@@ -17,7 +17,8 @@ struct FeedView: View {
                     ScrollView {
                         LazyVGrid(columns: cols, spacing: 12) {
                             ForEach(vm.items) { item in
-                                ItemCard(item: item)
+                                NavigationLink(value: item) { ItemCard(item: item) }
+                                    .buttonStyle(.plain)
                                     .task { await vm.loadMoreIfNeeded(current: item) }
                             }
                         }
@@ -26,6 +27,7 @@ struct FeedView: View {
                     }
                 }
             }
+            .navigationDestination(for: MarketItem.self) { ItemDetailView(item: $0) }
             .navigationTitle("Kliko.kz")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $vm.query, prompt: "Toyota Camry, iPhone…")

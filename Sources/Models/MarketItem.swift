@@ -19,6 +19,32 @@ struct MarketItem: Identifiable, Decodable, Hashable {
     var priceNegotiable: Bool?
     var forRent: Bool?
     var rentPriceDay: Int?
+    // ── детальная карточка (приходят при ?id=; в ленте частично) ──
+    var description: String?
+    var seller: String?
+    var sellerVerified: Bool?
+    var warrantyDays: Int?
+    var views: Int?
+    var createdAt: String?
+    var cpu: String?
+    var gpu: String?
+    var ram: String?
+    var storage: String?
+    var year: String?
+
+    /// Все фото (images → img) абсолютными URL.
+    var photoURLs: [URL] {
+        let list = (images?.isEmpty == false ? images! : [img].compactMap { $0 })
+        return list.compactMap { Config.url($0) }
+    }
+
+    /// Пары «характеристика → значение» для чипов (только заполненные).
+    var specPairs: [(String, String)] {
+        var out: [(String, String)] = []
+        func add(_ k: String, _ v: String?) { if let v, !v.trimmingCharacters(in: .whitespaces).isEmpty { out.append((k, v)) } }
+        add("Процессор", cpu); add("Видео", gpu); add("ОЗУ", ram); add("Накопитель", storage); add("Год", year)
+        return out
+    }
 
     /// URL превью для ленты (thumb → img → первое фото).
     var thumbURL: URL? {

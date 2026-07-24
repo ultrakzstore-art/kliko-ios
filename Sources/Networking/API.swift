@@ -38,4 +38,21 @@ struct API {
         do { return try decoder.decode(FeedResponse.self, from: data).items }
         catch { throw APIError.decode }
     }
+
+    /// Один товар: /api/listings.php?id=<id> → {ok, item}
+    func item(id: String) async throws -> MarketItem {
+        var comps = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "id", value: id)]
+        let (data, resp) = try await session.data(from: comps.url!)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError.badStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+        do { return try decoder.decode(ItemResponse.self, from: data).item }
+        catch { throw APIError.decode }
+    }
+}
+
+struct ItemResponse: Decodable {
+    let ok: Bool
+    let item: MarketItem
 }
