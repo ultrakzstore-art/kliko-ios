@@ -6,19 +6,43 @@ enum APIError: Error { case badStatus(Int), decode, network }
 /// поэтому после будущего входа авторизованные запросы «поедут» на тех же куках.
 struct API {
     static let shared = API()
-    private let session: URLSession = {
+    // internal (не private): используется расширениями API+Chat / API+Escrow в других файлах
+    let session: URLSession = {
         let c = URLSessionConfiguration.default
         c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 20
+        c.timeoutIntervalForRequest = 25
         c.httpCookieStorage = .shared
         return URLSession(configuration: c)
     }()
 
-    private let decoder: JSONDecoder = {
+    let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
         return d
     }()
+
+    // MARK: - Общие bearer-запросы (для чата/сделок поверх боевых эндпоинтов chat.php/dm.php/escrow.php)
+    /// GET к <apiBase>/<path> с Authorization: Bearer, декод в T. JSON парсим даже при 4xx/5xx.
+    func authedGET<T: Decodable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
+        var comps = URLComponents(url: Config.apiBase.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { comps.queryItems = query }
+        var req = URLRequest(url: comps.url!)
+        if let t = TokenStore.shared.token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let data: Data
+        do { (data, _) = try await session.data(for: req) } catch { throw APIError.network }
+        do { return try decoder.decode(T.self, from: data) } catch { throw APIError.decode }
+    }
+    /// POST JSON-тела к <apiBase>/<path> с Authorization: Bearer, декод в T.
+    func authedPOST<T: Decodable>(_ path: String, _ body: [String: Any]) async throws -> T {
+        var req = URLRequest(url: Config.apiBase.appendingPathComponent(path))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let t = TokenStore.shared.token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let data: Data
+        do { (data, _) = try await session.data(for: req) } catch { throw APIError.network }
+        do { return try decoder.decode(T.self, from: data) } catch { throw APIError.decode }
+    }
 
     /// Лента: /api/listings.php?sort=reco&page=&per=&cat=&q=&city=
     func feed(page: Int = 1, per: Int = 24, cat: String = "", q: String = "", city: String = "", sort: String = "reco") async throws -> [MarketItem] {

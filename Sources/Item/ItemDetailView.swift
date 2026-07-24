@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct ItemDetailView: View {
+    @EnvironmentObject private var app: AppState
     @State private var item: MarketItem
     @State private var page = 0
     @State private var showSoon = false
+    @State private var openChat = false
+    @State private var needLogin = false
 
     init(item: MarketItem) { _item = State(initialValue: item) }
 
@@ -42,11 +45,25 @@ struct ItemDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) { bottomBar }
         .task { await loadFull() }
+        .navigationDestination(isPresented: $openChat) {
+            ChatThreadView(peerId: item.sellerId ?? "", peerName: item.seller ?? "Продавец", listingId: item.id)
+        }
         .alert("Скоро", isPresented: $showSoon) {
             Button("Понятно", role: .cancel) {}
         } message: {
-            Text("Вход, чат и безопасная сделка появятся в следующих обновлениях приложения.")
+            Text("Безопасная сделка появится в следующем обновлении приложения.")
         }
+        .alert("Нужен вход", isPresented: $needLogin) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("Войдите в аккаунт на вкладке «Профиль», чтобы написать продавцу.")
+        }
+    }
+
+    private func startChat() {
+        guard app.isAuthed else { needLogin = true; return }
+        guard let sid = item.sellerId, !sid.isEmpty else { showSoon = true; return }
+        openChat = true
     }
 
     // MARK: - Галерея
@@ -112,7 +129,7 @@ struct ItemDetailView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            Button { showSoon = true } label: {
+            Button { startChat() } label: {
                 Label("Написать", systemImage: "message.fill")
                     .frame(maxWidth: .infinity).padding(.vertical, 13)
             }

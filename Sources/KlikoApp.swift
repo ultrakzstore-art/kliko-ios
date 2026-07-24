@@ -28,6 +28,9 @@ struct RootView: View {
             FeedView()
                 .tabItem { Label("Барахолка", systemImage: "square.grid.2x2.fill") }
 
+            InboxView()
+                .tabItem { Label("Чаты", systemImage: "bubble.left.and.bubble.right.fill") }
+
             ProfileTab()
                 .tabItem { Label("Профиль", systemImage: "person.crop.circle.fill") }
         }
