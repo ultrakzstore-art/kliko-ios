@@ -88,7 +88,7 @@ struct WebContainer: UIViewRepresentable {
             DealActivityManager.shared.handle(body)
         }
 
-        @objc func onРull(_ sender: UIRefreshControl) { webView?.reload() }
+        @objc func onPull(_ sender: UIRefreshControl) { webView?.reload() }
 
         // Ссылки в мессенджеры/звонок/почту — во внешние приложения; остальное (в т.ч.
         // платёжный шлюз и eGov-биометрия) остаётся в WebView, чтобы редиректы вернулись в приложение.
