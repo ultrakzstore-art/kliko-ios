@@ -10,6 +10,8 @@ struct KlikoApp: App {
         WindowGroup {
             RootWebView()
                 .tint(Theme.green)
+                // Тап по Live Activity сделки (widgetURL) → открыть нужный экран в PWA.
+                .onOpenURL { url in WebBridge.shared.pendingURL = url }
         }
     }
 }

@@ -19,6 +19,12 @@ struct WebContainer: UIViewRepresentable {
         prefs.allowsContentJavaScript = true
         cfg.defaultWebpagePreferences = prefs
 
+        // Мост Live Activity сделки: PWA зовёт window.KlikoLive.{start,update,end}(deal).
+        let ucc = cfg.userContentController
+        ucc.add(context.coordinator, name: "klikoLive")
+        ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
+                                       injectionTime: .atDocumentStart, forMainFrameOnly: false))
+
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
@@ -59,12 +65,28 @@ struct WebContainer: UIViewRepresentable {
     }
 
     // MARK: - Coordinator
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let bridge: WebBridge
         weak var webView: WKWebView?
         var lastToken: String?
 
         init(bridge: WebBridge) { self.bridge = bridge }
+
+        /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
+        /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
+        static let liveBridgeJS = """
+        window.KlikoNative = { platform:'ios', liveActivity:true };
+        window.KlikoLive = {
+          start:  function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'start',  deal:d||{}}); }catch(e){} },
+          update: function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'update', deal:d||{}}); }catch(e){} },
+          end:    function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'end',    deal:d||{}}); }catch(e){} }
+        };
+        """
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "klikoLive", let body = message.body as? [String: Any] else { return }
+            DealActivityManager.shared.handle(body)
+        }
 
         @objc func onРull(_ sender: UIRefreshControl) { webView?.reload() }
 

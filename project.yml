@@ -8,30 +8,53 @@ settings:
   base:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: ""            # ← впиши свой Apple Team ID в Xcode (Signing & Capabilities)
+    DEVELOPMENT_TEAM: ""            # ← впиши свой Apple Team ID в Xcode (Signing & Capabilities) для ОБОИХ таргетов
     SWIFT_VERSION: "5.9"
 targets:
+  # ── Приложение: PWA-обёртка ──
   Kliko:
     type: application
     platform: iOS
     sources:
       - Sources
+      - Shared                      # общие с виджетом типы (DealActivityAttributes)
+    dependencies:
+      - target: KlikoWidgets        # встраиваем виджет-расширение в приложение
     entitlements:
       path: Kliko.entitlements
       properties:
-        aps-environment: development   # ← для App Store/TestFlight поменяй на production (или включи авто-подпись)
+        aps-environment: development   # ← для App Store/TestFlight поменяй на production (или авто-подпись)
+    info:
+      path: Kliko-Info.plist
+      properties:
+        CFBundleDisplayName: Kliko
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [remote-notification]      # фоновые/тихие пуши
+        NSSupportsLiveActivities: true                # Live Activity сделки (локскрин/Dynamic Island)
+        NSCameraUsageDescription: "Камера нужна для фото товара и проверки по QR."
+        NSMicrophoneUsageDescription: "Микрофон нужен для голосовых сообщений в чате."
+        NSPhotoLibraryUsageDescription: "Доступ к фото — чтобы прикреплять изображения к объявлению."
+        NSPhotoLibraryAddUsageDescription: "Сохранение изображений из объявлений в галерею."
+        NSLocationWhenInUseUsageDescription: "Геолокация показывает объявления рядом и помогает в доставке."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app
-        INFOPLIST_KEY_CFBundleDisplayName: Kliko
-        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
-        # WebView-обёртке нужны разрешения, которыми пользуется PWA:
-        INFOPLIST_KEY_NSCameraUsageDescription: "Камера нужна для фото товара и проверки по QR."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Микрофон нужен для голосовых сообщений в чате."
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Доступ к фото — чтобы прикреплять изображения к объявлению."
-        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Сохранение изображений из объявлений в галерею."
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Геолокация показывает объявления рядом и помогает в доставке."
-        # Фоновые пуши (тихое обновление). Для алерт-пушей не обязательно, но пригодится Live Activity/обновлениям.
-        INFOPLIST_KEY_UIBackgroundModes: remote-notification
-        # ATS: наш API по HTTPS — исключений не требуется. Для http-стейджа добавь NSAppTransportSecurity вручную.
+
+  # ── Виджет-расширение: Live Activity сделки ──
+  KlikoWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - WidgetSources
+      - Shared                      # тот же DealActivityAttributes
+    info:
+      path: KlikoWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Kliko
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app.widgets
+# ATS: наш API по HTTPS — исключений не требуется. Для http-стейджа добавь NSAppTransportSecurity в info-properties.
