@@ -12,7 +12,6 @@ struct SplashView: View {
     @State private var pop = false
     @State private var tipIdx = 0
 
-    // Подсказки в тоне сайта (безопасность/фишки). Крутятся снизу, как на витрине.
     private let tips = [
         "Покупайте безопасно — через гаранта Kliko",
         "Оплата заморожена, пока вы не получите товар",
@@ -77,79 +76,62 @@ struct SplashView: View {
     }
 }
 
-// MARK: - Логотип (бейдж + гео-пин с часами + пульс), рисуется в системе координат 48×48
+// MARK: - Логотип: Canvas (гарантированно рендерится) в системе координат 48×48.
+// Бейдж-градиент + белый гео-пин + зелёный циферблат + идущая минутная стрелка + пульс-сонар.
 private struct KlikoLogo: View {
     let size: CGFloat
-    @State private var pulse = false
-    @State private var spin  = false
 
     var body: some View {
-        ZStack {
-            // Бейдж с градиентом (радиус 13/48 как в SVG)
-            RoundedRectangle(cornerRadius: 48 * 13/48, style: .continuous)
-                .fill(LinearGradient(colors: [kGreen2, kGreen], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 48, height: 48)
+        TimelineView(.animation) { tl in
+            Canvas { ctx, cs in
+                let s = cs.width / 48
+                func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+                let t = tl.date.timeIntervalSinceReferenceDate
 
-            // Гео-пин (белый)
-            PinShape().fill(.white).frame(width: 48, height: 48)
+                // Бейдж с градиентом (радиус 13/48)
+                let badge = Path(roundedRect: CGRect(x: 0, y: 0, width: cs.width, height: cs.height),
+                                 cornerRadius: 13 * s, style: .continuous)
+                ctx.fill(badge, with: .linearGradient(Gradient(colors: [kGreen2, kGreen]),
+                                                      startPoint: .zero,
+                                                      endPoint: CGPoint(x: cs.width, y: cs.height)))
+                // Гео-пин (белый)
+                var pin = Path()
+                pin.move(to: P(24, 9.8))
+                pin.addCurve(to: P(34.2, 19.9), control1: P(29.9, 9.8), control2: P(34.2, 14.3))
+                pin.addCurve(to: P(24, 38),     control1: P(34.2, 27),  control2: P(24, 38))
+                pin.addCurve(to: P(13.8, 19.9), control1: P(24, 38),    control2: P(13.8, 27))
+                pin.addCurve(to: P(24, 9.8),    control1: P(13.8, 14.3), control2: P(18.1, 9.8))
+                pin.closeSubpath()
+                ctx.fill(pin, with: .color(.white))
 
-            // Циферблат (зелёный) — r 6.2 в (24,19.5)
-            Circle().fill(kGreen).frame(width: 12.4, height: 12.4).position(x: 24, y: 19.5)
+                // Циферблат (зелёный), r 6.2 в (24,19.5)
+                ctx.fill(Path(ellipseIn: CGRect(x: (24-6.2)*s, y: (19.5-6.2)*s, width: 12.4*s, height: 12.4*s)),
+                         with: .color(kGreen))
 
-            // Стрелки
-            HourHand().stroke(.white, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .frame(width: 48, height: 48)
-            MinuteHand().stroke(.white, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .frame(width: 48, height: 48)
-                .rotationEffect(.degrees(spin ? 360 : 0), anchor: UnitPoint(x: 24.0/48.0, y: 19.5/48.0))
+                // Часовая стрелка → «10»
+                var hh = Path(); hh.move(to: P(24, 19.5)); hh.addLine(to: P(21.4, 17.2))
+                ctx.stroke(hh, with: .color(.white), style: StrokeStyle(lineWidth: 1.5*s, lineCap: .round))
 
-            // Центр стрелок
-            Circle().fill(.white).frame(width: 2.1, height: 2.1).position(x: 24, y: 19.5)
+                // Минутная стрелка (идёт: полный оборот за 6с)
+                let ang = (t.truncatingRemainder(dividingBy: 6) / 6) * 2 * .pi
+                var mh = Path(); mh.move(to: P(24, 19.5)); mh.addLine(to: P(27, 16.9))
+                let rot = CGAffineTransform(translationX: 24*s, y: 19.5*s)
+                    .rotated(by: ang).translatedBy(x: -24*s, y: -19.5*s)
+                ctx.stroke(mh.applying(rot), with: .color(.white), style: StrokeStyle(lineWidth: 1.5*s, lineCap: .round))
 
-            // Пульс геолокации (сонар) поверх — как «маяк» бренда
-            Circle().stroke(Color.white.opacity(0.55), lineWidth: 2)
-                .frame(width: 16, height: 16)
-                .scaleEffect(pulse ? 1.9 : 0.45)
-                .opacity(pulse ? 0 : 0.85)
-                .position(x: 24, y: 19.5)
+                // Центр стрелок
+                ctx.fill(Path(ellipseIn: CGRect(x: (24-1.05)*s, y: (19.5-1.05)*s, width: 2.1*s, height: 2.1*s)),
+                         with: .color(.white))
+
+                // Пульс геолокации (сонар): растёт и гаснет, период 2.1с
+                let ph = t.truncatingRemainder(dividingBy: 2.1) / 2.1
+                let rr = 8 * (0.4 + 1.55 * ph) * s
+                let ring = Path(ellipseIn: CGRect(x: 24*s - rr, y: 19.5*s - rr, width: 2*rr, height: 2*rr))
+                ctx.stroke(ring, with: .color(.white.opacity(0.85 * (1 - ph))), lineWidth: 2*s)
+            }
+            .frame(width: size, height: size)
+            .shadow(color: kGreen.opacity(0.32), radius: 18, y: 9)
         }
-        .frame(width: 48, height: 48)
-        .scaleEffect(size / 48)
-        .frame(width: size, height: size)
-        .shadow(color: kGreen.opacity(0.32), radius: 18, y: 9)
-        .onAppear {
-            withAnimation(.easeOut(duration: 2.1).repeatForever(autoreverses: false)) { pulse = true }
-            withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) { spin = true }
-        }
-    }
-}
-
-// Гео-пин (абсолютные координаты SVG в пространстве 48×48)
-private struct PinShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = min(rect.width, rect.height) / 48
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
-        var path = Path()
-        path.move(to: p(24, 9.8))
-        path.addCurve(to: p(34.2, 19.9), control1: p(29.9, 9.8), control2: p(34.2, 14.3))
-        path.addCurve(to: p(24, 38),     control1: p(34.2, 27), control2: p(24, 38))
-        path.addCurve(to: p(13.8, 19.9), control1: p(24, 38),   control2: p(13.8, 27))
-        path.addCurve(to: p(24, 9.8),    control1: p(13.8, 14.3), control2: p(18.1, 9.8))
-        path.closeSubpath()
-        return path
-    }
-}
-
-private struct HourHand: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = min(rect.width, rect.height) / 48
-        var p = Path(); p.move(to: CGPoint(x: 24*s, y: 19.5*s)); p.addLine(to: CGPoint(x: 21.4*s, y: 17.2*s)); return p
-    }
-}
-private struct MinuteHand: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = min(rect.width, rect.height) / 48
-        var p = Path(); p.move(to: CGPoint(x: 24*s, y: 19.5*s)); p.addLine(to: CGPoint(x: 27*s, y: 16.9*s)); return p
     }
 }
 

@@ -9,6 +9,10 @@ import SwiftUI
 ///  • Низ приподнят на 5px (padding.bottom 5) — контент не липнет к домашней полоске.
 struct RootWebView: View {
     @StateObject private var bridge = WebBridge.shared
+    @State private var minElapsed = false     // минимум показа сплэша, чтобы лого не мелькал
+
+    // Сплэш держим, пока сайт не загрузился ИЛИ не прошёл минимум времени.
+    private var showSplash: Bool { !(bridge.isLoaded && minElapsed) }
 
     var body: some View {
         ZStack {
@@ -21,12 +25,17 @@ struct RootWebView: View {
             if bridge.loadFailed {
                 OfflineView { bridge.retry() }
                     .transition(.opacity)
-            } else if !bridge.isLoaded {
+            } else if showSplash {
                 SplashView()
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: bridge.isLoaded)
+        .animation(.easeInOut(duration: 0.4), value: showSplash)
         .animation(.easeInOut(duration: 0.25), value: bridge.loadFailed)
+        .task {
+            // Минимум ~1.6с показа прелоадера (логотип + подсказка успевают появиться).
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            minElapsed = true
+        }
     }
 }
