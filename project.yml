@@ -16,10 +16,22 @@ targets:
     platform: iOS
     sources:
       - Sources
+    entitlements:
+      path: Kliko.entitlements
+      properties:
+        aps-environment: development   # ← для App Store/TestFlight поменяй на production (или включи авто-подпись)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app
         INFOPLIST_KEY_CFBundleDisplayName: Kliko
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
-        # ATS: наш API по HTTPS — исключений не требуется. Если тестируешь на http-стейдже, добавь NSAppTransportSecurity вручную.
+        # WebView-обёртке нужны разрешения, которыми пользуется PWA:
+        INFOPLIST_KEY_NSCameraUsageDescription: "Камера нужна для фото товара и проверки по QR."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Микрофон нужен для голосовых сообщений в чате."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Доступ к фото — чтобы прикреплять изображения к объявлению."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Сохранение изображений из объявлений в галерею."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Геолокация показывает объявления рядом и помогает в доставке."
+        # Фоновые пуши (тихое обновление). Для алерт-пушей не обязательно, но пригодится Live Activity/обновлениям.
+        INFOPLIST_KEY_UIBackgroundModes: remote-notification
+        # ATS: наш API по HTTPS — исключений не требуется. Для http-стейджа добавь NSAppTransportSecurity вручную.
