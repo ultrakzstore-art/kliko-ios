@@ -88,24 +88,29 @@ jobs:
           echo "Секреты на месте."
 
       - name: Выбрать Xcode и проверить версию SDK
-        # На образе обычно стоит несколько Xcode, и назначенный по умолчанию — не всегда
-        # самый новый. Берём тот, у которого iOS SDK старше, и сразу проверяем порог: без
-        # этой проверки несовпадение всплывает только на заливке, когда архив уже собран.
+        # Берём Xcode с НАИБОЛЬШЕЙ полной версией, а не первый подходящий по мажору:
+        # у 26.0.1 iOS SDK не совпадает с рантаймами симулятора, которые стоят на образе,
+        # и сборка каталога ресурсов падает сообщением про симулятор — хотя собираем под
+        # устройство. Версию сводим к числу вида 260201, чтобы сравнивать без sort -V,
+        # которого на macOS может не оказаться.
         run: |
-          best=""; bestmajor=0
+          best=""; bestkey=0
           for app in /Applications/Xcode*.app; do
             [ -d "$app" ] || continue
-            sdks="$app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
-            sdk=$(ls "$sdks" 2>/dev/null | grep -o "iPhoneOS[0-9][0-9]*" | head -1 | tr -dc "0-9")
-            echo "$app -> iOS SDK ${sdk:-неизвестен}"
-            if [ -n "$sdk" ] && [ "$sdk" -gt "$bestmajor" ]; then bestmajor="$sdk"; best="$app"; fi
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
+            [ -n "$v" ] || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            echo "$app -> Xcode $v (ключ $key)"
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
           done
-          if [ "$bestmajor" -lt 26 ]; then
-            echo "::error::Самый новый Xcode на раннере даёт iOS SDK $bestmajor, а App Store принимает только 26 и выше. Нужен образ посвежее в runs-on."
+          if [ "$bestkey" -lt 260000 ]; then
+            echo "::error::Самый новый Xcode на раннере — версии ниже 26, а App Store принимает только сборки с iOS SDK 26 и выше. Нужен образ посвежее в runs-on."
             exit 1
           fi
           sudo xcode-select -s "$best"
           xcodebuild -version
+          echo "--- рантаймы симулятора на образе ---"
+          xcrun simctl list runtimes 2>/dev/null || true
 
       - name: XcodeGen
         run: brew install xcodegen
