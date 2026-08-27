@@ -62,6 +62,9 @@ struct WebContainer: UIViewRepresentable {
         if let t = bridge.apnsToken, context.coordinator.lastToken != t, bridge.isLoaded {
             context.coordinator.registerPush(token: t, on: web)
         }
+        if let lt = bridge.liveToken, context.coordinator.lastLive != lt, bridge.isLoaded {
+            context.coordinator.registerLive(lt, on: web)
+        }
     }
 
     // MARK: - Coordinator
@@ -69,6 +72,7 @@ struct WebContainer: UIViewRepresentable {
         let bridge: WebBridge
         weak var webView: WKWebView?
         var lastToken: String?
+        var lastLive: LiveToken?
 
         init(bridge: WebBridge) { self.bridge = bridge }
 
@@ -145,19 +149,54 @@ struct WebContainer: UIViewRepresentable {
         }
 
         /// Регистрируем APNs-токен в текущей веб-сессии (cookie есть в WebView) —
-        /// бэкенд api/push_register.php привяжет его к вошедшему юзеру. Гость → бэкенд тихо игнорит.
+        /// бэкенд api/push_register.php привяжет его к вошедшему юзеру.
+        ///
+        /// 🔴 CSRF ОБЯЗАТЕЛЕН. Эндпоинт требует csrf_cab, и запрос без него получает
+        /// {ok:false,error:'csrf'} — то есть токен устройства НЕ сохранялся, и ни один
+        /// пуш не доходил. Ошибка была не видна: fetch с .catch() молчит, а приложение
+        /// выглядело работающим. Токен страницы отдаёт inc/app_bridge.php как
+        /// window.KlikoCsrf; у гостя его нет.
+        ///
+        /// lastToken запоминаем ТОЛЬКО при реальной отправке. Иначе первая попытка у
+        /// гостя (моста ещё нет) считалась бы удачной, и после входа токен уже никогда
+        /// бы не ушёл: человек вошёл, а уведомления молчат навсегда.
         func registerPush(token: String, on web: WKWebView) {
             guard lastToken != token else { return }
-            lastToken = token
             let safe = token.filter { $0.isHexDigit }
             let js = """
             (function(){try{
+              var c = window.KlikoCsrf || ''; if(!c) return false;
               fetch('/api/push_register.php',{method:'POST',credentials:'same-origin',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({token:'\(safe)',platform:'ios'})}).catch(function(){});
-            }catch(e){}})();
+                headers:{'Content-Type':'application/json','X-Kliko-Csrf':c},
+                body:JSON.stringify({token:'\(safe)',platform:'ios',csrf:c})}).catch(function(){});
+              return true;
+            }catch(e){ return false; }})();
             """
-            web.evaluateJavaScript(js, completionHandler: nil)
+            web.evaluateJavaScript(js) { [weak self] res, _ in
+                if (res as? Bool) == true { self?.lastToken = token }
+            }
+        }
+
+        /// Токен плашки сделки: тем же путём и с тем же CSRF, но с kind:'live'.
+        /// drop:true — активность закрылась, сервер должен забыть адресата.
+        func registerLive(_ lt: LiveToken, on web: WKWebView) {
+            guard lastLive != lt else { return }
+            let deal = lt.deal.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+            let tok  = lt.token.filter { $0.isHexDigit }
+            if deal.isEmpty { return }
+            if !lt.drop && tok.count < 32 { return }
+            let js = """
+            (function(){try{
+              var c = window.KlikoCsrf || ''; if(!c) return false;
+              fetch('/api/push_register.php',{method:'POST',credentials:'same-origin',
+                headers:{'Content-Type':'application/json','X-Kliko-Csrf':c},
+                body:JSON.stringify({kind:'live',deal:'\(deal)',token:'\(tok)',drop:\(lt.drop ? "true" : "false"),csrf:c})}).catch(function(){});
+              return true;
+            }catch(e){ return false; }})();
+            """
+            web.evaluateJavaScript(js) { [weak self] res, _ in
+                if (res as? Bool) == true { self?.lastLive = lt }
+            }
         }
     }
 }

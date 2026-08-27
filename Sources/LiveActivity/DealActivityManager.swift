@@ -4,11 +4,22 @@ import Foundation
 /// Управляет одной активной Live Activity сделки (как поездка в Я.Такси — одна за раз).
 /// Драйвится из веба через мост window.KlikoLive.{start,update,end} (см. WebContainer).
 /// Без @available: deployment target = iOS 17, а ActivityKit/ActivityContent доступны с 16.1/16.2.
+///
+/// ДВА ИСТОЧНИКА ОБНОВЛЕНИЙ, И ОБА НУЖНЫ.
+/// Пока приложение открыто, плашку кормит сам сайт: js/cabinet.js → dealLiveActivity().
+/// Но человек закрывает приложение сразу после оплаты и дальше смотрит на локскрин —
+/// а там висел бы этап на момент закрытия. «Оплачено, ждём отправки» через сутки после
+/// отправки хуже, чем отсутствие плашки: это уже не информация, а дезинформация.
+/// Поэтому активность запрашивается с pushType:.token, её токен уезжает на сервер, и
+/// дальше этапы приходят пушем (inc/deal_live.php → apns_send_live).
 final class DealActivityManager {
     static let shared = DealActivityManager()
 
     private var activity: Activity<DealActivityAttributes>?
     private var activeDealId: String?
+    /// Слежение за токеном активности. Токен может смениться за её жизнь — система
+    /// присылает новый в тот же поток, и старый перестаёт работать молча.
+    private var tokenTask: Task<Void, Never>?
 
     /// Точка входа из JS-моста: {action:'start'|'update'|'end', deal:{…}}.
     func handle(_ body: [String: Any]) {
@@ -57,22 +68,50 @@ final class DealActivityManager {
             role:   d["role"]  as? String ?? "buyer"
         )
         do {
-            activity = try Activity.request(
+            let a = try Activity.request(
                 attributes: attrs,
                 content: ActivityContent(state: cs, staleDate: nil),
-                pushType: nil                     // пока драйвим из приложения; для обновлений при закрытом
-            )                                     // приложении → pushType:.token + отправка APNs live-activity
+                // .token, а не nil: без токена сервер не может дотянуться до плашки, и
+                // она замирает в момент, когда приложение ушло в фон.
+                pushType: .token
+            )
+            activity = a
             activeDealId = dealId
+            observeToken(of: a, dealId: dealId)
         } catch {
             activity = nil; activeDealId = nil
         }
     }
 
+    /// Токен активности → в веб-сессию → api/push_register.php (kind=live).
+    /// Отдаём через WebBridge, а не шлём отсюда: запрос должен уйти С COOKIE ВЕБ-СЕССИИ
+    /// и с CSRF-токеном страницы, а они есть только внутри WKWebView.
+    private func observeToken(of a: Activity<DealActivityAttributes>, dealId: String) {
+        tokenTask?.cancel()
+        tokenTask = Task {
+            for await data in a.pushTokenUpdates {
+                let hex = data.map { String(format: "%02x", $0) }.joined()
+                await MainActor.run {
+                    WebBridge.shared.liveToken = LiveToken(deal: dealId, token: hex, drop: false)
+                }
+            }
+        }
+    }
+
     func end() async {
+        let closing = activeDealId
+        tokenTask?.cancel(); tokenTask = nil
         if let a = activity {
             await a.end(nil, dismissalPolicy: .immediate)
         }
         activity = nil
         activeDealId = nil
+        // Сообщаем серверу, что адресата больше нет: иначе он будет слать пуши в
+        // закрытую активность до первой ошибки от Apple, а до неё могут пройти сутки.
+        if let did = closing {
+            await MainActor.run {
+                WebBridge.shared.liveToken = LiveToken(deal: did, token: "", drop: true)
+            }
+        }
     }
 }
