@@ -14,8 +14,9 @@
 #   APPLE_TEAM_ID  — Team ID, правый верхний угол developer.apple.com
 #   ASC_KEY_ID     — Key ID ключа App Store Connect API
 #   ASC_ISSUER_ID  — Issuer ID оттуда же (одна строка на весь аккаунт)
-#   ASC_KEY_P8     — содержимое AuthKey_XXXX.p8 в base64, одной строкой.
-#                    В PowerShell на Windows:
+#   ASC_KEY_P8     — сам файл AuthKey_XXXX.p8: подойдёт и его содержимое как есть
+#                    (вместе со строками BEGIN/END), и оно же в base64. Для base64
+#                    в PowerShell на Windows:
 #                      [Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXX.p8"))
 #
 # ЗАПУСК: вкладка Actions → «iOS · TestFlight» → Run workflow. Первый прогон удобно
@@ -91,14 +92,24 @@ jobs:
           P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           mkdir -p "$KEY_DIR"
-          # На macOS декодирование — base64 -D (у GNU это -d). Ключ живёт только внутри
-          # раннера и удаляется отдельным шагом даже при падении сборки.
-          printf '%s' "$P8" | base64 -D > "$KEY_DIR/AuthKey_$KID.p8"
+          # Ключ живёт только внутри раннера и удаляется отдельным шагом даже при падении.
+          # ПРИНИМАЕМ ОБА ВИДА: и содержимое .p8 как есть, и его base64.
+          # Требовать один — значит ловить человека на ровном месте: открыть файл и
+          # скопировать текст естественнее, чем гонять его через конвертер, а ошибка
+          # всплыла бы только в сборке и выглядела бы как проблема с самим ключом.
+          # Различаем по заголовку PEM, а не по попытке декодировать: base64 молча
+          # «декодирует» почти любой текст, и мусор дошёл бы до подписи.
+          if printf '%s' "$P8" | grep -q 'BEGIN PRIVATE KEY'; then
+            printf '%s' "$P8" > "$KEY_DIR/AuthKey_$KID.p8"
+          else
+            # На macOS декодирование — base64 -D (у GNU это -d).
+            printf '%s' "$P8" | base64 -D > "$KEY_DIR/AuthKey_$KID.p8" 2>/dev/null || true
+          fi
           chmod 600 "$KEY_DIR/AuthKey_$KID.p8"
-          # Проверяем, что это ключ, а не мусор из криво скопированного base64: иначе
-          # ошибка вылезет уже на подписи и будет выглядеть как проблема с профилем.
+          # Проверяем, что на выходе действительно ключ: иначе ошибка вылезет уже на
+          # подписи и будет выглядеть как проблема с профилем, а не с секретом.
           head -1 "$KEY_DIR/AuthKey_$KID.p8" | grep -q 'BEGIN PRIVATE KEY' \
-            || { echo "::error::ASC_KEY_P8 не разбирается — нужен весь файл .p8, закодированный в base64"; exit 1; }
+            || { echo "::error::ASC_KEY_P8 не разбирается. Нужно ЛИБО содержимое файла .p8 целиком, вместе со строками BEGIN и END, ЛИБО оно же в base64"; exit 1; }
 
       - name: Сгенерировать проект
         run: xcodegen generate
