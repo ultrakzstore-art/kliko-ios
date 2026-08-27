@@ -51,7 +51,11 @@ jobs:
   testflight:
     # Фиксированная версия образа, а не macos-latest: смена образа меняет Xcode, а с ним
     # поведение подписи и формат ExportOptions. Обновляем осознанно, а не однажды утром.
-    runs-on: macos-15
+    #
+    # macos-26, а не macos-15: на пятнадцатом образе Xcode 16 с iOS SDK 18.5, а App Store
+    # принимает только SDK 26 и выше. Отказ приходил ПОСЛЕ сборки и подписи — минута с
+    # лишним впустую, и по формулировке не догадаешься, что дело в образе раннера.
+    runs-on: macos-26
     timeout-minutes: 45
 
     env:
@@ -82,6 +86,26 @@ jobs:
             exit 1
           fi
           echo "Секреты на месте."
+
+      - name: Выбрать Xcode и проверить версию SDK
+        # На образе обычно стоит несколько Xcode, и назначенный по умолчанию — не всегда
+        # самый новый. Берём тот, у которого iOS SDK старше, и сразу проверяем порог: без
+        # этой проверки несовпадение всплывает только на заливке, когда архив уже собран.
+        run: |
+          best=""; bestmajor=0
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            sdks="$app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
+            sdk=$(ls "$sdks" 2>/dev/null | grep -o "iPhoneOS[0-9][0-9]*" | head -1 | tr -dc "0-9")
+            echo "$app -> iOS SDK ${sdk:-неизвестен}"
+            if [ -n "$sdk" ] && [ "$sdk" -gt "$bestmajor" ]; then bestmajor="$sdk"; best="$app"; fi
+          done
+          if [ "$bestmajor" -lt 26 ]; then
+            echo "::error::Самый новый Xcode на раннере даёт iOS SDK $bestmajor, а App Store принимает только 26 и выше. Нужен образ посвежее в runs-on."
+            exit 1
+          fi
+          sudo xcode-select -s "$best"
+          xcodebuild -version
 
       - name: XcodeGen
         run: brew install xcodegen
