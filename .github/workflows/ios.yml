@@ -1,0 +1,195 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Сборка iOS без Mac: macOS-раннер GitHub, подпись ключом App Store Connect API,
+# готовая сборка уезжает в TestFlight.
+#
+# ПОЧЕМУ БЕЗ FASTLANE И БЕЗ СЕРТИФИКАТОВ В РЕПОЗИТОРИИ. Классический путь (fastlane
+# match) держит сертификаты в отдельном приватном репо и требует однажды создать их
+# на Mac. Mac'а здесь нет вообще, поэтому берём то, что xcodebuild умеет сам начиная
+# с Xcode 13: -allowProvisioningUpdates вместе с ключом App Store Connect API. Xcode
+# на раннере сам создаёт сертификат распространения и профили для ОБОИХ таргетов
+# (приложение и виджет Live Activity), а после сборки сам же заливает архив.
+# В репозитории не лежит ни одного секрета — только их имена.
+#
+# ЧТО ЗАВЕСТИ В SETTINGS → SECRETS AND VARIABLES → ACTIONS (одноразово):
+#   APPLE_TEAM_ID  — Team ID, правый верхний угол developer.apple.com
+#   ASC_KEY_ID     — Key ID ключа App Store Connect API
+#   ASC_ISSUER_ID  — Issuer ID оттуда же (одна строка на весь аккаунт)
+#   ASC_KEY_P8     — содержимое AuthKey_XXXX.p8 в base64, одной строкой.
+#                    В PowerShell на Windows:
+#                      [Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXX.p8"))
+#
+# ЗАПУСК: вкладка Actions → «iOS · TestFlight» → Run workflow. Первый прогон удобно
+# сделать с upload=false: проверит, что всё собирается и подписывается, но никуда
+# ничего не отправит.
+#
+# ⚠️ Имена переменных в шагах — латиницей. Комментарии по-русски, но bash допускает в
+#    именах только латиницу, цифры и подчёркивание: кириллическое имя падает с
+#    «command not found» ещё до сборки.
+# ─────────────────────────────────────────────────────────────────────────────
+name: iOS · TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Заливать в TestFlight (false — только собрать и проверить подпись)"
+        type: boolean
+        default: true
+      version:
+        description: "Версия для витрины App Store, например 1.0.0 (пусто — из project.yml)"
+        type: string
+        default: ""
+  push:
+    tags: ["v*"]          # тег v1.0.0 → сборка и заливка автоматически
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testflight:
+    # Фиксированная версия образа, а не macos-latest: смена образа меняет Xcode, а с ним
+    # поведение подписи и формат ExportOptions. Обновляем осознанно, а не однажды утром.
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    env:
+      SCHEME: Kliko
+      ARCHIVE_PATH: ${{ github.workspace }}/build/Kliko.xcarchive
+      EXPORT_DIR: ${{ github.workspace }}/build/export
+      KEY_DIR: ${{ github.workspace }}/build/keys
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Проверить, что секреты заведены
+        # Без этой проверки забытый секрет всплывает через десять минут ошибкой подписи,
+        # в которой про секрет нет ни слова.
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -z "$TEAM" ] && missing="$missing APPLE_TEAM_ID"
+          [ -z "$KID" ]  && missing="$missing ASC_KEY_ID"
+          [ -z "$ISS" ]  && missing="$missing ASC_ISSUER_ID"
+          [ -z "$P8" ]   && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "::error::Не заведены секреты:$missing — Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "Секреты на месте."
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$KEY_DIR"
+          # На macOS декодирование — base64 -D (у GNU это -d). Ключ живёт только внутри
+          # раннера и удаляется отдельным шагом даже при падении сборки.
+          printf '%s' "$P8" | base64 -D > "$KEY_DIR/AuthKey_$KID.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$KID.p8"
+          # Проверяем, что это ключ, а не мусор из криво скопированного base64: иначе
+          # ошибка вылезет уже на подписи и будет выглядеть как проблема с профилем.
+          head -1 "$KEY_DIR/AuthKey_$KID.p8" | grep -q 'BEGIN PRIVATE KEY' \
+            || { echo "::error::ASC_KEY_P8 не разбирается — нужен весь файл .p8, закодированный в base64"; exit 1; }
+
+      - name: Сгенерировать проект
+        run: xcodegen generate
+
+      - name: Собрать архив
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          IN_VERSION: ${{ inputs.version }}
+        run: |
+          set -o pipefail
+          # Номер сборки — номер запуска workflow. App Store Connect отклоняет повторный
+          # номер при той же версии, а руками его никто не помнит.
+          build_no="${{ github.run_number }}"
+          version="$IN_VERSION"
+          if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"          # тег v1.0.0 → 1.0.0
+          fi
+          extra=""
+          [ -n "$version" ] && extra="MARKETING_VERSION=$version"
+
+          xcodebuild archive \
+            -project Kliko.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" \
+            -authenticationKeyIssuerID "$ISS" \
+            DEVELOPMENT_TEAM="$TEAM" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$build_no" \
+            $extra
+
+      - name: Параметры экспорта
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          DO_UPLOAD: ${{ inputs.upload }}
+        run: |
+          mkdir -p "$EXPORT_DIR"
+          # destination=upload — архив уезжает в App Store Connect прямо из xcodebuild.
+          # Отдельный altool/Transporter (и второй способ ошибиться) не нужен.
+          # Тег всегда заливаем; ручной запуск — по флажку.
+          dest="upload"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$DO_UPLOAD" != "true" ]; then
+            dest="export"
+          fi
+          cat > "$EXPORT_DIR/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>$dest</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          echo "Назначение экспорта: $dest"
+
+      - name: Экспорт и заливка
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$EXPORT_DIR/ExportOptions.plist" \
+            -exportPath "$EXPORT_DIR" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" \
+            -authenticationKeyIssuerID "$ISS"
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"
+
+      - name: Сохранить сборку
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kliko-ios-${{ github.run_number }}
+          # .ipa появляется только при upload=false — при заливке файл уходит сразу в Apple.
+          path: |
+            ${{ github.workspace }}/build/export/*.ipa
+            ${{ github.workspace }}/build/export/*.plist
+          if-no-files-found: ignore
+          retention-days: 14

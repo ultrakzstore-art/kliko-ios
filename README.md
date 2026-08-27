@@ -1,69 +1,125 @@
-# Kliko iOS (SwiftUI) — MVP покупателя
+# Kliko iOS
 
-Нативное iOS-приложение поверх нашего API (`kliko.kz`). Веб-бэкенд переиспользуется как API.
-Это отдельный проект — **вне** веб-репо `ultra-site` (Swift на прод-сервер не деплоим).
+Приложение Kliko для iPhone: сайт `kliko.kz` в нативной оболочке плюс то, чего сайт не
+умеет — пуши при закрытом приложении, плашка сделки на локскрине, прелоадер, экран без
+связи, работа с камерой и микрофоном.
 
-## Что уже есть
-**Фаза 1 — Лента**: маркет из `GET /api/listings.php` (пагинация, поиск, pull-to-refresh),
-карточки (фото `_t`, цена/аренда/«Договорная», бейджи ТОП/Новое/Аренда, город), сеть
-`async/await`+`URLSession` (cookie-сессия), бренд-тема, модели `Codable`.
+Отдельный репозиторий, **вне** веб-репо `ultra-site`: Swift не должен уезжать на
+прод-сервер через `git push hoster`.
 
-**Фаза 2 — Карточка товара**: тап по карточке → детальный экран (`GET ?id=`): галерея фото
-(свайп + точки), цена, состояние/гарантия/город, характеристики (ОЗУ/накопитель/CPU/…),
-описание, продавец (+синяя галочка), нижняя панель «Написать» / «Купить безопасно» (пока
-заглушка — включим с входом/сделкой).
+## Что это, устройство
 
-**Фаза 3 — Вход/регистрация**: две вкладки (Барахолка / Профиль). Вход по номеру+пароль и
-упрощённая регистрация (номер → авто-пароль, показывается один раз) через `POST
-/api/mobile_auth.php` (bearer-токен, в обход CSRF веба). Токен хранится в **Keychain**,
-подставляется как `Authorization: Bearer` во все запросы. На старте — проверка токена (`me`),
-экран профиля (статус верификации/PRO, выход). Барахолку можно смотреть без входа.
+**Оболочка, а не второй интерфейс.** В июле 2026 нативные экраны (лента, карточка,
+вход, чат) были написаны и затем удалены — держать вторую реализацию витрины и чата
+значит чинить каждую правку дважды. Код остался в истории (`387e7ca`), подход и
+эндпоинты валидны, если решение когда-нибудь пересмотрят.
 
-**Фаза 4 — Чат (DM)**: вкладка «Чаты» (инбокс диалогов), экран переписки с лентой
-сообщений, композером и мягким опросом обновлений (3с). Работает поверх боевого `dm.php`
-по bearer-токену (бэкенд: Вариант В — тот же эндпоинт, без дублирования). Кнопка «Написать»
-в карточке товара открывает диалог с продавцом (требует входа). Бэкенд-мост: `inc/mobile_identity.php`
-(bearer→личность), `dm.php`/`chat.php`/`escrow.php` понимают `Authorization: Bearer`.
+Сейчас:
 
-## Дальше (по плану MVP покупателя)
-Безопасная сделка (эскроу create/pay/confirm) — требует: верификации мобильного юзера
-(OTP), подключённого эквайринга для пополнения, и 2 продуктовых решений по аренде.
-Кнопка «Купить безопасно» пока заглушка. Затем пуши (APNs/OneSignal, адресация по uid).
+| Слой | Что делает |
+|---|---|
+| `Sources/Web/WebContainer.swift` | WKWebView: cookie-сессия как в браузере, pull-to-refresh, свайп-назад, гранты камеры и микрофона, `tel:` / WhatsApp / Telegram наружу, оплата и eGov остаются внутри |
+| `Sources/Web/SplashView.swift` | прелоадер с логотипом, минимальное время показа |
+| `Sources/Web/WebBridge.swift` | мост JS ↔ Swift: токен APNs, `window.KlikoLive`, `window.KlikoNative` |
+| `Sources/App/AppDelegate.swift` | регистрация в APNs, deep-link по тапу на пуш |
+| `Sources/LiveActivity/` + `WidgetSources/` | Live Activity сделки: локскрин и Dynamic Island |
 
-## Сборка на Mac
-Требуется macOS + Xcode 15+.
+Веб-часть моста живёт в `ultra-site`: `inc/app_bridge.php` (отдаёт `window.KlikoUser`
+и `window.KlikoCsrf`), `api/push_register.php` (приём токена APNs), `inc/apns.php`
+(отправка), `js/cabinet.js` → `dealLiveActivity()` (кормит плашку сделки).
 
-1. Установи генератор проекта (один раз):
-   ```bash
-   brew install xcodegen
-   ```
-2. В папке проекта сгенерируй `.xcodeproj` и открой:
-   ```bash
-   cd kliko-ios
-   xcodegen generate
-   open Kliko.xcodeproj
-   ```
-3. В Xcode → target **Kliko** → **Signing & Capabilities**: выбери свой Team (Apple ID),
-   при необходимости поменяй Bundle ID (`kz.kliko.app`).
-4. Выбери симулятор (напр. iPhone 15) и нажми **Run** (⌘R). Лента подтянется с `kliko.kz`.
+## Сборка — в облаке, Mac не нужен
 
-> Если хочешь тестировать против локального стейджа по http — добавь `NSAppTransportSecurity`
-> в Info (через `project.yml`), но прод по HTTPS исключений не требует.
+Сборку делает GitHub Actions на macOS-раннере: `.github/workflows/ios.yml`. Подпись —
+ключом App Store Connect API, сертификат и профили Xcode создаёт сам
+(`-allowProvisioningUpdates`). Ни сертификатов, ни fastlane match, ни своего Mac.
+
+### 1. В кабинете Apple (браузер, Windows подходит)
+
+1. **Identifiers** → App ID `kz.kliko.app`, включить **Push Notifications**.
+   Второй App ID `kz.kliko.app.widgets` — для виджета Live Activity.
+2. **Keys** → новый ключ с **APNs** → скачать `AuthKey_XXXX.p8` (даётся **один раз**),
+   записать **Key ID**. Это ключ для отправки пушей с сервера.
+3. **Team ID** — правый верхний угол портала.
+4. **App Store Connect → Users and Access → Integrations → App Store Connect API** →
+   ключ с ролью **App Manager**: **Issuer ID**, **Key ID**, файл `.p8`.
+   Это отдельный ключ, не тот, что для APNs: первый подписывает и заливает сборку,
+   второй шлёт уведомления.
+5. **App Store Connect → Apps** → создать приложение с bundle id `kz.kliko.app`.
+
+### 2. Секреты репозитория
+
+Settings → Secrets and variables → Actions:
+
+| Секрет | Откуда |
+|---|---|
+| `APPLE_TEAM_ID` | Team ID из портала |
+| `ASC_KEY_ID` | Key ID ключа App Store Connect API |
+| `ASC_ISSUER_ID` | Issuer ID оттуда же |
+| `ASC_KEY_P8` | тот `.p8` в base64, одной строкой |
+
+В PowerShell на Windows:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXX.p8"))
+```
+
+### 3. Запуск
+
+Вкладка **Actions** → «iOS · TestFlight» → **Run workflow**.
+
+Первый прогон — с `upload = false`: соберёт и подпишет, но никуда не отправит, и
+покажет, всё ли на месте, не расходуя номер сборки в App Store Connect. Дальше
+`upload = true` либо тег `v1.0.0` — сборка уезжает в TestFlight сама.
+
+Номер сборки — номер запуска workflow, повторов не бывает. Версия витрины берётся из
+тега (`v1.0.0` → `1.0.0`) или из поля при ручном запуске.
+
+## Пуши: что задать на сервере
+
+В `admin_config.php` (правится руками на сервере, в репозитории его нет):
+
+```php
+define('APNS_KEY_ID',   'XXXXXXXXXX');                  // Key ID ключа APNs
+define('APNS_TEAM_ID',  'YYYYYYYYYY');                  // Team ID
+define('APNS_BUNDLE_ID','kz.kliko.app');
+define('APNS_KEY_P8',   '/абсолютный/путь/AuthKey_XXXXXXXXXX.p8');
+define('APNS_ENV',      'production');
+```
+
+⚠️ **`APNS_ENV` и `aps-environment` в `project.yml` должны совпадать.** Сейчас в
+проекте стоит `production` — под TestFlight и App Store. Расхождение не ломает
+сборку: APNs просто отвечает `BadDeviceToken`, и пуши молча не доходят.
+
+Файл `.p8` положить вне веб-корня и закрыть от раздачи.
+
+## Локально на Windows
+
+Собрать нельзя — нужен Xcode. Проверять правки можно только прогоном workflow.
+Поэтому Swift здесь пишется с расчётом на первый успешный проход: синтаксис
+выверяется глазами, а не компилятором.
 
 ## Структура
+
 ```
-project.yml            — спецификация проекта для XcodeGen
+project.yml                     — спецификация для XcodeGen (таргеты, entitlements, Info.plist)
+.github/workflows/ios.yml       — сборка, подпись, заливка в TestFlight
 Sources/
-  KlikoApp.swift       — @main, входная сцена (FeedView)
-  Config.swift         — apiBase (домен) + помощник URL
-  Theme.swift          — бренд-палитра
-  Models/MarketItem.swift  — модель товара (Codable, snake_case)
-  Networking/API.swift     — клиент API (async/await, cookies)
-  Feed/FeedViewModel.swift — состояние ленты (пагинация/поиск)
-  Feed/FeedView.swift      — экран ленты (2-колоночная сетка)
-  Feed/ItemCard.swift      — карточка товара
+  KlikoApp.swift                — @main → RootWebView
+  Config.swift                  — apiBase (домен)
+  Theme.swift                   — бренд-палитра
+  App/AppDelegate.swift         — APNs, deep-link
+  Web/RootWebView.swift         — сцена: сплэш → веб
+  Web/WebContainer.swift        — WKWebView и его политика
+  Web/WebBridge.swift           — мост JS ↔ Swift
+  Web/SplashView.swift          — прелоадер
+  LiveActivity/DealActivityManager.swift
+Shared/DealActivityAttributes.swift   — общие типы приложения и виджета
+WidgetSources/DealLiveActivity.swift  — локскрин и Dynamic Island
 ```
 
 ## Заметки
-- Иконку приложения добавим позже (Assets.xcassets → AppIcon) — сейчас проект собирается с дефолтной.
-- Домен API меняется в `Sources/Config.swift` (`apiBase`).
+
+- Deployment target — iOS 17.
+- Домен API меняется в `Sources/Config.swift`.
+- Bundle id: приложение `kz.kliko.app`, виджет `kz.kliko.app.widgets`.

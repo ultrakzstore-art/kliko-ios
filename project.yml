@@ -8,7 +8,10 @@ settings:
   base:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: ""            # ← впиши свой Apple Team ID в Xcode (Signing & Capabilities) для ОБОИХ таргетов
+    # Team ID подставляет сборка: xcodebuild получает DEVELOPMENT_TEAM аргументом из
+    # секрета APPLE_TEAM_ID (.github/workflows/ios.yml). Здесь пусто намеренно — Team ID
+    # виден в архиве и в логах, и держать его в репозитории незачем.
+    DEVELOPMENT_TEAM: ""
     SWIFT_VERSION: "5.9"
 targets:
   # ── Приложение: PWA-обёртка ──
@@ -23,7 +26,13 @@ targets:
     entitlements:
       path: Kliko.entitlements
       properties:
-        aps-environment: development   # ← для App Store/TestFlight поменяй на production (или авто-подпись)
+        # production, а не development. Профиль распространения, который создаёт сборка,
+        # несёт aps-environment=production, и расхождение с этим файлом ломает подпись.
+        # Сервер обязан быть в том же окружении: APNS_ENV='production' в admin_config.php,
+        # иначе APNs отвечает BadDeviceToken и пуши молча не доходят.
+        # Появится Mac и отладка на устройстве из Xcode — тогда здесь development, а на
+        # сервере APNS_ENV='sandbox'; менять надо ОБА, поодиночке они бесполезны.
+        aps-environment: production
     info:
       path: Kliko-Info.plist
       properties:
@@ -37,6 +46,10 @@ targets:
         NSPhotoLibraryUsageDescription: "Доступ к фото — чтобы прикреплять изображения к объявлению."
         NSPhotoLibraryAddUsageDescription: "Сохранение изображений из объявлений в галерею."
         NSLocationWhenInUseUsageDescription: "Геолокация показывает объявления рядом и помогает в доставке."
+        # Приложение шифрует только через системный HTTPS — это освобождённый случай.
+        # Без этого ключа App Store Connect задаёт вопрос об экспортном соответствии на
+        # КАЖДОЙ загрузке, и сборка висит в статусе «ожидает ответа» вместо TestFlight.
+        ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app
