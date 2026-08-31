@@ -37,6 +37,16 @@ targets:
       path: Kliko-Info.plist
       properties:
         CFBundleDisplayName: Kliko
+        # НОМЕР СБОРКИ И ВЕРСИЯ — ССЫЛКАМИ, А НЕ ЧИСЛАМИ. XcodeGen, генерируя этот
+        # plist, кладёт в версионные ключи литералы (CFBundleVersion=1,
+        # CFBundleShortVersionString=1.0). Сборка передаёт xcodebuild
+        # CURRENT_PROJECT_VERSION=<номер запуска> и MARKETING_VERSION=<версия из тега>, но это
+        # НАСТРОЙКИ, и без ссылки на них в бандл уезжает единица — каждый раз, любым прогоном.
+        # Всплыло это только на второй загрузке: App Store Connect отказал словами «bundle
+        # version must be higher than the previously uploaded version: '1'», хотя workflow
+        # думал, что шлёт седьмую сборку.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # НА ПЛАНШЕТЕ — ВСЕ ЧЕТЫРЕ. Телефон держат вертикально, планшет — как придётся, и
@@ -91,6 +101,11 @@ targets:
       path: KlikoWidgets-Info.plist
       properties:
         CFBundleDisplayName: Kliko
+        # ТЕ ЖЕ ЧИСЛА, ЧТО У ПРИЛОЖЕНИЯ. App Store Connect отклоняет пакет, в котором
+        # версия расширения разошлась с версией приложения, — а разойтись им проще
+        # простого: у литералов XcodeGen нет причины меняться вместе.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
