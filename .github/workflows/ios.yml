@@ -65,7 +65,12 @@ jobs:
       KEY_DIR: ${{ github.workspace }}/build/keys
 
     steps:
-      - uses: actions/checkout@v4
+      # v7, а не v4: раннер снял с поддержки Node 20 и до поры запускал старые действия
+      # на Node 24 сам, предупреждая в каждом прогоне. Когда перестанет — шаг упадёт на
+      # ровном месте. По дороге сюда ничего ломающего для нас нет: v5 — Node 24, v6 —
+      # токен в отдельном файле, v7 — ESM и запрет чекаута форк-PR для pull_request_target
+      # и workflow_run, а у нас триггеры только workflow_dispatch и тег.
+      - uses: actions/checkout@v7
 
       - name: Проверить, что секреты заведены
         # Без этой проверки забытый секрет всплывает через десять минут ошибкой подписи,
@@ -241,7 +246,10 @@ jobs:
 
       - name: Сохранить сборку
         if: always()
-        uses: actions/upload-artifact@v4
+        # v7 по той же причине, что и checkout. Входы, которыми мы пользуемся
+        # (name/path/if-no-files-found/retention-days), за три мажора не менялись;
+        # в v7 добавился лишь необязательный archive.
+        uses: actions/upload-artifact@v7
         with:
           name: kliko-ios-${{ github.run_number }}
           # .ipa появляется только при upload=false — при заливке файл уходит сразу в Apple.
