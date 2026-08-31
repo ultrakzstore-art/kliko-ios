@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit   // UIPasteboard: чтение системного буфера для моста вставки
 
 /// PWA kliko.kz внутри нативной обёртки. Сессия живёт в cookie-хранилище WKWebView
 /// (persistent) — вход/эскроу/чат работают как в браузере. Пуши регистрируются
@@ -15,6 +16,13 @@ struct WebContainer: UIViewRepresentable {
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []          // видео/аудио в ленте без лишнего тапа
         cfg.websiteDataStore = .default()                          // ПЕРСИСТЕНТНЫЕ cookie → сессия не слетает
+        /* ПОДПИСЬ ПРИЛОЖЕНИЯ В USER-AGENT. WKWebView честно считает себя браузером, и
+           странице приходилось угадывать по косвенным признакам: «iPhone/iPad в UA, но
+           ни Safari, ни CriOS». На iPad это ненадёжно — там UA умеет быть настольным.
+           App Review отклонил сборку по 5.1.2(i) именно из-за окна про куки, которое
+           внутри приложения показываться не должно, поэтому признак обязан быть точным,
+           а не вероятным. applicationNameForUserAgent дописывает метку к стандартному UA. */
+        cfg.applicationNameForUserAgent = "KlikoApp"
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         cfg.defaultWebpagePreferences = prefs
@@ -22,6 +30,12 @@ struct WebContainer: UIViewRepresentable {
         // Мост Live Activity сделки: PWA зовёт window.KlikoLive.{start,update,end}(deal).
         let ucc = cfg.userContentController
         ucc.add(context.coordinator, name: "klikoLive")
+        // Мост буфера обмена. В WKWebView веб-страница НЕ может прочитать системный
+        // буфер: navigator.clipboard.readText там либо отсутствует, либо отказывает —
+        // это ограничение платформы, а не наша ошибка. Кнопка «Вставить» на странице
+        // из-за этого выглядела сломанной. Читает буфер нативная сторона и отдаёт
+        // строку обратно в страницу — так же, как это делает любое приложение.
+        ucc.add(context.coordinator, name: "klikoPaste")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -79,7 +93,25 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true };
+        /* Вставка из системного буфера. Страница зовёт KlikoPaste.read() и получает
+           обещание; нативная сторона читает UIPasteboard и вызывает __klikoPasteDone.
+           Ждём не дольше двух секунд: если ответа нет, страница покажет привычную
+           подсказку про долгое нажатие, а не будет висеть. */
+        window.__klikoPasteCbs = [];
+        window.__klikoPasteDone = function(t){
+          var q = window.__klikoPasteCbs; window.__klikoPasteCbs = [];
+          q.forEach(function(f){ try{ f(String(t==null?'':t)); }catch(e){} });
+        };
+        window.KlikoPaste = { read: function(){
+          return new Promise(function(resolve){
+            var готово=false;
+            window.__klikoPasteCbs.push(function(t){ if(!готово){ готово=true; resolve(t); } });
+            try{ window.webkit.messageHandlers.klikoPaste.postMessage({}); }
+            catch(e){ if(!готово){ готово=true; resolve(''); } }
+            setTimeout(function(){ if(!готово){ готово=true; resolve(''); } }, 2000);
+          });
+        } };
         window.KlikoLive = {
           start:  function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'start',  deal:d||{}}); }catch(e){} },
           update: function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'update', deal:d||{}}); }catch(e){} },
@@ -88,6 +120,17 @@ struct WebContainer: UIViewRepresentable {
         """
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            // Буфер обмена: читаем и возвращаем строку в страницу.
+            if message.name == "klikoPaste" {
+                // UIPasteboard.string — то же, что видит человек в меню «Вставить».
+                // Ничего не сохраняем и никуда не отправляем: строка уходит прямо в
+                // страницу, которая её и запросила по нажатию кнопки.
+                let text = UIPasteboard.general.string ?? ""
+                let json = String(data: (try? JSONSerialization.data(withJSONObject: [text])) ?? Data(), encoding: .utf8) ?? "[\"\"]"
+                let js = "window.__klikoPasteDone(\(json)[0])"
+                DispatchQueue.main.async { [weak self] in self?.webView?.evaluateJavaScript(js) }
+                return
+            }
             guard message.name == "klikoLive", let body = message.body as? [String: Any] else { return }
             DealActivityManager.shared.handle(body)
         }
