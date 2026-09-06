@@ -36,6 +36,13 @@ struct WebContainer: UIViewRepresentable {
         // из-за этого выглядела сломанной. Читает буфер нативная сторона и отдаёт
         // строку обратно в страницу — так же, как это делает любое приложение.
         ucc.add(context.coordinator, name: "klikoPaste")
+        // Мост «открыть настройки приложения». Из веб-страницы системные настройки
+        // открыть НЕЛЬЗЯ: схемы вроде app-settings: браузеры закрыли давно. А человеку,
+        // который однажды нажал «Запретить» геопозицию или уведомления, вернуть их
+        // иначе почти невозможно — он не знает, где искать. Здесь страница просит
+        // открыть свой раздел настроек, и это единственный способ довести его туда
+        // одним нажатием. Ничего не читаем и не передаём: только открываем экран.
+        ucc.add(context.coordinator, name: "klikoSettings")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -129,6 +136,12 @@ struct WebContainer: UIViewRepresentable {
                 let json = String(data: (try? JSONSerialization.data(withJSONObject: [text])) ?? Data(), encoding: .utf8) ?? "[\"\"]"
                 let js = "window.__klikoPasteDone(\(json)[0])"
                 DispatchQueue.main.async { [weak self] in self?.webView?.evaluateJavaScript(js) }
+                return
+            }
+            // Открыть раздел этого приложения в системных настройках.
+            if message.name == "klikoSettings" {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                DispatchQueue.main.async { UIApplication.shared.open(url) }
                 return
             }
             guard message.name == "klikoLive", let body = message.body as? [String: Any] else { return }
