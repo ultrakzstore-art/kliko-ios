@@ -1,6 +1,8 @@
 import SwiftUI
 import WebKit
 import UIKit   // UIPasteboard: чтение системного буфера для моста вставки
+import CoreLocation      // различить «гео выключено на устройстве» и «запрещено этому приложению»
+import UserNotifications // статус уведомлений и запрос разрешения изнутри приложения
 
 /// PWA kliko.kz внутри нативной обёртки. Сессия живёт в cookie-хранилище WKWebView
 /// (persistent) — вход/эскроу/чат работают как в браузере. Пуши регистрируются
@@ -43,6 +45,17 @@ struct WebContainer: UIViewRepresentable {
         // открыть свой раздел настроек, и это единственный способ довести его туда
         // одним нажатием. Ничего не читаем и не передаём: только открываем экран.
         ucc.add(context.coordinator, name: "klikoSettings")
+        // Состояние разрешений. Веб-страница про них знает постыдно мало: браузерный
+        // Permissions API отвечает «denied» и в случае «человек запретил Kliko», и в
+        // случае «геолокация выключена на всём устройстве». Это два разных разговора:
+        // в первом надо открыть настройки приложения, во втором — общие, и никакая
+        // кнопка в настройках Kliko не поможет, пока выключен рубильник системы.
+        // Нативная сторона различает их и говорит странице правду.
+        ucc.add(context.coordinator, name: "klikoPerms")
+        // Запрос разрешения на уведомления ИЗНУТРИ приложения. Пока статус
+        // notDetermined, системное окно можно показать — и это куда лучше, чем гнать
+        // человека в настройки за тем, что спрашивается одним нажатием.
+        ucc.add(context.coordinator, name: "klikoAskPush")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -97,10 +110,77 @@ struct WebContainer: UIViewRepresentable {
 
         init(bridge: WebBridge) { self.bridge = bridge }
 
+        /// Собрать состояние разрешений и отдать его странице вызовом __klikoPerms.
+        ///
+        /// Геопозиция: locationServicesEnabled() — общий рубильник устройства,
+        /// authorizationStatus — решение по ЭТОМУ приложению. Первый вызов документирован
+        /// как блокирующий, поэтому уводим его с главной нити.
+        /// Уведомления: getNotificationSettings — единственный честный источник; статус
+        /// notDetermined означает, что окно ещё можно показать.
+        func отдатьРазрешения() {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let системаГео = CLLocationManager.locationServicesEnabled()
+                let статусГео: String
+                switch CLLocationManager().authorizationStatus {
+                case .authorizedAlways, .authorizedWhenInUse: статусГео = "granted"
+                case .denied, .restricted:                    статусГео = "denied"
+                default:                                      статусГео = "notDetermined"
+                }
+                UNUserNotificationCenter.current().getNotificationSettings { настройки in
+                    let статусПуш: String
+                    switch настройки.authorizationStatus {
+                    case .authorized, .provisional, .ephemeral: статусПуш = "granted"
+                    case .denied:                               статусПуш = "denied"
+                    default:                                    статусПуш = "notDetermined"
+                    }
+                    let данные: [String: Any] = [
+                        "гео": ["система": системаГео, "приложение": статусГео],
+                        "пуш": статусПуш
+                    ]
+                    let json = String(data: (try? JSONSerialization.data(withJSONObject: данные)) ?? Data(),
+                                      encoding: .utf8) ?? "{}"
+                    DispatchQueue.main.async { [weak self] in
+                        self?.webView?.evaluateJavaScript("window.__klikoPerms && window.__klikoPerms(\(json))")
+                    }
+                }
+            }
+        }
+
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true };
+        /* Разрешения. Страница зовёт KlikoPerms.read() и получает обещание с состоянием:
+           {гео:{система, приложение}, пуш}. Различать «выключено на устройстве» и
+           «запрещено этому приложению» в вебе нечем, а разговоры это разные. */
+        window.__klikoPermCbs = [];
+        window.__klikoPerms = function(состояние){
+          var q = window.__klikoPermCbs; window.__klikoPermCbs = [];
+          q.forEach(function(f){ try{ f(состояние); }catch(e){} });
+        };
+        window.KlikoPerms = {
+          read: function(){
+            return new Promise(function(resolve){
+              var готово=false;
+              window.__klikoPermCbs.push(function(с){ if(!готово){ готово=true; resolve(с); } });
+              try{ window.webkit.messageHandlers.klikoPerms.postMessage({}); }
+              catch(e){ if(!готово){ готово=true; resolve(null); } }
+              setTimeout(function(){ if(!готово){ готово=true; resolve(null); } }, 2000);
+            });
+          },
+          /* Спросить уведомления прямо здесь. Система покажет окно, только пока
+             статус notDetermined; иначе вернётся прежнее состояние. */
+          askPush: function(){
+            return new Promise(function(resolve){
+              var готово=false;
+              window.__klikoPermCbs.push(function(с){ if(!готово){ готово=true; resolve(с); } });
+              try{ window.webkit.messageHandlers.klikoAskPush.postMessage({}); }
+              catch(e){ if(!готово){ готово=true; resolve(null); } }
+              setTimeout(function(){ if(!готово){ готово=true; resolve(null); } }, 30000);
+            });
+          },
+          openSettings: function(){ try{ window.webkit.messageHandlers.klikoSettings.postMessage({}); }catch(e){} }
+        };
         /* Вставка из системного буфера. Страница зовёт KlikoPaste.read() и получает
            обещание; нативная сторона читает UIPasteboard и вызывает __klikoPasteDone.
            Ждём не дольше двух секунд: если ответа нет, страница покажет привычную
@@ -136,6 +216,21 @@ struct WebContainer: UIViewRepresentable {
                 let json = String(data: (try? JSONSerialization.data(withJSONObject: [text])) ?? Data(), encoding: .utf8) ?? "[\"\"]"
                 let js = "window.__klikoPasteDone(\(json)[0])"
                 DispatchQueue.main.async { [weak self] in self?.webView?.evaluateJavaScript(js) }
+                return
+            }
+            // Состояние разрешений → в страницу.
+            if message.name == "klikoPerms" {
+                отдатьРазрешения()
+                return
+            }
+            // Спросить разрешение на уведомления. Система покажет окно только пока
+            // статус notDetermined; во всех прочих случаях просто вернём текущий —
+            // страница сама решит, звать ли настройки.
+            if message.name == "klikoAskPush" {
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                    if granted { DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() } }
+                    self.отдатьРазрешения()
+                }
                 return
             }
             // Открыть раздел этого приложения в системных настройках.
