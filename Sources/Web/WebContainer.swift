@@ -56,6 +56,10 @@ struct WebContainer: UIViewRepresentable {
         // notDetermined, системное окно можно показать — и это куда лучше, чем гнать
         // человека в настройки за тем, что спрашивается одним нажатием.
         ucc.add(context.coordinator, name: "klikoAskPush")
+        // Геопозиция через систему, а не через окно WebKit (см. GeoBridge). WKWebView спрашивал
+        // «kliko.kz хочет использовать геопозицию» на каждой новой странице и не помнил ответа;
+        // iOS спрашивает один раз на всё приложение и помнит решение навсегда.
+        ucc.add(context.coordinator, name: "klikoGeo")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -81,6 +85,7 @@ struct WebContainer: UIViewRepresentable {
         web.scrollView.refreshControl = rc
 
         context.coordinator.webView = web
+        context.coordinator.geo.webView = web
         bridge.webView = web
         web.load(URLRequest(url: Config.apiBase))
         return web
@@ -107,6 +112,8 @@ struct WebContainer: UIViewRepresentable {
         weak var webView: WKWebView?
         var lastToken: String?
         var lastLive: LiveToken?
+        /// Геопозиция для страницы через CoreLocation (мост klikoGeo).
+        let geo = GeoBridge()
 
         init(bridge: WebBridge) { self.bridge = bridge }
 
@@ -149,7 +156,7 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true };
         /* Разрешения. Страница зовёт KlikoPerms.read() и получает обещание с состоянием:
            {гео:{система, приложение}, пуш}. Различать «выключено на устройстве» и
            «запрещено этому приложению» в вебе нечем, а разговоры это разные. */
@@ -181,6 +188,70 @@ struct WebContainer: UIViewRepresentable {
           },
           openSettings: function(){ try{ window.webkit.messageHandlers.klikoSettings.postMessage({}); }catch(e){} }
         };
+        /* ГЕОПОЗИЦИЯ — ЧЕРЕЗ СИСТЕМУ. Окно WebKit «сайт хочет знать ваше местоположение»
+           появлялось на каждой новой странице и ответа не помнило: витрина, кабинет, карта и
+           доставка спрашивали заново. navigator.geolocation здесь отвечает мостом klikoGeo:
+           iOS спрашивает один раз на всё приложение и помнит решение. Только в главном окне —
+           ответы моста приходят туда, во вложенные рамки их не доставить. */
+        (function(){
+          if (window.top !== window) return;
+          var м = window.webkit && window.webkit.messageHandlers;
+          if (!м || !м.klikoGeo) return;
+          var ждут = {}, номер = 0;
+          function ошибка(код, текст){ return {code: код, message: текст || '', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3}; }
+          window.__klikoGeo = function(id, r){
+            var ж = ждут[id]; if (!ж) return;
+            if (!ж.watch) delete ждут[id];
+            if (r && r.ok) {
+              var н = function(v){ return (v === undefined) ? null : v; };
+              try { ж.ok({coords: {latitude: r.lat, longitude: r.lon, accuracy: r.acc, altitude: н(r.alt), altitudeAccuracy: н(r.altAcc), heading: н(r.heading), speed: н(r.speed)}, timestamp: r.ts || Date.now()}); } catch (e) {}
+            } else if (ж.err) {
+              try { ж.err(ошибка((r && r.code) || 2, r && r.message)); } catch (e) {}
+            }
+          };
+          function послать(сообщ){ try { м.klikoGeo.postMessage(сообщ); return true; } catch (e) { return false; } }
+          var гео = {
+            getCurrentPosition: function(ok, err, опц){
+              опц = опц || {};
+              var id = ++номер;
+              ждут[id] = {ok: ok, err: err, watch: false};
+              var срок = (typeof опц.timeout === 'number' && опц.timeout > 0 && опц.timeout !== Infinity) ? опц.timeout : 0;
+              var возраст = (typeof опц.maximumAge === 'number') ? (опц.maximumAge === Infinity ? 1e12 : опц.maximumAge) : 0;
+              if (!послать({op: 'get', id: id, high: !!опц.enableHighAccuracy, maxAge: возраст, timeout: срок})) {
+                delete ждут[id];
+                if (err) { try { err(ошибка(2, 'bridge')); } catch (e) {} }
+              }
+            },
+            watchPosition: function(ok, err, опц){
+              опц = опц || {};
+              var id = ++номер;
+              ждут[id] = {ok: ok, err: err, watch: true};
+              послать({op: 'watch', id: id, high: !!опц.enableHighAccuracy});
+              return id;
+            },
+            clearWatch: function(id){ delete ждут[id]; послать({op: 'clear', id: id}); }
+          };
+          try { Object.defineProperty(navigator, 'geolocation', {value: гео, configurable: true}); } catch (e) {}
+          /* Permissions API про геопозицию — по решению системы для приложения. Иначе фоновые
+             места сайта (js/geo.js) считали бы, что «ещё не спрашивали», и не брали координаты
+             даже после разрешения. */
+          try {
+            if (navigator.permissions && navigator.permissions.query) {
+              var исходный = navigator.permissions.query.bind(navigator.permissions);
+              navigator.permissions.query = function(описание){
+                if (описание && описание.name === 'geolocation' && window.KlikoPerms) {
+                  return KlikoPerms.read().then(function(с){
+                    var г = (с && с['гео']) || {};
+                    var сост = (г['система'] === false || г['приложение'] === 'denied') ? 'denied'
+                             : (г['приложение'] === 'granted' ? 'granted' : 'prompt');
+                    return {name: 'geolocation', state: сост, onchange: null};
+                  });
+                }
+                return исходный(описание);
+              };
+            }
+          } catch (e) {}
+        })();
         /* Вставка из системного буфера. Страница зовёт KlikoPaste.read() и получает
            обещание; нативная сторона читает UIPasteboard и вызывает __klikoPasteDone.
            Ждём не дольше двух секунд: если ответа нет, страница покажет привычную
@@ -216,6 +287,11 @@ struct WebContainer: UIViewRepresentable {
                 let json = String(data: (try? JSONSerialization.data(withJSONObject: [text])) ?? Data(), encoding: .utf8) ?? "[\"\"]"
                 let js = "window.__klikoPasteDone(\(json)[0])"
                 DispatchQueue.main.async { [weak self] in self?.webView?.evaluateJavaScript(js) }
+                return
+            }
+            // Геопозиция: запрос страницы → CoreLocation → ответ в страницу (см. GeoBridge).
+            if message.name == "klikoGeo" {
+                if let body = message.body as? [String: Any] { geo.handle(body) }
                 return
             }
             // Состояние разрешений → в страницу.
