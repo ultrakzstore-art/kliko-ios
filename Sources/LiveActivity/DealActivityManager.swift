@@ -29,16 +29,35 @@ final class DealActivityManager {
         Task { await startOrUpdate(d) }
     }
 
+    /// Состояние из моста страницы. Сайт присылает и курьера (phase/etaAt/courier) — то же состояние,
+    /// что сервер шлёт пушем. Прежняя версия сайта курьера не присылает: тогда, пока этап сделки тот
+    /// же, оставляем курьера и его подписи из текущей плашки — иначе открытие приложения стирало бы
+    /// «Курьер едет к вам, будет в 14:35», присланное пушем.
     private func contentState(_ d: [String: Any]) -> DealActivityAttributes.ContentState {
-        DealActivityAttributes.ContentState(
-            status:     d["status"]     as? String ?? "",
-            statusText: d["statusText"] as? String ?? "",
+        let dealId = d["dealId"] as? String ?? ""
+        let prev: DealActivityAttributes.ContentState? = (activeDealId == dealId) ? activity?.content.state : nil
+        let status = d["status"] as? String ?? ""
+        let withCourier = d.keys.contains("phase")
+        let keep = !withCourier && !(prev?.phase ?? "").isEmpty && prev?.status == status
+        return DealActivityAttributes.ContentState(
+            status:     status,
+            statusText: keep ? (prev?.statusText ?? "") : (d["statusText"] as? String ?? ""),
             stepIndex:  intVal(d["stepIndex"]),
             stepsTotal: intVal(d["stepsTotal"]),
             counterpart: d["counterpart"] as? String ?? "",
             amountText: d["amountText"] as? String ?? "",
-            etaText:    d["etaText"]    as? String ?? ""
+            etaText:    keep ? (prev?.etaText ?? "") : (d["etaText"] as? String ?? ""),
+            phase:      withCourier ? (d["phase"] as? String) : (keep ? prev?.phase : nil),
+            etaAt:      withCourier ? positive(d["etaAt"]) : (keep ? prev?.etaAt : nil),
+            courier:    withCourier ? (d["courier"] as? String) : (keep ? prev?.courier : nil)
         )
+    }
+    /// Время прибытия из моста: число или строка; ноль и мусор — «времени нет».
+    private func positive(_ v: Any?) -> Double? {
+        if let n = v as? Double { return n > 0 ? n : nil }
+        if let n = v as? Int { return n > 0 ? Double(n) : nil }
+        if let s = v as? String, let n = Double(s) { return n > 0 ? n : nil }
+        return nil
     }
     private func intVal(_ v: Any?) -> Int {
         if let i = v as? Int { return i }
