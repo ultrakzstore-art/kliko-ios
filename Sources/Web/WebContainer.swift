@@ -84,6 +84,7 @@ struct WebContainer: UIViewRepresentable {
         // Pull-to-refresh
         let rc = UIRefreshControl()
         rc.tintColor = UIColor(Theme.green2)
+        rc.attributedTitle = Coordinator.фразаОбновления()   // подпись под колесом: «потяни ещё — обновится», каждый раз другая
         rc.addTarget(context.coordinator, action: #selector(Coordinator.onPull(_:)), for: .valueChanged)
         web.scrollView.refreshControl = rc
 
@@ -346,6 +347,30 @@ struct WebContainer: UIViewRepresentable {
             DealActivityManager.shared.handle(body)
         }
 
+        /// Подпись при потягивании вниз. Владелец 15.09.2026: «пусть выходит упоминание — подтяни ещё, обновится; слова
+        /// подбери сам и каждый раз разные, интересные». Фраза меняется после каждого обновления, язык — первый язык
+        /// телефона (kk/ru/en/ar), по умолчанию русский.
+        static let фразыОбновления: [String: [String]] = [
+            "ru": ["Потяни ещё — обновится", "Отпускай, сейчас освежим", "Ещё чуть-чуть — и всё свежее",
+                   "Проверяем, что нового на витрине", "Потяни — вдруг уже появилось то самое", "Свежие объявления уже в пути",
+                   "Ещё немного — и лента обновится", "Смотрим, кто что выставил"],
+            "kk": ["Тағы тартыңыз — жаңарады", "Жіберіңіз, қазір жаңартамыз", "Витринада не жаңалық бар екен",
+                   "Жаңа хабарландырулар жолда", "Сәл ғана — лента жаңарады"],
+            "en": ["Pull a bit more to refresh", "Let go — freshening things up", "Checking what's new",
+                   "Fresh listings on the way", "Almost there — the feed is updating"],
+            "ar": ["اسحب أكثر قليلًا للتحديث", "اترك — نحدّث الآن", "نتحقق من الجديد",
+                   "إعلانات جديدة في الطريق", "لحظة — تتحدث القائمة"]
+        ]
+        static func фразаОбновления() -> NSAttributedString {
+            let код = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+            let список = фразыОбновления[код] ?? фразыОбновления["ru"] ?? []
+            let текст = список.randomElement() ?? ""
+            return NSAttributedString(string: текст, attributes: [
+                .foregroundColor: UIColor.secondaryLabel,
+                .font: UIFont.preferredFont(forTextStyle: .footnote)
+            ])
+        }
+
         @objc func onPull(_ sender: UIRefreshControl) { webView?.reload() }
 
         // Ссылки в мессенджеры/звонок/почту — во внешние приложения; остальное (в т.ч.
@@ -384,6 +409,7 @@ struct WebContainer: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             webView.scrollView.refreshControl?.endRefreshing()
+            webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             bridge.loadFailed = false
             if !bridge.isLoaded { bridge.isLoaded = true }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
@@ -391,10 +417,12 @@ struct WebContainer: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             webView.scrollView.refreshControl?.endRefreshing()
+            webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             failIfOffline(error)
         }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             webView.scrollView.refreshControl?.endRefreshing()
+            webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             failIfOffline(error)
         }
         private func failIfOffline(_ error: Error) {
