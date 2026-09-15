@@ -60,6 +60,9 @@ struct WebContainer: UIViewRepresentable {
         // «kliko.kz хочет использовать геопозицию» на каждой новой странице и не помнил ответа;
         // iOS спрашивает один раз на всё приложение и помнит решение навсегда.
         ucc.add(context.coordinator, name: "klikoGeo")
+        // Получатель из контактов (см. ContactsBridge): системный список, разрешение на контакты не нужно —
+        // приложение получает только выбранные человеком имя и номер.
+        ucc.add(context.coordinator, name: "klikoContacts")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -86,6 +89,7 @@ struct WebContainer: UIViewRepresentable {
 
         context.coordinator.webView = web
         context.coordinator.geo.webView = web
+        context.coordinator.contacts.webView = web
         bridge.webView = web
         web.load(URLRequest(url: Config.apiBase))
         return web
@@ -114,6 +118,8 @@ struct WebContainer: UIViewRepresentable {
         var lastLive: LiveToken?
         /// Геопозиция для страницы через CoreLocation (мост klikoGeo).
         let geo = GeoBridge()
+        /// Выбор получателя из контактов телефона (мост klikoContacts).
+        let contacts = ContactsBridge()
 
         init(bridge: WebBridge) { self.bridge = bridge }
 
@@ -156,7 +162,7 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true };
         /* Разрешения. Страница зовёт KlikoPerms.read() и получает обещание с состоянием:
            {гео:{система, приложение}, пуш}. Различать «выключено на устройстве» и
            «запрещено этому приложению» в вебе нечем, а разговоры это разные. */
@@ -270,6 +276,21 @@ struct WebContainer: UIViewRepresentable {
             setTimeout(function(){ if(!готово){ готово=true; resolve(''); } }, 2000);
           });
         } };
+        /* Получатель из телефонной книги. Страница зовёт KlikoContacts.pick() и получает обещание {ok, name, phone};
+           ok:false с code 'cancel' — человек закрыл список. Разрешение на контакты не нужно (ContactsBridge). */
+        window.__klikoContactCbs = {};
+        window.__klikoContact = function(id, r){
+          var f = window.__klikoContactCbs[id]; delete window.__klikoContactCbs[id];
+          if (f) { try { f(r || {ok:false}); } catch (e) {} }
+        };
+        window.KlikoContacts = { pick: function(){
+          return new Promise(function(resolve){
+            var id = Math.floor(Math.random() * 1000000000);
+            window.__klikoContactCbs[id] = resolve;
+            try { window.webkit.messageHandlers.klikoContacts.postMessage({id: id}); }
+            catch (e) { delete window.__klikoContactCbs[id]; resolve({ok:false, code:'bridge'}); }
+          });
+        } };
         window.KlikoLive = {
           start:  function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'start',  deal:d||{}}); }catch(e){} },
           update: function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'update', deal:d||{}}); }catch(e){} },
@@ -292,6 +313,12 @@ struct WebContainer: UIViewRepresentable {
             // Геопозиция: запрос страницы → CoreLocation → ответ в страницу (см. GeoBridge).
             if message.name == "klikoGeo" {
                 if let body = message.body as? [String: Any] { geo.handle(body) }
+                return
+            }
+            // Получатель из контактов: системный список, ответ уйдёт в страницу (ContactsBridge).
+            if message.name == "klikoContacts" {
+                let id = ((message.body as? [String: Any])?["id"] as? NSNumber)?.intValue ?? 0
+                contacts.pick(id: id)
                 return
             }
             // Состояние разрешений → в страницу.
