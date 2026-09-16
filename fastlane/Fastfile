@@ -27,6 +27,8 @@ platform :ios do
     UI.user_error!("У приложения нет ни одной версии в App Store Connect") unless base
     langs = base.get_app_store_version_localizations.map(&:locale)
     UI.message("Языки версии: #{langs.join(', ')}")
+    # Пометки прогона (::notice::) видны на странице Actions без входа в GitHub — логи шагов нет.
+    $stdout.puts("::notice title=App Store Connect::в App Store #{live ? live.version_string : '-'}; готовится #{edit ? "#{edit.version_string} (#{edit.app_store_state})" : '-'}; языки: #{langs.join(', ')}")
 
     root = ENV.fetch("GITHUB_WORKSPACE")
     src = File.join(root, "fastlane", "screenshots")
@@ -40,6 +42,7 @@ platform :ios do
         UI.success("#{lang}: #{Dir.glob(File.join(src, lang, '*.png')).size} кадров")
       else
         UI.important("#{lang}: такого языка у версии нет — пропускаю")
+        $stdout.puts("::warning title=Язык пропущен::#{lang} не заведён у версии в App Store Connect")
       end
     end
     UI.user_error!("Ни один язык с кадрами не заведён у версии") if Dir.children(dst).empty?
@@ -59,5 +62,18 @@ platform :ios do
       run_precheck_before_submit: false,
       force: true
     )
+
+    # Сверка по факту: что теперь лежит у версии в App Store Connect, по языкам и размерам экрана.
+    after = app.get_edit_app_store_version(platform: ios)
+    UI.user_error!("После заливки у приложения нет готовящейся версии") unless after
+    after.get_app_store_version_localizations.each do |loc|
+      sets = loc.get_app_screenshot_sets
+      line = sets.map do |set|
+        shots = set.app_screenshots || []
+        bad = shots.count { |s| (s.asset_delivery_state || {})["state"].to_s == "FAILED" }
+        "#{set.screenshot_display_type}=#{shots.size}#{bad > 0 ? " (ошибок #{bad})" : ''}"
+      end
+      $stdout.puts("::notice title=Кадры #{loc.locale} · версия #{after.version_string}::#{line.empty? ? 'нет кадров' : line.join(', ')}")
+    end
   end
 end
