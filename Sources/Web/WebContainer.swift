@@ -63,6 +63,12 @@ struct WebContainer: UIViewRepresentable {
         // Получатель из контактов (см. ContactsBridge): системный список, разрешение на контакты не нужно —
         // приложение получает только выбранные человеком имя и номер.
         ucc.add(context.coordinator, name: "klikoContacts")
+        // ВЫХОД НАЧИСТО (владелец 16.09.2026: «старая сессия, когда вышел в приложении — очистить, чтобы не приходили чужие
+        // сообщения на другую сессию; чистая должна быть как попа младенца»). Страница перед выходом зовёт klikoLogout
+        // (inc/app_bridge.php): забываем токены устройства и плашки сделки, закрываем плашку, а когда сервер ответил
+        // выходом (адрес с bye=1) — стираем всё, что WebView хранит на телефоне. Раньше не стираем: без куки сессии
+        // сервер не узнал бы, чьи адреса уведомлений снимать.
+        ucc.add(context.coordinator, name: "klikoLogout")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -88,6 +94,11 @@ struct WebContainer: UIViewRepresentable {
         rc.addTarget(context.coordinator, action: #selector(Coordinator.onPull(_:)), for: .valueChanged)
         web.scrollView.refreshControl = rc
 
+        /* Настоящий прогресс загрузки для прелоадера — доля, которую считает сам WebKit. */
+        context.coordinator.progressObs = web.observe(\.estimatedProgress, options: [.initial, .new]) { w, _ in
+            let p = w.estimatedProgress
+            Task { @MainActor in WebBridge.shared.progress = p }
+        }
         context.coordinator.webView = web
         context.coordinator.geo.webView = web
         context.coordinator.contacts.webView = web
@@ -117,6 +128,9 @@ struct WebContainer: UIViewRepresentable {
         weak var webView: WKWebView?
         var lastToken: String?
         var lastLive: LiveToken?
+        var progressObs: NSKeyValueObservation?
+        /// Выход запрошен страницей — стереть данные WebView, как только сервер ответит выходом (bye=1).
+        var wipeAfterLogout = false
         /// Геопозиция для страницы через CoreLocation (мост klikoGeo).
         let geo = GeoBridge()
         /// Выбор получателя из контактов телефона (мост klikoContacts).
@@ -322,6 +336,15 @@ struct WebContainer: UIViewRepresentable {
                 contacts.pick(id: id)
                 return
             }
+            // Выход: токены забыть сразу (следующий вход отправит токен уже новому аккаунту), плашку сделки закрыть,
+            // данные WebView стереть после ответа сервера (didFinish).
+            if message.name == "klikoLogout" {
+                lastToken = nil
+                lastLive = nil
+                wipeAfterLogout = true
+                Task { await DealActivityManager.shared.end() }
+                return
+            }
             // Состояние разрешений → в страницу.
             if message.name == "klikoPerms" {
                 отдатьРазрешения()
@@ -412,6 +435,13 @@ struct WebContainer: UIViewRepresentable {
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             bridge.loadFailed = false
             if !bridge.isLoaded { bridge.isLoaded = true }
+            if wipeAfterLogout, let адрес = webView.url?.absoluteString, адрес.contains("bye=1") {
+                wipeAfterLogout = false
+                /* Всё, что сайт хранил на телефоне: куки, localStorage, IndexedDB, Cache Storage, сервис-воркеры, кэш.
+                   Сервер уже снял привязки уведомлений этой сессии и погасил её — остатков не будет ни там, ни здесь. */
+                WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                                                        modifiedSince: Date(timeIntervalSince1970: 0)) {}
+            }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }
 

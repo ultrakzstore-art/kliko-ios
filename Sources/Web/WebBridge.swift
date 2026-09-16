@@ -22,6 +22,7 @@ final class WebBridge: ObservableObject {
     @Published var apnsToken: String?      // токен устройства (ставит AppDelegate) → шлём в веб-сессию
     @Published var liveToken: LiveToken?   // токен плашки сделки (ставит DealActivityManager)
     @Published var pendingURL: URL?        // куда перейти по тапу на пуш (deep-link)
+    @Published var progress: Double = 0    // доля загрузки страницы (WKWebView.estimatedProgress) → прогресс-бар прелоадера
 
     weak var webView: WKWebView?
 
