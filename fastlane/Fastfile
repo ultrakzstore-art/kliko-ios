@@ -1,0 +1,63 @@
+# Кадры App Store (см. .github/workflows/appstore-screenshots.yml).
+# Грузим только в те языки, что уже заведены у версии в App Store Connect: новый язык без описания и ключевых слов
+# потом не пропустит версию на проверку, а заводить его — решение владельца, не побочный эффект заливки картинок.
+default_platform(:ios)
+
+platform :ios do
+  lane :shots do |options|
+    version = (options[:version] || "").to_s
+    UI.user_error!("Не задана версия: fastlane shots version:1.5") if version.empty?
+
+    key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+      in_house: false
+    )
+
+    app = Spaceship::ConnectAPI::App.find("kz.kliko.app")
+    UI.user_error!("Приложение kz.kliko.app не найдено этим ключом") unless app
+    ios = Spaceship::ConnectAPI::Platform::IOS
+    edit = app.get_edit_app_store_version(platform: ios)
+    live = app.get_live_app_store_version(platform: ios)
+    UI.message("В App Store: #{live ? live.version_string : '—'}; готовится: #{edit ? "#{edit.version_string} (#{edit.app_store_state})" : '—'}")
+
+    # Новая версия, если её создаст deliver, получает языки предыдущей — берём их оттуда же.
+    base = edit || live
+    UI.user_error!("У приложения нет ни одной версии в App Store Connect") unless base
+    langs = base.get_app_store_version_localizations.map(&:locale)
+    UI.message("Языки версии: #{langs.join(', ')}")
+
+    root = ENV.fetch("GITHUB_WORKSPACE")
+    src = File.join(root, "fastlane", "screenshots")
+    dst = File.join(root, "build", "shots")
+    FileUtils.rm_rf(dst)
+    FileUtils.mkdir_p(dst)
+    Dir.children(src).sort.each do |lang|
+      next unless File.directory?(File.join(src, lang))
+      if langs.include?(lang)
+        FileUtils.cp_r(File.join(src, lang), dst)
+        UI.success("#{lang}: #{Dir.glob(File.join(src, lang, '*.png')).size} кадров")
+      else
+        UI.important("#{lang}: такого языка у версии нет — пропускаю")
+      end
+    end
+    UI.user_error!("Ни один язык с кадрами не заведён у версии") if Dir.children(dst).empty?
+
+    deliver(
+      api_key: key,
+      app_identifier: "kz.kliko.app",
+      platform: "ios",
+      app_version: version,
+      skip_app_version_update: false,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: false,
+      screenshots_path: dst,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+end

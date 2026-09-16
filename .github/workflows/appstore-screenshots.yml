@@ -1,0 +1,106 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Кадры App Store → App Store Connect тем же ключом API, что и сборка (ios.yml).
+#
+# Владелец 16.09.2026: «поменяй сразу фото скринов: аппарат сам был, сверху описание, снизу реальный скрин внутри
+# аппарата; в скринах всё про гаранта и безопасность — торгуйся по-настоящему + безопасно».
+#
+# Кадры лежат в fastlane/screenshots/<язык>/ (ru, en-US), 1290×2796 — размер 6.9″. Внутри телефона — настоящие
+# экраны kliko.kz. Заливка (fastlane/Fastfile, lane shots) перезаписывает прежние кадры версии только в тех языках,
+# что уже заведены в App Store Connect, и на проверку НЕ отправляет.
+#
+# ЗАПУСК: сам — при изменении кадров в main; вручную — Actions → «App Store · Скриншоты» → Run workflow (версия).
+# ─────────────────────────────────────────────────────────────────────────────
+name: App Store · Скриншоты
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия в App Store Connect, к которой относятся кадры"
+        type: string
+        default: "1.5"
+  push:
+    branches: [main]
+    paths:
+      - "fastlane/screenshots/**"
+      - "fastlane/Fastfile"
+      - ".github/workflows/appstore-screenshots.yml"
+
+concurrency:
+  group: appstore-screenshots
+  cancel-in-progress: true
+
+jobs:
+  upload:
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      KEY_DIR: ${{ github.workspace }}/build/keys
+      APP_VERSION: ${{ inputs.version || '1.5' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Проверить, что секреты заведены
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -z "$KID" ] && missing="$missing ASC_KEY_ID"
+          [ -z "$ISS" ] && missing="$missing ASC_ISSUER_ID"
+          [ -z "$P8" ]  && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then echo "::error::Не заведены секреты:$missing"; exit 1; fi
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$KEY_DIR"
+          # Те же три вида секрета, что принимает ios.yml: файл .p8 целиком, он же в base64, только тело ключа.
+          out="$KEY_DIR/AuthKey_$KID.p8"
+          if printf %s "$P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$P8" > "$out"
+          else
+            printf %s "$P8" | tr -d "[:space:]" | base64 -D > "$KEY_DIR/decoded" 2>/dev/null || true
+            if head -c 40 "$KEY_DIR/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$KEY_DIR/decoded" "$out"
+            else
+              body=$(printf %s "$P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"; printf %s "$body"; echo; echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$KEY_DIR/decoded"
+          fi
+          chmod 600 "$out"
+          head -1 "$out" | grep -q 'BEGIN PRIVATE KEY' || { echo "::error::ASC_KEY_P8 не похож на ключ"; exit 1; }
+          echo "ASC_KEY_PATH=$out" >> "$GITHUB_ENV"
+
+      - name: Проверить кадры
+        run: |
+          # 6.9″: 1290×2796. Другой размер App Store Connect отвергнет уже после загрузки — ловим сразу.
+          for f in fastlane/screenshots/*/*.png; do
+            w=$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}'); h=$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')
+            echo "$f ${w}x${h}"
+            [ "$w" = "1290" ] && [ "$h" = "2796" ] || { echo "::error::$f — ${w}x${h}, нужно 1290x2796"; exit 1; }
+          done
+
+      - name: fastlane
+        run: |
+          command -v fastlane >/dev/null 2>&1 || brew install fastlane
+          fastlane --version | tail -1
+
+      - name: Залить кадры в App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          FASTLANE_DISABLE_COLORS: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: fastlane ios shots version:"$APP_VERSION"
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"
