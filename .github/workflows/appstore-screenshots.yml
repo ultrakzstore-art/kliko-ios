@@ -9,6 +9,8 @@
 # что уже заведены в App Store Connect, и на проверку НЕ отправляет.
 #
 # ЗАПУСК: сам — при изменении кадров в main; вручную — Actions → «App Store · Скриншоты» → Run workflow (версия).
+# ВЕРСИЯ ПО УМОЛЧАНИЮ — та, что готовится к выпуску. 17.09.2026 кадры ушли в 1.5, хотя готовилась 1.6: умолчание осталось
+# от прошлой версии, и владелец не нашёл их в 1.6. Новая версия в App Store Connect — меняйте умолчание здесь же (два места ниже).
 # ─────────────────────────────────────────────────────────────────────────────
 name: App Store · Скриншоты
 
@@ -18,7 +20,7 @@ on:
       version:
         description: "Версия в App Store Connect, к которой относятся кадры"
         type: string
-        default: "1.5"
+        default: "1.6"
   push:
     branches: [main]
     paths:
@@ -36,7 +38,7 @@ jobs:
     timeout-minutes: 40
     env:
       KEY_DIR: ${{ github.workspace }}/build/keys
-      APP_VERSION: ${{ inputs.version || '1.5' }}
+      APP_VERSION: ${{ inputs.version || '1.6' }}
     steps:
       - uses: actions/checkout@v7
 
