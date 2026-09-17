@@ -82,11 +82,15 @@ jobs:
 
       - name: Проверить кадры
         run: |
-          # 6.9″: 1320×2868. Другой размер App Store Connect отвергнет уже после загрузки — ловим сразу.
+          # iPhone 6.9″: 1320×2868; iPad 13″: 2064×2752 (без кадров iPad App Store не принимает версию на проверку —
+          # приложение поддерживает планшет). Другой размер App Store Connect отвергнет уже после загрузки — ловим сразу.
           for f in fastlane/screenshots/*/*.png; do
             w=$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}'); h=$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')
             echo "$f ${w}x${h}"
-            [ "$w" = "1320" ] && [ "$h" = "2868" ] || { echo "::error::$f — ${w}x${h}, нужно 1320x2868"; exit 1; }
+            case "${w}x${h}" in
+              1320x2868|2064x2752) ;;
+              *) echo "::error::$f — ${w}x${h}, нужно 1320x2868 (iPhone) или 2064x2752 (iPad)"; exit 1 ;;
+            esac
           done
 
       - name: fastlane
