@@ -36,6 +36,9 @@ struct RootWebView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: showSplash)
+        // Сплэш ушёл — строка состояния начинает следовать странице (SceneDelegate, KlikoHostingController).
+        .onAppear { bridge.splashDone = !showSplash }
+        .onChange(of: showSplash) { _, виден in bridge.splashDone = !виден }
         .animation(.easeInOut(duration: 0.25), value: bridge.loadFailed)
         .task {
             // Минимум ~1.6с показа прелоадера (логотип + подсказка успевают появиться).

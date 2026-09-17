@@ -5,7 +5,19 @@ import UserNotifications
 /// в веб-сессию → api/push_register.php привяжет к юзеру). По тапу на пуш открываем нужный
 /// экран внутри PWA (deep-link). Категории (чат / подписка на объявление / новости-акции)
 /// различает сервер полем "url" в payload — клиент просто ведёт туда.
+/// Точка входа приложения (1.6). Раньше ею был SwiftUI App (KlikoApp.swift) с WindowGroup; окно теперь создаёт
+/// SceneDelegate, чтобы корневым контроллером стал KlikoHostingController — он решает, светлые часы или тёмные.
+@main
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    /// Сцена окна — SceneDelegate (то же имя «Default», что в UIApplicationSceneManifest в project.yml).
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let конфиг = UISceneConfiguration(name: "Default", sessionRole: connectingSceneSession.role)
+        конфиг.delegateClass = SceneDelegate.self
+        return конфиг
+    }
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {

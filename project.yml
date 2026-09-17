@@ -48,6 +48,14 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         UILaunchScreen: {}
+        # ОКНО СОЗДАЁТ СЦЕНА UIKit (1.6): корнем стал KlikoHostingController — он решает, светлые часы или тёмные.
+        # Одна сцена, как и раньше у WindowGroup на телефоне.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # НА ПЛАНШЕТЕ — ВСЕ ЧЕТЫРЕ. Телефон держат вертикально, планшет — как придётся, и
         # приложение, которое отказывается поворачиваться, на iPad читается как сломанное.

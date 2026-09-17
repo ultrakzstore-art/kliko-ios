@@ -23,6 +23,8 @@ final class WebBridge: ObservableObject {
     @Published var liveToken: LiveToken?   // токен плашки сделки (ставит DealActivityManager)
     @Published var pendingURL: URL?        // куда перейти по тапу на пуш (deep-link)
     @Published var progress: Double = 0    // доля загрузки страницы (WKWebView.estimatedProgress) → прогресс-бар прелоадера
+    @Published var statusBarLight = false  // верх страницы тёмный → светлые часы (мост klikoBars, 1.6)
+    @Published var splashDone = false      // сплэш ушёл → строка состояния следует странице, а не подложке
 
     weak var webView: WKWebView?
 

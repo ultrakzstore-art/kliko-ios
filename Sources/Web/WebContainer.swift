@@ -24,7 +24,11 @@ struct WebContainer: UIViewRepresentable {
            App Review отклонил сборку по 5.1.2(i) именно из-за окна про куки, которое
            внутри приложения показываться не должно, поэтому признак обязан быть точным,
            а не вероятным. applicationNameForUserAgent дописывает метку к стандартному UA. */
-        cfg.applicationNameForUserAgent = "KlikoApp"
+        /* С ВЕРСИЕЙ (1.6): «KlikoApp/1.6». Метка без версии — сборки до 1.6, у которых строка состояния тёмная всегда;
+           сайт по ней оставляет белую вуаль над зелёной шапкой (inc/mk_green_top.php, mk-gtop-app15). С версией
+           приложение само ставит светлые часы на тёмном верху (мост klikoBars), и шапка уходит под вырез целиком. */
+        let версия = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.6"
+        cfg.applicationNameForUserAgent = "KlikoApp/" + версия
         let prefs = WKWebpagePreferences()
         prefs.allowsContentJavaScript = true
         cfg.defaultWebpagePreferences = prefs
@@ -69,6 +73,9 @@ struct WebContainer: UIViewRepresentable {
         // выходом (адрес с bye=1) — стираем всё, что WebView хранит на телефоне. Раньше не стираем: без куки сессии
         // сервер не узнал бы, чьи адреса уведомлений снимать.
         ucc.add(context.coordinator, name: "klikoLogout")
+        // Строка состояния под цвет верха страницы (1.6): страница говорит «light» — тёмный верх, светлые часы, «dark» —
+        // наоборот (см. блок klikoBars в liveBridgeJS и KlikoHostingController).
+        ucc.add(context.coordinator, name: "klikoBars")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -177,7 +184,68 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true, bars:true };
+        /* СТРОКА СОСТОЯНИЯ ПОД ЦВЕТ ВЕРХА СТРАНИЦЫ (1.6, владелец 17.09.2026: «стиль хедера — градиент… выложи в TestFlight»).
+           Зелёная шапка витрины уходит под Dynamic Island, и тёмные часы на ней не читаются; светлый кабинет — наоборот.
+           Смотрим, что лежит под строкой состояния: вуаль безопасной зоны (--sa-veil) поверх первого непрозрачного слоя,
+           градиенты тоже, фото — тёмное. Говорим приложению «light» (светлые часы) или «dark» только при смене.
+           Без обратных косых черт: строка живёт в Swift-литерале, где они значат своё. */
+        (function(){
+          if (window.top !== window) return;
+          var м = window.webkit && window.webkit.messageHandlers;
+          if (!м || !м.klikoBars) return;
+          var было = '', ждём = false;
+          function разбор(s, от){
+            s = String(s || '');
+            var i = s.indexOf('rgb', от || 0); if (i < 0) return null;
+            var a = s.indexOf('(', i), b = s.indexOf(')', a); if (a < 0 || b < 0) return null;
+            var тело = s.slice(a + 1, b), ч = тело.split(',');
+            if (ч.length < 3) ч = тело.split(' ').filter(function(x){ return x && x !== '/'; });
+            var r = parseFloat(ч[0]), g = parseFloat(ч[1]), bl = parseFloat(ч[2]), al = ч.length > 3 ? parseFloat(ч[3]) : 1;
+            if (isNaN(r) || isNaN(g) || isNaN(bl)) return null;
+            if (isNaN(al)) al = 1;
+            return {r: r, g: g, b: bl, a: al, конец: b + 1};
+          }
+          function фон(el){
+            var cs = getComputedStyle(el), c = разбор(cs.backgroundColor, 0);
+            if (c && c.a >= 0.5) return c;
+            var im = cs.backgroundImage;
+            if (im && im !== 'none') {
+              var сумма = {r: 0, g: 0, b: 0}, n = 0, поз = 0, шаг = 0;
+              while (шаг++ < 12) { var к = разбор(im, поз); if (!к) break; поз = к.конец; if (к.a >= 0.5) { сумма.r += к.r; сумма.g += к.g; сумма.b += к.b; n++; } }
+              if (n) return {r: сумма.r / n, g: сумма.g / n, b: сумма.b / n, a: 1};
+            }
+            return null;
+          }
+          function подСтрокой(){
+            var el = document.elementFromPoint(Math.round(window.innerWidth / 2), 4), шаг = 0;
+            while (el && шаг++ < 30) {
+              var т = el.tagName;
+              if (т === 'IMG' || т === 'VIDEO' || т === 'CANVAS' || т === 'IFRAME') return {r: 40, g: 40, b: 40, a: 1};
+              var c = фон(el); if (c) return c;
+              el = el.parentElement;
+            }
+            return фон(document.documentElement) || {r: 255, g: 255, b: 255, a: 1};
+          }
+          function решить(){
+            ждём = false;
+            if (!document.documentElement || !document.body) return;
+            var низ = подСтрокой();
+            var в = разбор(getComputedStyle(document.documentElement).getPropertyValue('--sa-veil'), 0);
+            if (в && в.a > 0) низ = {r: в.r * в.a + низ.r * (1 - в.a), g: в.g * в.a + низ.g * (1 - в.a), b: в.b * в.a + низ.b * (1 - в.a)};
+            var яркость = (0.2126 * низ.r + 0.7152 * низ.g + 0.0722 * низ.b) / 255;
+            var стиль = яркость < 0.6 ? 'light' : 'dark';
+            if (стиль !== было) { было = стиль; try { м.klikoBars.postMessage(стиль); } catch (e) {} }
+          }
+          function скоро(){ if (ждём) return; ждём = true; setTimeout(решить, 80); }
+          ['DOMContentLoaded', 'load', 'pageshow', 'resize', 'scroll', 'visibilitychange', 'transitionend', 'animationend', 'touchend', 'click'].forEach(function(e){
+            window.addEventListener(e, скоро, {passive: true, capture: true});
+          });
+          document.addEventListener('DOMContentLoaded', function(){
+            try { new MutationObserver(скоро).observe(document.documentElement, {attributes: true, subtree: true, childList: true, attributeFilter: ['class', 'style', 'data-theme', 'hidden', 'open']}); } catch (e) {}
+          });
+          setInterval(function(){ if (document.visibilityState !== 'hidden') решить(); }, 1500);
+        })();
         /* Разрешения. Страница зовёт KlikoPerms.read() и получает обещание с состоянием:
            {гео:{система, приложение}, пуш}. Различать «выключено на устройстве» и
            «запрещено этому приложению» в вебе нечем, а разговоры это разные. */
@@ -343,6 +411,12 @@ struct WebContainer: UIViewRepresentable {
                 lastLive = nil
                 wipeAfterLogout = true
                 Task { await DealActivityManager.shared.end() }
+                return
+            }
+            // Верх страницы тёмный или светлый → стиль строки состояния (KlikoHostingController через WebBridge).
+            if message.name == "klikoBars" {
+                let светлые = ((message.body as? String) ?? "") == "light"
+                Task { @MainActor in WebBridge.shared.statusBarLight = светлые }
                 return
             }
             // Состояние разрешений → в страницу.
