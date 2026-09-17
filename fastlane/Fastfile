@@ -76,4 +76,95 @@ platform :ios do
       $stdout.puts("::notice title=Кадры #{loc.locale} · версия #{after.version_string}::#{line.empty? ? 'нет кадров' : line.join(', ')}")
     end
   end
+
+  # Отправка версии на проверку App Store (см. .github/workflows/appstore-submit.yml). Владелец 17.09.2026: «запроси
+  # публикацию на стор». По умолчанию — ПРОВЕРКА: пометки прогона показывают версию, сборку, языки, кадры и данные для
+  # проверяющего, а в Apple ничего не уходит. Отправка — только с submit:true.
+  # Данные для входа проверяющего и контакты в пометки не печатаются — только «есть / нет».
+  lane :submit do |options|
+    version = (options[:version] || "").to_s
+    UI.user_error!("Не задана версия: fastlane submit version:1.6") if version.empty?
+    send_it = options[:submit].to_s == "true"
+    note = lambda { |title, msg| $stdout.puts("::notice title=#{title}::#{msg}") }
+    blank = lambda { |s| s.to_s.strip.empty? }
+
+    key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+      in_house: false
+    )
+    app = Spaceship::ConnectAPI::App.find("kz.kliko.app")
+    UI.user_error!("Приложение kz.kliko.app не найдено этим ключом") unless app
+    ios = Spaceship::ConnectAPI::Platform::IOS
+    edit = app.get_edit_app_store_version(platform: ios)
+    live = app.get_live_app_store_version(platform: ios)
+    UI.user_error!("У приложения нет готовящейся версии") unless edit
+    note.call("Версия", "в App Store #{live ? live.version_string : '-'}; готовится #{edit.version_string} (#{edit.app_store_state}); выпуск после одобрения: #{edit.release_type}")
+    UI.user_error!("Готовится #{edit.version_string}, а отправить просили #{version}") unless edit.version_string == version
+    UI.user_error!("У Apple уже идёт проверка этого приложения") if app.get_in_progress_review_submission(platform: ios)
+
+    # Сборка — самая свежая готовая этой версии (номер сборки = номер прогона «iOS · TestFlight»).
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: version, platform: ios)
+    note.call("Сборки #{version}", builds.empty? ? "нет ни одной" : builds.map { |b| "#{b.version}: #{b.processing_state}#{b.expired ? ', истекла' : ''}" }.join("; "))
+    build = builds.select { |b| b.processing_state == "VALID" && !b.expired }.max_by { |b| b.version.to_i }
+    UI.user_error!("Нет готовой сборки #{version}") unless build
+    note.call("Сборка к отправке", "#{version} (#{build.version}); шифрование: #{build.uses_non_exempt_encryption.nil? ? 'не указано' : build.uses_non_exempt_encryption}")
+
+    # «Что нового» обязательно у обновления. Пустое поле заполняем текстом из репозитория, заполненное не трогаем.
+    notes_file = File.join(ENV.fetch("GITHUB_WORKSPACE"), "fastlane", "whats_new_ru.txt")
+    notes_ru = File.exist?(notes_file) ? File.read(notes_file).strip : ""
+    locs = edit.get_app_store_version_localizations
+    locs.each do |l|
+      shots = l.get_app_screenshot_sets.map { |s| "#{s.screenshot_display_type}=#{(s.app_screenshots || []).size}" }.join(", ")
+      whats = if !blank.call(l.whats_new) then "есть"
+              elsif l.locale.start_with?("ru") && !notes_ru.empty? then "пусто, впишем из fastlane/whats_new_ru.txt"
+              else "ПУСТО"
+              end
+      note.call("Язык #{l.locale}", "описание #{blank.call(l.description) ? 'ПУСТО' : 'есть'}; ключевые слова #{blank.call(l.keywords) ? 'ПУСТО' : 'есть'}; ссылка поддержки #{blank.call(l.support_url) ? 'ПУСТО' : 'есть'}; что нового: #{whats}; кадры #{shots.empty? ? 'нет' : shots}")
+    end
+
+    detail = begin
+      edit.fetch_app_store_review_detail
+    rescue StandardError
+      nil
+    end
+    if detail
+      contact = [detail.contact_first_name, detail.contact_last_name, detail.contact_phone, detail.contact_email].none? { |x| blank.call(x) }
+      demo = !blank.call(detail.demo_account_name) && !blank.call(detail.demo_account_password)
+      note.call("Для проверяющего", "контакт #{contact ? 'заполнен' : 'НЕ ПОЛНЫЙ'}; вход нужен: #{detail.demo_account_required ? 'да' : 'нет'}; логин и пароль #{demo ? 'есть' : 'нет'}; заметки #{blank.call(detail.notes) ? 'нет' : 'есть'}")
+    else
+      note.call("Для проверяющего", "НЕ ЗАПОЛНЕНО")
+    end
+
+    unless send_it
+      note.call("Проверка", "в Apple ничего не отправлено: это прогон-проверка (submit=false)")
+      next
+    end
+
+    locs.each do |l|
+      next unless blank.call(l.whats_new) && l.locale.start_with?("ru") && !notes_ru.empty?
+      l.update(attributes: { whatsNew: notes_ru })
+      note.call("Что нового #{l.locale}", "вписано из fastlane/whats_new_ru.txt")
+    end
+
+    deliver(
+      api_key: key,
+      app_identifier: "kz.kliko.app",
+      platform: "ios",
+      app_version: version,
+      build_number: build.version,
+      skip_app_version_update: true,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: true,
+      submission_information: { export_compliance_uses_encryption: false },
+      run_precheck_before_submit: false,
+      force: true
+    )
+
+    now = Spaceship::ConnectAPI::AppStoreVersion.get(app_store_version_id: edit.id)
+    note.call("Отправлено", "версия #{now.version_string}, сборка #{build.version}: #{now.app_store_state}; выпуск после одобрения: #{now.release_type}")
+  end
 end

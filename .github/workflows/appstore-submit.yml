@@ -1,0 +1,96 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Отправка версии на проверку App Store тем же ключом App Store Connect API, что и сборка (ios.yml) и кадры
+# (appstore-screenshots.yml).
+#
+# Владелец 17.09.2026: «запроси публикацию на стор».
+#
+# ТОЛЬКО ВРУЧНУЮ: Actions → «App Store · Отправка на проверку» → Run workflow. Сам по пушу не запускается никогда.
+# По умолчанию submit=false — прогон-проверка: в пометках прогона видно версию, сборку, языки, кадры и данные для
+# проверяющего («есть / нет», без самих логинов и контактов), а в Apple ничего не уходит. submit=true — отправка:
+# берётся самая свежая готовая сборка этой версии, пустое «Что нового» (ru) заполняется из fastlane/whats_new_ru.txt,
+# режим выпуска после одобрения не меняется — какой выбран в App Store Connect, такой и останется.
+# ─────────────────────────────────────────────────────────────────────────────
+name: App Store · Отправка на проверку
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия в App Store Connect"
+        type: string
+        default: "1.6"
+      submit:
+        description: "Отправить на проверку (false — только проверить, что уйдёт)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: appstore-submit
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      KEY_DIR: ${{ github.workspace }}/build/keys
+      APP_VERSION: ${{ inputs.version }}
+      DO_SUBMIT: ${{ inputs.submit }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Проверить, что секреты заведены
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -z "$KID" ] && missing="$missing ASC_KEY_ID"
+          [ -z "$ISS" ] && missing="$missing ASC_ISSUER_ID"
+          [ -z "$P8" ]  && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then echo "::error::Не заведены секреты:$missing"; exit 1; fi
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$KEY_DIR"
+          # Те же три вида секрета, что принимает ios.yml: файл .p8 целиком, он же в base64, только тело ключа.
+          out="$KEY_DIR/AuthKey_$KID.p8"
+          if printf %s "$P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$P8" > "$out"
+          else
+            printf %s "$P8" | tr -d "[:space:]" | base64 -D > "$KEY_DIR/decoded" 2>/dev/null || true
+            if head -c 40 "$KEY_DIR/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$KEY_DIR/decoded" "$out"
+            else
+              body=$(printf %s "$P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"; printf %s "$body"; echo; echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$KEY_DIR/decoded"
+          fi
+          chmod 600 "$out"
+          head -1 "$out" | grep -q 'BEGIN PRIVATE KEY' || { echo "::error::ASC_KEY_P8 не похож на ключ"; exit 1; }
+          echo "ASC_KEY_PATH=$out" >> "$GITHUB_ENV"
+
+      - name: fastlane
+        run: |
+          command -v fastlane >/dev/null 2>&1 || brew install fastlane
+          fastlane --version | tail -1
+
+      - name: Проверить и отправить
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          FASTLANE_DISABLE_COLORS: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: fastlane ios submit version:"$APP_VERSION" submit:"$DO_SUBMIT"
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"
