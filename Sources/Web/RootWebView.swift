@@ -8,6 +8,7 @@ import SwiftUI
 ///  • WebView ВО ВЕСЬ ЭКРАН: под Dynamic Island / вырезом и до самого низа (см. ниже).
 struct RootWebView: View {
     @StateObject private var bridge = WebBridge.shared
+    @ObservedObject private var lock = AppLock.shared   // вход по Face ID: экран замка поверх всего (AppLock)
     @State private var minElapsed = false     // минимум показа сплэша, чтобы лого не мелькал
 
     // Сплэш держим, пока сайт не загрузился ИЛИ не прошёл минимум времени.
@@ -34,7 +35,17 @@ struct RootWebView: View {
                 SplashView()
                     .transition(.opacity)
             }
+
+            /* Защита входа включена: заперто или приложение неактивно — содержимое закрыто (переключатель приложений
+               не покажет переписку). Страница под замком продолжает жить: сессия и пуши не трогаются. */
+            if lock.enabled && (lock.locked || lock.cover) {
+                LockView()
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: lock.locked)
+        .animation(.easeInOut(duration: 0.15), value: lock.cover)
         .animation(.easeInOut(duration: 0.4), value: showSplash)
         // Сплэш ушёл — строка состояния начинает следовать странице (SceneDelegate, KlikoHostingController).
         .onAppear { bridge.splashDone = !showSplash }

@@ -36,12 +36,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         окно.makeKeyAndVisible()
 
         let мост = WebBridge.shared
-        /* Пока виден сплэш или экран «нет связи» — системный стиль: под ними подложка systemBackground, а не страница.
-           Потом — то, что сказала страница: светлые часы на тёмном верху, тёмные на светлом. */
-        подписка = Publishers.CombineLatest3(мост.$statusBarLight, мост.$splashDone, мост.$loadFailed)
+        let замок = AppLock.shared
+        /* Пока виден сплэш, экран «нет связи» или замок входа — системный стиль: под ними подложка systemBackground, а не
+           страница. Потом — то, что сказала страница: светлые часы на тёмном верху, тёмные на светлом. */
+        let замокВиден = замок.$locked.combineLatest(замок.$cover, замок.$enabled).map { заперт, закрыт, вкл in вкл && (заперт || закрыт) }
+        подписка = Publishers.CombineLatest4(мост.$statusBarLight, мост.$splashDone, мост.$loadFailed, замокВиден)
             .receive(on: DispatchQueue.main)
-            .sink { [weak корень] светлые, сплэшУшёл, нетСвязи in
-                корень?.стильСтроки = (!сплэшУшёл || нетСвязи) ? .default : (светлые ? .lightContent : .darkContent)
+            .sink { [weak корень] светлые, сплэшУшёл, нетСвязи, подЗамком in
+                корень?.стильСтроки = (!сплэшУшёл || нетСвязи || подЗамком) ? .default : (светлые ? .lightContent : .darkContent)
             }
 
         // Холодный старт по нажатию на плашку сделки (widgetURL): раньше это ловил .onOpenURL у WindowGroup.
@@ -52,4 +54,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         if let адрес = URLContexts.first?.url { WebBridge.shared.pendingURL = адрес }
     }
+
+    // Вход по Face ID (AppLock): закрыть содержимое при уходе, запереть после минуты в фоне, спросить при возврате.
+    func sceneWillResignActive(_ scene: UIScene)    { AppLock.shared.sceneWillResignActive() }
+    func sceneDidEnterBackground(_ scene: UIScene)  { AppLock.shared.sceneDidEnterBackground() }
+    func sceneWillEnterForeground(_ scene: UIScene) { AppLock.shared.sceneWillEnterForeground() }
+    func sceneDidBecomeActive(_ scene: UIScene)     { AppLock.shared.sceneDidBecomeActive() }
 }

@@ -76,6 +76,9 @@ struct WebContainer: UIViewRepresentable {
         // Строка состояния под цвет верха страницы (1.6): страница говорит «light» — тёмный верх, светлые часы, «dark» —
         // наоборот (см. блок klikoBars в liveBridgeJS и KlikoHostingController).
         ucc.add(context.coordinator, name: "klikoBars")
+        // Вход по Face ID (AppLock): страница узнаёт, что умеет телефон и включена ли защита, и включает её по просьбе
+        // человека в Настройках кабинета. Включение и выключение подтверждаются той же проверкой владельца.
+        ucc.add(context.coordinator, name: "klikoLock")
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -184,7 +187,34 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true, bars:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true, bars:true, lock:true };
+        /* ВХОД ПО FACE ID. KlikoLock.state() → {ok, enabled, kind: faceID|touchID|opticID|passcode|none};
+           KlikoLock.set(on) → проверка владельца системой → {ok, enabled, kind, code}; code 'cancel' — человек передумал.
+           Только главное окно: ответ приходит туда. */
+        (function(){
+          if (window.top !== window) return;
+          var м = window.webkit && window.webkit.messageHandlers;
+          if (!м || !м.klikoLock) return;
+          var ждут = {}, номер = 0;
+          window.__klikoLock = function(id, r){
+            var f = ждут[id]; delete ждут[id];
+            if (f) { try { f(r || {ok: false}); } catch (e) {} }
+          };
+          function вызвать(сообщ, срок){
+            return new Promise(function(resolve){
+              var id = ++номер, готово = false;
+              ждут[id] = function(r){ if (!готово) { готово = true; resolve(r); } };
+              сообщ.id = id;
+              try { м.klikoLock.postMessage(сообщ); }
+              catch (e) { delete ждут[id]; готово = true; resolve({ok: false, code: 'bridge'}); return; }
+              setTimeout(function(){ if (!готово) { готово = true; delete ждут[id]; resolve({ok: false, code: 'timeout'}); } }, срок);
+            });
+          }
+          window.KlikoLock = {
+            state: function(){ return вызвать({op: 'state'}, 3000); },
+            set: function(on){ return вызвать({op: 'set', on: !!on}, 120000); }
+          };
+        })();
         /* СТРОКА СОСТОЯНИЯ ПОД ЦВЕТ ВЕРХА СТРАНИЦЫ (1.6, владелец 17.09.2026: «стиль хедера — градиент… выложи в TestFlight»).
            Зелёная шапка витрины уходит под Dynamic Island, и тёмные часы на ней не читаются; светлый кабинет — наоборот.
            Смотрим, что лежит под строкой состояния: вуаль безопасной зоны (--sa-veil) поверх первого непрозрачного слоя,
@@ -404,6 +434,24 @@ struct WebContainer: UIViewRepresentable {
                 contacts.pick(id: id)
                 return
             }
+            // Вход по Face ID: состояние или включение/выключение защиты (AppLock) → ответ в страницу.
+            if message.name == "klikoLock" {
+                let тело = (message.body as? [String: Any]) ?? [:]
+                let id = (тело["id"] as? NSNumber)?.intValue ?? 0
+                let оп = (тело["op"] as? String) ?? "state"
+                let вкл = (тело["on"] as? NSNumber)?.boolValue ?? false
+                Task { @MainActor in
+                    let замок = AppLock.shared
+                    if оп == "set" {
+                        замок.setEnabled(вкл) { [weak self] прошло, код in
+                            self?.ответЗамка(id, ["ok": прошло, "enabled": замок.enabled, "kind": замок.kind(), "code": код ?? ""])
+                        }
+                    } else {
+                        self.ответЗамка(id, ["ok": true, "enabled": замок.enabled, "kind": замок.kind()])
+                    }
+                }
+                return
+            }
             // Выход: токены забыть сразу (следующий вход отправит токен уже новому аккаунту), плашку сделки закрыть,
             // данные WebView стереть после ответа сервера (didFinish).
             if message.name == "klikoLogout" {
@@ -442,6 +490,14 @@ struct WebContainer: UIViewRepresentable {
             }
             guard message.name == "klikoLive", let body = message.body as? [String: Any] else { return }
             DealActivityManager.shared.handle(body)
+        }
+
+        /// Ответ моста klikoLock в страницу: window.__klikoLock(id, данные). О биометрии страница знает только тип и «включено».
+        func ответЗамка(_ id: Int, _ данные: [String: Any]) {
+            let json = String(data: (try? JSONSerialization.data(withJSONObject: данные)) ?? Data(), encoding: .utf8) ?? "{}"
+            DispatchQueue.main.async { [weak self] in
+                self?.webView?.evaluateJavaScript("window.__klikoLock && window.__klikoLock(\(id), \(json))")
+            }
         }
 
         /// Подпись при потягивании вниз. Владелец 15.09.2026: «пусть выходит упоминание — подтяни ещё, обновится; слова
