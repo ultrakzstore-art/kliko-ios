@@ -431,7 +431,23 @@ struct WebContainer: UIViewRepresentable {
           delete window.__klikoPhotoBuf[id]; delete window.__klikoPhotoCbs[id];
           if (f) { try { f({ok: buf.length > 0, files: buf, code: code || ''}); } catch (e) {} }
         };
-        window.KlikoPhotos = { pick: function(limit){
+        window.__klikoPhotoLatestCbs = {};
+        window.__klikoPhotoLatest = function(id, b64){
+          var f = window.__klikoPhotoLatestCbs[id]; delete window.__klikoPhotoLatestCbs[id];
+          if (f) { try { f(b64 ? ('data:image/jpeg;base64,' + b64) : ''); } catch (e) {} }
+        };
+        window.KlikoPhotos = {
+          /* Миниатюра последнего снимка плёнки для плитки «Галерея» в камере: строка data:… или пустая,
+             если человек не дал доступ к медиатеке или показывать нечего. Пустая строка — не ошибка. */
+          latest: function(){
+            return new Promise(function(resolve){
+              var id = Math.floor(Math.random() * 1000000000);
+              window.__klikoPhotoLatestCbs[id] = resolve;
+              try { window.webkit.messageHandlers.klikoPhotos.postMessage({id: id, latest: true}); }
+              catch (e) { delete window.__klikoPhotoLatestCbs[id]; resolve(''); }
+            });
+          },
+          pick: function(limit){
           return new Promise(function(resolve){
             var id = Math.floor(Math.random() * 1000000000);
             window.__klikoPhotoBuf[id] = []; window.__klikoPhotoCbs[id] = resolve;
@@ -473,6 +489,7 @@ struct WebContainer: UIViewRepresentable {
             if message.name == "klikoPhotos" {
                 let тело = message.body as? [String: Any]
                 let id = (тело?["id"] as? NSNumber)?.intValue ?? 0
+                if (тело?["latest"] as? NSNumber)?.boolValue == true { photos.latest(id: id); return }
                 let сколько = (тело?["limit"] as? NSNumber)?.intValue ?? 5
                 photos.pick(id: id, limit: сколько)
                 return

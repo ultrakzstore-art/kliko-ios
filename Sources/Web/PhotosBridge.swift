@@ -79,6 +79,63 @@ final class PhotosBridge: NSObject, PHPickerViewControllerDelegate {
         }
     }
 
+    /// МИНИАТЮРА ПОСЛЕДНЕГО СНИМКА ПЛЁНКИ — для плитки «Галерея» в камере.
+    ///
+    /// Владелец 23.09.2026: «в камере с левой стороны, где выбор с галереи, должно показывать последнее фото с
+    /// галереи». В родной камере телефона эта плитка показывает именно последний кадр плёнки, и без неё кнопка
+    /// читается как пустой квадрат.
+    ///
+    /// Здесь, в отличие от выбора снимков, нужен НАСТОЯЩИЙ доступ к медиатеке: прочитать чужой (не выбранный
+    /// человеком) кадр иначе нельзя. Поэтому спрашиваем разрешение — и молча отступаем, если его не дали:
+    /// страница оставит свой значок, кнопка продолжит работать. Сами по кругу не переспрашиваем — это делает
+    /// система. При «ограниченном доступе» плёнка видна не вся: тогда покажем последний из разрешённых, а если
+    /// разрешённых нет — ответим пустым, и это не ошибка.
+    func latest(id: Int) {
+        let статус = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch статус {
+        case .authorized, .limited:
+            взятьПоследний(id)
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] новый in
+                guard let self = self else { return }
+                if новый == .authorized || новый == .limited { self.взятьПоследний(id) }
+                else { self.миниатюра(id, b64: "") }
+            }
+        default:
+            миниатюра(id, b64: "")
+        }
+    }
+
+    private func взятьПоследний(_ id: Int) {
+        let отбор = PHFetchOptions()
+        отбор.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        отбор.fetchLimit = 1
+        guard let снимок = PHAsset.fetchAssets(with: .image, options: отбор).firstObject else {
+            миниатюра(id, b64: "")   // плёнка пуста или показывать нечего
+            return
+        }
+        let настройки = PHImageRequestOptions()
+        настройки.deliveryMode = .highQualityFormat   // один ответ, а не «сначала мыло, потом резкое»
+        настройки.resizeMode = .exact
+        настройки.isNetworkAccessAllowed = true       // кадр может лежать только в iCloud
+        настройки.isSynchronous = false
+        var ответил = false
+        PHImageManager.default().requestImage(for: снимок,
+                                              targetSize: CGSize(width: 240, height: 240),
+                                              contentMode: .aspectFill,
+                                              options: настройки) { [weak self] кадр, _ in
+            guard let self = self, !ответил else { return }
+            ответил = true
+            let данные = кадр?.jpegData(compressionQuality: 0.7)
+            self.миниатюра(id, b64: данные?.base64EncodedString() ?? "")
+        }
+    }
+
+    private func миниатюра(_ id: Int, b64: String) {
+        let js = "window.__klikoPhotoLatest && window.__klikoPhotoLatest(\(id), '\(b64)')"
+        DispatchQueue.main.async { [weak self] in self?.webView?.evaluateJavaScript(js) }
+    }
+
     /// Ужать до разумной стороны и перекодировать в JPEG. HEIC с телефона веб-страница читает не везде,
     /// а JPEG понимают все — и сервер, и разбор по фото.
     private func вjpeg(_ кадр: UIImage) -> Data? {
