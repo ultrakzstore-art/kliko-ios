@@ -67,6 +67,10 @@ struct WebContainer: UIViewRepresentable {
         // Получатель из контактов (см. ContactsBridge): системный список, разрешение на контакты не нужно —
         // приложение получает только выбранные человеком имя и номер.
         ucc.add(context.coordinator, name: "klikoContacts")
+        // Снимки ТОЛЬКО из медиатеки (см. PhotosBridge). Обычный input type=file в WKWebView открывает лист
+        // «Фото / Снять фото / Выбрать файл», и убрать из него лишнее со стороны страницы нельзя. Человек к
+        // этому моменту уже стоит в открытой камере и нажал «Галерея» — ему нужна плёнка, а не iCloud Drive.
+        ucc.add(context.coordinator, name: "klikoPhotos")
         // ВЫХОД НАЧИСТО (владелец 16.09.2026: «старая сессия, когда вышел в приложении — очистить, чтобы не приходили чужие
         // сообщения на другую сессию; чистая должна быть как попа младенца»). Страница перед выходом зовёт klikoLogout
         // (inc/app_bridge.php): забываем токены устройства и плашки сделки, закрываем плашку, а когда сервер ответил
@@ -112,6 +116,7 @@ struct WebContainer: UIViewRepresentable {
         context.coordinator.webView = web
         context.coordinator.geo.webView = web
         context.coordinator.contacts.webView = web
+        context.coordinator.photos.webView = web
         bridge.webView = web
         web.load(URLRequest(url: Config.apiBase))
         return web
@@ -145,6 +150,8 @@ struct WebContainer: UIViewRepresentable {
         let geo = GeoBridge()
         /// Выбор получателя из контактов телефона (мост klikoContacts).
         let contacts = ContactsBridge()
+        /// Снимки из медиатеки телефона (мост klikoPhotos).
+        let photos = PhotosBridge()
 
         init(bridge: WebBridge) { self.bridge = bridge }
 
@@ -187,7 +194,7 @@ struct WebContainer: UIViewRepresentable {
         /// JS-API для сайта: window.KlikoLive.start/update/end(deal) → Live Activity сделки.
         /// Флаг window.KlikoNative даёт сайту понять, что он внутри приложения.
         static let liveBridgeJS = """
-        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true, bars:true, lock:true };
+        window.KlikoNative = { platform:'ios', liveActivity:true, clipboard:true, perms:true, geo:true, contacts:true, bars:true, lock:true, photos:true };
         /* ВХОД ПО FACE ID. KlikoLock.state() → {ok, enabled, kind: faceID|touchID|opticID|passcode|none};
            KlikoLock.set(on) → проверка владельца системой → {ok, enabled, kind, code}; code 'cancel' — человек передумал.
            Только главное окно: ответ приходит туда. */
@@ -404,6 +411,34 @@ struct WebContainer: UIViewRepresentable {
             catch (e) { delete window.__klikoContactCbs[id]; resolve({ok:false, code:'bridge'}); }
           });
         } };
+        /* СНИМКИ ИЗ МЕДИАТЕКИ. Страница зовёт KlikoPhotos.pick(сколько) и получает обещание {ok, files, code},
+           где files — обычные File, как из input type=file: их принимает тот же код подачи, что и всегда.
+           Кадры приходят по одному (__klikoPhotoPart), потом закрывающий __klikoPhotoDone: восемь снимков
+           одним куском — это мегабайты в одном вызове и заметная пауза на слабом телефоне.
+           code 'cancel' — человек закрыл медиатеку, 'bridge' — приложение старое и моста в нём нет. */
+        window.__klikoPhotoBuf = {};
+        window.__klikoPhotoCbs = {};
+        window.__klikoPhotoPart = function(id, name, b64){
+          var buf = window.__klikoPhotoBuf[id]; if (!buf) return;
+          try {
+            var bin = atob(b64), n = bin.length, u = new Uint8Array(n);
+            for (var i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+            buf.push(new File([u], name || ('photo' + (buf.length + 1) + '.jpg'), {type: 'image/jpeg'}));
+          } catch (e) {}
+        };
+        window.__klikoPhotoDone = function(id, count, code){
+          var buf = window.__klikoPhotoBuf[id] || [], f = window.__klikoPhotoCbs[id];
+          delete window.__klikoPhotoBuf[id]; delete window.__klikoPhotoCbs[id];
+          if (f) { try { f({ok: buf.length > 0, files: buf, code: code || ''}); } catch (e) {} }
+        };
+        window.KlikoPhotos = { pick: function(limit){
+          return new Promise(function(resolve){
+            var id = Math.floor(Math.random() * 1000000000);
+            window.__klikoPhotoBuf[id] = []; window.__klikoPhotoCbs[id] = resolve;
+            try { window.webkit.messageHandlers.klikoPhotos.postMessage({id: id, limit: (limit || 5)}); }
+            catch (e) { delete window.__klikoPhotoBuf[id]; delete window.__klikoPhotoCbs[id]; resolve({ok:false, code:'bridge'}); }
+          });
+        } };
         window.KlikoLive = {
           start:  function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'start',  deal:d||{}}); }catch(e){} },
           update: function(d){ try{ window.webkit.messageHandlers.klikoLive.postMessage({action:'update', deal:d||{}}); }catch(e){} },
@@ -432,6 +467,14 @@ struct WebContainer: UIViewRepresentable {
             if message.name == "klikoContacts" {
                 let id = ((message.body as? [String: Any])?["id"] as? NSNumber)?.intValue ?? 0
                 contacts.pick(id: id)
+                return
+            }
+            // Медиатека: страница просит снимки и говорит, сколько мест осталось под кадры.
+            if message.name == "klikoPhotos" {
+                let тело = message.body as? [String: Any]
+                let id = (тело?["id"] as? NSNumber)?.intValue ?? 0
+                let сколько = (тело?["limit"] as? NSNumber)?.intValue ?? 5
+                photos.pick(id: id, limit: сколько)
                 return
             }
             // Вход по Face ID: состояние или включение/выключение защиты (AppLock) → ответ в страницу.
