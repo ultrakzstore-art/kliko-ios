@@ -315,6 +315,7 @@ struct AddSubSheet: View {
     @State private var subcategories: [OLX.Category] = []
     @State private var sub: OLX.Category?
     @State private var loadingSubs = false
+    @State private var subsNote = ""
     @State private var citySlug = ""
     @State private var words = ""
     @State private var priceFrom = ""
@@ -380,7 +381,9 @@ struct AddSubSheet: View {
                 guard let newTop else { return }
                 loadingSubs = true
                 Task {
-                    subcategories = await OLX.subcategories(of: newTop.path)
+                    let result = await OLX.subcategories(of: newTop.path)
+                    subcategories = result.list
+                    subsNote = result.note
                     loadingSubs = false
                 }
             }
@@ -401,6 +404,11 @@ struct AddSubSheet: View {
                         Text("Вся рубрика").tag(OLX.Category?.none)
                         ForEach(subcategories) { c in Text(verbatim: c.name).tag(Optional(c)) }
                     }
+                } else {
+                    Text("У этой рубрики подрубрик нет — ищем по всей рубрике").font(.footnote).foregroundStyle(.secondary)
+                }
+                if !subsNote.isEmpty {
+                    Text(verbatim: subsNote).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

@@ -241,12 +241,115 @@ enum OLX {
         ("Уральск", "uralsk"), ("Кызылорда", "kyzylorda"), ("Петропавловск", "petropavlovsk"), ("Талдыкорган", "taldykorgan"),
     ].map { City(name: $0.0, slug: $0.1) }
 
-    /// Подрубрики на уровень ниже — со страницы рубрики на самом OLX.
-    static func subcategories(of path: String) async -> [Category] {
-        guard let url = URL(string: "\(base)/d/\(path)/"),
-              let result = try? await get(url, accept: "text/html"), (200..<300).contains(result.1) else { return [] }
-        return parseSubcategories(String(decoding: result.0, as: UTF8.self), parent: path)
+    /// Подрубрики на уровень ниже. Сначала — с самого OLX (ссылки и данные страницы), иначе —
+    /// встроенный список. note — почему список не с OLX (показываем человеку).
+    static func subcategories(of path: String) async -> (list: [Category], note: String) {
+        guard let url = URL(string: "\(base)/d/\(path)/") else { return (fallbackSubcategories[path] ?? [], "") }
+        var note = ""
+        do {
+            let (data, code) = try await get(url, accept: "text/html")
+            if (200..<300).contains(code) {
+                let html = String(decoding: data, as: UTF8.self)
+                var found = parseSubcategories(html, parent: path)
+                if found.isEmpty { found = subcategoriesFromState(html, parent: path) }
+                if !found.isEmpty { return (found, "") }
+                note = "OLX не показал подрубрики на странице — встроенный список"
+            } else {
+                note = "OLX ответил \(code) — встроенный список подрубрик"
+            }
+        } catch {
+            note = "Нет связи с OLX — встроенный список подрубрик"
+        }
+        return (fallbackSubcategories[path] ?? [], note)
     }
+
+    /// Подрубрики из данных страницы (window.__PRERENDERED_STATE__): ищем любые объекты, где
+    /// есть ссылка вида /d/<рубрика>/<подрубрика>/ и название рядом с ней.
+    static func subcategoriesFromState(_ html: String, parent: String) -> [Category] {
+        guard let literal = firstMatch(#"window\.__PRERENDERED_STATE__\s*=\s*("(?:[^"\\]|\\.)*")"#, in: html, dotAll: true),
+              let inner = try? JSONSerialization.jsonObject(with: Data(literal.utf8), options: .fragmentsAllowed) as? String,
+              let state = try? JSONSerialization.jsonObject(with: Data(inner.utf8)) else { return [] }
+        let citySlugs = Set(cities.map(\.slug))
+        let depth = parent.split(separator: "/").count + 1
+        var out: [Category] = []
+        var seen = Set<String>()
+        func walk(_ node: Any, _ level: Int) {
+            if level > 12 || out.count >= 40 { return }
+            if let list = node as? [Any] { list.forEach { walk($0, level + 1) }; return }
+            guard let d = node as? [String: Any] else { return }
+            let link = ["url", "href", "path", "link", "searchUrl", "normalizedUrl"].lazy.compactMap { d[$0] as? String }.first
+            let name = ["name", "label", "title", "displayName"].lazy.compactMap { d[$0] as? String }.first
+            if let link, let name, let slug = firstMatch(#"/d/(?:kk/)?([a-z0-9-]+(?:/[a-z0-9-]+)*)/?"#, in: link) {
+                let parts = slug.split(separator: "/")
+                if parts.count == depth, slug.hasPrefix(parent + "/"), let last = parts.last.map(String.init),
+                   !citySlugs.contains(last), !last.hasPrefix("q-"), seen.insert(slug).inserted, !name.isEmpty, name.count <= 60 {
+                    out.append(Category(name: name, path: slug))
+                }
+            }
+            d.values.forEach { walk($0, level + 1) }
+        }
+        walk(state, 0)
+        return out
+    }
+
+    /// Запасной список — основные подрубрики OLX.kz. Если какая-то ссылка устарела, поиск
+    /// покажет ошибку под собой (первый проход идёт сразу при добавлении).
+    static let fallbackSubcategories: [String: [Category]] = {
+        let raw: [String: [(String, String)]] = [
+            "elektronika": [
+                ("Телефоны и аксессуары", "telefony-i-aksesuary"), ("Компьютеры и комплектующие", "kompyutery-i-komplektuyuschie"),
+                ("Ноутбуки и аксессуары", "noutbuki-i-aksesuary"), ("Планшеты, эл. книги", "planshety-el-knigi-i-aksessuary"),
+                ("ТВ и видеотехника", "tv-videotehnika"), ("Аудиотехника", "audiotehnika"),
+                ("Игры и приставки", "igry-i-igrovye-pristavki"), ("Фото и видео", "foto-video"),
+                ("Техника для дома", "tehnika-dlya-doma"), ("Техника для кухни", "tehnika-dlya-kuhni"),
+                ("Климатическое оборудование", "klimaticheskoe-oborudovanie"), ("Индивидуальный уход", "individualnyy-uhod"),
+                ("Прочая электроника", "prochaja-electronika"),
+            ],
+            "transport": [
+                ("Легковые автомобили", "legkovye-avtomobili"), ("Грузовые автомобили", "gruzovye-avtomobili"),
+                ("Мото", "moto"), ("Спецтехника", "spetstehnika"), ("Сельхозтехника", "selhoztehnika"),
+                ("Автобусы", "avtobusy"), ("Водный транспорт", "vodnyy-transport"), ("Прицепы", "pritsepy-doma-na-kolesah"),
+                ("Другой транспорт", "drugoy-transport"),
+            ],
+            "zapchasti-dlya-transporta": [
+                ("Автозапчасти", "avtozapchasti"), ("Шины, диски и колёса", "shiny-diski-i-kolesa"),
+                ("Аксессуары для авто", "aksessuary-dlya-avto"), ("Мотозапчасти", "motozapchasti"),
+                ("Запчасти для спецтехники", "zapchasti-dlya-spetstehniki"),
+            ],
+            "nedvizhimost": [
+                ("Квартиры", "kvartiry"), ("Дома", "doma"), ("Земля", "zemlya"), ("Коммерческая", "kommercheskaya-nedvizhimost"),
+                ("Посуточно", "posutochno-pochasovo"), ("Гаражи и парковки", "garazhy-parkovki"),
+            ],
+            "dom-i-sad": [
+                ("Мебель", "mebel"), ("Предметы интерьера", "predmety-interera"), ("Строительство и ремонт", "stroitelstvo-remont"),
+                ("Инструменты", "instrumenty"), ("Сад и огород", "sad-ogorod"), ("Посуда", "posuda-kuhonnaya-utvar"),
+                ("Хозинвентарь", "hozyaystvennyy-inventar"), ("Прочее для дома", "prochie-tovary-dlya-doma"),
+            ],
+            "moda-i-stil": [
+                ("Женская одежда", "zhenskaya-odezhda"), ("Мужская одежда", "muzhskaya-odezhda"),
+                ("Женская обувь", "zhenskaya-obuv"), ("Мужская обувь", "muzhskaya-obuv"),
+                ("Аксессуары", "aksessuary"), ("Наручные часы", "naruchnye-chasy"), ("Красота и здоровье", "krasota-zdorove"),
+            ],
+            "detskiy-mir": [
+                ("Детская одежда", "detskaya-odezhda"), ("Детская обувь", "detskaya-obuv"), ("Игрушки", "igrushki"),
+                ("Коляски", "detskie-kolyaski"), ("Детская мебель", "detskaya-mebel"), ("Автокресла", "detskie-avtokresla"),
+            ],
+            "hobbi-otdyh-i-sport": [
+                ("Спорт и отдых", "sport-otdyh"), ("Велосипеды", "velo"), ("Музыкальные инструменты", "muzykalnye-instrumenty"),
+                ("Книги и журналы", "knigi-zhurnaly"), ("Антиквариат и коллекции", "antikvariat-kollektsii"),
+                ("Туризм", "turizm"), ("Рыбалка и охота", "ohota-rybalka"),
+            ],
+            "zhivotnye": [
+                ("Собаки", "sobaki"), ("Кошки", "koshki"), ("Птицы", "ptitsy"), ("Аквариумистика", "akvariumnye-rybki"),
+                ("Сельхоз животные", "selskohozyaystvennye-zhivotnye"), ("Зоотовары", "zootovary"),
+            ],
+        ]
+        var out: [String: [Category]] = [:]
+        for (parent, list) in raw {
+            out[parent] = list.map { Category(name: $0.0, path: "\(parent)/\($0.1)") }
+        }
+        return out
+    }()
 
     static func parseSubcategories(_ html: String, parent: String) -> [Category] {
         let citySlugs = Set(cities.map(\.slug))
