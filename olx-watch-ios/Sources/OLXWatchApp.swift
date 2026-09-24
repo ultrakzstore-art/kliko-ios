@@ -40,6 +40,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in await AppModel.shared.didReceiveDeviceToken(deviceToken) }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        let message = error.localizedDescription
+        Task { @MainActor in AppModel.shared.error = "Пуши не подключились: \(message)" }
+    }
+
+    // Тихий пуш-будильник от сервера: проверяем OLX с телефона, пока iOS даёт ~30 секунд.
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        Task { @MainActor in
+            let found = await AppModel.shared.handleWakePush()
+            completionHandler(found ? .newData : .noData)
+        }
+    }
+
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .list, .sound])

@@ -1,6 +1,7 @@
 import BackgroundTasks
 import Foundation
 import Observation
+import Security
 import UIKit
 import UserNotifications
 
@@ -33,6 +34,8 @@ final class AppModel {
 
     var ads: [Ad] { state.ads }
     var subs: [Sub] { state.subs }
+    var allAds: [Ad] { state.all ?? [] }
+    private(set) var pushStatus = ""
 
     init() {
         load()
@@ -120,6 +123,7 @@ final class AppModel {
             ad.via = "search"
             ad.subIds = [id]
             ad.foundAt = Date()
+            recordAll(ad)
             add(ad, subs: [sub])
         }
         save()
@@ -137,7 +141,7 @@ final class AppModel {
 
     private func turbo() async {
         let ready = state.subs.filter { !$0.paused && $0.ready }
-        guard state.frontier > 0, !ready.isEmpty else { return }
+        guard state.frontier > 0 else { return }
         var ids: [Int] = []
         var n = state.frontier + 1
         while ids.count < Self.turboWindow && n <= state.frontier + Self.turboWindow * 5 {
@@ -164,11 +168,12 @@ final class AppModel {
             guard !seenSet.contains(id) else { continue }
             remember(id)
             let hit = ready.filter { OLX.matches($0, ad) }
-            guard !hit.isEmpty else { continue }
             ad.via = "turbo"
             ad.subIds = hit.map(\.id)
             ad.foundAt = Date()
-            add(ad, subs: hit)
+            recordAll(ad)                 // «Все новые» — любое пойманное объявление
+            guard !hit.isEmpty else { continue }
+            add(ad, subs: hit)            // «По запросам» и уведомление — только подходящее
         }
         misses = misses.filter { $0.key > state.frontier - 500 }
         save()
@@ -193,6 +198,14 @@ final class AppModel {
         content.userInfo = ["ad_id": ad.id, "url": ad.link?.absoluteString ?? ""]
         let req = UNNotificationRequest(identifier: "ad-\(ad.id)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req) { _ in }
+    }
+
+    private func recordAll(_ ad: Ad) {
+        var list = state.all ?? []
+        guard !list.contains(where: { $0.id == ad.id }) else { return }
+        list.insert(ad, at: 0)
+        if list.count > 300 { list.removeLast(list.count - 300) }
+        state.all = list
     }
 
     private func remember(_ id: Int) {
@@ -267,6 +280,7 @@ final class AppModel {
 
     func clearFeed() {
         state.ads.removeAll()
+        state.all = []
         save()
     }
 
@@ -286,6 +300,70 @@ final class AppModel {
 
     func requestNotifications() async {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+        UIApplication.shared.registerForRemoteNotifications()   // токен — для тихих пушей-будильников
+    }
+
+    // MARK: — будильник через APNs
+    //
+    // iOS не даёт приложению работать в фоне. Сервер на kliko.kz (wake.php по cron) раз в
+    // несколько минут шлёт тихий пуш — iPhone ненадолго будит приложение, и оно само проверяет
+    // OLX с телефона. Сервер к OLX не ходит. Настройка необязательна.
+
+    static let defaultPushEndpoint = "https://kliko.kz/olx-watch/api.php"
+    var pushEndpoint: String = UserDefaults.standard.string(forKey: "push_endpoint") ?? AppModel.defaultPushEndpoint
+    var pushKey: String = Keychain.read("push_key") ?? ""
+    private var deviceToken: String? = UserDefaults.standard.string(forKey: "device_token")
+
+    var pushConfigured: Bool { !pushKey.isEmpty }
+
+    func didReceiveDeviceToken(_ data: Data) async {
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        deviceToken = hex
+        UserDefaults.standard.set(hex, forKey: "device_token")
+        await registerDevice()
+    }
+
+    func connectPushServer(endpoint: String, key: String) async {
+        let e = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: e), url.scheme == "https" else { pushStatus = "Адрес должен начинаться с https://"; return }
+        pushEndpoint = e
+        pushKey = k
+        UserDefaults.standard.set(e, forKey: "push_endpoint")
+        Keychain.write("push_key", k)
+        pushStatus = "Подключаю…"
+        await requestNotifications()
+        await registerDevice()
+    }
+
+    private func registerDevice() async {
+        guard pushConfigured, let url = URL(string: pushEndpoint) else { return }
+        guard let token = deviceToken else { pushStatus = "Жду токен пушей от iPhone — разрешите уведомления"; return }
+        var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        c?.queryItems = [URLQueryItem(name: "a", value: "device")]
+        guard let target = c?.url else { return }
+        var req = URLRequest(url: target, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(pushKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            pushStatus = (200..<300).contains(code) ? "Подключено: сервер будит приложение тихими пушами"
+                : code == 401 ? "Сервер не принял ключ" : "Сервер ответил \(code)"
+        } catch {
+            pushStatus = "Нет связи с сервером: \(error.localizedDescription)"
+        }
+    }
+
+    /// Тихий пуш от сервера: короткая проверка — поиски и один проход турбо.
+    func handleWakePush() async -> Bool {
+        let before = state.ads.count
+        await pollAll()
+        await turbo()
+        save()
+        return state.ads.count > before
     }
 
     func scheduleBackgroundRefresh() {
@@ -326,5 +404,36 @@ final class AppModel {
     func save() {
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: Self.fileURL, options: .atomic)
+    }
+}
+
+/// Ключ сервера пушей — в Связке ключей, а не в настройках приложения.
+enum Keychain {
+    private static let service = "kz.kliko.olxwatch"
+
+    static func read(_ account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func write(_ account: String, _ value: String) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = Data(value.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(add as CFDictionary, nil)
     }
 }

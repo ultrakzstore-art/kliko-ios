@@ -24,44 +24,83 @@ struct FeedView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
 
+    enum Scope: String, CaseIterable { case matched = "По запросам", all = "Все новые" }
+    @State private var scope = Scope.matched
+    @State private var subFilter: Int?          // nil — все запросы
+
+    private var shown: [Ad] {
+        switch scope {
+        case .all: return model.allAds
+        case .matched:
+            guard let id = subFilter else { return model.ads }
+            return model.ads.filter { $0.subIds.contains(id) }
+        }
+    }
+
     var body: some View {
-        Group {
-            if model.ads.isEmpty {
-                ContentUnavailableView {
-                    Label(model.subs.isEmpty ? "Добавьте поиск" : "Пока пусто", systemImage: model.subs.isEmpty ? "magnifyingglass" : "tray")
-                } description: {
-                    Text(model.subs.isEmpty
-                         ? "Во вкладке «Поиски» выберите рубрику, город и цену — новые объявления появятся здесь."
-                         : "Как только на OLX появится подходящее объявление, оно придёт сюда. Проверяю, пока приложение открыто.")
+        List {
+            Section {
+                Picker("Лента", selection: $scope) {
+                    ForEach(Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-            } else {
-                List {
-                    if let error = model.error { ErrorRow(text: error) }
-                    ForEach(model.ads) { ad in
-                        Button { if let url = ad.link { openURL(url) } } label: {
-                            AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { AdMenu(ad: ad) }
-                        .swipeActions(edge: .trailing) {
-                            if let url = ad.sellerURL {
-                                Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
-                                    .tint(.indigo)
-                            }
-                        }
+                .pickerStyle(.segmented)
+                if scope == .matched && model.subs.count > 1 {
+                    Picker("Запрос", selection: $subFilter) {
+                        Text("Все запросы").tag(Int?.none)
+                        ForEach(model.subs) { sub in Text(verbatim: sub.name).tag(Optional(sub.id)) }
                     }
                 }
-                .listStyle(.plain)
+            }
+            .listRowSeparator(.hidden)
+
+            if let error = model.error { ErrorRow(text: error) }
+
+            if shown.isEmpty {
+                ContentUnavailableView {
+                    Label(emptyTitle, systemImage: scope == .all ? "bolt" : "tray")
+                } description: {
+                    Text(emptyText)
+                }
+                .listRowSeparator(.hidden)
+            }
+
+            ForEach(shown) { ad in
+                Button { if let url = ad.link { openURL(url) } } label: {
+                    AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId, showQuery: scope == .all || subFilter == nil,
+                          queryNames: model.subs.filter { ad.subIds.contains($0.id) }.map(\.name))
+                }
+                .buttonStyle(.plain)
+                .contextMenu { AdMenu(ad: ad) }
+                .swipeActions(edge: .trailing) {
+                    if let url = ad.sellerURL {
+                        Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
+                            .tint(.indigo)
+                    }
+                }
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Новые на OLX")
         .refreshable { await model.pollAll() }
+    }
+
+    private var emptyTitle: String {
+        if model.subs.isEmpty { return "Добавьте поиск" }
+        return scope == .all ? "Пока ничего" : "Пока пусто"
+    }
+
+    private var emptyText: String {
+        if model.subs.isEmpty { return "Во вкладке «Поиски» выберите рубрику, город и цену — новые объявления появятся здесь." }
+        if scope == .all { return "Здесь всё новое, что турбо поймало на OLX, в любой рубрике. Проверяю, пока приложение открыто." }
+        return "Как только на OLX появится подходящее объявление, оно придёт сюда и уведомлением."
     }
 }
 
 struct AdRow: View {
     let ad: Ad
     var highlighted = false
+    var showQuery = false
+    var queryNames: [String] = []
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -90,6 +129,11 @@ struct AdRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 Badges(ad: ad)
+                if showQuery && !queryNames.isEmpty {
+                    Label { Text(verbatim: queryNames.joined(separator: ", ")) } icon: { Image(systemName: "magnifyingglass") }
+                        .font(.caption2)
+                        .foregroundStyle(Color.watchAccent)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -380,11 +424,47 @@ struct SettingsView: View {
                 Text("Турбо проверяет следующие номера объявлений напрямую — так ловятся объявления до попадания в поиск, в том числе на проверке.")
             }
 
+            PushSection()
+
             Section {
                 Button("Разрешить уведомления") { Task { await model.requestNotifications() } }
                 Button("Очистить ленту", role: .destructive) { model.clearFeed() }
             }
         }
         .navigationTitle("Настройки")
+    }
+}
+
+/// Тихие пуши-будильники: сервер на kliko.kz будит приложение, и оно проверяет OLX в фоне.
+struct PushSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var endpoint = ""
+    @State private var key = ""
+    @State private var busy = false
+
+    var body: some View {
+        Section {
+            TextField(text: $endpoint, prompt: Text(verbatim: AppModel.defaultPushEndpoint)) { Text(verbatim: "Сервер") }
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            SecureField(text: $key, prompt: Text(verbatim: "Ключ api_token")) { Text(verbatim: "Ключ") }
+            Button(busy ? "Подключаю…" : "Подключить будильник") {
+                busy = true
+                Task { await model.connectPushServer(endpoint: endpoint, key: key); busy = false }
+            }
+            .disabled(busy || endpoint.isEmpty || key.isEmpty)
+            if !model.pushStatus.isEmpty {
+                Text(verbatim: model.pushStatus).font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Будильник через пуши (необязательно)")
+        } footer: {
+            Text("Сервер на kliko.kz раз в несколько минут шлёт тихий пуш — iPhone будит приложение, и оно проверяет OLX с телефона даже когда закрыто. Сервер к OLX не ходит.")
+        }
+        .onAppear {
+            endpoint = model.pushEndpoint
+            key = model.pushKey
+        }
     }
 }

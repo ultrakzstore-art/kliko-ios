@@ -99,4 +99,7 @@ struct Persisted: Codable {
     var nextSubId = 1
     var turbo = true
     var stats = Stats()
+    /// Все новые объявления, которые поймал сборщик, — в любой рубрике. Необязательное поле:
+    /// state.json версии 1.1 его не знает, и обязательное поле сбросило бы сохранённые поиски.
+    var all: [Ad]?
 }

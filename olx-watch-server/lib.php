@@ -362,7 +362,7 @@ function der_to_raw(string $der): string {
 }
 
 // Подменяется в тестах.
-$GLOBALS['APNS_SEND'] = function (string $token, array $payload): int {
+$GLOBALS['APNS_SEND'] = function (string $token, array $payload, string $type = 'alert', int $priority = 10): int {
     $host = cfg('apns_env', 'production') === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
     $ch = curl_init("https://$host/3/device/$token");
     curl_setopt_array($ch, ca_opts() + [
@@ -374,8 +374,8 @@ $GLOBALS['APNS_SEND'] = function (string $token, array $payload): int {
         CURLOPT_HTTPHEADER => [
             'authorization: bearer ' . apns_jwt(),
             'apns-topic: ' . cfg('apns_bundle_id', 'kz.kliko.olxwatch'),
-            'apns-push-type: alert',
-            'apns-priority: 10',
+            "apns-push-type: $type",
+            "apns-priority: $priority",
         ],
     ]);
     curl_exec($ch);
@@ -415,4 +415,27 @@ function push_ad_unsafe(array $ad, array $subs, string $via): void {
         $code = ($GLOBALS['APNS_SEND'])($token, $payload);
         if ($code === 410) db()->prepare('DELETE FROM devices WHERE token = ?')->execute([$token]); // приложение удалено — токен умер
     }
+}
+
+// Тихий пуш-будильник: без текста, только content-available. iPhone ненадолго будит приложение,
+// и оно само проверяет OLX с телефона. Приоритет 5 и тип background — так требует Apple для
+// тихих пушей; частоту iOS ограничивает сама (обычно несколько раз в час).
+function send_wake(): array {
+    $p8 = (string)cfg('apns_key_p8', '');
+    if ($p8 === '' || !is_readable($p8)) return ['sent' => 0, 'error' => 'нет ключа APNs'];
+    $sent = 0;
+    $failed = 0;
+    foreach (db()->query('SELECT token FROM devices')->fetchAll(PDO::FETCH_COLUMN) as $token) {
+        try {
+            $code = ($GLOBALS['APNS_SEND'])($token, ['aps' => ['content-available' => 1]], 'background', 5);
+        } catch (Throwable $e) {
+            kv_set('last_push_error', ['at' => time(), 'msg' => $e->getMessage()]);
+            $failed++;
+            continue;
+        }
+        if ($code === 410) db()->prepare('DELETE FROM devices WHERE token = ?')->execute([$token]);
+        if ($code === 200) $sent++; else $failed++;
+    }
+    kv_set('last_wake', ['at' => time(), 'sent' => $sent, 'failed' => $failed]);
+    return ['sent' => $sent, 'failed' => $failed];
 }

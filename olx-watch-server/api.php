@@ -140,6 +140,7 @@ try {
                 'cron_ok' => $lastCron > time() - 180,
                 'on_demand_at' => kv_get('last_on_demand'),
                 'last_push_error' => kv_get('last_push_error'),
+                'last_wake' => kv_get('last_wake'),
                 'last_cron' => $lastCron ?: null,
                 'turbo' => (bool)kv_get('turbo', true),
                 'frontier' => (int)kv_get('frontier', 0) ?: null,

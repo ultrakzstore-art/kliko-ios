@@ -34,7 +34,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         # Фоновое обновление: iOS изредка будит приложение проверить поиски (AppModel.refreshTaskId).
-        UIBackgroundModes: [fetch]
+        UIBackgroundModes: [fetch, remote-notification]   # фоновое обновление + тихие пуши-будильники
         BGTaskSchedulerPermittedIdentifiers: [kz.kliko.olxwatch.refresh]
     settings:
       base:

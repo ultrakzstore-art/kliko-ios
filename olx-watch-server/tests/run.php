@@ -93,6 +93,15 @@ $before = count($pushes);
 $GLOBALS['APNS_SEND'] = function () { throw new RuntimeException('не должно вызываться'); };
 check((function () { try { push_ad(base_ad(['id' => 1, 'title' => 't']), [['id' => 1, 'name' => 'x']], 'search'); return true; } catch (Throwable $e) { return false; } })(), 'пуш без ключа не роняет сборщик');
 
+// Будильник: тихий пуш типа background с приоритетом 5 и только content-available.
+$wakes = [];
+$GLOBALS['APNS_SEND'] = function (string $token, array $payload, string $type = 'alert', int $priority = 10) use (&$wakes): int {
+    $wakes[] = [$payload, $type, $priority];
+    return 200;
+};
+$r = send_wake();
+check($r['sent'] === 1 && $wakes[0] === [['aps' => ['content-available' => 1]], 'background', 5], 'будильник: тихий пуш, background, приоритет 5');
+
 // 403 от OLX — пауза.
 $GLOBALS['OLX_FETCH'] = fn() => [429, ''];
 poll_sub($get());
