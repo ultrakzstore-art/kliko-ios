@@ -376,8 +376,19 @@ $GLOBALS['APNS_SEND'] = function (string $token, array $payload): int {
     return $code;
 };
 
+// Пуш — необязательная часть: без ключа APNs или при сбое Apple объявление всё равно
+// попадает в ленту, а сборщик идёт дальше.
 function push_ad(array $ad, array $subs, string $via): void {
-    if (!cfg('apns_key_p8')) return;
+    $p8 = (string)cfg('apns_key_p8', '');
+    if ($p8 === '' || !is_readable($p8)) return;
+    try {
+        push_ad_unsafe($ad, $subs, $via);
+    } catch (Throwable $e) {
+        kv_set('last_push_error', ['at' => time(), 'msg' => $e->getMessage()]);
+    }
+}
+
+function push_ad_unsafe(array $ad, array $subs, string $via): void {
     $price = $ad['price_label'] ?: ($ad['price'] !== null ? number_format($ad['price'], 0, '.', ' ') . ' ₸' : '');
     $payload = [
         'aps' => [

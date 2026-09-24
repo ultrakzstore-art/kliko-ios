@@ -61,15 +61,40 @@ function ad_out(array $row): array {
     ];
 }
 
+// Без cron лента всё равно живая: пока приложение открыто, оно спрашивает ленту раз в 20 сек,
+// и если cron не отмечался больше двух минут, этот запрос сам проверяет поиски (до ~10 сек).
+// Турбо так не крутится — для него нужен cron.
+function poll_on_demand(): void {
+    if ((int)kv_get('last_cron', 0) > time() - 120) return;
+    $lock = fopen(cfg('lock_file', sys_get_temp_dir() . '/olx-watch.lock'), 'c');
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) return;
+    require_once __DIR__ . '/watch.php';
+    $deadline = time() + 10;
+    try {
+        foreach (subs_all() as $sub) {
+            if (time() >= $deadline || blocked()) break;
+            if ($sub['paused'] || time() - (int)$sub['last_poll'] < max(10, (int)cfg('poll_sec', 30))) continue;
+            poll_sub($sub);
+        }
+        kv_set('last_on_demand', time());
+    } catch (Throwable $e) {
+        kv_set('last_error', ['at' => time(), 'msg' => $e->getMessage()]);
+    } finally {
+        flock($lock, LOCK_UN);
+    }
+}
+
 try {
     switch ("$method $action") {
         case 'GET feed':
+            if (empty($_GET['before'])) poll_on_demand();
             $before = (int)($_GET['before'] ?? 0) ?: PHP_INT_MAX;
             $st = db()->prepare('SELECT * FROM ads WHERE shown = 1 AND found_at < ? ORDER BY found_at DESC, id DESC LIMIT 50');
             $st->execute([$before]);
             out(['ads' => array_map('ad_out', $st->fetchAll())]);
 
         case 'GET subs':
+            poll_on_demand();
             out(['subs' => array_map('sub_out', subs_all())]);
 
         case 'POST subs':
@@ -113,6 +138,8 @@ try {
                     'curl_http2' => defined('CURL_VERSION_HTTP2') && (curl_version()['features'] & CURL_VERSION_HTTP2) !== 0],
                 'subs' => (int)db()->query('SELECT COUNT(*) FROM subs')->fetchColumn(),
                 'cron_ok' => $lastCron > time() - 180,
+                'on_demand_at' => kv_get('last_on_demand'),
+                'last_push_error' => kv_get('last_push_error'),
                 'last_cron' => $lastCron ?: null,
                 'turbo' => (bool)kv_get('turbo', true),
                 'frontier' => (int)kv_get('frontier', 0) ?: null,

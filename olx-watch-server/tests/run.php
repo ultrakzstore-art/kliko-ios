@@ -87,6 +87,12 @@ $jwt = apns_jwt();
 $parts = explode('.', $jwt);
 check(count($parts) === 3 && strlen(base64_decode(strtr($parts[2], '-_', '+/'))) === 64, 'JWT APNs подписан ES256');
 
+// Ключ APNs указан, но файла нет — объявления всё равно идут в ленту, сборщик не падает.
+file_put_contents("$tmp/config2.php", "<?php return ['db_file' => '$tmp/w.db', 'apns_key_p8' => '/нет/такого/AuthKey.p8'];");
+$before = count($pushes);
+$GLOBALS['APNS_SEND'] = function () { throw new RuntimeException('не должно вызываться'); };
+check((function () { try { push_ad(base_ad(['id' => 1, 'title' => 't']), [['id' => 1, 'name' => 'x']], 'search'); return true; } catch (Throwable $e) { return false; } })(), 'пуш без ключа не роняет сборщик');
+
 // 403 от OLX — пауза.
 $GLOBALS['OLX_FETCH'] = fn() => [429, ''];
 poll_sub($get());
