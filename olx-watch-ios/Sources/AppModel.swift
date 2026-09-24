@@ -68,14 +68,16 @@ final class AppModel {
         busy = true
         defer { busy = false }
         if let until = blockedUntil, until > Date() { return }
-        if state.turbo, Date().timeIntervalSince(lastTurbo) >= Self.turboInterval {
-            lastTurbo = Date()
-            await turbo()
-        }
+        // Сначала поиск: он переставляет «последний номер» на самые свежие объявления, и турбо
+        // после долгой паузы не бредёт по вчерашним номерам.
         for sub in state.subs where !sub.paused {
             if let last = sub.lastPoll, Date().timeIntervalSince(last) < Self.pollInterval { continue }
             if let until = blockedUntil, until > Date() { break }
             await poll(sub.id)
+        }
+        if state.turbo, Date().timeIntervalSince(lastTurbo) >= Self.turboInterval {
+            lastTurbo = Date()
+            await turbo()
         }
     }
 
@@ -88,6 +90,7 @@ final class AppModel {
 
     private func poll(_ id: Int) async {
         guard let url = state.subs.first(where: { $0.id == id })?.url else { return }
+        let frontierBefore = state.frontier
         let ads: [Ad]
         do {
             ads = try await OLX.search(url)
@@ -119,8 +122,10 @@ final class AppModel {
 
         for var ad in ads where !seenSet.contains(ad.id) {
             remember(ad.id)
-            if let created = ad.createdAt, Date().timeIntervalSince(created) > Self.freshness { continue }
+            if Self.isStale(ad, frontier: frontierBefore) { continue }
             if let full = try? await OLX.offer(ad.id) { ad.merge(full) }
+            // Дата подачи часто есть только в карточке — проверяем ещё раз, уже с ней.
+            if Self.isStale(ad, frontier: frontierBefore) { continue }
             ad.via = "search"
             ad.subIds = [id]
             ad.foundAt = Date()
@@ -128,6 +133,14 @@ final class AppModel {
             add(ad, subs: [sub])
         }
         save()
+    }
+
+    /// Новое — это подано меньше часа назад. Старое, которое подняли или продвинули, всплывает
+    /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
+    /// старья он сильно меньше самых свежих номеров.
+    private static func isStale(_ ad: Ad, frontier: Int) -> Bool {
+        if let created = ad.createdAt { return Date().timeIntervalSince(created) > freshness }
+        return frontier > 0 && ad.id < frontier - 20_000
     }
 
     private func learn(_ sub: inout Sub, from ads: [Ad]) {
@@ -168,6 +181,7 @@ final class AppModel {
             state.stats.lastTurboHit = Date()
             guard !seenSet.contains(id) else { continue }
             remember(id)
+            if Self.isStale(ad, frontier: 0) { continue }   // после долгой паузы — не вчерашнее
             let hit = ready.filter { OLX.matches($0, ad) }
             ad.via = "turbo"
             ad.subIds = hit.map(\.id)
