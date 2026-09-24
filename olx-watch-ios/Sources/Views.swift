@@ -478,12 +478,12 @@ struct SettingsView: View {
 
             Section {
                 Picker("Показывать поданные за", selection: Binding(get: { model.freshnessMinutes }, set: { model.freshnessMinutes = $0 })) {
-                    ForEach(AppModel.freshnessChoices, id: \.self) { m in Text("\(m) мин").tag(m) }
+                    ForEach(AppModel.freshnessChoices, id: \.self) { m in Text(m == 1 ? "последнюю минуту" : "\(m) мин").tag(m) }
                 }
             } header: {
                 Text("Только новоиспечённые")
             } footer: {
-                Text("Старое, которое продавец поднял или продвинул, и всё поданное раньше этого срока в ленту и уведомления не попадает.")
+                Text("Старое, которое продавец поднял или продвинул, и всё поданное раньше этого срока в ленту и уведомления не попадает. «Последняя минута» работает, пока приложение открыто: в фоне iOS будит его редко, и такие объявления к пробуждению уже старше минуты.")
             }
 
             Section {

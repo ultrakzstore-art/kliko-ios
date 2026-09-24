@@ -18,11 +18,11 @@ final class AppModel {
     private static let turboInterval: TimeInterval = 10
     private static let turboWindow = 5
     private static let missGiveUp = 12
-    /// «Новое» — подано не раньше, чем столько минут назад (настройка; по умолчанию 15).
-    static let freshnessChoices = [5, 15, 30, 60]
+    /// «Новое» — подано не раньше, чем столько минут назад (настройка; по умолчанию 1).
+    static let freshnessChoices = [1, 5, 15, 30, 60]
     var freshnessMinutes: Int = {
         let v = UserDefaults.standard.integer(forKey: "freshness_min")
-        return v > 0 ? v : 15
+        return v > 0 ? v : 1
     }() {
         didSet { UserDefaults.standard.set(freshnessMinutes, forKey: "freshness_min") }
     }
