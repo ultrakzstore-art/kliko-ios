@@ -14,8 +14,25 @@ final class AppModel {
     static let refreshTaskId = "kz.kliko.olxwatch.refresh"
     static let processingTaskId = "kz.kliko.olxwatch.processing"
 
-    private static let pollInterval: TimeInterval = 30
-    private static let turboInterval: TimeInterval = 10
+    /// Скорость: как часто спрашивать OLX. Чаще — быстрее ловим, но выше риск, что OLX
+    /// ограничит запросы с телефона (тогда сработает пауза).
+    enum Speed: String, CaseIterable, Identifiable {
+        case normal, fast, max
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .normal: return "Обычная — поиск 30 с, турбо 10 с"
+            case .fast: return "Быстрая — поиск 15 с, турбо 5 с"
+            case .max: return "Максимум — поиск 10 с, турбо 3 с"
+            }
+        }
+        var poll: TimeInterval { self == .normal ? 30 : self == .fast ? 15 : 10 }
+        var turbo: TimeInterval { self == .normal ? 10 : self == .fast ? 5 : 3 }
+    }
+
+    var speed: Speed = Speed(rawValue: UserDefaults.standard.string(forKey: "speed") ?? "") ?? .fast {
+        didSet { UserDefaults.standard.set(speed.rawValue, forKey: "speed") }
+    }
     private static let turboWindow = 5
     private static let missGiveUp = 12
     /// «Новое» — подано не раньше, чем столько минут назад (настройка; по умолчанию 1).
@@ -57,7 +74,7 @@ final class AppModel {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.tick()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(1))
             }
         }
     }
@@ -78,11 +95,11 @@ final class AppModel {
         // Сначала поиск: он переставляет «последний номер» на самые свежие объявления, и турбо
         // после долгой паузы не бредёт по вчерашним номерам.
         for sub in state.subs where !sub.paused {
-            if let last = sub.lastPoll, Date().timeIntervalSince(last) < Self.pollInterval { continue }
+            if let last = sub.lastPoll, Date().timeIntervalSince(last) < speed.poll { continue }
             if let until = blockedUntil, until > Date() { break }
             await poll(sub.id)
         }
-        if state.turbo, Date().timeIntervalSince(lastTurbo) >= Self.turboInterval {
+        if state.turbo, Date().timeIntervalSince(lastTurbo) >= speed.turbo {
             lastTurbo = Date()
             await turbo()
         }

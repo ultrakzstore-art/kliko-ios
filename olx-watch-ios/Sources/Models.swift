@@ -36,6 +36,13 @@ struct Ad: Codable, Identifiable, Hashable {
 
     var postedDate: Date { createdAt ?? foundAt }
 
+    /// Сколько секунд прошло от подачи до того, как мы его поймали.
+    var lagText: String? {
+        guard let createdAt else { return nil }
+        let s = max(0, Int(foundAt.timeIntervalSince(createdAt)))
+        return s < 120 ? "поймано через \(s) с" : "поймано через \(s / 60) мин"
+    }
+
     /// Ссылка с номером после # — сайт эту часть игнорирует, а номер под рукой.
     var link: URL? {
         let base = url.hasPrefix("http") ? String(url.split(separator: "#").first ?? "") : "\(OLX.base)/d/obyavlenie/-ID\(OLX.encode(id)).html"

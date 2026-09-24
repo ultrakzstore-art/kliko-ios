@@ -155,6 +155,9 @@ struct AdRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 Badges(ad: ad)
+                if let lag = ad.lagText {
+                    Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
+                }
                 if showQuery && !queryNames.isEmpty {
                     Label { Text(verbatim: queryNames.joined(separator: ", ")) } icon: { Image(systemName: "magnifyingglass") }
                         .font(.caption2)
@@ -195,6 +198,9 @@ struct LinkRow: View {
             .lineLimit(1)
             if !ad.subIds.isEmpty || ad.onReview {
                 Badges(ad: ad)
+            }
+            if let lag = ad.lagText {
+                Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)
@@ -473,13 +479,17 @@ struct SettingsView: View {
             } header: {
                 Text("Сборщик")
             } footer: {
-                Text("Поиск — раз в 30 секунд, турбо — раз в 10 секунд, пока приложение на экране. В фоне iOS изредка даёт проверить поиски (обычно раз в 15+ минут).")
+                Text("Поиск и турбо — с выбранной скоростью, пока приложение на экране. В фоне iOS изредка даёт проверить поиски (обычно раз в 15+ минут).")
             }
 
             Section {
                 Picker("Показывать поданные за", selection: Binding(get: { model.freshnessMinutes }, set: { model.freshnessMinutes = $0 })) {
                     ForEach(AppModel.freshnessChoices, id: \.self) { m in Text(m == 1 ? "последнюю минуту" : "\(m) мин").tag(m) }
                 }
+                Picker("Скорость", selection: Binding(get: { model.speed }, set: { model.speed = $0 })) {
+                    ForEach(AppModel.Speed.allCases) { sp in Text(sp.title).tag(sp) }
+                }
+                .pickerStyle(.inline)
             } header: {
                 Text("Только новоиспечённые")
             } footer: {
