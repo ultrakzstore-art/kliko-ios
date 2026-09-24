@@ -26,9 +26,18 @@ function render() {
   $('run').textContent = running ? '■ Остановить' : '▶ Запустить';
   $('run').classList.toggle('on', running);
 
+  const acc = $('account');
+  acc.classList.toggle('ok', S.olxLoggedIn === true);
+  acc.classList.toggle('bad', S.olxLoggedIn === false);
+  $('acc-text').textContent = S.olxLoggedIn === true ? 'OLX: вход выполнен ✓'
+    : S.olxLoggedIn === false ? 'OLX: вы не вошли в аккаунт' : 'OLX: вход не проверен (нет связи с OLX?)';
+  $('acc-login').hidden = S.olxLoggedIn === true;
+  $('acc-logout').hidden = S.olxLoggedIn !== true;
+
   const ready = S.items.filter((x) => x.status === 'ready').length;
   let status;
   if (!S.hasKey) status = 'Укажите ключ Claude API в настройках.';
+  else if (S.olxLoggedIn === false) status = 'Войдите в OLX: кнопка «Войти в OLX», вход — в окне справа.';
   else if (S.postingId) status = 'Подаю объявление…';
   else if (!running) status = `Расписание выключено. Готово к подаче: ${ready}.`;
   else if (!S.inHours) status = `Вне рабочего окна (${S.settings.workStart}–${S.settings.workEnd}). Готово к подаче: ${ready}.`;
@@ -121,6 +130,8 @@ $('items').addEventListener('click', async (e) => {
 });
 
 $('run').onclick = () => api.run(!S.settings.running);
+$('acc-login').onclick = () => api.olxLogin();
+$('acc-logout').onclick = () => api.olxLogout();
 
 document.querySelectorAll('nav button').forEach((b) => {
   b.onclick = async () => {

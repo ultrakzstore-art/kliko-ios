@@ -53,3 +53,9 @@ label input, label select, label textarea { margin-top: 3px; color: var(--ink); 
 details { margin-top: 16px; }
 .batches { margin-bottom: 8px; }
 .batch { background: var(--card); border: 1px solid var(--accent); border-radius: 12px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+.account { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 14px 8px; padding: 8px 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+.account.ok { border-color: var(--ok); }
+.account.bad { border-color: var(--err); }
+.account .acc-actions { display: flex; gap: 6px; }
+.account button { padding: 4px 10px; font-size: 12px; }
+.account.bad #acc-login { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 700; }

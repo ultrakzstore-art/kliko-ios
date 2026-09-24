@@ -17,5 +17,8 @@ contextBridge.exposeInMainWorld('api', {
   chooseInbox: () => ipcRenderer.invoke('inbox:choose'),
   openInbox: () => ipcRenderer.invoke('inbox:open'),
   openOlx: (url) => ipcRenderer.invoke('olx:open', url),
+  olxLogin: () => ipcRenderer.invoke('olx:login'),
+  olxLogout: () => ipcRenderer.invoke('olx:logout'),
+  olxCheck: () => ipcRenderer.invoke('olx:check'),
   readNotes: () => ipcRenderer.invoke('notes:read'),
 });

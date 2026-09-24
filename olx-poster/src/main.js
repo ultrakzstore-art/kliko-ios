@@ -13,10 +13,11 @@ const { describeItem } = require('./describe');
 const { groupPhotos, MAX_PER_ITEM } = require('./grouping');
 const { postItem, START_URL } = require('./poster');
 const { PageTools } = require('./page-tools');
+const { Account, MY_ACCOUNT_URL, LOGIN_POPUP_HOSTS, isLoginUrl } = require('./account');
 
 const PANEL_WIDTH = 460;
 
-let win, panel, olx, store, folder, phone;
+let win, panel, olx, store, folder, phone, account;
 let phoneUrls = [];
 let phoneQr = '';
 const logLines = [];
@@ -38,6 +39,7 @@ function publicState() {
   return {
     settings,
     hasKey: !!store.getApiKey(),
+    olxLoggedIn: account ? account.loggedIn : null,
     items: store.items.map((it) => ({ ...it, photoUrls: it.photos.map((p) => pathToFileURL(p).href) })),
     batches: store.batches.map((b) => ({ id: b.id, count: b.photos.length, attempts: b.attempts })),
     groupingId: state.groupingId,
@@ -151,6 +153,18 @@ async function postOne(id) {
   const item = store.items.find((x) => x.id === id);
   const apiKey = store.getApiKey();
   if (!item || !item.listing || state.postingId || !apiKey) return;
+  // Без входа в аккаунт подавать бессмысленно: встаём на паузу и открываем страницу входа.
+  if (account.loggedIn !== true) {
+    const ok = await account.check();
+    if (ok === null) return; // нет сети — попробуем на следующем круге
+    if (ok === false) {
+      if (store.settings.running) store.saveSettings({ running: false });
+      olx.webContents.loadURL(MY_ACCOUNT_URL);
+      notify('OLX Poster на паузе', 'Войдите в аккаунт OLX в окне приложения и снова нажмите «Запустить»');
+      return;
+    }
+  }
+  if (state.postingId) return;
   state.postingId = id;
   state.stopRequested = false;
   state.lastPostAt = Date.now();
@@ -220,9 +234,28 @@ function createWindow() {
   const ua = olxSession.getUserAgent().replace(/\s(Electron|olx-poster|OLX Poster)\/\S+/gi, '');
   olxSession.setUserAgent(ua);
   olx = new WebContentsView({ webPreferences: { session: olxSession, contextIsolation: true, sandbox: true } });
+  account = new Account(olxSession, log);
+  account.onChange(pushState);
   olx.webContents.setWindowOpenHandler(({ url }) => {
-    olx.webContents.loadURL(url); // ссылки «в новом окне» открываем здесь же
+    // Вход через Google/Facebook/Apple идёт во всплывающем окне — ему нужен настоящий попап
+    // в той же сессии, иначе OLX не узнает, что вход состоялся.
+    let host = '';
+    try { host = new URL(url).hostname; } catch {}
+    if (LOGIN_POPUP_HOSTS.test(host)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, autoHideMenuBar: true, title: 'Вход' } };
+    }
+    olx.webContents.loadURL(url); // остальные ссылки «в новом окне» открываем здесь же
     return { action: 'deny' };
+  });
+  // Ушли со страницы входа на обычную — похоже, вошли: перепроверяем.
+  let wasOnLogin = false;
+  olx.webContents.on('did-navigate', (_e, url) => {
+    const onLogin = isLoginUrl(url);
+    if (wasOnLogin && !onLogin) setTimeout(() => account.check(), 1500);
+    wasOnLogin = onLogin;
+  });
+  olx.webContents.on('did-create-window', (child) => {
+    child.on('closed', () => setTimeout(() => account.check(), 1500));
   });
   olx.webContents.loadURL('https://www.olx.kz/');
 
@@ -247,7 +280,23 @@ function registerIpc() {
     if ('inboxDir' in clean) folder.start();
   });
   ipcMain.handle('key:set', (_e, key) => store.setApiKey(key));
+  ipcMain.handle('olx:login', () => olx.webContents.loadURL(MY_ACCOUNT_URL));
+  ipcMain.handle('olx:check', () => account.check());
+  ipcMain.handle('olx:logout', async () => {
+    const r = await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Выйти', 'Отмена'], defaultId: 1, cancelId: 1,
+      message: 'Выйти из аккаунта OLX?', detail: 'Данные входа удалятся с этого компьютера. Расписание остановится.',
+    });
+    if (r.response !== 0) return;
+    state.stopRequested = true;
+    store.saveSettings({ running: false });
+    await account.logout();
+    olx.webContents.loadURL(MY_ACCOUNT_URL);
+  });
   ipcMain.handle('run', (_e, on) => {
+    if (on) account.check().then((ok) => {
+      if (ok === false) log('Внимание: не выполнен вход в OLX — нажмите «Войти в OLX»');
+    });
     store.saveSettings({ running: !!on });
     log(on ? `Расписание включено: раз в ${store.settings.intervalMin} мин, ${store.settings.workStart}–${store.settings.workEnd}` : 'Расписание остановлено');
   });
@@ -313,6 +362,8 @@ app.whenReady().then(async () => {
   setInterval(() => describeLoop().catch((e) => log(`Ошибка: ${e.message}`)), 3000);
   setInterval(() => postLoop().catch((e) => log(`Ошибка: ${e.message}`)), 15_000);
   setInterval(pushState, 30_000); // обновить обратный отсчёт в панели
+  setInterval(() => { if (!state.postingId) account.check(); }, 15 * 60_000); // вход мог истечь
+  account.check();
   pushState();
 });
 

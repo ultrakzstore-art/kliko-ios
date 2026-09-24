@@ -19,6 +19,15 @@ const g = normalize([
 assert.deepStrictEqual(g.map((x) => x.photos), [['p1', 'p2'], ['p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'], ['p11'], ['p12']]);
 assert.strictEqual(g[1].what, 'куртка');
 
+// Страница входа OLX или нет.
+const { isLoginUrl, LOGIN_POPUP_HOSTS } = require('../src/account');
+assert.ok(isLoginUrl('https://login.olx.kz/?cc=abc'));
+assert.ok(isLoginUrl('https://www.olx.kz/account/?ref%5B0%5D%5Baction%5D=myaccount'));
+assert.ok(!isLoginUrl('https://www.olx.kz/myaccount/'));
+assert.ok(!isLoginUrl('https://www.olx.kz/d/post-new-ad/'));
+assert.ok(LOGIN_POPUP_HOSTS.test('accounts.google.com') && LOGIN_POPUP_HOSTS.test('www.facebook.com'));
+assert.ok(!LOGIN_POPUP_HOSTS.test('evilfacebook.com'));
+
 // Структурированный ответ: каждый объект закрыт и перечисляет все поля в required.
 function walk(node, where) {
   if (node.type === 'object') {
