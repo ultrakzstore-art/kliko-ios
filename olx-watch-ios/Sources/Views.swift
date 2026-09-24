@@ -411,7 +411,7 @@ struct AddSubSheet: View {
             }
         }
         Section {
-            TextField(text: $words, prompt: Text(verbatim: "iphone 13, hp 250, шины r16")) { Text(verbatim: "Слова") }
+            TextField(text: $words, prompt: Text(verbatim: "необязательно: iphone 13, hp 250")) { Text(verbatim: "Слова") }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             HStack {
@@ -421,9 +421,9 @@ struct AddSubSheet: View {
                     .keyboardType(.numberPad)
             }
         } header: {
-            Text("Слова и цена (необязательно)")
+            Text("Слова и цена — необязательно")
         } footer: {
-            Text("Без рубрики нужны слова. Первый проход запоминает, что уже есть, — дальше приходят только новые.")
+            Text("Можно выбрать только рубрику — без слов придут все новые объявления в ней. Слова нужны, только если рубрика «Все». Первый проход запоминает, что уже есть, — дальше приходят только новые.")
         }
     }
 
