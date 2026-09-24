@@ -220,6 +220,12 @@ jobs:
           extra=""
           [ -n "$version" ] && extra="MARKETING_VERSION=$version"
 
+          # АРХИВ БЕЗ СЕРТИФИКАТА РАЗРАБОТКИ. Автоподпись на чистом раннере каждый раз выпускала новый
+          # сертификат разработки (закрытый ключ умирал вместе с раннером), следующий прогон его отзывал —
+          # и Apple слала письмо «Certificate revoked» на каждую сборку. Архив подписываем локально
+          # (ad-hoc, «-»): права (aps-environment) в подписи остаются, а настоящую подпись для TestFlight
+          # ставит экспорт — облачным сертификатом распространения, который не пересоздаётся.
+          # Что права дожили до выгрузки, проверяет шаг «Проверить подпись и права».
           xcodebuild archive \
             -project OLXWatch.xcodeproj \
             -scheme "$SCHEME" \
@@ -231,7 +237,10 @@ jobs:
             -authenticationKeyID "$KID" \
             -authenticationKeyIssuerID "$ISS" \
             DEVELOPMENT_TEAM="$TEAM" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            PROVISIONING_PROFILE_SPECIFIER= \
             CURRENT_PROJECT_VERSION="$build_no" \
             $extra
 
@@ -276,6 +285,24 @@ jobs:
             -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
             -authenticationKeyID "$KID" \
             -authenticationKeyIssuerID "$ISS"
+
+      - name: Проверить подпись и права
+        # Только когда .ipa остался у нас (пуш или ручной запуск без заливки). Без aps-environment пуши
+        # молча не доходят, поэтому его отсутствие — ошибка сборки, а не предупреждение.
+        run: |
+          ipa=$(ls "$EXPORT_DIR"/*.ipa 2>/dev/null | head -1)
+          if [ -z "$ipa" ]; then echo "Сборка ушла в App Store Connect — проверять нечего."; exit 0; fi
+          rm -rf "$EXPORT_DIR/check" && mkdir -p "$EXPORT_DIR/check"
+          unzip -q "$ipa" -d "$EXPORT_DIR/check"
+          app=$(ls -d "$EXPORT_DIR"/check/Payload/*.app | head -1)
+          codesign -dvv "$app" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+          ents=$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || true)
+          echo "$ents" | grep -A1 -E "aps-environment|application-identifier" || true
+          echo "$ents" | grep -A1 "aps-environment" | grep -q production \
+            || { echo "::error::В подписанном приложении нет aps-environment=production — пуши работать не будут"; exit 1; }
+          codesign -dvv "$app" 2>&1 | grep -q "Authority=Apple Distribution" \
+            || { echo "::error::Приложение подписано не сертификатом распространения"; exit 1; }
+          echo "Подпись распространения и права на пуши на месте."
 
       - name: Убрать ключ
         if: always()
