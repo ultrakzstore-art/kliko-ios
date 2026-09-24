@@ -9,6 +9,7 @@ import UserNotifications
 @Observable
 final class AppModel {
     static let shared = AppModel()
+    static let defaultEndpoint = "https://kliko.kz/olx-watch/api.php"
 
     var endpoint: String = UserDefaults.standard.string(forKey: "endpoint") ?? ""
     var token: String = Keychain.read("api_token") ?? ""

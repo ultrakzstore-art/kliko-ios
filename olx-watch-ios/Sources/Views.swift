@@ -227,7 +227,7 @@ struct AddSubSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("https://www.olx.kz/d/…", text: $url, axis: .vertical)
+                    TextField(text: $url, prompt: Text(verbatim: "https://www.olx.kz/d/…"), axis: .vertical) { Text(verbatim: "Ссылка") }
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -273,7 +273,9 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                TextField("https://kliko.kz/olx-watch/api.php", text: $endpoint)
+                // Подсказки — verbatim: иначе SwiftUI читает строку как Markdown, и адрес в подсказке
+                // рисуется синей ссылкой — выглядит как уже введённый текст, а поле на деле пустое.
+                TextField(text: $endpoint, prompt: Text(verbatim: AppModel.defaultEndpoint)) { Text(verbatim: "Адрес сервера") }
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -315,7 +317,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Настройки")
         .onAppear {
-            endpoint = model.endpoint
+            endpoint = model.endpoint.isEmpty ? AppModel.defaultEndpoint : model.endpoint
             token = model.token
             saved = model.configured
         }
