@@ -18,6 +18,8 @@ import SwiftUI
  странице, и вторая их копия неизбежно разойдётся с первой. Нажатие на карточку не открывает товар здесь —
  оно говорит странице, куда идти, и та открывает объявление у себя. Одна витрина, один набор правил.
  */
+/* Цвета текста — системные (.primary / .secondary), а не постоянные Theme.ink/muted: фон тут системный и в тёмной
+   теме чёрный, и тёмный текст на нём не читался (разбор 24.09.2026). */
 struct FeedPreview: View {
     let снимок: FeedSnapshot
     /// Нажали карточку: отдаём адрес обёртке, страница откроет объявление сама.
@@ -29,8 +31,11 @@ struct FeedPreview: View {
         ZStack(alignment: .bottom) {
             Color(.systemBackground).ignoresSafeArea()
 
+            /* Lazy — не для красоты: обычный стек создаёт все семьдесят картинок сразу, и на плохой связи они
+               отнимали бы канал у страницы, которую превью должно ускорить (разбор 24.09.2026). Ленивый создаёт
+               только то, что на экране. */
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 26) {
+                LazyVStack(alignment: .leading, spacing: 26) {
                     шапка
                     ForEach(снимок.rows) { ряд in
                         if !ряд.items.isEmpty { полка(ряд) }
@@ -39,9 +44,6 @@ struct FeedPreview: View {
                 }
                 .padding(.top, 8)
             }
-            /* Листать можно, а нажимать по карточкам — пока не попросили открыть: два запроса подряд отправили
-               бы страницу сначала на одно объявление, потом на другое. */
-            .disabled(ждём != nil)
 
             строкаВнизу
         }
@@ -66,13 +68,13 @@ struct FeedPreview: View {
                     .frame(width: 8, height: 8)
                 Text(ряд.название)
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(.primary)
                 Spacer()
             }
             .padding(.horizontal, 16)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
+                LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(ряд.items) { товар in
                         карточка(товар)
                     }
@@ -92,7 +94,7 @@ struct FeedPreview: View {
                 ZStack(alignment: .topLeading) {
                     обложка(товар)
                     if товар.вТопе {
-                        Text("ТОП")
+                        Text(снимок.слово(\.top, "ТОП"))
                             .font(.system(size: 10, weight: .heavy))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -101,19 +103,19 @@ struct FeedPreview: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(Self.цена(товар))
+                    Text(Self.цена(товар, снимок))
                         .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(.primary)
                     Text(товар.название)
                         .font(.system(size: 13))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .frame(height: 34, alignment: .top)
                     if !товар.город.isEmpty {
                         Text(товар.город)
                             .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -126,6 +128,9 @@ struct FeedPreview: View {
             .opacity(ждём == nil || ждём == товар.id ? 1 : 0.5)
         }
         .buttonStyle(.plain)
+        /* Листать можно, а нажимать по карточкам — пока не попросили открыть: два запроса подряд отправили бы
+           страницу сначала на одно объявление, потом на другое. Выключаем карточки, а не всю прокрутку. */
+        .disabled(ждём != nil)
     }
 
     private func обложка(_ товар: FeedSnapshot.Item) -> some View {
@@ -146,9 +151,10 @@ struct FeedPreview: View {
     private var строкаВнизу: some View {
         HStack(spacing: 9) {
             ProgressView().scaleEffect(0.7)
-            Text(ждём == nil ? "Загружаем свежее" : "Открываем объявление")
+            Text(ждём == nil ? снимок.слово(\.loading, "Загружаем свежее")
+                             : снимок.слово(\.opening, "Открываем объявление"))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.muted)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
         .background(.regularMaterial, in: Capsule())
@@ -168,8 +174,11 @@ struct FeedPreview: View {
     }
 
     /// «14 900 000 ₸». Цены нет — «Цена по запросу»: пустое место под ценой читается как сломанная карточка.
-    static func цена(_ товар: FeedSnapshot.Item) -> String {
-        guard let p = товар.p, p > 0 else { return товар.торг ? "Договорная" : "Цена по запросу" }
+    /// Слова — из снимка, на языке человека.
+    static func цена(_ товар: FeedSnapshot.Item, _ снимок: FeedSnapshot) -> String {
+        guard let p = товар.p, p > 0 else {
+            return товар.торг ? снимок.слово(\.neg, "Договорная") : снимок.слово(\.noprice, "Цена по запросу")
+        }
         let ф = NumberFormatter()
         ф.numberStyle = .decimal
         ф.groupingSeparator = "\u{00A0}"          // неразрывный пробел: цена не переносится посреди числа

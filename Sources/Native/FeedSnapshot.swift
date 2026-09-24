@@ -23,6 +23,23 @@ struct FeedSnapshot: Codable {
     /// Когда сняли, в миллисекундах unix — так же, как `Date.now()` на странице.
     let t: Double?
     let rows: [Row]
+    /// Слова самого экрана — на языке человека, со страницы (js/marketplace-home.js, `_mhToApp`). Снимок от
+    /// старой сборки сайта их не несёт — тогда берутся русские запасные ниже.
+    let l: Labels?
+
+    struct Labels: Codable {
+        let loading: String?
+        let opening: String?
+        let noprice: String?
+        let neg: String?
+        let top: String?
+    }
+
+    /// Подпись по ключу: пришла со страницы — её, нет — запасная.
+    func слово(_ путь: KeyPath<Labels, String?>, _ запас: String) -> String {
+        if let v = l?[keyPath: путь], !v.isEmpty { return v }
+        return запас
+    }
 
     struct Row: Codable, Identifiable {
         /// Ключ раздела: transport, realty, jobs…

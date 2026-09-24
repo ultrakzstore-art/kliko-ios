@@ -657,7 +657,13 @@ struct WebContainer: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            пробовалиИзКэша = false           // страница встала: следующий обрыв снова вправе заглянуть в память
+            попыткиИзКэша = 0                 // страница встала: следующий обрыв снова вправе заглянуть в память
+            /* Главная под языком человека (/kz/ru/) — запасной адрес на случай без сети. Корень kliko.kz — это
+               редирект, а его хранение зависит от заголовков сервера; сама главная хранится под своим адресом. */
+            if let u = webView.url, let свой = Config.deepLink(u),
+               свой.path.range(of: "^/[a-z]{2}/[a-z]{2}/?$", options: .regularExpression) != nil {
+                UserDefaults.standard.set(свой.absoluteString, forKey: Coordinator.ключГлавной)
+            }
             webView.scrollView.refreshControl?.endRefreshing()
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             bridge.loadFailed = false
@@ -685,20 +691,40 @@ struct WebContainer: UIViewRepresentable {
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             failIfOffline(error)
         }
-        /// Уже пробовали достать страницу из памяти в этот заход? Второй раз не пробуем: без сети повтор
-        /// закончится тем же, а бесконечный круг «не вышло → пробуем снова» съест батарею.
-        private var пробовалиИзКэша = false
+        /// Сколько раз в этот заход доставали страницу из памяти: не больше двух — нажатая, потом главная.
+        /// Дальше не пробуем: без сети повтор закончится тем же, а круг «не вышло → снова» съест батарею.
+        private var попыткиИзКэша = 0
+        /// Где лежит адрес последней открытой главной (см. didFinish).
+        static let ключГлавной = "klikoLastHome"
 
         private func failIfOffline(_ error: Error) {
+            /* 🔴 ОТМЕНЁННАЯ ЗАГРУЗКА — НЕ ОБРЫВ СВЯЗИ (разбор 24.09.2026). Пока на экране лента-превью, страница ещё
+               грузится; нажали карточку — обёртка начинает новую загрузку, и старая падает с «отменено» (-999).
+               Считать это обрывом значило бы тут же запустить загрузку из кэша — и она отменила бы переход к
+               объявлению, на которое человек нажал. То же с «загрузка кадра прервана» у WebKit (102). */
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
+            if ns.domain == "WebKitErrorDomain" && ns.code == 102 { return }
             // Показываем «нет связи» только если страница ещё не загружалась (иначе не мигаем на дозагрузках).
             guard !bridge.isLoaded else { return }
             /* СНАЧАЛА ПАМЯТЬ, ПОТОМ ТУПИК. Человек в метро запускал приложение и упирался в экран «нет связи»,
                хотя ту же самую страницу он открывал час назад и она лежит в кэше. Показываем её: подборки
                главная и сама возьмёт с диска (js/marketplace-home.js), так что экран будет живой, а не пустой.
                Не вышло и из памяти — тогда честный экран «нет связи», как и раньше. */
-            if !пробовалиИзКэша, let web = webView {
-                пробовалиИзКэша = true
-                var запрос = URLRequest(url: Config.apiBase)
+            if попыткиИзКэша < 2, let web = webView {
+                /* Сначала та страница, что не открылась (например, объявление, нажатое в превью). Её копии чаще всего
+                   нет: объявления сайт открывает внутри главной, без отдельной загрузки. Тогда — главная: она на
+                   диске почти всегда (разбор 24.09.2026). */
+                let неОткрылась = (ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL).flatMap { Config.deepLink($0) }
+                /* Главная — последняя открытая под языком человека; её не было — корень, как раньше. */
+                let главная = UserDefaults.standard.string(forKey: Coordinator.ключГлавной).flatMap { URL(string: $0) }
+                    .flatMap { Config.deepLink($0) } ?? Config.apiBase
+                /* Корень (холодный старт) — это та же главная, только через редирект: сразу идём к ней. */
+                let корень = неОткрылась.map { $0.path.isEmpty || $0.path == "/" } ?? true
+                let адрес: URL
+                if попыткиИзКэша == 0, let u = неОткрылась, !корень, u != главная { адрес = u; попыткиИзКэша = 1 }
+                else { адрес = главная; попыткиИзКэша = 2 }
+                var запрос = URLRequest(url: адрес)
                 запрос.cachePolicy = .returnCacheDataDontLoad
                 web.load(запрос)
                 return
