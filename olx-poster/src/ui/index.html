@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'">
+<title>OLX Poster</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">OLX Poster</div>
+    <button id="run" class="run">▶ Запустить</button>
+  </header>
+  <div class="status" id="status"></div>
+
+  <nav>
+    <button data-tab="queue" class="on">Очередь</button>
+    <button data-tab="phone">Телефон</button>
+    <button data-tab="log">Журнал</button>
+    <button data-tab="settings">Настройки</button>
+  </nav>
+
+  <section id="tab-queue" class="tab on">
+    <div id="drop" class="drop">Перетащите сюда фото одного товара<br><small>или кидайте их в папку-входящие / снимайте с телефона</small></div>
+    <div class="counts" id="counts"></div>
+    <div id="items"></div>
+  </section>
+
+  <section id="tab-phone" class="tab">
+    <p>Отсканируйте камерой телефона. Телефон и компьютер — в одной Wi-Fi сети.</p>
+    <img id="qr" alt="QR-код">
+    <p class="mono" id="phone-url"></p>
+    <p class="hint">Снимаете товар → «Отправить в очередь» → следующий. Claude сразу пишет черновик, а подача идёт по расписанию.</p>
+    <p class="hint">Windows при первом запуске спросит про доступ к сети — разрешите для частных сетей.</p>
+  </section>
+
+  <section id="tab-log" class="tab">
+    <pre id="log"></pre>
+  </section>
+
+  <section id="tab-settings" class="tab">
+    <form id="settings">
+      <fieldset>
+        <legend>Claude</legend>
+        <label>Ключ API <small>(console.anthropic.com → API Keys)</small>
+          <input type="password" id="key" placeholder="sk-ant-…" autocomplete="off"></label>
+        <label>Модель
+          <select name="model">
+            <option value="claude-opus-5">Claude Opus 5 — лучше справляется с формой</option>
+            <option value="claude-sonnet-5">Claude Sonnet 5 — дешевле</option>
+          </select></label>
+        <label>Тщательность подачи
+          <select name="effort">
+            <option value="low">низкая — быстрее и дешевле</option>
+            <option value="medium">средняя</option>
+            <option value="high">высокая — если часто ошибается</option>
+          </select></label>
+      </fieldset>
+      <fieldset>
+        <legend>Расписание</legend>
+        <div class="row">
+          <label>Раз в, мин <input type="number" name="intervalMin" min="1"></label>
+          <label>С <input type="time" name="workStart"></label>
+          <label>До <input type="time" name="workEnd"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Объявления</legend>
+        <label>Город / район <input name="city"></label>
+        <div class="row">
+          <label>Контактное имя <input name="contactName"></label>
+          <label>Телефон <input name="phone"></label>
+        </div>
+        <label>Как назначать цену <textarea name="priceHint" rows="2"></textarea></label>
+        <label>Свои правила для текста <textarea name="extraRules" rows="2" placeholder="Например: в конце описания «Самовывоз — Абая/Розыбакиева, отправлю Kaspi-доставкой»"></textarea></label>
+      </fieldset>
+      <fieldset>
+        <legend>Папка-входящие</legend>
+        <p class="mono" id="inbox"></p>
+        <div class="row">
+          <button type="button" id="inbox-choose">Выбрать папку</button>
+          <button type="button" id="inbox-open">Открыть</button>
+        </div>
+        <label>Фото с разрывом меньше, сек — один товар <input type="number" name="groupGapSec" min="10"></label>
+        <p class="hint">Подпапка = один товар. Имя подпапки — подсказка и цена: «кроссовки nike 42 — 15000».</p>
+      </fieldset>
+      <button type="submit" class="primary">Сохранить</button>
+      <span id="saved"></span>
+    </form>
+    <details>
+      <summary>Что робот запомнил о форме OLX</summary>
+      <pre id="notes"></pre>
+    </details>
+  </section>
+
+  <script src="ui.js"></script>
+</body>
+</html>

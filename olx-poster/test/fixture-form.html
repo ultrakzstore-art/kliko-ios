@@ -1,0 +1,25 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Подать объявление</title></head>
+<body style="font:16px sans-serif">
+<h1>Создать объявление</h1>
+<div><button type="button" id="addphoto">Добавить фото</button><input type="file" id="file" multiple accept="image/*" style="display:none"><div id="previews"></div></div>
+<label for="title">Название</label><input id="title">
+<div role="combobox" aria-expanded="false" id="cat" tabindex="0" style="border:1px solid #999;padding:6px;margin:8px 0">Выберите рубрику</div>
+<ul role="listbox" id="catlist" style="display:none"><li role="option">Электроника</li><li role="option">Мода и стиль</li></ul>
+<label for="desc">Описание</label><textarea id="desc"></textarea>
+<label for="price">Цена</label><input id="price" inputmode="numeric">
+<label for="cond">Состояние</label><select id="cond"><option value="">—</option><option value="used">Б/у</option><option value="new">Новое</option></select>
+<div role="alert" id="err"></div>
+<button type="button" id="submit">Опубликовать</button>
+<script>
+  const typed = {};
+  for (const id of ['title','desc','price']) document.getElementById(id).addEventListener('input', (e) => typed[id] = e.target.value);
+  document.getElementById('addphoto').onclick = () => document.getElementById('file').click();
+  document.getElementById('file').onchange = (e) => { document.getElementById('previews').textContent = 'Фото: ' + e.target.files.length; };
+  document.getElementById('cat').onclick = () => { document.getElementById('catlist').style.display = 'block'; document.getElementById('cat').setAttribute('aria-expanded','true'); };
+  document.querySelectorAll('[role=option]').forEach((li) => li.onclick = () => { document.getElementById('cat').textContent = li.textContent; document.getElementById('catlist').style.display = 'none'; });
+  document.getElementById('submit').onclick = () => {
+    if (!typed.title) { document.getElementById('err').textContent = 'Укажите название'; return; }
+    document.body.innerHTML = '<h1>Объявление отправлено</h1>';
+  };
+  window.__result = () => ({ typed, cat: document.getElementById('cat')?.textContent, cond: document.getElementById('cond')?.value, photos: document.getElementById('file')?.files.length });
+</script></body></html>

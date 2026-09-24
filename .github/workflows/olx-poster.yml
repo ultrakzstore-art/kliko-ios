@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OLX Poster — установщик для Windows (.exe) из папки olx-poster/.
+# Собирается на каждый пуш, который меняет olx-poster/, и вручную: Actions →
+# «OLX Poster · Windows» → Run workflow. Готовый установщик — в артефакте прогона
+# (внизу страницы прогона, «OLX-Poster-Setup»).
+# Сборка без подписи кода: Windows SmartScreen при первом запуске покажет
+# «Неизвестный издатель» → «Подробнее» → «Выполнить в любом случае».
+# ─────────────────────────────────────────────────────────────────────────────
+name: OLX Poster · Windows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "olx-poster/**"
+      - ".github/workflows/olx-poster.yml"
+
+concurrency:
+  group: olx-poster-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: olx-poster
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: olx-poster/package-lock.json
+
+      - run: npm ci
+
+      - name: Проверки
+        run: npm run check
+
+      - name: Установщик
+        run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OLX-Poster-Setup
+          path: olx-poster/dist/*.exe
+          if-no-files-found: error

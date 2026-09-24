@@ -1,0 +1,28 @@
+{
+  "name": "olx-poster",
+  "productName": "OLX Poster",
+  "version": "0.1.0",
+  "description": "Фото → Claude пишет объявление → приложение само подаёт его на OLX.kz по расписанию",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node test/syntax.js && node test/describe-schema.test.js",
+    "dist": "electron-builder --win --x64 --publish never"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "kz.kliko.olxposter",
+    "productName": "OLX Poster",
+    "files": ["src/**/*", "package.json"],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}
