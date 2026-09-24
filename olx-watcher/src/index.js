@@ -18,6 +18,7 @@ const { bot, notify, alert } = createBot({ token: config.token, db, config, getW
 watcher = new Watcher({ db, config, notify, alert, log });
 
 bot.api.setMyCommands([
+  { command: 'new', description: 'Новый поиск: рубрика, город, цена' },
   { command: 'list', description: 'Мои поиски' },
   { command: 'turbo', description: 'Турбо: ловить раньше поиска' },
   { command: 'status', description: 'Как идут дела' },

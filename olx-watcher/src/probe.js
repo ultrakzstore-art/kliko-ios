@@ -2,9 +2,17 @@
 //   npm run probe -- "<ссылка на поиск>"          — выдача поиска и карточка самого свежего
 //   npm run probe -- "<ссылка на объявление>"     — карточка по номеру и 5 следующих номеров
 const olx = require('./olx');
+const cats = require('./categories');
 
 (async () => {
   const url = process.argv[2];
+  // npm run probe -- categories [путь] — подрубрики, как их увидит мастер /new
+  if (url === 'categories') {
+    const p = process.argv[3];
+    const list = p ? await cats.children(p) : cats.TOP;
+    console.log(list.length ? list.map((c) => `  ${c.path}  —  ${c.name}`).join('\n') : 'подрубрик не нашлось (конечная рубрика или OLX не отдал страницу)');
+    return;
+  }
   if (!url) {
     console.log('Использование: npm run probe -- "<ссылка на поиск или объявление с olx.kz>"');
     process.exit(1);

@@ -2,10 +2,12 @@
 
 const { Bot, InlineKeyboard, GrammyError } = require('grammy');
 const { idFromUrl, newestFirst, BASE, encodeId } = require('./olx');
+const { registerWizard } = require('./wizard');
 
 const HELP = `Я присылаю новые объявления OLX.kz по вашим поискам — через секунды после подачи.
 
-Как добавить поиск: на olx.kz выберите рубрику, город, цену, введите слова → скопируйте ссылку из адресной строки → пришлите мне (можно с названием в первой строке).
+➕ /new — новый поиск кнопками: рубрика → подрубрика → город → слова → цена.
+Или пришлите ссылку на поиск с olx.kz (можно с названием в первой строке).
 
 /list — мои поиски (пауза, удалить)
 /turbo — вкл/выкл ловлю по номерам, раньше поиска
@@ -32,9 +34,15 @@ function createBot({ token, db, config, getWatcher, log }) {
     return next();
   });
 
-  bot.command(['start', 'help'], (ctx) => ctx.reply(HELP, { link_preview_options: { is_disabled: true } }));
+  const menu = () => new InlineKeyboard().text('➕ Новый поиск', 'w:new').text('📋 Мои поиски', 'list');
+  bot.command(['start', 'help'], (ctx) => ctx.reply(HELP, { reply_markup: menu(), link_preview_options: { is_disabled: true } }));
 
   bot.command('list', (ctx) => sendList(ctx));
+  bot.callbackQuery('list', async (ctx) => { await ctx.answerCallbackQuery(); await sendList(ctx); });
+
+  // Мастер нового поиска: кнопки и ответы на его вопросы — раньше общего разбора текста.
+  const wizardText = registerWizard(bot, { db, log });
+  bot.on('message:text', wizardText);
 
   bot.command('turbo', async (ctx) => {
     const on = !db.get('turbo', true);
@@ -62,7 +70,7 @@ function createBot({ token, db, config, getWatcher, log }) {
   bot.on('message:text', async (ctx) => {
     const text = ctx.message.text.trim();
     const m = /https?:\/\/(?:www\.|m\.)?olx\.kz\/\S+/i.exec(text);
-    if (!m) return ctx.reply('Пришлите ссылку на поиск с olx.kz. /help — подробнее.');
+    if (!m) return ctx.reply('Нажмите «Новый поиск» — выберем рубрику кнопками. Или пришлите ссылку на поиск с olx.kz.', { reply_markup: menu() });
     const url = m[0];
     if (idFromUrl(url)) return ctx.reply('Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком объявлений.');
     try { newestFirst(url); } catch (e) { return ctx.reply(e.message); }
@@ -85,8 +93,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     const subs = db.subs();
     const text = subs.length
       ? subs.map((s) => `#${s.id} ${s.paused ? '⏸' : '▶️'} ${s.name} — прислал ${s.sent}${s.last_error ? ` ⚠ ${s.last_error}` : ''}`).join('\n')
-      : 'Поисков пока нет. Пришлите ссылку на поиск с olx.kz.';
-    const kb = new InlineKeyboard();
+      : 'Поисков пока нет.';
+    const kb = new InlineKeyboard().text('➕ Новый поиск', 'w:new').row();
     for (const s of subs) {
       kb.text(`${s.paused ? '▶️' : '⏸'} #${s.id}`, `${s.paused ? 'resume' : 'pause'}:${s.id}`).text(`🗑 #${s.id}`, `del:${s.id}`).row();
     }
