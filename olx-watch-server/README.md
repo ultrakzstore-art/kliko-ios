@@ -12,7 +12,9 @@
 ## Установка
 
 1. Залить папку на хостинг, например в `kliko.kz/olx-watch/` (файлы: `api.php`, `lib.php`,
-   `watch.php`, `cron.php`, `.htaccess`, `config.sample.php`). Снаружи открыт только
+   `watch.php`, `cron.php`, `cacert.pem`, `.htaccess`, `config.sample.php`). `cacert.pem` —
+   свежие корневые сертификаты Mozilla: на хостингах с устаревшим системным списком без него
+   curl отвечает «certificate has expired» на исправные сертификаты OLX и Apple. Снаружи открыт только
    `api.php` — остальное закрывает `.htaccess`.
 2. `config.sample.php` → `config.php`, заполнить:
    - `api_token` — длинная случайная строка (её же вводите в приложении);

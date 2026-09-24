@@ -64,10 +64,18 @@ class OlxHttpError extends RuntimeException {
     }
 }
 
+// Свой список корневых сертификатов (cacert.pem рядом): на части хостингов системный
+// устарел, и curl отвечает «certificate has expired» на исправные сертификаты OLX и Apple.
+// Проверку сертификатов не отключаем — просто даём ей свежий список.
+function ca_opts(): array {
+    $ca = (string)cfg('ca_file', __DIR__ . '/cacert.pem');
+    return is_readable($ca) ? [CURLOPT_CAINFO => $ca] : [];
+}
+
 // Подменяется в тестах.
 $GLOBALS['OLX_FETCH'] = function (string $url, string $accept): array {
     $ch = curl_init($url);
-    curl_setopt_array($ch, [
+    curl_setopt_array($ch, ca_opts() + [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT => 20,
@@ -357,7 +365,7 @@ function der_to_raw(string $der): string {
 $GLOBALS['APNS_SEND'] = function (string $token, array $payload): int {
     $host = cfg('apns_env', 'production') === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
     $ch = curl_init("https://$host/3/device/$token");
-    curl_setopt_array($ch, [
+    curl_setopt_array($ch, ca_opts() + [
         CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
