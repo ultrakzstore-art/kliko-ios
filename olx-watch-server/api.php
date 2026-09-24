@@ -31,6 +31,8 @@ function fail(string $msg, int $code = 400): void {
 $secret = (string)cfg('api_token', '');
 $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
 $given = preg_match('/^Bearer\s+(.+)$/i', $auth, $m) ? trim($m[1]) : (string)($_SERVER['HTTP_X_TOKEN'] ?? '');
+// Проверка из браузера после установки: api.php?a=status&key=<api_token> — только статус, только чтение.
+if ($given === '' && ($_GET['a'] ?? '') === 'status' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') $given = (string)($_GET['key'] ?? '');
 if (strlen($secret) < 24 || !hash_equals($secret, $given)) fail('нет доступа', 401);
 
 $action = (string)($_GET['a'] ?? '');
@@ -104,7 +106,12 @@ try {
 
         case 'GET status':
             $lastCron = (int)kv_get('last_cron', 0);
+            $p8 = (string)cfg('apns_key_p8', '');
             out([
+                'php' => PHP_VERSION,
+                'extensions' => ['pdo_sqlite' => extension_loaded('pdo_sqlite'), 'curl' => extension_loaded('curl'), 'openssl' => extension_loaded('openssl'),
+                    'curl_http2' => defined('CURL_VERSION_HTTP2') && (curl_version()['features'] & CURL_VERSION_HTTP2) !== 0],
+                'subs' => (int)db()->query('SELECT COUNT(*) FROM subs')->fetchColumn(),
                 'cron_ok' => $lastCron > time() - 180,
                 'last_cron' => $lastCron ?: null,
                 'turbo' => (bool)kv_get('turbo', true),
@@ -114,7 +121,8 @@ try {
                 'blocked_until' => ($b = (int)kv_get('backoff_until', 0)) > time() ? $b : null,
                 'last_error' => kv_get('last_error'),
                 'devices' => (int)db()->query('SELECT COUNT(*) FROM devices')->fetchColumn(),
-                'push_ready' => (bool)cfg('apns_key_p8') && is_readable((string)cfg('apns_key_p8')),
+                'push_ready' => $p8 !== '' && is_readable($p8) && cfg('apns_key_id') && cfg('apns_team_id'),
+                'push_problem' => $p8 === '' ? 'не задан apns_key_p8' : (!is_readable($p8) ? 'файл .p8 не найден или не читается: ' . $p8 : null),
             ]);
 
         case 'POST test_push':
