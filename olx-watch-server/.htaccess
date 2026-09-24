@@ -1,0 +1,11 @@
+# Снаружи доступен только api.php. Остальное — код, настройки и база.
+Require all denied
+<Files "api.php">
+  Require all granted
+</Files>
+# Заголовок Authorization на части хостингов теряется по дороге в PHP — передаём явно.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>

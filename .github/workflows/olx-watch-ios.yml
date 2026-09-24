@@ -1,0 +1,297 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OLX Watch (olx-watch-ios/) — личное приложение, тем же способом, что и Kliko:
+# macOS-раннер, подпись ключом App Store Connect API, те же секреты репозитория
+# (APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8). Bundle id kz.kliko.olxwatch —
+# App ID и профили сборка заводит сама (-allowProvisioningUpdates).
+#
+# Пуш, меняющий olx-watch-ios/, — только сборка и подпись (проверка, что компилируется).
+# В TestFlight — вручную: Actions → «OLX Watch · TestFlight» → Run workflow, upload = true.
+# Перед первой заливкой один раз создать приложение в App Store Connect → Apps → «+» →
+# New App, bundle id kz.kliko.olxwatch (App ID появится в списке после первого прогона).
+# ─────────────────────────────────────────────────────────────────────────────
+name: OLX Watch · TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Заливать в TestFlight (false — только собрать и проверить подпись)"
+        type: boolean
+        default: false
+      version:
+        description: "Версия для витрины App Store, например 1.0.0 (пусто — из project.yml)"
+        type: string
+        default: ""
+  push:
+    paths:
+      - "olx-watch-ios/**"
+      - ".github/workflows/olx-watch-ios.yml"
+
+concurrency:
+  group: olx-watch-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testflight:
+    # Фиксированная версия образа, а не macos-latest: смена образа меняет Xcode, а с ним
+    # поведение подписи и формат ExportOptions. Обновляем осознанно, а не однажды утром.
+    #
+    # macos-26, а не macos-15: на пятнадцатом образе Xcode 16 с iOS SDK 18.5, а App Store
+    # принимает только SDK 26 и выше. Отказ приходил ПОСЛЕ сборки и подписи — минута с
+    # лишним впустую, и по формулировке не догадаешься, что дело в образе раннера.
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: olx-watch-ios
+
+    env:
+      SCHEME: OLXWatch
+      ARCHIVE_PATH: ${{ github.workspace }}/build/OLXWatch.xcarchive
+      EXPORT_DIR: ${{ github.workspace }}/build/export
+      KEY_DIR: ${{ github.workspace }}/build/keys
+
+    steps:
+      # v7, а не v4: раннер снял с поддержки Node 20 и до поры запускал старые действия
+      # на Node 24 сам, предупреждая в каждом прогоне. Когда перестанет — шаг упадёт на
+      # ровном месте. По дороге сюда ничего ломающего для нас нет: v5 — Node 24, v6 —
+      # токен в отдельном файле, v7 — ESM и запрет чекаута форк-PR для pull_request_target
+      # и workflow_run, а у нас триггеры только workflow_dispatch и тег.
+      - uses: actions/checkout@v7
+
+      - name: Проверить, что секреты заведены
+        # Без этой проверки забытый секрет всплывает через десять минут ошибкой подписи,
+        # в которой про секрет нет ни слова.
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -z "$TEAM" ] && missing="$missing APPLE_TEAM_ID"
+          [ -z "$KID" ]  && missing="$missing ASC_KEY_ID"
+          [ -z "$ISS" ]  && missing="$missing ASC_ISSUER_ID"
+          [ -z "$P8" ]   && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "::error::Не заведены секреты:$missing — Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "Секреты на месте."
+
+      - name: Выбрать Xcode и проверить версию SDK
+        # Берём Xcode с НАИБОЛЬШЕЙ полной версией, а не первый подходящий по мажору:
+        # у 26.0.1 iOS SDK не совпадает с рантаймами симулятора, которые стоят на образе,
+        # и сборка каталога ресурсов падает сообщением про симулятор — хотя собираем под
+        # устройство. Версию сводим к числу вида 260201, чтобы сравнивать без sort -V,
+        # которого на macOS может не оказаться.
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
+            [ -n "$v" ] || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            echo "$app -> Xcode $v (ключ $key)"
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          if [ "$bestkey" -lt 260000 ]; then
+            echo "::error::Самый новый Xcode на раннере — версии ниже 26, а App Store принимает только сборки с iOS SDK 26 и выше. Нужен образ посвежее в runs-on."
+            exit 1
+          fi
+          sudo xcode-select -s "$best"
+          xcodebuild -version
+          echo "--- рантаймы симулятора на образе ---"
+          xcrun simctl list runtimes 2>/dev/null || true
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$KEY_DIR"
+          # Ключ живёт только внутри раннера и удаляется отдельным шагом даже при падении.
+          # ПРИНИМАЕМ ЛЮБОЙ ИЗ ТРЁХ ВИДОВ ВСТАВКИ. Требовать один-единственный — значит
+          # ловить человека на ровном месте: файл открывают в блокноте и копируют то, что
+          # видят, а видят разное. Ошибка при этом всплывает только в сборке и выглядит как
+          # проблема с ключом, а не с тем, как его скопировали. Все три варианта встречались
+          # вживую, последний — чаще всего:
+          #   1) весь файл целиком, вместе со строками BEGIN и END;
+          #   2) он же, прогнанный через base64;
+          #   3) только тело ключа — то, что МЕЖДУ строками BEGIN и END.
+          out="$KEY_DIR/AuthKey_$KID.p8"
+          if printf %s "$P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$P8" > "$out"                              # (1) файл целиком
+          else
+            # На macOS декодирование — base64 -D (у GNU это -d). Проверяем РЕЗУЛЬТАТ, а не
+            # сам факт декодирования: base64 молча «переваривает» почти любой текст.
+            printf %s "$P8" | tr -d "[:space:]" | base64 -D > "$KEY_DIR/decoded" 2>/dev/null || true
+            if head -c 40 "$KEY_DIR/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$KEY_DIR/decoded" "$out"                        # (2) файл в base64
+            else
+              # (3) Тело ключа без обёртки — это и есть base64 от DER. Надеваем заголовки
+              # обратно и переносим по 64 символа, как требует формат PEM.
+              # fold НЕ ставит перенос в конце последней строки, и без явного echo
+              # строка END приклеивалась к телу ключа — openssl такой файл не читает.
+              body=$(printf %s "$P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"
+                printf %s "$body"; echo
+                echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$KEY_DIR/decoded"
+          fi
+          chmod 600 "$KEY_DIR/AuthKey_$KID.p8"
+          # Проверяем, что на выходе действительно ключ: иначе ошибка вылезет уже на
+          # подписи и будет выглядеть как проблема с профилем, а не с секретом.
+          head -1 "$KEY_DIR/AuthKey_$KID.p8" | grep -q 'BEGIN PRIVATE KEY' \
+            || { echo "::error::ASC_KEY_P8 не похож на ключ. Подойдёт любое: весь файл .p8, он же в base64, или только тело ключа между BEGIN и END. Похоже, вставлено что-то другое — например, имя файла или Key ID"; exit 1; }
+
+      - name: Сгенерировать проект
+        run: xcodegen generate
+
+      - name: Отозвать сертификаты разработки прошлых прогонов
+        # АВТОПОДПИСЬ НА ЧИСТОМ РАННЕРЕ КАЖДЫЙ РАЗ ВЫПУСКАЕТ НОВЫЙ СЕРТИФИКАТ РАЗРАБОТКИ, а закрытый ключ к нему умирает
+        # вместе с раннером. 17.09.2026 (тег v1.6) лимит Apple кончился: «Your account has reached the maximum number of
+        # certificates» — архив не собрался. Сертификаты, выпущенные прошлыми прогонами через ключ API («Created via API»),
+        # больше ничем не используются: отзываем только их и только тип «разработка». Сертификаты распространения не
+        # трогаем. Сбой этого шага сборку не валит — если подпись всё равно упадёт, об этом скажет следующий шаг.
+        continue-on-error: true
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, subprocess, time, urllib.request
+
+          kid, iss = os.environ['KID'], os.environ['ISS']
+          key = os.path.join(os.environ['KEY_DIR'], 'AuthKey_%s.p8' % kid)
+          b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b'=')
+          now = int(time.time())
+          msg = (b64(json.dumps({'alg': 'ES256', 'kid': kid, 'typ': 'JWT'}).encode()) + b'.'
+                 + b64(json.dumps({'iss': iss, 'iat': now, 'exp': now + 600, 'aud': 'appstoreconnect-v1'}).encode()))
+          der = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', key], input=msg, capture_output=True, check=True).stdout
+          # Подпись openssl — DER: SEQUENCE { INTEGER r, INTEGER s }. JWT ждёт r||s по 32 байта.
+          pos = 3 if der[1] & 0x80 else 2
+          def integer(p):
+              n = der[p + 1]
+              return der[p + 2:p + 2 + n], p + 2 + n
+          r, pos = integer(pos)
+          s, _ = integer(pos)
+          raw = r.lstrip(b'\x00').rjust(32, b'\x00') + s.lstrip(b'\x00').rjust(32, b'\x00')
+          jwt = (msg + b'.' + b64(raw)).decode()
+
+          def call(method, url):
+              req = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + jwt})
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = resp.read()
+                  return json.loads(data) if data else {}
+
+          api = 'https://api.appstoreconnect.apple.com/v1/certificates'
+          certs = call('GET', api + '?filter[certificateType]=DEVELOPMENT,IOS_DEVELOPMENT&limit=200').get('data', [])
+          print('сертификатов разработки:', len(certs))
+          отозвано = 0
+          for c in certs:
+              a = c.get('attributes', {})
+              имя = '%s | %s' % (a.get('name') or '', a.get('displayName') or '')
+              print(' -', имя, a.get('certificateType'), a.get('expirationDate'))
+              if 'Created via API' not in имя:
+                  continue
+              call('DELETE', api + '/' + c['id'])
+              отозвано += 1
+          print('отозвано:', отозвано)
+          PY
+
+      - name: Собрать архив
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          IN_VERSION: ${{ inputs.version }}
+        run: |
+          set -o pipefail
+          # Номер сборки — номер запуска workflow. App Store Connect отклоняет повторный
+          # номер при той же версии, а руками его никто не помнит.
+          build_no="${{ github.run_number }}"
+          version="$IN_VERSION"
+          extra=""
+          [ -n "$version" ] && extra="MARKETING_VERSION=$version"
+
+          xcodebuild archive \
+            -project OLXWatch.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" \
+            -authenticationKeyIssuerID "$ISS" \
+            DEVELOPMENT_TEAM="$TEAM" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$build_no" \
+            $extra
+
+      - name: Параметры экспорта
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          DO_UPLOAD: ${{ inputs.upload }}
+        run: |
+          mkdir -p "$EXPORT_DIR"
+          # destination=upload — архив уезжает в App Store Connect прямо из xcodebuild.
+          # Отдельный altool/Transporter (и второй способ ошибиться) не нужен.
+          # Заливаем только ручным запуском с флажком; пуш — проверка сборки.
+          dest="export"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$DO_UPLOAD" = "true" ]; then
+            dest="upload"
+          fi
+          cat > "$EXPORT_DIR/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>$dest</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          echo "Назначение экспорта: $dest"
+
+      - name: Экспорт и заливка
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$EXPORT_DIR/ExportOptions.plist" \
+            -exportPath "$EXPORT_DIR" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" \
+            -authenticationKeyIssuerID "$ISS"
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"
+
+      - name: Сохранить сборку
+        if: always()
+        # v7 по той же причине, что и checkout. Входы, которыми мы пользуемся
+        # (name/path/if-no-files-found/retention-days), за три мажора не менялись;
+        # в v7 добавился лишь необязательный archive.
+        uses: actions/upload-artifact@v7
+        with:
+          name: olx-watch-ios-${{ github.run_number }}
+          # .ipa появляется только при upload=false — при заливке файл уходит сразу в Apple.
+          path: |
+            ${{ github.workspace }}/build/export/*.ipa
+            ${{ github.workspace }}/build/export/*.plist
+          if-no-files-found: ignore
+          retention-days: 14
