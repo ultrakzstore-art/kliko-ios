@@ -49,6 +49,10 @@ function render() {
     $('items').innerHTML = items.map(itemHtml).join('');
   }
 
+  $('batches').innerHTML = S.batches.map((b) => `<div class="batch">${b.id === S.groupingId
+    ? `Claude раскладывает ${b.count} фото по товарам…`
+    : `Пачка из ${b.count} фото ждёт раскладки${b.attempts ? ` (попыток: ${b.attempts})` : ''}${S.hasKey ? '' : ' — нужен ключ Claude API'}`}</div>`).join('');
+
   $('qr').src = S.phoneQr || '';
   $('phone-url').textContent = S.phoneUrls.join('\n') || 'Нет сети';
   $('inbox').textContent = S.settings.inboxDir;

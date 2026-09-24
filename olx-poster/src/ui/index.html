@@ -21,7 +21,8 @@
   </nav>
 
   <section id="tab-queue" class="tab on">
-    <div id="drop" class="drop">Перетащите сюда фото одного товара<br><small>или кидайте их в папку-входящие / снимайте с телефона</small></div>
+    <div id="drop" class="drop">Перетащите сюда фото — хоть все товары разом<br><small>Claude сам разложит их по объявлениям. Или кидайте в папку-входящие / снимайте с телефона</small></div>
+    <div class="batches" id="batches"></div>
     <div class="counts" id="counts"></div>
     <div id="items"></div>
   </section>
@@ -30,7 +31,7 @@
     <p>Отсканируйте камерой телефона. Телефон и компьютер — в одной Wi-Fi сети.</p>
     <img id="qr" alt="QR-код">
     <p class="mono" id="phone-url"></p>
-    <p class="hint">Снимаете товар → «Отправить в очередь» → следующий. Claude сразу пишет черновик, а подача идёт по расписанию.</p>
+    <p class="hint">Режим «Много товаров»: снимаете подряд все вещи, каждую с разных сторон, → «Отправить». Claude раскладывает фото по товарам, пишет объявления, а подача идёт по расписанию.</p>
     <p class="hint">Windows при первом запуске спросит про доступ к сети — разрешите для частных сетей.</p>
   </section>
 
@@ -81,8 +82,8 @@
           <button type="button" id="inbox-choose">Выбрать папку</button>
           <button type="button" id="inbox-open">Открыть</button>
         </div>
-        <label>Фото с разрывом меньше, сек — один товар <input type="number" name="groupGapSec" min="10"></label>
-        <p class="hint">Подпапка = один товар. Имя подпапки — подсказка и цена: «кроссовки nike 42 — 15000».</p>
+        <p class="hint">Кидайте фото прямо в папку — Claude разложит их по товарам. Подпапка до 8 фото — один товар, её имя — подсказка и цена: «кроссовки nike 42 — 15000».</p>
+        <label>Запасной вариант, если Claude не смог разложить: фото с разрывом меньше, сек — один товар <input type="number" name="groupGapSec" min="10"></label>
       </fieldset>
       <button type="submit" class="primary">Сохранить</button>
       <span id="saved"></span>

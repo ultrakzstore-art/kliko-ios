@@ -10,6 +10,7 @@ const QRCode = require('qrcode');
 const { Store } = require('./store');
 const { FolderIntake, PhoneIntake } = require('./intake');
 const { describeItem } = require('./describe');
+const { groupPhotos, MAX_PER_ITEM } = require('./grouping');
 const { postItem, START_URL } = require('./poster');
 const { PageTools } = require('./page-tools');
 
@@ -19,7 +20,7 @@ let win, panel, olx, store, folder, phone;
 let phoneUrls = [];
 let phoneQr = '';
 const logLines = [];
-const state = { describingId: null, postingId: null, stopRequested: false, lastPostAt: 0 };
+const state = { groupingId: null, describingId: null, postingId: null, stopRequested: false, lastPostAt: 0 };
 
 function log(line) {
   const stamp = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -38,6 +39,8 @@ function publicState() {
     settings,
     hasKey: !!store.getApiKey(),
     items: store.items.map((it) => ({ ...it, photoUrls: it.photos.map((p) => pathToFileURL(p).href) })),
+    batches: store.batches.map((b) => ({ id: b.id, count: b.photos.length, attempts: b.attempts })),
+    groupingId: state.groupingId,
     phoneUrls,
     phoneQr,
     describingId: state.describingId,
@@ -69,6 +72,51 @@ function inWorkHours(d = new Date()) {
 function nextPostAt() {
   if (!store.settings.running) return null;
   return state.lastPostAt + store.settings.intervalMin * 60_000;
+}
+
+// Пачка → товары. Claude раскладывает фото; если три раза не вышло — делим по разрывам
+// во времени съёмки, чтобы пачка не застряла навсегда.
+async function groupLoop() {
+  if (state.groupingId) return;
+  const batch = store.batches[0];
+  const apiKey = store.getApiKey();
+  if (!batch || !apiKey) return;
+  state.groupingId = batch.id;
+  pushState();
+  log(`Claude раскладывает ${batch.photos.length} фото по товарам…`);
+  let groups;
+  let cost = 0;
+  try {
+    const r = await groupPhotos({ apiKey, settings: store.settings, photos: batch.photos.map((p) => p.path), log });
+    groups = r.groups;
+    cost = r.cost;
+  } catch (e) {
+    batch.attempts += 1;
+    log(`Не удалось разложить пачку: ${e.message}`);
+    if (batch.attempts < 3) { store.saveBatches(); state.groupingId = null; return; }
+    groups = splitByTime(batch.photos, store.settings.groupGapSec * 1000);
+    log(`Делю пачку по времени съёмки: ${groups.length} товаров`);
+  }
+  for (const g of groups) {
+    const it = store.addItem(g.photos, { source: batch.source, note: g.what || '' });
+    if (cost) store.update(it.id, { costUsd: cost / groups.length });
+  }
+  store.removeBatch(batch.id);
+  state.groupingId = null;
+}
+
+function splitByTime(photos, gap) {
+  const groups = [];
+  for (const p of [...photos].sort((a, b) => a.mtime - b.mtime)) {
+    const last = groups[groups.length - 1];
+    if (last && p.mtime - last.lastMtime <= gap && last.photos.length < MAX_PER_ITEM) {
+      last.photos.push(p.path);
+      last.lastMtime = p.mtime;
+    } else {
+      groups.push({ photos: [p.path], lastMtime: p.mtime, what: '' });
+    }
+  }
+  return groups;
 }
 
 async function describeLoop() {
@@ -221,10 +269,10 @@ function registerIpc() {
     store.update(id, { listing });
   });
   ipcMain.handle('items:add', (_e, paths) => {
-    const photos = (paths || []).filter((p) => /\.(jpe?g|png|webp|heic|heif)$/i.test(p)).slice(0, 8);
+    const photos = (paths || []).filter((p) => /\.(jpe?g|png|webp|heic|heif)$/i.test(p));
     if (photos.length) {
-      const it = store.addItem(photos, { source: 'drop' });
-      log(`Новый товар (перетащили ${photos.length} фото) → ${it.id}`);
+      store.addBatch(photos, { source: 'drop' });
+      log(`Перетащили ${photos.length} фото — Claude разложит по товарам`);
     }
   });
   ipcMain.handle('inbox:choose', async () => {
@@ -261,6 +309,7 @@ app.whenReady().then(async () => {
   if (phoneUrls[0]) phoneQr = await QRCode.toDataURL(phoneUrls[0], { margin: 1, width: 260 });
   log(phoneUrls[0] ? `Страница для телефона: ${phoneUrls[0]}` : 'Нет сети — страница для телефона недоступна');
 
+  setInterval(() => groupLoop().catch((e) => { state.groupingId = null; log(`Ошибка: ${e.message}`); }), 3000);
   setInterval(() => describeLoop().catch((e) => log(`Ошибка: ${e.message}`)), 3000);
   setInterval(() => postLoop().catch((e) => log(`Ошибка: ${e.message}`)), 15_000);
   setInterval(pushState, 30_000); // обновить обратный отсчёт в панели

@@ -35,6 +35,10 @@ class Store {
     this.settings = { ...DEFAULTS, inboxDir: path.join(app.getPath('pictures'), 'OLX') };
     Object.assign(this.settings, readJson(this.settingsFile, {}));
     this.items = readJson(this.queueFile, []);
+    // Пачки: куча фото разом, которую Claude ещё не разложил по товарам.
+    this.batchesFile = path.join(this.dir, 'batches.json');
+    this.batchesDir = path.join(this.dir, 'batches');
+    this.batches = readJson(this.batchesFile, []);
     // После падения посреди работы — вернуть «зависшие» статусы в очередь.
     for (const it of this.items) {
       if (it.status === 'describing') it.status = 'new';
@@ -88,6 +92,36 @@ class Store {
     this.items.push(item);
     this.saveQueue();
     return item;
+  }
+
+  // Пачка фото: копируем к себе, запоминаем время съёмки (файловое) — оно пригодится,
+  // если раскладка через Claude не удастся и придётся делить по разрывам во времени.
+  addBatch(photoPaths, { source }) {
+    const id = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14) + '-' + crypto.randomBytes(3).toString('hex');
+    const dir = path.join(this.batchesDir, id);
+    fs.mkdirSync(dir, { recursive: true });
+    const photos = photoPaths.map((src, i) => {
+      const dest = path.join(dir, `${String(i + 1).padStart(3, '0')}${path.extname(src).toLowerCase() || '.jpg'}`);
+      fs.copyFileSync(src, dest);
+      let mtime = Date.now();
+      try { mtime = fs.statSync(src).mtimeMs; } catch {}
+      return { path: dest, mtime };
+    });
+    const batch = { id, source, photos, attempts: 0, createdAt: Date.now() };
+    this.batches.push(batch);
+    this.saveBatches();
+    return batch;
+  }
+
+  removeBatch(id) {
+    this.batches = this.batches.filter((b) => b.id !== id);
+    fs.rmSync(path.join(this.batchesDir, id), { recursive: true, force: true });
+    this.saveBatches();
+  }
+
+  saveBatches() {
+    writeJson(this.batchesFile, this.batches);
+    this.emit();
   }
 
   update(id, patch) {

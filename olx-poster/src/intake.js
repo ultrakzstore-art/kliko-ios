@@ -1,7 +1,7 @@
-// Откуда берутся товары:
-//  1) папка-«входящие» (куда синхронизируется камера телефона: OneDrive, Google Диск, USB);
-//     подпапка = один товар, свободные фото группируются по времени съёмки;
-//  2) страница для телефона в локальной сети (QR-код в приложении): сфоткал → «Отправить».
+// Откуда берутся фото:
+//  1) папка-«входящие» (куда синхронизируется камера телефона: OneDrive, Google Диск, USB):
+//     подпапка до 8 фото = один товар, всё остальное — пачка, которую Claude раскладывает сам;
+//  2) страница для телефона в локальной сети (QR-код в приложении): один товар или пачка.
 
 const fs = require('fs');
 const os = require('os');
@@ -42,35 +42,30 @@ class FolderIntake {
     const entries = fs.readdirSync(inbox, { withFileTypes: true });
     const done = path.join(inbox, '_добавлено');
 
-    // Подпапки: одна папка — один товар. Имя папки — подсказка («кроссовки 42 15000»).
+    // Подпапка до 8 фото — один товар, имя папки — подсказка и цена («кроссовки 42 — 15000»).
+    // Подпапка побольше — это пачка разных товаров.
     for (const e of entries) {
       if (!e.isDirectory() || e.name.startsWith('_')) continue;
       const dir = path.join(inbox, e.name);
       const files = listImages(dir);
       if (!files.length || files.some((f) => now - f.mtime < SETTLE_MS)) continue;
-      const { note, price } = parseHint(e.name);
-      const item = this.store.addItem(files.map((f) => f.path), { source: 'folder', note, price });
+      if (files.length <= 8) {
+        const { note, price } = parseHint(e.name);
+        const item = this.store.addItem(files.map((f) => f.path), { source: 'folder', note, price });
+        this.log(`Новый товар из папки «${e.name}» (${files.length} фото) → ${item.id}`);
+      } else {
+        this.store.addBatch(files.map((f) => f.path), { source: 'folder' });
+        this.log(`Пачка из папки «${e.name}»: ${files.length} фото — Claude разложит по товарам`);
+      }
       moveInto(dir, done);
-      this.log(`Новый товар из папки «${e.name}» (${files.length} фото) → ${item.id}`);
     }
 
-    // Свободные фото: группируем по разрыву во времени между кадрами.
+    // Свободные фото в самой папке — пачка. Ждём, пока докачаются все.
     const loose = listImages(inbox);
-    if (!loose.length) return;
-    if (now - loose[loose.length - 1].mtime < Math.max(SETTLE_MS, this.store.settings.groupGapSec * 1000)) return;
-    const gap = this.store.settings.groupGapSec * 1000;
-    const groups = [];
-    for (const f of loose) {
-      const last = groups[groups.length - 1];
-      if (last && f.mtime - last[last.length - 1].mtime <= gap) last.push(f);
-      else groups.push([f]);
-    }
-    fs.mkdirSync(done, { recursive: true });
-    for (const g of groups) {
-      const item = this.store.addItem(g.map((f) => f.path), { source: 'folder' });
-      for (const f of g) moveInto(f.path, done);
-      this.log(`Новый товар из свободных фото (${g.length} шт.) → ${item.id}`);
-    }
+    if (!loose.length || now - loose[loose.length - 1].mtime < 3 * SETTLE_MS) return;
+    this.store.addBatch(loose.map((f) => f.path), { source: 'folder' });
+    for (const f of loose) moveInto(f.path, done);
+    this.log(`Пачка из папки: ${loose.length} фото — Claude разложит по товарам`);
   }
 }
 
@@ -149,13 +144,15 @@ class PhoneIntake {
     if (req.method === 'GET' && url.pathname === '/queue') {
       const counts = {};
       for (const it of this.store.items) counts[it.status] = (counts[it.status] || 0) + 1;
+      counts.batch_photos = this.store.batches.reduce((a, b) => a + b.photos.length, 0);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify(counts));
     }
     if (req.method === 'POST' && url.pathname === '/upload') {
-      // Тело — JSON { note, price, photos: [dataURL, …] }; фото уже ужаты на телефоне.
-      const body = JSON.parse(await readBody(req, 60 * 1024 * 1024));
-      const photos = (body.photos || []).slice(0, 8);
+      // Тело — JSON { batch, note, price, photos: [dataURL, …] }; фото уже ужаты на телефоне.
+      // batch=true — куча фото разных товаров, раскладывает Claude.
+      const body = JSON.parse(await readBody(req, 150 * 1024 * 1024));
+      const photos = (body.photos || []).slice(0, body.batch ? 200 : 8);
       if (!photos.length) throw new Error('нет фото');
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'olx-'));
       const files = photos.map((dataUrl, i) => {
@@ -165,12 +162,18 @@ class PhoneIntake {
         fs.writeFileSync(p, Buffer.from(m[2], 'base64'));
         return p;
       });
-      const price = parseInt(String(body.price || '').replace(/\D/g, ''), 10) || null;
-      const item = this.store.addItem(files, { source: 'phone', note: String(body.note || '').slice(0, 500), price });
+      let id;
+      if (body.batch) {
+        id = this.store.addBatch(files, { source: 'phone' }).id;
+        this.log(`Пачка с телефона: ${files.length} фото — Claude разложит по товарам`);
+      } else {
+        const price = parseInt(String(body.price || '').replace(/\D/g, ''), 10) || null;
+        id = this.store.addItem(files, { source: 'phone', note: String(body.note || '').slice(0, 500), price }).id;
+        this.log(`Новый товар с телефона (${files.length} фото) → ${id}`);
+      }
       fs.rmSync(tmp, { recursive: true, force: true });
-      this.log(`Новый товар с телефона (${files.length} фото) → ${item.id}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ ok: true, id: item.id }));
+      return res.end(JSON.stringify({ ok: true, id }));
     }
     res.writeHead(404);
     res.end();

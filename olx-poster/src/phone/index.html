@@ -24,10 +24,20 @@
   .send:disabled { opacity:.5; }
   .status { text-align:center; color:var(--muted); min-height:1.4em; margin-top:10px; }
   .status.err { color:var(--err); }
+  .mode { display:flex; background:var(--card); border-radius:12px; padding:4px; margin-bottom:12px; }
+  .mode button { flex:1; border:0; background:none; color:var(--muted); padding:10px; border-radius:9px; font:inherit; font-weight:600; }
+  .mode button.on { background:var(--accent); color:var(--accent-ink); }
+  .hint { color:var(--muted); font-size:14px; margin:0 0 10px; }
+  .single-only[hidden] { display:none; }
 </style>
 </head>
 <body>
-  <h1>Новый товар для OLX</h1>
+  <h1>Фото для OLX</h1>
+  <div class="mode">
+    <button id="m-batch" class="on">Много товаров</button>
+    <button id="m-single">Один товар</button>
+  </div>
+  <p class="hint" id="mode-hint"></p>
   <div class="card">
     <label class="shoot" for="cam">📷 Снять фото</label>
     <input id="cam" type="file" accept="image/*" capture="environment">
@@ -35,7 +45,7 @@
     <input id="lib" type="file" accept="image/*" multiple>
     <div class="thumbs" id="thumbs"></div>
   </div>
-  <div class="card">
+  <div class="card single-only" hidden>
     <label for="note">Подсказка для Claude (по желанию)</label>
     <textarea id="note" placeholder="Размер 42, носил месяц, есть коробка"></textarea>
     <label for="price">Цена, ₸ (пусто — Claude предложит сам)</label>
@@ -47,6 +57,20 @@
 <script>
   const token = new URLSearchParams(location.search).get('t');
   const photos = [];
+  let batch = true;
+  const MAX = () => (batch ? 200 : 8);
+
+  function setMode(b) {
+    batch = b;
+    $('m-batch').classList.toggle('on', b);
+    $('m-single').classList.toggle('on', !b);
+    document.querySelectorAll('.single-only').forEach((el) => { el.hidden = b; });
+    $('mode-hint').textContent = b
+      ? 'Снимай подряд все товары: каждый с разных сторон, бирки, характеристики. Claude сам разложит фото по объявлениям.'
+      : 'Все фото — один товар (до 8). Можно добавить подсказку и цену.';
+    photos.splice(MAX());
+    render();
+  }
   const $ = (id) => document.getElementById(id);
 
   // Ужимаем на телефоне: 1600 px по длинной стороне, JPEG. Заодно HEIC превращается в JPEG.
@@ -80,7 +104,7 @@
 
   async function add(e) {
     for (const f of e.target.files) {
-      if (photos.length >= 8) break;
+      if (photos.length >= MAX()) break;
       try { photos.push(await shrink(f)); } catch (err) { status(err.message, true); }
     }
     e.target.value = '';
@@ -99,8 +123,9 @@
       const r = await fetch('/queue?t=' + token);
       const q = await r.json();
       const waiting = (q.new || 0) + (q.describing || 0) + (q.ready || 0);
+      const sorting = q.batch_photos ? ` · разбираю фото: ${q.batch_photos}` : '';
       if (!$('status').textContent || $('status').dataset.q) {
-        status(`В очереди: ${waiting} · опубликовано: ${q.published || 0}`);
+        status(`В очереди: ${waiting} · опубликовано: ${q.published || 0}${sorting}`);
         $('status').dataset.q = '1';
       }
     } catch {}
@@ -110,17 +135,18 @@
     $('send').disabled = true;
     status('Отправляю…');
     try {
+      status(`Отправляю ${photos.length} фото…`);
       const r = await fetch('/upload?t=' + token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: $('note').value, price: $('price').value, photos }),
+        body: JSON.stringify({ batch, note: batch ? '' : $('note').value, price: batch ? '' : $('price').value, photos }),
       });
       if (!r.ok) throw new Error('Компьютер не принял фото');
       photos.length = 0;
       $('note').value = '';
       $('price').value = '';
       render();
-      status('Готово ✓ Снимай следующий товар');
+      status(batch ? 'Готово ✓ Claude раскладывает фото по товарам' : 'Готово ✓ Снимай следующий товар');
       delete $('status').dataset.q;
       setTimeout(() => { $('status').dataset.q = '1'; refreshQueue(); }, 2500);
     } catch (err) {
@@ -129,6 +155,9 @@
     }
   };
 
+  $('m-batch').onclick = () => setMode(true);
+  $('m-single').onclick = () => setMode(false);
+  setMode(true);
   refreshQueue();
   setInterval(refreshQueue, 15000);
 </script>
