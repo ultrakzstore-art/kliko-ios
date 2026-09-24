@@ -18,7 +18,14 @@ final class AppModel {
     private static let turboInterval: TimeInterval = 10
     private static let turboWindow = 5
     private static let missGiveUp = 12
-    private static let freshness: TimeInterval = 3600   // «Топ» бывает старым — такое не новое
+    /// «Новое» — подано не раньше, чем столько минут назад (настройка; по умолчанию 15).
+    static let freshnessChoices = [5, 15, 30, 60]
+    var freshnessMinutes: Int = {
+        let v = UserDefaults.standard.integer(forKey: "freshness_min")
+        return v > 0 ? v : 15
+    }() {
+        didSet { UserDefaults.standard.set(freshnessMinutes, forKey: "freshness_min") }
+    }
 
     private(set) var state = Persisted()
     var error: String?
@@ -122,10 +129,10 @@ final class AppModel {
 
         for var ad in ads where !seenSet.contains(ad.id) {
             remember(ad.id)
-            if Self.isStale(ad, frontier: frontierBefore) { continue }
+            if isStale(ad, frontier: frontierBefore) { continue }
             if let full = try? await OLX.offer(ad.id) { ad.merge(full) }
             // Дата подачи часто есть только в карточке — проверяем ещё раз, уже с ней.
-            if Self.isStale(ad, frontier: frontierBefore) { continue }
+            if isStale(ad, frontier: frontierBefore) { continue }
             ad.via = "search"
             ad.subIds = [id]
             ad.foundAt = Date()
@@ -138,9 +145,9 @@ final class AppModel {
     /// Новое — это подано меньше часа назад. Старое, которое подняли или продвинули, всплывает
     /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
     /// старья он сильно меньше самых свежих номеров.
-    private static func isStale(_ ad: Ad, frontier: Int) -> Bool {
-        if let created = ad.createdAt { return Date().timeIntervalSince(created) > freshness }
-        return frontier > 0 && ad.id < frontier - 20_000
+    private func isStale(_ ad: Ad, frontier: Int) -> Bool {
+        if let created = ad.createdAt { return Date().timeIntervalSince(created) > TimeInterval(freshnessMinutes * 60) }
+        return frontier > 0 && ad.id < frontier - 5_000
     }
 
     private func learn(_ sub: inout Sub, from ads: [Ad]) {
@@ -181,7 +188,7 @@ final class AppModel {
             state.stats.lastTurboHit = Date()
             guard !seenSet.contains(id) else { continue }
             remember(id)
-            if Self.isStale(ad, frontier: 0) { continue }   // после долгой паузы — не вчерашнее
+            if isStale(ad, frontier: 0) { continue }   // после долгой паузы — не вчерашнее
             let hit = ready.filter { OLX.matches($0, ad) }
             ad.via = "turbo"
             ad.subIds = hit.map(\.id)
