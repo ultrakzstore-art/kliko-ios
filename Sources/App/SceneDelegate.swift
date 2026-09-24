@@ -46,13 +46,27 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 корень?.стильСтроки = (!сплэшУшёл || нетСвязи || подЗамком) ? .default : (светлые ? .lightContent : .darkContent)
             }
 
-        // Холодный старт по нажатию на плашку сделки (widgetURL): раньше это ловил .onOpenURL у WindowGroup.
-        if let адрес = connectionOptions.urlContexts.first?.url { мост.pendingURL = адрес }
+        // Холодный старт по нажатию на плашку сделки (widgetURL) или по кнопке «Открыть в приложении»
+        // (kliko://open?u=…). Раньше это ловил .onOpenURL у WindowGroup.
+        // Адрес проходит через Config.deepLink: он переводит схему в страницу и отсекает чужие домены.
+        if let адрес = connectionOptions.urlContexts.first?.url { мост.pendingURL = Config.deepLink(адрес) }
+
+        // Холодный старт по ссылке сайта из поиска, письма или сообщения (Universal Links, applinks:kliko.kz).
+        // Домен здесь уже проверила iOS — по файлу apple-app-site-association; Config.deepLink страхует.
+        if let ссылка = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }),
+           let адрес = ссылка.webpageURL, let наш = Config.deepLink(адрес) { мост.pendingURL = наш }
     }
 
-    /// Нажатие на плашку сделки, когда приложение уже запущено.
+    /// Плашка сделки или кнопка «Открыть в приложении», когда приложение уже запущено.
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        if let адрес = URLContexts.first?.url { WebBridge.shared.pendingURL = адрес }
+        if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.pendingURL = наш }
+    }
+
+    /// Ссылка сайта из поиска, письма или чужого приложения, когда наше уже запущено (Universal Links).
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let адрес = userActivity.webpageURL, let наш = Config.deepLink(адрес) else { return }
+        WebBridge.shared.pendingURL = наш
     }
 
     // Вход по Face ID (AppLock): закрыть содержимое при уходе, запереть после минуты в фоне, спросить при возврате.

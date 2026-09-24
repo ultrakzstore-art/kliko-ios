@@ -13,7 +13,32 @@ struct WebContainer: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(bridge: bridge) }
 
+    /**
+     ДИСКОВЫЙ КЭШ ПОБОЛЬШЕ (владелец 24.09.2026: «когда интернет кончается — очень долго работает»).
+
+     Замер на проде: оформление сайта — 295 КБ сжатыми, и адреса у него версионированные, со сроком в год
+     (`?v=…`, Cache-Control: immutable). Значит по сети оно обязано ехать РОВНО ОДИН РАЗ за выкладку. Съедает
+     это только тесный кэш: по умолчанию общий URLCache на iOS — 512 КБ в памяти и 10 МБ на диске, и наш
+     набор вытесняется оттуда первой же лентой фотографий.
+
+     🔴 СВОЙ КЭШ WEBKIT ЭТИМ НЕ УПРАВЛЯЕТСЯ — у него собственное хранилище, и размера его публичного рычага
+     нет. Здесь мы поднимаем кэш для НАШИХ запросов через URLSession (регистрация пуша, ленты) и для
+     повторной загрузки страницы из памяти, когда сети нет (ниже, `failIfOffline`). Полный контроль дал
+     бы только обработчик своей схемы с файлами внутри приложения — это отдельная работа.
+
+     Значения: 32 МБ в памяти и 256 МБ на диске. Диск у телефона не резиновый, но система сама вытеснит кэш,
+     когда места станет мало, — это её обязанность, а не наша.
+     */
+    private static func большойКэш() {
+        let нужно = 256 * 1024 * 1024
+        guard URLCache.shared.diskCapacity < нужно else { return }   // уже подняли на прошлом создании
+        URLCache.shared = URLCache(memoryCapacity: 32 * 1024 * 1024,
+                                   diskCapacity: нужно,
+                                   diskPath: "kliko-web")
+    }
+
     func makeUIView(context: Context) -> WKWebView {
+        Self.большойКэш()
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []          // видео/аудио в ленте без лишнего тапа
@@ -36,6 +61,9 @@ struct WebContainer: UIViewRepresentable {
         // Мост Live Activity сделки: PWA зовёт window.KlikoLive.{start,update,end}(deal).
         let ucc = cfg.userContentController
         ucc.add(context.coordinator, name: "klikoLive")
+        /* Снимок ленты для запуска: страница присылает то, что человек видит прямо сейчас, а приложение кладёт
+           это на диск и показывает при следующем старте, пока грузится сама страница (FeedPreview). */
+        ucc.add(context.coordinator, name: "klikoFeed")
         // Мост буфера обмена. В WKWebView веб-страница НЕ может прочитать системный
         // буфер: navigator.clipboard.readText там либо отсутствует, либо отказывает —
         // это ограничение платформы, а не наша ошибка. Кнопка «Вставить» на странице
@@ -463,6 +491,14 @@ struct WebContainer: UIViewRepresentable {
         """
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            /* Снимок ленты. Кладём как есть: разбирать его здесь незачем, а формат знает только тот, кто его
+               читает (FeedStore → FeedSnapshot). Пишем в фоне — на главной очереди сейчас отрисовка страницы. */
+            if message.name == "klikoFeed" {
+                if let строка = message.body as? String {
+                    DispatchQueue.global(qos: .utility).async { FeedStore.сохранить(строка) }
+                }
+                return
+            }
             // Буфер обмена: читаем и возвращаем строку в страницу.
             if message.name == "klikoPaste" {
                 // UIPasteboard.string — то же, что видит человек в меню «Вставить».
@@ -621,6 +657,7 @@ struct WebContainer: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            пробовалиИзКэша = false           // страница встала: следующий обрыв снова вправе заглянуть в память
             webView.scrollView.refreshControl?.endRefreshing()
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             bridge.loadFailed = false
@@ -631,6 +668,9 @@ struct WebContainer: UIViewRepresentable {
                    Сервер уже снял привязки уведомлений этой сессии и погасил её — остатков не будет ни там, ни здесь. */
                 WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
                                                         modifiedSince: Date(timeIntervalSince1970: 0)) {}
+                /* И снимок ленты: он был подобран под город и историю ушедшего человека, следующему его не
+                   показываем. */
+                FeedStore.стереть()
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }
@@ -645,9 +685,25 @@ struct WebContainer: UIViewRepresentable {
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             failIfOffline(error)
         }
+        /// Уже пробовали достать страницу из памяти в этот заход? Второй раз не пробуем: без сети повтор
+        /// закончится тем же, а бесконечный круг «не вышло → пробуем снова» съест батарею.
+        private var пробовалиИзКэша = false
+
         private func failIfOffline(_ error: Error) {
             // Показываем «нет связи» только если страница ещё не загружалась (иначе не мигаем на дозагрузках).
-            if !bridge.isLoaded { bridge.loadFailed = true }
+            guard !bridge.isLoaded else { return }
+            /* СНАЧАЛА ПАМЯТЬ, ПОТОМ ТУПИК. Человек в метро запускал приложение и упирался в экран «нет связи»,
+               хотя ту же самую страницу он открывал час назад и она лежит в кэше. Показываем её: подборки
+               главная и сама возьмёт с диска (js/marketplace-home.js), так что экран будет живой, а не пустой.
+               Не вышло и из памяти — тогда честный экран «нет связи», как и раньше. */
+            if !пробовалиИзКэша, let web = webView {
+                пробовалиИзКэша = true
+                var запрос = URLRequest(url: Config.apiBase)
+                запрос.cachePolicy = .returnCacheDataDontLoad
+                web.load(запрос)
+                return
+            }
+            bridge.loadFailed = true
         }
 
         /// Регистрируем APNs-токен в текущей веб-сессии (cookie есть в WebView) —

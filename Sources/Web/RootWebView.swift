@@ -11,8 +11,15 @@ struct RootWebView: View {
     @ObservedObject private var lock = AppLock.shared   // вход по Face ID: экран замка поверх всего (AppLock)
     @State private var minElapsed = false     // минимум показа сплэша, чтобы лого не мелькал
 
-    // Сплэш держим, пока сайт не загрузился ИЛИ не прошёл минимум времени.
-    private var showSplash: Bool { !(bridge.isLoaded && minElapsed) }
+    /* ЛЕНТА ВМЕСТО ПУСТОГО ОЖИДАНИЯ (владелец 24.09.2026: «когда интернет кончается — очень долго работает»).
+       Снимок читаем синхронно при создании экрана: файл крошечный, а нужен он на ПЕРВОМ кадре — уйдя в фон,
+       мы бы сначала показали сплэш и только потом подменили его лентой, и это мигание было бы хуже ожидания. */
+    @State private var снимок: FeedSnapshot? = FeedStore.прочитать()
+
+    /* Минимум в 1,6 с придуман для сплэша: логотип не должен мелькать. Ленте он не нужен — это содержимое, а
+       не заставка, и держать её лишнюю секунду поверх готовой страницы значит самому же замедлять запуск.
+       Поэтому со снимком ждём ровно столько, сколько грузится страница. */
+    private var showSplash: Bool { !(bridge.isLoaded && (minElapsed || снимок != nil)) }
 
     var body: some View {
         ZStack {
@@ -32,8 +39,15 @@ struct RootWebView: View {
                 OfflineView { bridge.retry() }
                     .transition(.opacity)
             } else if showSplash {
-                SplashView()
-                    .transition(.opacity)
+                if let снимок {
+                    /* Нажали карточку — говорим странице, куда идти, а превью держим до её готовности: убрать
+                       его сразу значит показать белый экран вместо объявления. */
+                    FeedPreview(снимок: снимок) { адрес in bridge.pendingURL = адрес }
+                        .transition(.opacity)
+                } else {
+                    SplashView()
+                        .transition(.opacity)
+                }
             }
 
             /* Защита входа включена: заперто или приложение неактивно — содержимое закрыто (переключатель приложений

@@ -33,6 +33,19 @@ targets:
         # Появится Mac и отладка на устройстве из Xcode — тогда здесь development, а на
         # сервере APNS_ENV='sandbox'; менять надо ОБА, поодиночке они бесполезны.
         aps-environment: production
+        # ССЫЛКИ САЙТА ОТКРЫВАЕТ ПРИЛОЖЕНИЕ (Universal Links). Человек находит объявление в поиске и
+        # нажимает — iOS поднимает приложение на той же странице вместо Safari. Пара к файлу
+        # https://kliko.kz/.well-known/apple-app-site-association (сервер: aasa.php + inc/app_deeplink.php),
+        # который обязан отдавать TEAMID.kz.kliko.app. Нет файла или Team ID в нём другой — ссылки просто
+        # открываются в Safari, как раньше; ничего не ломается.
+        # Только apex-домен: www.kliko.kz за файлом отвечает перенаправлением, а Apple перенаправления при
+        # проверке не ходит — такой домен не подтвердился бы.
+        # webcredentials — общие с сайтом пароли и коды из SMS: те же ключи Связки для kliko.kz.
+        # Возможность Associated Domains у App ID включает сама сборка: xcodebuild ходит с
+        # -allowProvisioningUpdates и ключом App Store Connect, профиль перевыпускается автоматически.
+        com.apple.developer.associated-domains:
+          - applinks:kliko.kz
+          - webcredentials:kliko.kz
     info:
       path: Kliko-Info.plist
       properties:
@@ -66,6 +79,16 @@ targets:
                                                 UIInterfaceOrientationPortraitUpsideDown,
                                                 UIInterfaceOrientationLandscapeLeft,
                                                 UIInterfaceOrientationLandscapeRight]
+        # 🔴 СВОЯ СХЕМА — ДЛЯ КНОПКИ НА САМОМ САЙТЕ. Универсальная ссылка НЕ поднимает приложение, когда по
+        # ней нажимают на странице того же домена: Apple считает, что человек уже на сайте и хочет остаться.
+        # Кнопка «Открыть в приложении» стоит как раз на kliko.kz — через universal link она не сработала бы
+        # никогда. Поэтому у неё свой адрес kliko://open?u=<полный адрес страницы>; разбирает Config.deepLink,
+        # и он же проверяет, что адрес НАШ: иначе чужая программа открыла бы в обёртке любой сайт, а там куки
+        # сессии. Сайт зовёт схему только у тех, кто уже заходил из приложения (inc/app_deeplink.php).
+        CFBundleURLTypes:
+          - CFBundleURLName: kz.kliko.app
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [kliko]
         UIBackgroundModes: [remote-notification]      # фоновые/тихие пуши
         NSSupportsLiveActivities: true                # Live Activity сделки (локскрин/Dynamic Island)
         # ТЕКСТЫ РАЗРЕШЕНИЙ. App Review в письме по нашей сборке отдельно напомнил
