@@ -1,6 +1,6 @@
 # OLX Watch — личное iPhone-приложение: лента новых объявлений OLX.kz и пуши.
 # Отдельное приложение с аккаунта разработчика Kliko, bundle id kz.kliko.olxwatch.
-# Данные — с сервера olx-watch-server (PHP на хостинге kliko.kz). Сборка —
+# Проверки OLX идут прямо с телефона (сервер не нужен). Сборка —
 # .github/workflows/olx-watch-ios.yml, тем же способом, что и Kliko.
 name: OLXWatch
 options:
@@ -33,6 +33,9 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+        # Фоновое обновление: iOS изредка будит приложение проверить поиски (AppModel.refreshTaskId).
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [kz.kliko.olxwatch.refresh]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.olxwatch

@@ -6,8 +6,6 @@ extension Color {
 }
 
 struct RootView: View {
-    @Environment(AppModel.self) private var model
-
     var body: some View {
         TabView {
             NavigationStack { FeedView() }
@@ -28,51 +26,36 @@ struct FeedView: View {
 
     var body: some View {
         Group {
-            if !model.configured {
+            if model.ads.isEmpty {
                 ContentUnavailableView {
-                    Label("Подключите сервер", systemImage: "server.rack")
-                } description: {
-                    Text("Во вкладке «Настройки» укажите адрес api.php на kliko.kz и ключ доступа.")
-                }
-            } else if model.ads.isEmpty {
-                ContentUnavailableView {
-                    Label("Пока пусто", systemImage: "tray")
+                    Label(model.subs.isEmpty ? "Добавьте поиск" : "Пока пусто", systemImage: model.subs.isEmpty ? "magnifyingglass" : "tray")
                 } description: {
                     Text(model.subs.isEmpty
-                         ? "Добавьте поиск во вкладке «Поиски» — новые объявления появятся здесь и придут пушем."
-                         : "Как только на OLX появится подходящее объявление, оно придёт сюда и пушем.")
+                         ? "Во вкладке «Поиски» выберите рубрику, город и цену — новые объявления появятся здесь."
+                         : "Как только на OLX появится подходящее объявление, оно придёт сюда. Проверяю, пока приложение открыто.")
                 }
             } else {
                 List {
                     if let error = model.error { ErrorRow(text: error) }
                     ForEach(model.ads) { ad in
-                        Button { if let url = URL(string: ad.url) { openURL(url) } } label: {
+                        Button { if let url = ad.link { openURL(url) } } label: {
                             AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId)
                         }
                         .buttonStyle(.plain)
                         .contextMenu { AdMenu(ad: ad) }
                         .swipeActions(edge: .trailing) {
-                            if let s = ad.sellerUrl, let url = URL(string: s) {
+                            if let url = ad.sellerURL {
                                 Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
                                     .tint(.indigo)
                             }
                         }
-                        .onAppear { if ad.id == model.ads.last?.id { Task { await model.loadMore() } } }
                     }
-                    if model.loadingMore { ProgressView().frame(maxWidth: .infinity) }
                 }
                 .listStyle(.plain)
             }
         }
         .navigationTitle("Новые на OLX")
-        .refreshable { await model.refreshAll() }
-        // Пока лента на экране — подтягиваем свежее раз в 20 секунд.
-        .task {
-            while !Task.isCancelled {
-                await model.refreshFeed()
-                try? await Task.sleep(for: .seconds(20))
-            }
-        }
+        .refreshable { await model.pollAll() }
     }
 }
 
@@ -94,13 +77,13 @@ struct AdRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(ad.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                    .font(.subheadline.weight(.semibold)).lineLimit(2)
                 if !ad.priceText.isEmpty {
-                    Text(ad.priceText).font(.headline)
+                    Text(verbatim: ad.priceText).font(.headline)
                 }
                 HStack(spacing: 4) {
-                    if !ad.city.isEmpty { Text(ad.city) }
-                    Text("·")
+                    if !ad.city.isEmpty { Text(verbatim: ad.city); Text(verbatim: "·") }
                     Text("\(ad.postedDate, style: .relative) назад")
                 }
                 .font(.caption)
@@ -133,7 +116,7 @@ struct Badge: View {
     let color: Color
 
     var body: some View {
-        Text(text)
+        Text(verbatim: text)
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -146,18 +129,18 @@ struct AdMenu: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        if let url = URL(string: ad.url) {
+        if let url = ad.link {
             Button { openURL(url) } label: { Label("Открыть на OLX", systemImage: "safari") }
             ShareLink(item: url) { Label("Поделиться", systemImage: "square.and.arrow.up") }
             Button { UIPasteboard.general.url = url } label: { Label("Скопировать ссылку", systemImage: "doc.on.doc") }
         }
-        if let s = ad.sellerUrl, let url = URL(string: s) {
+        if let url = ad.sellerURL {
             Button { openURL(url) } label: { Label("Все объявления автора", systemImage: "person.crop.circle") }
         }
         if !ad.params.isEmpty || !ad.description.isEmpty {
             Section {
-                ForEach(ad.params, id: \.self) { Text($0) }
-                if !ad.description.isEmpty { Text(String(ad.description.prefix(200)) + "…") }
+                ForEach(ad.params, id: \.self) { Text(verbatim: $0) }
+                if !ad.description.isEmpty { Text(verbatim: String(ad.description.prefix(200)) + "…") }
             }
         }
     }
@@ -167,7 +150,7 @@ struct ErrorRow: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
+        Label { Text(verbatim: text) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
             .font(.footnote)
             .foregroundStyle(.red)
     }
@@ -181,25 +164,24 @@ struct SubsView: View {
 
     var body: some View {
         List {
-            if let error = model.error { ErrorRow(text: error) }
             if model.subs.isEmpty {
-                Text("На olx.kz настройте поиск (рубрика, город, цена, слова), скопируйте ссылку из адресной строки и добавьте её здесь.")
+                Text("Нажмите «+»: выберите рубрику, город и цену — или вставьте ссылку на поиск с olx.kz.")
                     .foregroundStyle(.secondary)
             }
             ForEach(model.subs) { sub in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(sub.name).font(.headline)
+                        Text(verbatim: sub.name).font(.headline)
                         Spacer()
                         if sub.paused { Image(systemName: "pause.circle.fill").foregroundStyle(.secondary) }
                     }
                     Text(sub.ready ? "Прислано: \(sub.sent)" : "Первый проход — запоминаю, что уже есть…")
                         .font(.caption).foregroundStyle(.secondary)
-                    if !sub.error.isEmpty { Text(sub.error).font(.caption).foregroundStyle(.red) }
+                    if !sub.error.isEmpty { Text(verbatim: sub.error).font(.caption).foregroundStyle(.red) }
                 }
                 .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { Task { await model.delete(sub) } } label: { Label("Удалить", systemImage: "trash") }
-                    Button { Task { await model.togglePause(sub) } } label: {
+                    Button(role: .destructive) { model.delete(sub) } label: { Label("Удалить", systemImage: "trash") }
+                    Button { model.togglePause(sub) } label: {
                         Label(sub.paused ? "Продолжить" : "Пауза", systemImage: sub.paused ? "play" : "pause")
                     }
                     .tint(.gray)
@@ -209,36 +191,66 @@ struct SubsView: View {
         .navigationTitle("Поиски")
         .toolbar {
             Button { adding = true } label: { Image(systemName: "plus") }
-                .disabled(!model.configured)
         }
-        .refreshable { await model.refreshSubs() }
+        .refreshable { await model.pollAll() }
         .sheet(isPresented: $adding) { AddSubSheet() }
     }
 }
 
+/// Новый поиск: выбрать рубрику, город, слова и цену — или вставить ссылку с сайта.
 struct AddSubSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+
+    enum Mode: String, CaseIterable { case pick = "Выбрать", link = "Ссылка" }
+    @State private var mode = Mode.pick
     @State private var url = ""
     @State private var name = ""
     @State private var saving = false
 
+    @State private var top: OLX.Category?
+    @State private var subcategories: [OLX.Category] = []
+    @State private var sub: OLX.Category?
+    @State private var loadingSubs = false
+    @State private var citySlug = ""
+    @State private var words = ""
+    @State private var priceFrom = ""
+    @State private var priceTo = ""
+
+    private var builtURL: String {
+        OLX.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: words,
+                           priceFrom: Int(priceFrom.filter(\.isNumber)), priceTo: Int(priceTo.filter(\.isNumber)))
+    }
+
+    private var canSave: Bool {
+        if saving { return false }
+        switch mode {
+        case .link: return !url.isEmpty
+        case .pick: return top != nil || !words.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
+    private var autoName: String {
+        guard mode == .pick else { return "" }
+        var parts = [words.isEmpty ? (sub?.name ?? top?.name ?? "Поиск") : words]
+        if let city = OLX.cities.first(where: { $0.slug == citySlug }) { parts.append(city.name) }
+        if !priceTo.isEmpty { parts.append("до \(priceTo)") }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField(text: $url, prompt: Text(verbatim: "https://www.olx.kz/d/…"), axis: .vertical) { Text(verbatim: "Ссылка") }
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Button("Вставить из буфера") { url = UIPasteboard.general.string ?? url }
-                } header: {
-                    Text("Ссылка на поиск OLX")
-                } footer: {
-                    Text("Рубрика, город, цена и слова берутся из ссылки. Первый проход запоминает, что уже есть, — присылаются только новые.")
+                Picker("Как", selection: $mode) {
+                    ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+
+                if mode == .pick { pickForm } else { linkForm }
+
                 Section("Название (необязательно)") {
-                    TextField("Ноутбуки до 300 000", text: $name)
+                    TextField(text: $name, prompt: Text(verbatim: "Ноутбуки до 300 000")) { Text(verbatim: "Название") }
                 }
                 if let error = model.error { ErrorRow(text: error) }
             }
@@ -247,16 +259,82 @@ struct AddSubSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Добавить") {
+                    Button(saving ? "Проверяю…" : "Добавить") {
                         saving = true
+                        let link = mode == .pick ? builtURL : url
+                        let title = name.isEmpty ? autoName : name
                         Task {
-                            if await model.addSub(url: url, name: name) { dismiss() }
+                            if await model.addSub(url: link, name: title) { dismiss() }
                             saving = false
                         }
                     }
-                    .disabled(url.isEmpty || saving)
+                    .disabled(!canSave)
                 }
             }
+            .onChange(of: top) { _, newTop in
+                sub = nil
+                subcategories = []
+                guard let newTop else { return }
+                loadingSubs = true
+                Task {
+                    subcategories = await OLX.subcategories(of: newTop.path)
+                    loadingSubs = false
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var pickForm: some View {
+        Section("Рубрика") {
+            Picker("Рубрика", selection: $top) {
+                Text("Все рубрики").tag(OLX.Category?.none)
+                ForEach(OLX.topCategories) { c in Text(verbatim: c.name).tag(Optional(c)) }
+            }
+            if top != nil {
+                if loadingSubs {
+                    HStack { Text("Подрубрики"); Spacer(); ProgressView() }
+                } else if !subcategories.isEmpty {
+                    Picker("Подрубрика", selection: $sub) {
+                        Text("Вся рубрика").tag(OLX.Category?.none)
+                        ForEach(subcategories) { c in Text(verbatim: c.name).tag(Optional(c)) }
+                    }
+                }
+            }
+        }
+        Section("Город") {
+            Picker("Город", selection: $citySlug) {
+                Text("Весь Казахстан").tag("")
+                ForEach(OLX.cities, id: \.slug) { c in Text(verbatim: c.name).tag(c.slug) }
+            }
+        }
+        Section {
+            TextField(text: $words, prompt: Text(verbatim: "iphone 13, hp 250, шины r16")) { Text(verbatim: "Слова") }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            HStack {
+                TextField(text: $priceFrom, prompt: Text(verbatim: "Цена от")) { Text(verbatim: "От") }
+                    .keyboardType(.numberPad)
+                TextField(text: $priceTo, prompt: Text(verbatim: "до, ₸")) { Text(verbatim: "До") }
+                    .keyboardType(.numberPad)
+            }
+        } header: {
+            Text("Слова и цена (необязательно)")
+        } footer: {
+            Text("Без рубрики нужны слова. Первый проход запоминает, что уже есть, — дальше приходят только новые.")
+        }
+    }
+
+    @ViewBuilder private var linkForm: some View {
+        Section {
+            TextField(text: $url, prompt: Text(verbatim: "https://www.olx.kz/d/…"), axis: .vertical) { Text(verbatim: "Ссылка") }
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Вставить из буфера") { url = UIPasteboard.general.string ?? url }
+        } header: {
+            Text("Ссылка на поиск OLX")
+        } footer: {
+            Text("На olx.kz настройте поиск и скопируйте ссылку из адресной строки.")
         }
     }
 }
@@ -265,62 +343,48 @@ struct AddSubSheet: View {
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
-    @State private var endpoint = ""
-    @State private var token = ""
-    @State private var saving = false
-    @State private var saved = false
+    @State private var checking = false
 
     var body: some View {
+        let st = model.state.stats
         Form {
             Section {
-                // Подсказки — verbatim: иначе SwiftUI читает строку как Markdown, и адрес в подсказке
-                // рисуется синей ссылкой — выглядит как уже введённый текст, а поле на деле пустое.
-                TextField(text: $endpoint, prompt: Text(verbatim: AppModel.defaultEndpoint)) { Text(verbatim: "Адрес сервера") }
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                SecureField("Ключ доступа (api_token)", text: $token)
-                Button(saving ? "Проверяю…" : saved ? "Подключено ✓" : "Подключить") {
-                    saving = true
-                    Task {
-                        saved = await model.saveSettings(endpoint: endpoint, token: token)
-                        if saved { await model.requestPushPermission() }
-                        saving = false
-                    }
+                LabeledContent("Проверка", value: model.running ? "идёт, пока приложение открыто" : "на паузе")
+                if let until = model.blockedUntil, until > Date() {
+                    LabeledContent("OLX ограничил запросы", value: "до " + until.formatted(date: .omitted, time: .shortened))
                 }
-                .disabled(endpoint.isEmpty || token.isEmpty || saving)
                 if let error = model.error { ErrorRow(text: error) }
+                Button(checking ? "Проверяю…" : "Проверить поиски сейчас") {
+                    checking = true
+                    Task { await model.pollAll(); checking = false }
+                }
+                .disabled(checking || model.subs.isEmpty)
             } header: {
-                Text("Сервер")
+                Text("Сборщик")
             } footer: {
-                Text("Адрес api.php из папки olx-watch-server на kliko.kz и ключ api_token из её config.php.")
+                Text("Поиск — раз в 30 секунд, турбо — раз в 10 секунд, пока приложение на экране. В фоне iOS изредка даёт проверить поиски (обычно раз в 15+ минут).")
             }
 
-            if let st = model.status {
-                Section("Как идут дела") {
-                    LabeledContent("Сборщик", value: st.cronOk ? "работает" : "не запускается — проверьте cron")
-                    Toggle("Турбо: раньше поиска", isOn: Binding(
-                        get: { st.turbo },
-                        set: { on in Task { await model.setTurbo(on) } }
-                    ))
-                    LabeledContent("Проверено номеров", value: "\(st.stats["turbo_probes"] ?? 0)")
-                    LabeledContent("Найдено турбо", value: "\(st.stats["turbo_found"] ?? 0)")
-                    LabeledContent("Запросов поиска", value: "\(st.stats["search_ok"] ?? 0) / ошибок \(st.stats["search_err"] ?? 0)")
-                    if let until = st.blockedUntil {
-                        LabeledContent("OLX ограничил запросы", value: "до " + Date(timeIntervalSince1970: TimeInterval(until)).formatted(date: .omitted, time: .shortened))
-                    }
-                    LabeledContent("Пуши на сервере", value: st.pushReady ? "настроены" : "нет ключа APNs")
-                    LabeledContent("Устройств", value: "\(st.devices)")
-                    Button("Прислать пробный пуш") { Task { await model.testPush() } }
+            Section {
+                Toggle("Турбо: раньше поиска", isOn: Binding(get: { model.state.turbo }, set: { model.setTurbo($0) }))
+                LabeledContent("Проверено номеров", value: "\(st.turboProbes)")
+                LabeledContent("Найдено по номерам", value: "\(st.turboFound)")
+                if let hit = st.lastTurboHit {
+                    LabeledContent("Последняя находка", value: hit.formatted(date: .omitted, time: .shortened))
                 }
+                LabeledContent("Последний номер", value: model.state.frontier > 0 ? "\(model.state.frontier)" : "—")
+                LabeledContent("Запросов поиска", value: "\(st.searchOk) / ошибок \(st.searchErr)")
+            } header: {
+                Text("Турбо")
+            } footer: {
+                Text("Турбо проверяет следующие номера объявлений напрямую — так ловятся объявления до попадания в поиск, в том числе на проверке.")
+            }
+
+            Section {
+                Button("Разрешить уведомления") { Task { await model.requestNotifications() } }
+                Button("Очистить ленту", role: .destructive) { model.clearFeed() }
             }
         }
         .navigationTitle("Настройки")
-        .onAppear {
-            endpoint = model.endpoint.isEmpty ? AppModel.defaultEndpoint : model.endpoint
-            token = model.token
-            saved = model.configured
-        }
-        .task { await model.refreshStatus() }
     }
 }

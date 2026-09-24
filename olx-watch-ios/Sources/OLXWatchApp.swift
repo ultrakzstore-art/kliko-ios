@@ -1,3 +1,4 @@
+import BackgroundTasks
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -14,39 +15,36 @@ struct OLXWatchApp: App {
                 .environment(model)
                 .tint(.watchAccent)
         }
+        // Сборщик крутится, пока приложение на экране; в фоне — только когда iOS разбудит.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshAll() } }
+            switch phase {
+            case .active: model.start()
+            case .background: model.stop()
+            default: break
+            }
         }
     }
 }
 
-/// Пуши: регистрация токена и открытие объявления по тапу на уведомление.
+/// Уведомления (показываем и при открытом приложении, тап — объявление на OLX) и фоновое обновление.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
-        Task { @MainActor in
-            if AppModel.shared.configured { await AppModel.shared.requestPushPermission() }
+        // Регистрировать обработчик обязательно до конца запуска.
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: AppModel.refreshTaskId, using: nil) { task in
+            guard let refresh = task as? BGAppRefreshTask else { task.setTaskCompleted(success: false); return }
+            Task { @MainActor in AppModel.shared.handleBackgroundRefresh(refresh) }
         }
+        Task { @MainActor in await AppModel.shared.requestNotifications() }
         return true
     }
 
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Task { @MainActor in await AppModel.shared.didReceiveDeviceToken(deviceToken) }
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        Task { @MainActor in AppModel.shared.error = "Пуши не подключились: \(error.localizedDescription)" }
-    }
-
-    // Пуш, пришедший при открытом приложении, тоже показываем — и обновляем ленту.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        Task { @MainActor in await AppModel.shared.refreshFeed() }
         completionHandler([.banner, .list, .sound])
     }
 
-    // Тап по пушу — сразу объявление на OLX (в приложении OLX, если стоит, иначе в Safari).
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
@@ -54,7 +52,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let link = (info["url"] as? String).flatMap(URL.init(string:))
         Task { @MainActor in
             AppModel.shared.highlightedAdId = adId
-            await AppModel.shared.refreshFeed()
             if let link { _ = await UIApplication.shared.open(link, options: [:]) }
             completionHandler()
         }
