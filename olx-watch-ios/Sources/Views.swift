@@ -62,19 +62,31 @@ struct FeedView: View {
                     Text(emptyText)
                 }
                 .listRowSeparator(.hidden)
-            }
-
-            ForEach(shown) { ad in
-                Button { if let url = ad.link { openURL(url) } } label: {
-                    AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId, showQuery: scope == .all || subFilter == nil,
-                          queryNames: model.subs.filter { ad.subIds.contains($0.id) }.map(\.name))
+            } else if scope == .all {
+                // Несортированные: всё новое подряд — название и ссылка.
+                ForEach(model.allAds) { ad in
+                    Button { if let url = ad.link { openURL(url) } } label: { LinkRow(ad: ad) }
+                        .buttonStyle(.plain)
+                        .contextMenu { AdMenu(ad: ad) }
                 }
-                .buttonStyle(.plain)
-                .contextMenu { AdMenu(ad: ad) }
-                .swipeActions(edge: .trailing) {
-                    if let url = ad.sellerURL {
-                        Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
-                            .tint(.indigo)
+            } else if subFilter != nil {
+                ForEach(shown) { ad in adButton(ad) }
+            } else {
+                // Отсортированные: у каждого запроса — свой раздел.
+                ForEach(model.subs) { sub in
+                    let items = model.ads.filter { $0.subIds.contains(sub.id) }
+                    if !items.isEmpty {
+                        Section {
+                            ForEach(items) { ad in adButton(ad) }
+                        } header: {
+                            Text(verbatim: "\(sub.name) · \(items.count)")
+                        }
+                    }
+                }
+                let orphans = model.ads.filter { ad in !model.subs.contains { ad.subIds.contains($0.id) } }
+                if !orphans.isEmpty {
+                    Section("Удалённые запросы") {
+                        ForEach(orphans) { ad in adButton(ad) }
                     }
                 }
             }
@@ -82,6 +94,20 @@ struct FeedView: View {
         .listStyle(.plain)
         .navigationTitle("Новые на OLX")
         .refreshable { await model.pollAll() }
+    }
+
+    private func adButton(_ ad: Ad) -> some View {
+        Button { if let url = ad.link { openURL(url) } } label: {
+            AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId)
+        }
+        .buttonStyle(.plain)
+        .contextMenu { AdMenu(ad: ad) }
+        .swipeActions(edge: .trailing) {
+            if let url = ad.sellerURL {
+                Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
+                    .tint(.indigo)
+            }
+        }
     }
 
     private var emptyTitle: String {
@@ -140,6 +166,39 @@ struct AdRow: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .listRowBackground(highlighted ? Color.watchAccent.opacity(0.12) : nil)
+    }
+}
+
+/// Строка «Все новые»: название, ссылка, цена, город и время — без фото, чтобы влезало больше.
+struct LinkRow: View {
+    let ad: Ad
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            if let url = ad.link {
+                Text(verbatim: url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
+                    .font(.caption)
+                    .foregroundStyle(Color.watchAccent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            HStack(spacing: 4) {
+                if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
+                if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
+                Text("· \(ad.postedDate, style: .relative) назад")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            if !ad.subIds.isEmpty || ad.onReview {
+                Badges(ad: ad)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 

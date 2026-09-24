@@ -34,8 +34,8 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         # Фоновое обновление: iOS изредка будит приложение проверить поиски (AppModel.refreshTaskId).
-        UIBackgroundModes: [fetch, remote-notification]   # фоновое обновление + тихие пуши-будильники
-        BGTaskSchedulerPermittedIdentifiers: [kz.kliko.olxwatch.refresh]
+        UIBackgroundModes: [fetch, processing, remote-notification]   # фоновые задачи + тихие пуши-будильники
+        BGTaskSchedulerPermittedIdentifiers: [kz.kliko.olxwatch.refresh, kz.kliko.olxwatch.processing]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.olxwatch

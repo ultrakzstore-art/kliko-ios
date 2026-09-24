@@ -12,6 +12,7 @@ import UserNotifications
 final class AppModel {
     static let shared = AppModel()
     static let refreshTaskId = "kz.kliko.olxwatch.refresh"
+    static let processingTaskId = "kz.kliko.olxwatch.processing"
 
     private static let pollInterval: TimeInterval = 30
     private static let turboInterval: TimeInterval = 10
@@ -366,17 +367,27 @@ final class AppModel {
         return state.ads.count > before
     }
 
+    /// Просим iOS будить нас как можно чаще. Когда именно — решает система: по тому, как часто
+    /// приложением пользуются, заряду и сети. Обычно — раз в 15–60 минут, ночью на зарядке — дольше.
     func scheduleBackgroundRefresh() {
-        let req = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
-        req.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(req)
+        let refresh = BGAppRefreshTaskRequest(identifier: Self.refreshTaskId)
+        refresh.earliestBeginDate = Date(timeIntervalSinceNow: 5 * 60)
+        try? BGTaskScheduler.shared.submit(refresh)
+
+        // Вторая, «долгая» задача: iOS даёт ей больше времени (обычно на зарядке и в Wi-Fi).
+        let processing = BGProcessingTaskRequest(identifier: Self.processingTaskId)
+        processing.requiresNetworkConnectivity = true
+        processing.requiresExternalPower = false
+        processing.earliestBeginDate = Date(timeIntervalSinceNow: 10 * 60)
+        try? BGTaskScheduler.shared.submit(processing)
     }
 
-    /// Фоновое обновление от iOS: один проход по поискам (без турбо), новые — уведомлением.
-    func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
+    /// Фоновая работа от iOS: поиски и проход турбо, новые — уведомлением.
+    func handleBackgroundTask(_ task: BGTask) {
         scheduleBackgroundRefresh()
         let work = Task { @MainActor in
             await self.pollAll()
+            await self.turbo()
             self.save()
             task.setTaskCompleted(success: true)
         }

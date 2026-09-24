@@ -32,9 +32,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         // Регистрировать обработчик обязательно до конца запуска.
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: AppModel.refreshTaskId, using: nil) { task in
-            guard let refresh = task as? BGAppRefreshTask else { task.setTaskCompleted(success: false); return }
-            Task { @MainActor in AppModel.shared.handleBackgroundRefresh(refresh) }
+        for id in [AppModel.refreshTaskId, AppModel.processingTaskId] {
+            BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { task in
+                Task { @MainActor in AppModel.shared.handleBackgroundTask(task) }
+            }
         }
         Task { @MainActor in await AppModel.shared.requestNotifications() }
         return true
