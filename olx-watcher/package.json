@@ -1,0 +1,16 @@
+{
+  "name": "olx-watcher",
+  "version": "0.1.0",
+  "description": "Личный телеграм-бот: новые объявления OLX.kz по вашим поискам — через секунды после подачи",
+  "private": true,
+  "main": "src/index.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings --env-file-if-exists=.env src/index.js",
+    "probe": "node --no-warnings --env-file-if-exists=.env src/probe.js",
+    "test": "node --no-warnings --test"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0"
+  }
+}
