@@ -705,6 +705,7 @@ struct WebContainer: UIViewRepresentable {
                    показываем. */
                 FeedStore.стереть()
                 ListingsCache.стереть()          // и сохранённую нативную ленту — по той же причине
+                Task { @MainActor in FavoritesStore.shared.стереть() }   // и избранное ушедшего (этап 5)
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

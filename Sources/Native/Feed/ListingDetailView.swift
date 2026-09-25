@@ -51,6 +51,11 @@ struct ListingDetailView: View {
         .background(Color(.systemBackground))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if Config.избранное {
+                ToolbarItem(placement: .topBarTrailing) {
+                    КнопкаИзбранного(товар: товар, место: .шапка)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if let адрес = товар.адрес {
                     ShareLink(item: адрес) { Image(systemName: "square.and.arrow.up") }
@@ -60,6 +65,10 @@ struct ListingDetailView: View {
         }
         .safeAreaInset(edge: .bottom) { нижняяПанель }
         .task { await догрузить() }
+        /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5). */
+        .onChange(of: товар) { _, свежий in
+            if Config.избранное { FavoritesStore.shared.освежить(свежий) }
+        }
         .fullScreenCover(item: Binding(get: { фотоНаВесьЭкран.map(ФотоИндекс.init) },
                                        set: { фотоНаВесьЭкран = $0?.id })) { выбранное in
             ФотоНаВесьЭкран(адреса: товар.фотоАдреса, начало: выбранное.id)

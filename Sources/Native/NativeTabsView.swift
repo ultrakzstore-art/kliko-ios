@@ -15,7 +15,7 @@ import SwiftUI
  минуту, пока приложение на экране.
  */
 struct NativeTabsView: View {
-    enum Вкладка: Hashable { case лента, сообщения, разместить, кабинет }
+    enum Вкладка: Hashable { case лента, избранное, сообщения, разместить, кабинет }
 
     @ObservedObject private var мост = WebBridge.shared
     @StateObject private var чаты = ChatListModel()
@@ -30,6 +30,19 @@ struct NativeTabsView: View {
             NativeFeedView(открыть: открыть, открытьСайт: открытьСайт)
                 .tabItem { Label(TabsText.т("feed"), systemImage: "square.grid.2x2") }
                 .tag(Вкладка.лента)
+
+            /* Этап 5: избранное — своя вкладка со своим стеком; маршруты карточки и чата те же, что у ленты. */
+            if Config.избранное {
+                NavigationStack {
+                    FavoritesView(открыть: открыть, вЛенту: { вкладка = .лента })
+                        .navigationDestination(for: Listing.self) { товар in
+                            ListingDetailView(товар: товар, открыть: открыть)
+                        }
+                        .чатМаршруты(открыть: открыть)
+                }
+                .tabItem { Label(FavoritesText.т("title"), systemImage: "heart") }
+                .tag(Вкладка.избранное)
+            }
 
             if Config.нативныйЧат {
                 NavigationStack {

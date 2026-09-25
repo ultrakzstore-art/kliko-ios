@@ -40,6 +40,7 @@ struct NativeFeedView: View {
                 ListingDetailView(товар: товар, открыть: открыть)
             }
             .чатМаршруты(открыть: открыть)
+            .избранноеМаршруты(открыть: открыть)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -50,7 +51,15 @@ struct NativeFeedView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Kliko")
                 }
-                /* С нижними вкладками (этап 4) сообщения и кабинет — там; в шапке их второй раз не показываем. */
+                /* С нижними вкладками (этап 4) избранное, сообщения и кабинет — там; в шапке их второй раз не показываем. */
+                if Config.избранное && !Config.нижниеВкладки {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        NavigationLink(value: ИзбранноеЦель.список) {
+                            Image(systemName: "heart")
+                        }
+                        .accessibilityLabel(FavoritesText.т("title"))
+                    }
+                }
                 if Config.нативныйЧат && !Config.нижниеВкладки {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink(value: ЧатЦель.список) {
@@ -146,6 +155,7 @@ struct NativeFeedView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .сердечкоИзбранного(товар)          // этап 5: сердечко — слоем над карточкой, не внутри ссылки
                     .onAppear { модель.дальше(после: товар) }
                 }
             }
