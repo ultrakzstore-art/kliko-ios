@@ -595,9 +595,58 @@ final class AppModel {
 
     /// Следующие 3 номера за границей и один подальше (+5…+20 по кругу — чтобы снятые номера не
     /// держали на месте), плюс недавние промахи. Подошло поиску по рубрике, городу, словам — сразу.
+    @ObservationIgnored private var kaspiSynced = false
+    @ObservationIgnored private var kaspiStep = 16
+    @ObservationIgnored private var kaspiHi = 0
+    @ObservationIgnored private var kaspiLastTick = Date.distantPast
+
+    /// Номер n или сразу за ним (снятые дают дырки по 1–2): первый существующий или 0.
+    private func kaspiExists(_ n: Int) async throws -> Int {
+        for id in n...(n + 2) {
+            if try await Site.kaspiById(id) != nil { return id }
+        }
+        return 0
+    }
+
+    /// Сначала — найти самый последний номер Kaspi: граница из выдачи может отставать на тысячи,
+    /// и турбо слало бы подряд всё старое. Пока ищем — ничего не шлём: шаг вперёд удваиваем,
+    /// где объявлений уже нет — делим пополам.
+    private func kaspiSync() async throws {
+        var lo = kaspiFrontier
+        for _ in 0..<4 {
+            if kaspiHi == 0 {
+                var hit = try await kaspiExists(lo + kaspiStep)
+                if hit == 0 { hit = try await kaspiExists(lo + kaspiStep * 4) }   // дырка — смотрим дальше
+                if hit > 0 { lo = hit; kaspiStep = min(kaspiStep * 2, 20_000); continue }
+                kaspiHi = lo + kaspiStep
+            }
+            if kaspiHi - lo <= 3 {
+                for id in (lo + 1)...(kaspiHi + 3) {
+                    if try await Site.kaspiById(id) != nil { lo = id }
+                }
+                kaspiSynced = true
+                kaspiHi = 0
+                kaspiStep = 16
+                break
+            }
+            let mid = (lo + kaspiHi) / 2
+            let hit = try await kaspiExists(mid)
+            if hit > 0 { lo = hit } else { kaspiHi = mid }
+        }
+        kaspiFrontier = lo
+        UserDefaults.standard.set(lo, forKey: "kaspi_frontier")
+    }
+
     private func kaspiTurbo() async {
         let subs = state.subs.filter { !$0.paused && $0.ready && $0.site == .kaspi }
         guard !subs.isEmpty, kaspiFrontier > 0 else { return }
+        // Приложение было закрыто дольше 5 минут — край ищем заново (пропущенное принесёт выдача).
+        if Date().timeIntervalSince(kaspiLastTick) > 300 { kaspiSynced = false }
+        kaspiLastTick = Date()
+        if !kaspiSynced {
+            do { try await kaspiSync(); ok(site: .kaspi) } catch { fail(error, site: .kaspi) }
+            return
+        }
         var ids = (1...3).map { kaspiFrontier + $0 }
         kaspiJump = kaspiJump % 16 + 1
         ids.append(kaspiFrontier + 4 + kaspiJump)
