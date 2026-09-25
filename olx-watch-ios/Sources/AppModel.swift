@@ -155,6 +155,10 @@ final class AppModel {
             lastTurbo = Date()
             await turbo()
         }
+        if state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
+            lastKaspiTurbo = Date()
+            await kaspiTurbo()
+        }
     }
 
     /// Проверить все поиски сейчас (кнопка и фоновое обновление).
@@ -261,6 +265,7 @@ final class AppModel {
         sub.lastPoll = Date()
         sub.error = ads.isEmpty ? "Поиск ничего не вернул — проверьте ссылку" : ""
         let top = ads.map(\.id).max() ?? 0
+        if site == .kaspi, top > 0 { bumpKaspi(top - site.idOffset) }
         // Первый проход — только запоминаем выдачу.
         if !sub.ready {
             ads.forEach { remember($0.id) }
@@ -576,6 +581,61 @@ final class AppModel {
 
     /// Пауза Kolesa / Krisha / Kaspi — своя: OLX ограничил — остальные работают, и их удачный
     /// ответ не сбрасывает паузу OLX (и наоборот).
+    // Турбо Kaspi: номера объявлений сквозные; граница — самый большой номер из выдачи Kaspi.
+    @ObservationIgnored private var kaspiFrontier = UserDefaults.standard.integer(forKey: "kaspi_frontier")
+    @ObservationIgnored private var kaspiMisses: [Int: Int] = [:]
+    @ObservationIgnored private var kaspiJump = 0
+    @ObservationIgnored private var lastKaspiTurbo = Date.distantPast
+
+    private func bumpKaspi(_ n: Int) {
+        guard n > kaspiFrontier else { return }
+        kaspiFrontier = n
+        UserDefaults.standard.set(n, forKey: "kaspi_frontier")
+    }
+
+    /// Следующие 3 номера за границей и один подальше (+5…+20 по кругу — чтобы снятые номера не
+    /// держали на месте), плюс недавние промахи. Подошло поиску по рубрике, городу, словам — сразу.
+    private func kaspiTurbo() async {
+        let subs = state.subs.filter { !$0.paused && $0.ready && $0.site == .kaspi }
+        guard !subs.isEmpty, kaspiFrontier > 0 else { return }
+        var ids = (1...3).map { kaspiFrontier + $0 }
+        kaspiJump = kaspiJump % 16 + 1
+        ids.append(kaspiFrontier + 4 + kaspiJump)
+        for (n, c) in kaspiMisses where n < kaspiFrontier && n > kaspiFrontier - 50 && c < 30 && ids.count < 5 { ids.append(n) }
+        for n in ids {
+            let found: Ad?
+            do {
+                found = try await Site.kaspiById(n)
+                ok(site: .kaspi)
+            } catch {
+                fail(error, site: .kaspi)
+                if siteBlocked(.kaspi) { break }
+                continue
+            }
+            guard var ad = found else { kaspiMisses[n, default: 0] += 1; continue }
+            kaspiMisses[n] = nil
+            bumpKaspi(n)
+            guard !seenSet.contains(ad.id) else { continue }
+            var hit: [Sub] = []
+            for s in subs {
+                if let why = Site.kaspiMismatch(s, ad) {
+                    trace(ad.id, "Kaspi по номеру → «\(s.name)»: не подошло — \(why)")
+                } else {
+                    hit.append(s)
+                }
+            }
+            guard !hit.isEmpty else { continue }   // не понятно — его принесёт обход выдачи
+            remember(ad.id)
+            ad.via = "turbo"
+            ad.foundAt = Date()
+            recordAll(ad)
+            deliver(ad, to: hit)
+            trace(ad.id, "Kaspi по номеру: пришло в «\(hit.map(\.name).joined(separator: "», «"))»")
+        }
+        kaspiMisses = kaspiMisses.filter { $0.key > kaspiFrontier - 200 }
+        save()
+    }
+
     @ObservationIgnored private var siteBlock: [Site: (until: Date, backoff: TimeInterval)] = [:]
 
     private func siteBlocked(_ site: Site) -> Bool {

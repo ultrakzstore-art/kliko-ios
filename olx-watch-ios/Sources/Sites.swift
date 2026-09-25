@@ -369,7 +369,86 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         for key in ["datePosted", "datePublished"] {
             if let s = product?[key] as? String, let d = parseDate(s) { ad.createdAt = d; break }
         }
+        if source == .kaspi { ad.crumbs = breadcrumbs(html, url: url) }
         return ad
+    }
+
+    /// Крошки карточки: сначала JSON-LD BreadcrumbList, иначе ссылки в блоке с «breadcrumb» в классе.
+    /// Меню сайта не берём — оно ссылается на все рубрики.
+    private static func breadcrumbs(_ html: String, url: String) -> [String] {
+        var out: [String] = []
+        func add(_ href: String) {
+            guard let u = URL(string: decode(href), relativeTo: URL(string: url))?.absoluteURL else { return }
+            let p = u.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            if !p.isEmpty, !p.hasPrefix("a/"), !out.contains(p) { out.append(p) }
+        }
+        for x in jsonLD(html) where String(describing: x["@type"] ?? "").contains("BreadcrumbList") {
+            for it in (x["itemListElement"] as? [[String: Any]]) ?? [] {
+                if let s = it["item"] as? String { add(s) }
+                else if let d = it["item"] as? [String: Any], let s = (d["@id"] as? String) ?? (d["url"] as? String) { add(s) }
+                else if let s = it["url"] as? String { add(s) }
+            }
+        }
+        if out.isEmpty, let block = matches(#"<(?:nav|ol|ul|div)\b[^>]*class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]{0,4000}?)</(?:nav|ol|ul)>"#, in: html).first {
+            for h in matches(#"href=["']([^"']+)["']"#, in: block) { add(h) }
+        }
+        return out
+    }
+
+    /// Kaspi по номеру: /a/<номер>/ открывает объявление без названия. Нет (или на проверке) — nil.
+    static func kaspiById(_ n: Int) async throws -> Ad? {
+        let link = "https://obyavleniya.kaspi.kz/a/\(n)/"
+        guard let url = URL(string: link), let page = try await html(url) else { return nil }
+        let ad = parseDetail(page, id: Site.kaspi.idOffset + n, url: link, source: .kaspi)
+        guard !ad.title.isEmpty, ad.price != nil || !(ad.photos ?? []).isEmpty || !ad.photo.isEmpty else { return nil }
+        return ad
+    }
+
+    /// Подходит ли объявление Kaspi, найденное по номеру, поиску: рубрика (по крошкам), город, слова.
+    /// Не понятно — причина, и его принесёт обход выдачи.
+    static func kaspiMismatch(_ sub: Sub, _ ad: Ad) -> String? {
+        guard let u = URL(string: sub.url) else { return "ссылка поиска" }
+        var parts = u.path.split(separator: "/").map(String.init)
+        let cities = Set(kaspiCitySlugs + kaspiRounds.values.flatMap { $0.cities })
+        var city = ""
+        if parts.count > 1, cities.contains(parts[0]) { city = parts.removeFirst() }
+        var words: [String] = []
+        if let i = parts.firstIndex(where: { $0.hasPrefix("k--") }) {
+            let raw = String(parts[i].dropFirst(3))
+            words = (raw.removingPercentEncoding ?? raw).split(whereSeparator: { $0 == "-" || $0 == " " }).map(String.init)
+            parts = Array(parts[..<i])
+        }
+        let path = parts.joined(separator: "/").lowercased()
+        let crumbs = ad.crumbs ?? []
+        if crumbs.isEmpty { return "рубрика объявления не видна" }
+        var adCity = ""
+        var cats: [String] = []
+        for c in crumbs {
+            let p = c.split(separator: "/").map(String.init)
+            if p.count > 1, cities.contains(p[0]) {
+                if adCity.isEmpty { adCity = p[0] }
+                cats.append(p.dropFirst().joined(separator: "/"))
+            } else {
+                cats.append(c)
+            }
+        }
+        if !path.isEmpty, !cats.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) { return "другая рубрика" }
+        if !city.isEmpty {
+            let same: Bool
+            if !adCity.isEmpty {
+                same = adCity == city
+            } else if let name = kolesaCities.first(where: { $0.slug == city })?.name, !ad.city.isEmpty {
+                same = ad.city.lowercased() == name.lowercased()
+            } else {
+                same = false
+            }
+            if !same { return adCity.isEmpty && ad.city.isEmpty ? "город объявления не виден" : "другой город" }
+        }
+        if !words.isEmpty {
+            let text = (ad.title + " " + ad.description).lowercased()
+            if let miss = words.first(where: { !text.contains(OLX.stem($0.lowercased())) }) { return "нет слова «\(miss)»" }
+        }
+        return nil
     }
 
     // MARK: — разбор
