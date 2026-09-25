@@ -64,8 +64,9 @@ struct Ad: Codable, Identifiable, Hashable {
     }
 
     var sellerURL: URL? {
-        guard let userId, !userId.isEmpty else { return nil }
-        return URL(string: "\(OLX.base)/list/user/\(userId)/")
+        // OLX пишет продавца в ссылке коротким кодом — как номер объявления (62-ричная запись).
+        guard let userId, let n = Int(userId), n > 0 else { return nil }
+        return URL(string: "\(OLX.base)/list/user/\(OLX.encode(n))/")
     }
 
     /// Дополнить данными карточки: непустое из карточки побеждает.

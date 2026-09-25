@@ -93,6 +93,22 @@ enum OLX {
         return normalizeOffer((json["data"] as? [String: Any]) ?? json)
     }
 
+    /// Самые свежие объявления всей доски — «где сейчас OLX». Сначала через тот же API, что
+    /// и карточки (в списке сразу описание и все фото), не вышло — страница всей доски.
+    static func latest() async throws -> [Ad] {
+        if let url = URL(string: "\(base)/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc") {
+            let (data, code) = try await get(url, accept: "application/json")
+            if code == 403 || code == 429 { throw Failure.blocked(code) }
+            if (200..<300).contains(code),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let list = json["data"] as? [[String: Any]] {
+                let ads = list.compactMap(normalizeOffer)
+                if !ads.isEmpty { return ads }
+            }
+        }
+        return try await search("\(base)/list/")
+    }
+
     // MARK: — разбор выдачи
 
     /// Сайт кладёт данные страницы в window.__PRERENDERED_STATE__ — JSON внутри JS-строки.

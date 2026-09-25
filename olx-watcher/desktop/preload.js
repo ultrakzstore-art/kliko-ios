@@ -1,0 +1,17 @@
+// Мост окна к основному процессу: только нужные действия, без доступа к Node.
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('app', {
+  state: () => ipcRenderer.invoke('state'),
+  save: (patch) => ipcRenderer.invoke('save', patch),
+  forgetToken: () => ipcRenderer.invoke('forget-token'),
+  start: () => ipcRenderer.invoke('start'),
+  stop: () => ipcRenderer.invoke('stop'),
+  restart: () => ipcRenderer.invoke('restart'),
+  probe: (url) => ipcRenderer.invoke('probe', url),
+  openData: () => ipcRenderer.invoke('open-data'),
+  openUrl: (url) => ipcRenderer.invoke('open-url', url),
+  onState: (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
+  onLog: (fn) => ipcRenderer.on('log', (_e, lines) => fn(lines)),
+  onProbe: (fn) => ipcRenderer.on('probe', (_e, text) => fn(text)),
+});

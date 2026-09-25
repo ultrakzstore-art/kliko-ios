@@ -31,6 +31,6 @@ module.exports = {
     kaspi: prices(`KASPI_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('KASPI_PRICES') : null),
   }])),
   kaspiDetails: (process.env.KASPI_DETAILS || '').trim(),
-  sellerUrl: process.env.SELLER_URL || 'https://www.olx.kz/list/user/{id}/',
+  sellerUrl: process.env.SELLER_URL || 'https://www.olx.kz/list/user/{code}/',
   dbFile: process.env.DB_FILE || path.join(__dirname, '..', 'data', 'watcher.db'),
 };

@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OLX Watcher для ПК — установщик Windows (.exe) из olx-watcher/: окно, в котором
+# настраивается и работает телеграм-бот. Собирается на каждый пуш, меняющий olx-watcher/,
+# и вручную: Actions → «OLX Watcher · Windows» → Run workflow. Установщик — в артефакте
+# прогона («OLX-Watcher-Setup», внизу страницы прогона).
+# Без подписи кода: SmartScreen при первом запуске → «Подробнее» → «Выполнить в любом случае».
+# ─────────────────────────────────────────────────────────────────────────────
+name: OLX Watcher · Windows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "olx-watcher/**"
+      - ".github/workflows/olx-watcher-desktop.yml"
+
+concurrency:
+  group: olx-watcher-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: olx-watcher
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: olx-watcher/package-lock.json
+
+      - run: npm ci
+
+      - name: Проверки
+        run: |
+          npm run check
+          npm test
+
+      - name: Установщик
+        run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OLX-Watcher-Setup
+          path: olx-watcher/dist/*.exe
+          if-no-files-found: error

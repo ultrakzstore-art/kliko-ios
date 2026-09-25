@@ -33,7 +33,7 @@ final class AppModel {
     var speed: Speed = Speed(rawValue: UserDefaults.standard.string(forKey: "speed") ?? "") ?? .fast {
         didSet { UserDefaults.standard.set(speed.rawValue, forKey: "speed") }
     }
-    private static let turboWindow = 5
+    private static let turboWindow = 8
     private static let missGiveUp = 12
     /// «Новое» — подано не раньше, чем столько минут назад (настройка; по умолчанию 1).
     static let freshnessChoices = [1, 5, 15, 30, 60]
@@ -63,6 +63,7 @@ final class AppModel {
 
     private var loop: Task<Void, Never>?
     private var lastTurbo = Date.distantPast
+    private var lastAnchor = Date.distantPast
     private var backoff: TimeInterval = 0
     private var misses: [Int: Int] = [:]
     private var seenSet = Set<Int>()
@@ -92,6 +93,7 @@ final class AppModel {
     func start() {
         guard loop == nil else { return }
         running = true
+        lastAnchor = .distantPast   // открыли приложение — сразу смотрим, где сейчас OLX
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.tick()
@@ -114,6 +116,11 @@ final class AppModel {
         busy = true
         defer { busy = false }
         if let until = blockedUntil, until > Date() { return }
+        // Где сейчас OLX: при открытии — сразу, дальше с частотой поиска.
+        if Date().timeIntervalSince(lastAnchor) >= speed.poll {
+            lastAnchor = Date()
+            await anchor()
+        }
         // Сначала поиск: он переставляет «последний номер» на самые свежие объявления, и турбо
         // после долгой паузы не бредёт по вчерашним номерам.
         for sub in state.subs where !sub.paused {
@@ -199,6 +206,36 @@ final class AppModel {
     }
 
     // MARK: — турбо: следующие номера напрямую, раньше поиска
+
+    /// Самые свежие объявления всей доски: турбо перескакивает к ним, а не бредёт от номера,
+    /// на котором приложение закрыли (после часа паузы это тысячи номеров, и всё старше
+    /// минуты отбрасывается — лента стояла пустой). Свежее из них сразу идёт в ленту.
+    private func anchor() async {
+        let ads: [Ad]
+        do {
+            ads = try await OLX.latest()
+            ok()
+        } catch {
+            fail(error)
+            return
+        }
+        guard let top = ads.map(\.id).max() else { return }
+        if top > state.frontier + Self.turboWindow * 3 {
+            state.frontier = top - Self.turboWindow   // прыжок; последние номера турбо ещё проверит
+        }
+        let ready = state.subs.filter { !$0.paused && $0.ready }
+        for var ad in ads.sorted(by: { $0.id < $1.id }) where !seenSet.contains(ad.id) && !ad.promoted {
+            if isStale(ad, frontier: 0) { continue }
+            remember(ad.id)
+            let hit = ready.filter { OLX.matches($0, ad) }
+            ad.via = "search"
+            ad.subIds = hit.map(\.id)
+            ad.foundAt = Date()
+            recordAll(ad)
+            if !hit.isEmpty { add(ad, subs: hit) }
+        }
+        publish()
+    }
 
     private func turbo() async {
         let ready = state.subs.filter { !$0.paused && $0.ready }
@@ -479,6 +516,7 @@ final class AppModel {
     func handleWakePush() async -> Bool {
         let before = state.ads.count
         await pollAll()
+        await anchor()
         await turbo()
         publish()
         saveNow()
@@ -505,6 +543,7 @@ final class AppModel {
         scheduleBackgroundRefresh()
         let work = Task { @MainActor in
             await self.pollAll()
+            await self.anchor()
             await self.turbo()
             self.publish()
             self.saveNow()

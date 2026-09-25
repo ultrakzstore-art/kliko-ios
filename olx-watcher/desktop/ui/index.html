@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>OLX Watcher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="../icon.png" alt=""><span>OLX Watcher</span></div>
+    <nav>
+      <button data-tab="bot" class="active">Бот</button>
+      <button data-tab="settings">Настройки</button>
+      <button data-tab="probe">Проверка площадок</button>
+      <button data-tab="log">Журнал</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Бот: статус, запуск, счётчики -->
+    <section id="tab-bot" class="tab active">
+      <div class="card status-card">
+        <div class="status-line">
+          <span id="dot" class="dot"></span>
+          <div>
+            <div id="status-title" class="status-title">Бот остановлен</div>
+            <div id="status-sub" class="muted"></div>
+          </div>
+          <div class="spacer"></div>
+          <button id="btn-open-tg" class="secondary hidden">Открыть в Telegram</button>
+          <button id="btn-start" class="primary">Запустить</button>
+          <button id="btn-stop" class="danger hidden">Остановить</button>
+        </div>
+        <div id="status-error" class="error hidden"></div>
+      </div>
+
+      <div id="setup" class="card hidden">
+        <h2>Как создать бота — 2 минуты</h2>
+        <ol>
+          <li>В Telegram откройте <a href="#" data-url="https://t.me/BotFather">@BotFather</a> и отправьте <code>/newbot</code>.</li>
+          <li>Имя — любое, например «OLX Новые объявления».</li>
+          <li>Юзернейм — латиницей и обязательно на <code>bot</code>, например <code>olx_new_kz_bot</code>.</li>
+          <li>BotFather пришлёт токен вида <code>1234567890:AAH…</code> — скопируйте его.</li>
+          <li>Вставьте токен ниже и нажмите «Сохранить и запустить».</li>
+          <li>Напишите своему боту <code>/start</code> — первый, кто это сделает, станет владельцем.</li>
+        </ol>
+        <div class="row">
+          <input id="setup-token" type="password" placeholder="Токен от @BotFather" autocomplete="off" spellcheck="false">
+          <button id="btn-setup-save" class="primary">Сохранить и запустить</button>
+        </div>
+        <div id="setup-error" class="error hidden"></div>
+      </div>
+
+      <div class="grid">
+        <div class="card stat"><div class="num" id="st-users">—</div><div class="muted">пользователей</div></div>
+        <div class="card stat"><div class="num" id="st-paid">—</div><div class="muted">платных</div></div>
+        <div class="card stat"><div class="num" id="st-trial">—</div><div class="muted">на тесте</div></div>
+        <div class="card stat"><div class="num" id="st-subs">—</div><div class="muted">поисков</div></div>
+        <div class="card stat"><div class="num" id="st-sent">—</div><div class="muted">отправлено объявлений</div></div>
+        <div class="card stat"><div class="num" id="st-search">—</div><div class="muted">запросов поиска / ошибок</div></div>
+        <div class="card stat"><div class="num" id="st-turbo">—</div><div class="muted">турбо: поймано / проверено</div></div>
+        <div class="card stat"><div class="num" id="st-frontier">—</div><div class="muted">последний номер OLX</div></div>
+      </div>
+      <div id="blocked" class="card warn hidden"></div>
+
+      <div class="card">
+        <h2>Команды владельца в боте</h2>
+        <ul class="plain">
+          <li><code>/users</code> — пользователи и сроки доступа</li>
+          <li><code>/grant ID дней [olx|kolesa|krisha|kaspi|all]</code> — выдать доступ вручную</li>
+          <li><code>/stats</code> — работа сборщика и оплаты</li>
+          <li><code>/turbo</code> — включить/выключить турбо</li>
+        </ul>
+        <p class="muted">Бот работает, пока запущено это приложение. Закрытое окно — бот продолжает работать из значка возле часов. Компьютер выключен или спит — объявления не приходят.</p>
+      </div>
+    </section>
+
+    <!-- Настройки -->
+    <section id="tab-settings" class="tab">
+      <div class="card">
+        <h2>Бот</h2>
+        <label>Токен от @BotFather
+          <div class="row">
+            <input id="token" type="password" placeholder="оставьте пустым, чтобы не менять" autocomplete="off" spellcheck="false">
+            <button id="btn-forget" class="secondary">Удалить токен</button>
+          </div>
+          <span id="token-hint" class="muted"></span>
+        </label>
+        <label>Ваш Telegram ID (владелец)
+          <input data-env="ADMIN_ID" placeholder="пусто — владельцем станет первый, кто напишет /start">
+        </label>
+        <label class="check"><input id="autoStart" type="checkbox"> Запускать бота при открытии приложения</label>
+        <label class="check"><input id="openAtLogin" type="checkbox"> Открывать приложение при входе в Windows (свёрнутым)</label>
+      </div>
+
+      <div class="card">
+        <h2>Доступ</h2>
+        <div class="form-grid">
+          <label>Тестовый доступ, дней<input data-env="TRIAL_DAYS" inputmode="numeric"></label>
+          <label>Поисков на тесте<input data-env="FREE_SUBS" inputmode="numeric"></label>
+          <label>Проверка на тесте, сек<input data-env="FREE_POLL_SEC" inputmode="numeric"></label>
+          <label>Поисков у платных<input data-env="PAID_SUBS" inputmode="numeric"></label>
+          <label>Проверка у платных, сек<input data-env="POLL_SEC" inputmode="numeric"></label>
+          <label>«Новое» — не старше, мин<input data-env="FRESH_MIN" inputmode="numeric"></label>
+          <label>Турбо раз в, сек<input data-env="TURBO_SEC" inputmode="numeric"></label>
+          <label>Турбо номеров за раз<input data-env="TURBO_WINDOW" inputmode="numeric"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Цены за 7 / 14 / 30 дней</h2>
+        <p class="muted">Три числа через запятую. Пусто — тариф этим способом не продаётся.</p>
+        <table class="prices">
+          <thead><tr><th>Тариф</th><th>Telegram Stars ⭐</th><th>Kaspi, ₸</th></tr></thead>
+          <tbody>
+            <tr><td>🟣 OLX</td><td><input data-env="STARS_PRICES_OLX"></td><td><input data-env="KASPI_PRICES_OLX"></td></tr>
+            <tr><td>🚗 Kolesa</td><td><input data-env="STARS_PRICES_KOLESA"></td><td><input data-env="KASPI_PRICES_KOLESA"></td></tr>
+            <tr><td>🏠 Krisha</td><td><input data-env="STARS_PRICES_KRISHA"></td><td><input data-env="KASPI_PRICES_KRISHA"></td></tr>
+            <tr><td>🔴 Kaspi Объявления</td><td><input data-env="STARS_PRICES_KASPI"></td><td><input data-env="KASPI_PRICES_KASPI"></td></tr>
+            <tr><td>🔥 Всё сразу</td><td><input data-env="STARS_PRICES_ALL"></td><td><input data-env="KASPI_PRICES_ALL"></td></tr>
+          </tbody>
+        </table>
+        <label>Реквизиты Kaspi для покупателя
+          <input data-env="KASPI_DETAILS">
+        </label>
+      </div>
+
+      <div class="actions">
+        <span id="save-msg" class="muted"></span>
+        <button id="btn-data" class="secondary">Папка с данными</button>
+        <button id="btn-save" class="primary">Сохранить</button>
+      </div>
+    </section>
+
+    <!-- Проверка площадок -->
+    <section id="tab-probe" class="tab">
+      <div class="card">
+        <h2>Что площадка отдаёт с этого компьютера</h2>
+        <p class="muted">Вставьте ссылку на поиск (OLX, Kolesa, Krisha, Kaspi) или на одно объявление OLX. Проверка покажет, сколько объявлений видно, разберётся ли карточка и работают ли номера для турбо. Телеграм не нужен.</p>
+        <div class="row">
+          <input id="probe-url" placeholder="https://kolesa.kz/cars/almaty/" spellcheck="false">
+          <button id="btn-probe" class="primary">Проверить</button>
+        </div>
+        <div class="chips">
+          <button class="chip" data-probe="https://www.olx.kz/d/elektronika/">OLX · Электроника</button>
+          <button class="chip" data-probe="https://kolesa.kz/cars/">Kolesa · Легковые</button>
+          <button class="chip" data-probe="https://krisha.kz/prodazha/kvartiry/">Krisha · Квартиры</button>
+          <button class="chip" data-probe="https://kaspi.kz/obyavleniya/">Kaspi Объявления</button>
+        </div>
+      </div>
+      <pre id="probe-out" class="console">Результат появится здесь.</pre>
+    </section>
+
+    <!-- Журнал -->
+    <section id="tab-log" class="tab">
+      <pre id="log" class="console tall"></pre>
+    </section>
+  </main>
+
+  <script src="ui.js"></script>
+</body>
+</html>

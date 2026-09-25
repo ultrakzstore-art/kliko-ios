@@ -1,16 +1,44 @@
 {
   "name": "olx-watcher",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Личный телеграм-бот: новые объявления OLX.kz по вашим поискам — через секунды после подачи",
   "private": true,
-  "main": "src/index.js",
-  "engines": { "node": ">=22.13" },
+  "main": "desktop/main.js",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node --no-warnings --env-file-if-exists=.env src/index.js",
     "probe": "node --no-warnings --env-file-if-exists=.env src/probe.js",
-    "test": "node --no-warnings --test"
+    "test": "node --no-warnings --test",
+    "desktop": "electron .",
+    "check": "node test/syntax.js",
+    "dist": "electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "grammy": "^1.46.0"
+  },
+  "productName": "OLX Watcher",
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "kz.olxwatcher.desktop",
+    "productName": "OLX Watcher",
+    "files": [
+      "src/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "OLX-Watcher-Setup-${version}.${ext}"
+    }
   }
 }

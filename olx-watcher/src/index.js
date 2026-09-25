@@ -25,8 +25,50 @@ bot.api.setMyCommands([
   { command: 'help', description: 'Справка' },
 ]).catch(() => {});
 
+// Запущен из приложения для ПК — отчитываемся ему: имя бота, счётчики, фатальные ошибки.
+const parent = process.parentPort || null;
+function report(msg) {
+  if (parent) parent.postMessage(msg);
+}
+
 watcher.start();
-bot.start({ onStart: (me) => log(`бот @${me.username} запущен; поиск раз в ${config.pollSec} сек, турбо раз в ${config.turboSec} сек`) });
+bot.start({
+  onStart: (me) => {
+    log(`бот @${me.username} запущен; поиск раз в ${config.pollSec} сек, турбо раз в ${config.turboSec} сек`);
+    report({ type: 'ready', username: me.username });
+  },
+}).catch((e) => {
+  const code = e?.error_code;
+  const text = code === 401 ? 'Telegram не принял токен — проверьте BOT_TOKEN (скопируйте заново у @BotFather)'
+    : code === 409 ? 'Этот бот уже запущен в другом месте (второе окно, start.bat или сервер) — остановите его'
+      : `Telegram: ${e.message}`;
+  log(text);
+  report({ type: 'fatal', text });
+  watcher.stop();
+  setTimeout(() => process.exit(2), 200);
+});
+
+if (parent) {
+  const snapshot = () => {
+    const now = Date.now();
+    const users = db.users();
+    report({
+      type: 'stats',
+      users: users.length,
+      paid: users.filter((u) => db.isPaid(u, 'any', now)).length,
+      trial: users.filter((u) => db.isTrial(u, now)).length,
+      subs: db.subs().length,
+      frontier: watcher.frontier,
+      blockedUntil: watcher.backoffUntil > now ? watcher.backoffUntil : 0,
+      ...watcher.stats,
+    });
+  };
+  setInterval(snapshot, 5000);
+  setTimeout(snapshot, 1500);
+  parent.on('message', (e) => {
+    if (e.data?.type === 'stop') { watcher.stop(); bot.stop().finally(() => process.exit(0)); }
+  });
+}
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.once(sig, () => { watcher.stop(); bot.stop(); });

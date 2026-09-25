@@ -28,70 +28,125 @@ struct FeedView: View {
     @State private var scope = Scope.matched
     @State private var subFilter: Int?          // nil — все запросы
 
+    // Что сейчас на экране. Пока вы листаете ниже верха, новые объявления не вставляются
+    // сверху (из-за этого лента дёргалась), а копятся под кнопкой «↑ N новых».
+    @State private var feedAds: [Ad] = []
+    @State private var feedAll: [Ad] = []
+    @State private var pendingAds = 0
+    @State private var pendingAll = 0
+    @State private var atTop = true
+
     private var shown: [Ad] {
         switch scope {
-        case .all: return model.allAds
+        case .all: return feedAll
         case .matched:
-            guard let id = subFilter else { return model.ads }
-            return model.ads.filter { $0.subIds.contains(id) }
+            guard let id = subFilter else { return feedAds }
+            return feedAds.filter { $0.subIds.contains(id) }
         }
     }
 
+    private var pending: Int { scope == .all ? pendingAll : pendingAds }
+
     var body: some View {
-        List {
-            Section {
-                Picker("Лента", selection: $scope) {
-                    ForEach(Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                if scope == .matched && model.subs.count > 1 {
-                    Picker("Запрос", selection: $subFilter) {
-                        Text("Все запросы").tag(Int?.none)
-                        ForEach(model.subs) { sub in Text(verbatim: sub.name).tag(Optional(sub.id)) }
+        ScrollViewReader { proxy in
+            List {
+                Section {
+                    Picker("Лента", selection: $scope) {
+                        ForEach(Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                }
-            }
-            .listRowSeparator(.hidden)
-
-            if let error = model.error { ErrorRow(text: error) }
-
-            if shown.isEmpty {
-                ContentUnavailableView {
-                    Label(emptyTitle, systemImage: scope == .all ? "bolt" : "tray")
-                } description: {
-                    Text(emptyText)
-                }
-                .listRowSeparator(.hidden)
-            } else if scope == .all {
-                // Несортированные: всё новое подряд — название и ссылка.
-                ForEach(model.allAds) { ad in
-                    LinkRow(ad: ad).contextMenu { AdMenu(ad: ad) }
-                }
-            } else if subFilter != nil {
-                ForEach(shown) { ad in adButton(ad) }
-            } else {
-                // Отсортированные: у каждого запроса — свой раздел.
-                ForEach(model.subs) { sub in
-                    let items = model.ads.filter { $0.subIds.contains(sub.id) }
-                    if !items.isEmpty {
-                        Section {
-                            ForEach(items) { ad in adButton(ad) }
-                        } header: {
-                            Text(verbatim: "\(sub.name) · \(items.count)")
+                    .pickerStyle(.segmented)
+                    .onAppear { atTop = true }
+                    .onDisappear { atTop = false }
+                    if scope == .matched && model.subs.count > 1 {
+                        Picker("Запрос", selection: $subFilter) {
+                            Text("Все запросы").tag(Int?.none)
+                            ForEach(model.subs) { sub in Text(verbatim: sub.name).tag(Optional(sub.id)) }
                         }
                     }
                 }
-                let orphans = model.ads.filter { ad in !model.subs.contains { ad.subIds.contains($0.id) } }
-                if !orphans.isEmpty {
-                    Section("Удалённые запросы") {
-                        ForEach(orphans) { ad in adButton(ad) }
+                .listRowSeparator(.hidden)
+                .id("top")
+
+                if let error = model.error { ErrorRow(text: error) }
+
+                if shown.isEmpty {
+                    ContentUnavailableView {
+                        Label(emptyTitle, systemImage: scope == .all ? "bolt" : "tray")
+                    } description: {
+                        Text(emptyText)
+                    }
+                    .listRowSeparator(.hidden)
+                } else if scope == .all {
+                    // Несортированные: всё новое подряд — название и ссылка.
+                    ForEach(feedAll) { ad in
+                        LinkRow(ad: ad).contextMenu { AdMenu(ad: ad) }
+                    }
+                } else if subFilter != nil {
+                    ForEach(shown) { ad in adButton(ad) }
+                } else {
+                    // Отсортированные: у каждого запроса — свой раздел.
+                    ForEach(model.subs) { sub in
+                        let items = feedAds.filter { $0.subIds.contains(sub.id) }
+                        if !items.isEmpty {
+                            Section {
+                                ForEach(items) { ad in adButton(ad) }
+                            } header: {
+                                Text(verbatim: "\(sub.name) · \(items.count)")
+                            }
+                        }
+                    }
+                    let orphans = feedAds.filter { ad in !model.subs.contains { ad.subIds.contains($0.id) } }
+                    if !orphans.isEmpty {
+                        Section("Удалённые запросы") {
+                            ForEach(orphans) { ad in adButton(ad) }
+                        }
                     }
                 }
             }
+            .listStyle(.plain)
+            .overlay(alignment: .top) {
+                if pending > 0 {
+                    Button {
+                        sync(force: true)
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("top", anchor: .top) }
+                    } label: {
+                        Label("\(pending) новых", systemImage: "arrow.up")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Color.watchAccent, in: Capsule())
+                            .foregroundStyle(.white)
+                            .shadow(radius: 4, y: 2)
+                    }
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: pending)
         }
-        .listStyle(.plain)
         .navigationTitle("Новые на OLX")
-        .refreshable { await model.pollAll() }
+        .refreshable { await model.pollAll(); sync(force: true) }
+        .onAppear { sync(force: true) }
+        .onChange(of: model.ads) { _, _ in sync() }
+        .onChange(of: model.allAds) { _, _ in sync() }
+        .onChange(of: atTop) { _, top in if top { sync() } }
+    }
+
+    /// Наверху — показываем всё как есть. Ниже — только обновляем то, что уже на экране
+    /// (фото, описание), а новое считаем и ждём, пока вы вернётесь наверх или нажмёте кнопку.
+    private func sync(force: Bool = false) {
+        let a = merged(model.ads, into: feedAds, force: force)
+        feedAds = a.list
+        pendingAds = a.pending
+        let b = merged(model.allAds, into: feedAll, force: force)
+        feedAll = b.list
+        pendingAll = b.pending
+    }
+
+    private func merged(_ new: [Ad], into current: [Ad], force: Bool) -> (list: [Ad], pending: Int) {
+        if force || atTop || current.isEmpty { return (new, 0) }
+        let onScreen = Set(current.map(\.id))
+        let fresh = new.reduce(0) { $0 + (onScreen.contains($1.id) ? 0 : 1) }
+        return (new.filter { onScreen.contains($0.id) }, fresh)
     }
 
     private func adButton(_ ad: Ad) -> some View {
@@ -149,8 +204,8 @@ struct AdRow: View {
     }
 }
 
-/// Кнопки действий. Номер есть — «Позвонить» звонит сразу. Номера нет — главная кнопка
-/// ведёт ко всем объявлениям автора (если автор известен), иначе — на само объявление.
+/// Кнопки действий, главное — номер. Есть в тексте — «Позвонить» звонит сразу. Нет — «Номер —
+/// на OLX» открывает объявление, где его показывают. Рядом — все объявления автора.
 struct ActionButtons: View {
     let ad: Ad
     var compact = false
@@ -171,21 +226,22 @@ struct ActionButtons: View {
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Все объявления автора")
                 }
-            } else if let seller = ad.sellerURL {
-                Button { openURL(seller) } label: {
-                    Label("Все объявления автора", systemImage: "person.crop.circle")
+            } else if let url = ad.link {
+                // Номера в тексте нет — главное всё равно номер: открываем объявление,
+                // там «Показать телефон» (в приложении OLX или в Safari, где вы вошли).
+                Button { openURL(url) } label: {
+                    Label("Номер — на OLX", systemImage: "phone.arrow.up.right")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.watchAccent)
-            } else if let url = ad.link {
-                Button { openURL(url) } label: {
-                    Label("Открыть на OLX", systemImage: "arrow.up.right.square")
-                        .frame(maxWidth: .infinity)
+                .tint(.green)
+                if let seller = ad.sellerURL {
+                    Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Все объявления автора")
                 }
-                .buttonStyle(.bordered)
             }
-            if (!phones.isEmpty || ad.sellerURL != nil), let url = ad.link {
+            if !phones.isEmpty, let url = ad.link {
                 Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
                     .buttonStyle(.bordered)
                     .accessibilityLabel("Открыть на OLX")
