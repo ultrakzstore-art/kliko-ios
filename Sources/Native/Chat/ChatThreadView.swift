@@ -164,6 +164,8 @@ struct ChatThreadView: View {
     @FocusState private var полеВФокусе: Bool
     /// Поле только что получило фокус, клавиатура ещё выезжает: пропавшая отметка низа — её работа, кнопку не показываем.
     @State private var клавиатураЕдет = false
+    /// «Назад» своей шапки сайта — системная панель в виде сайта спрятана (шапкаСайта).
+    @Environment(\.dismiss) private var закрыть
 
     init(модель: @autoclosure @escaping () -> ChatThreadModel, заголовок: String, открыть: @escaping (URL) -> Void) {
         _модель = StateObject(wrappedValue: модель())
@@ -173,6 +175,7 @@ struct ChatThreadView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if Config.дизайнКакНаСайте { шапкаСайта }
             if !модель.загружено {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if модель.ошибка == .нуженВход {
@@ -200,17 +203,19 @@ struct ChatThreadView: View {
         .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.systemBackground))
         .navigationTitle(заголовок.isEmpty ? ChatText.т("peer") : заголовок)
         .navigationBarTitleDisplayMode(.inline)
-        /* Этап 30: панель как .kc-head сайта — кружок с буквой и имя, поверхность вместо стекла. */
-        .toolbar {
+        /* Этап 30 ставил .kc-head сайта в системную панель (кружок с буквой и имя в середине, поверхность вместо стекла).
+           Владелец 25.09.2026, проверка на телефоне, сборка 33: у круглой «Назад» слева — большое мягкое пятно тени.
+           Это не наша тень: сборка идёт на iOS 26 SDK, и системная кнопка «Назад» там — круг Liquid Glass со своей
+           широкой тенью; ни .toolbarBackground, ни краска панели её не снимают. Поэтому в виде сайта системную панель
+           прячем, как на странице объявления (этап 28), и рисуем шапку сами — шапкаСайта со своей «Назад» как у сайта.
+           Жест «смахнуть от края — назад» UIKit с панелью выключает — его возвращает СмахнутьНазад. Заголовок
+           навигации остаётся: его читает VoiceOver и «Назад» следующего экрана. Прежний вид — системная панель. */
+        .toolbar(Config.дизайнКакНаСайте ? Visibility.hidden : Visibility.automatic, for: .navigationBar)
+        .background {
             if Config.дизайнКакНаСайте {
-                ToolbarItem(placement: .principal) {
-                    ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
-                }
+                СмахнутьНазад().frame(width: 0, height: 0)
             }
         }
-        .toolbarBackground(Config.дизайнКакНаСайте ? Visibility.visible : Visibility.automatic, for: .navigationBar)
-        .toolbarBackground(Config.дизайнКакНаСайте ? AnyShapeStyle(Theme.поверхность) : AnyShapeStyle(Material.bar),
-                           for: .navigationBar)
         .tint(Config.дизайнКакНаСайте ? Theme.акцент : Theme.green)
         .task {
             await модель.начать()
@@ -222,6 +227,44 @@ struct ChatThreadView: View {
             ПросьбаОценить.shared.делоУшло(карточка: false)
             /* Этап 17: ушли из переписки — черновик на диск сейчас, не дожидаясь паузы после последней буквы. */
             if Config.удобныйЧат { ЧерновикиЧата.shared.сохранитьСейчас() }
+        }
+    }
+
+    /**
+     Шапка переписки как .kc-head сайта: поверхность, линия снизу, отступы 11/12; слева «Назад» — квадрат 36 со
+     скруглением и кромкой цвета линии, без тени (.mk-vfocus-back сайта), место для пальца — 44; дальше кружок с буквой и
+     имя (ШапкаПерепискиСайта). Владелец 25.09.2026, проверка на телефоне, сборка 33: вместо системной стеклянной
+     кнопки с пятном тени.
+     */
+    private var шапкаСайта: some View {
+        HStack(spacing: 6) {
+            Button { закрыть() } label: {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1)
+                    }
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
+            .accessibilityLabel(ListingPageText.т("back"))
+            ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .background(Theme.поверхность)
+        .overlay(alignment: .bottom) {
+            Theme.линия
+                .frame(height: 1)
+                .accessibilityHidden(true)
         }
     }
 

@@ -39,7 +39,7 @@ struct ПолосаПохожих: View {
     /// Заголовок и карточки от края до края экрана: полоса стоит вне отступов карточки объявления.
     private func рамка<Карточки: View>(@ViewBuilder _ карточки: () -> Карточки) -> some View {
         let содержимое = карточки()
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             Text(заголовок ?? SimilarText.т("title"))
                 .font(Config.дизайнКакНаСайте ? Font.system(size: 18, weight: .heavy) : Font.headline)
                 .foregroundStyle(Config.дизайнКакНаСайте ? Theme.текст : Color.primary)
@@ -50,10 +50,14 @@ struct ПолосаПохожих: View {
                     содержимое
                 }
                 .padding(.horizontal, 16)
+                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: прокрутка обрезала тень карточек прямо по их
+                   низу. Место под тень — внутри прокрутки; снаружи отступы меньше на столько же, ряд той же высоты. */
+                .padding(.top, 2)
+                .padding(.bottom, 12)
             }
         }
         .padding(.top, 2)
-        .padding(.bottom, 20)
+        .padding(.bottom, 8)
     }
 }
 
