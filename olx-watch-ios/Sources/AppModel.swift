@@ -143,7 +143,9 @@ final class AppModel {
     // MARK: — поиск
 
     private func poll(_ id: Int) async {
-        guard let url = state.subs.first(where: { $0.id == id })?.url else { return }
+        guard let found = state.subs.first(where: { $0.id == id }) else { return }
+        if found.site != .olx { return await pollSite(found) }
+        let url = found.url
         let frontierBefore = state.frontier
         let ads: [Ad]
         do {
@@ -189,6 +191,54 @@ final class AppModel {
         save()
     }
 
+    /// Kolesa, Krisha, Kaspi: новое — номер больше самого большого, что поиск уже видел.
+    /// Подробности (фото, цена, описание) — из карточки, только для нового.
+    private func pollSite(_ found: Sub) async {
+        let site = found.site
+        let ads: [Ad]
+        do {
+            ads = try await site.search(found.url)
+            ok()
+            state.stats.searchOk += 1
+        } catch {
+            state.stats.searchErr += 1
+            fail(error)
+            updateSub(found.id) { $0.lastPoll = Date(); $0.error = error.localizedDescription }
+            save()
+            return
+        }
+        guard let index = state.subs.firstIndex(where: { $0.id == found.id }) else { return }
+        var sub = state.subs[index]
+        sub.lastPoll = Date()
+        sub.error = ads.isEmpty ? "Поиск ничего не вернул — проверьте ссылку" : ""
+        let top = ads.map(\.id).max() ?? 0
+        // Первый проход — только запоминаем выдачу.
+        if !sub.ready {
+            ads.forEach { remember($0.id) }
+            sub.ready = true
+            sub.watermark = top
+            state.subs[index] = sub
+            save()
+            return
+        }
+        let mark = sub.watermark ?? top
+        sub.watermark = max(mark, top)
+        state.subs[index] = sub
+        for var ad in ads.sorted(by: { $0.id < $1.id }) where ad.id > mark && !seenSet.contains(ad.id) {
+            remember(ad.id)
+            if let full = try? await site.detail(ad) { ad.merge(full) }
+            // Дата подачи есть не у всех карточек; есть и старше часа — это не новое.
+            if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) { continue }
+            ad.source = site.rawValue
+            ad.via = "search"
+            ad.subIds = [sub.id]
+            ad.foundAt = Date()
+            recordAll(ad)
+            add(ad, subs: [sub])
+        }
+        save()
+    }
+
     /// Новое — это подано меньше часа назад. Старое, которое подняли или продвинули, всплывает
     /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
     /// старья он сильно меньше самых свежих номеров.
@@ -223,7 +273,7 @@ final class AppModel {
         if top > state.frontier + Self.turboWindow * 3 {
             state.frontier = top - Self.turboWindow   // прыжок; последние номера турбо ещё проверит
         }
-        let ready = state.subs.filter { !$0.paused && $0.ready }
+        let ready = state.subs.filter { !$0.paused && $0.ready && $0.site == .olx }
         for var ad in ads.sorted(by: { $0.id < $1.id }) where !seenSet.contains(ad.id) && !ad.promoted {
             if isStale(ad, frontier: 0) { continue }
             remember(ad.id)
@@ -238,7 +288,7 @@ final class AppModel {
     }
 
     private func turbo() async {
-        let ready = state.subs.filter { !$0.paused && $0.ready }
+        let ready = state.subs.filter { !$0.paused && $0.ready && $0.site == .olx }
         guard state.frontier > 0 else { return }
         var ids: [Int] = []
         var n = state.frontier + 1
@@ -394,17 +444,22 @@ final class AppModel {
 
     func addSub(url: String, name: String, categoryLabel: String? = nil) async -> Bool {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if OLX.adId(fromURL: trimmed) != nil {
+        guard let site = Site.of(url: trimmed) else {
+            error = "Нужна ссылка на поиск с olx.kz, kolesa.kz, krisha.kz или Kaspi Объявлений."
+            return false
+        }
+        if site.isAdURL(trimmed) {
             error = "Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком."
             return false
         }
-        do { _ = try OLX.newestFirst(trimmed) } catch {
+        do { _ = try site.newestFirst(trimmed) } catch {
             self.error = error.localizedDescription
             return false
         }
         let title = name.trimmingCharacters(in: .whitespaces)
         var sub = Sub(id: state.nextSubId, name: String((title.isEmpty ? Self.nameFromURL(trimmed) : title).prefix(60)), url: trimmed)
         sub.categoryLabel = categoryLabel
+        sub.source = site == .olx ? nil : site.rawValue
         state.nextSubId += 1
         state.subs.append(sub)
         error = nil

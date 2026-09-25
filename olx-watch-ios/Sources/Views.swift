@@ -123,7 +123,7 @@ struct FeedView: View {
             }
             .animation(.easeOut(duration: 0.2), value: pending)
         }
-        .navigationTitle("Новые на OLX")
+        .navigationTitle("Новые объявления")
         .refreshable { await model.pollAll(); sync(force: true) }
         .onAppear { sync(force: true) }
         .onChange(of: model.ads) { _, _ in sync() }
@@ -230,7 +230,7 @@ struct ActionButtons: View {
                 // Номера в тексте нет — главное всё равно номер: открываем объявление,
                 // там «Показать телефон» (в приложении OLX или в Safari, где вы вошли).
                 Button { openURL(url) } label: {
-                    Label("Номер — на OLX", systemImage: "phone.arrow.up.right")
+                    Label("Номер — на \(ad.site == .kaspi ? "Kaspi" : ad.site.title)", systemImage: "phone.arrow.up.right")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -244,7 +244,7 @@ struct ActionButtons: View {
             if !phones.isEmpty, let url = ad.link {
                 Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Открыть на OLX")
+                    .accessibilityLabel("Открыть на \(ad.site.title)")
             }
         }
         .font(.subheadline.weight(.semibold))
@@ -493,6 +493,7 @@ struct Badges: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            if ad.site != .olx { Badge(text: "\(ad.site.emoji) \(ad.site.title)", color: .blue) }
             if ad.early { Badge(text: "⚡ раньше поиска", color: .orange) }
             if ad.onReview { Badge(text: "на проверке", color: .yellow) }
             if ad.business { Badge(text: "магазин", color: .indigo) }
@@ -519,7 +520,7 @@ struct AdMenu: View {
 
     var body: some View {
         if let url = ad.link {
-            Button { openURL(url) } label: { Label("Открыть на OLX", systemImage: "safari") }
+            Button { openURL(url) } label: { Label("Открыть на \(ad.site.title)", systemImage: "safari") }
             ShareLink(item: url) { Label("Поделиться", systemImage: "square.and.arrow.up") }
             Button { UIPasteboard.general.url = url } label: { Label("Скопировать ссылку", systemImage: "doc.on.doc") }
         }
@@ -554,13 +555,13 @@ struct SubsView: View {
     var body: some View {
         List {
             if model.subs.isEmpty {
-                Text("Нажмите «+»: выберите рубрику, город и цену — или вставьте ссылку на поиск с olx.kz.")
+                Text("Нажмите «+»: выберите площадку (OLX, Kolesa, Krisha, Kaspi), рубрику, город и цену — или вставьте ссылку на поиск с сайта.")
                     .foregroundStyle(.secondary)
             }
             ForEach(model.subs) { sub in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(verbatim: sub.name).font(.headline)
+                        Text(verbatim: "\(sub.site.emoji) \(sub.name)").font(.headline)
                         Spacer()
                         if sub.paused { Image(systemName: "pause.circle.fill").foregroundStyle(.secondary) }
                     }
@@ -593,6 +594,7 @@ struct AddSubSheet: View {
 
     enum Mode: String, CaseIterable { case pick = "Выбрать", link = "Ссылка" }
     @State private var mode = Mode.pick
+    @State private var site = Site.olx
     @State private var url = ""
     @State private var name = ""
     @State private var saving = false
@@ -608,7 +610,7 @@ struct AddSubSheet: View {
     @State private var priceTo = ""
 
     private var builtURL: String {
-        OLX.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: words,
+        site.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: site == .olx ? words : "",
                            priceFrom: Int(priceFrom.filter(\.isNumber)), priceTo: Int(priceTo.filter(\.isNumber)))
     }
 
@@ -616,14 +618,20 @@ struct AddSubSheet: View {
         if saving { return false }
         switch mode {
         case .link: return !url.isEmpty
-        case .pick: return top != nil || !words.trimmingCharacters(in: .whitespaces).isEmpty
+        case .pick:
+            switch site {
+            case .olx: return top != nil || !words.trimmingCharacters(in: .whitespaces).isEmpty
+            case .kolesa, .krisha: return top != nil
+            case .kaspi: return false
+            }
         }
     }
 
     private var autoName: String {
         guard mode == .pick else { return "" }
-        var parts = [words.isEmpty ? (sub?.name ?? top?.name ?? "Поиск") : words]
-        if let city = OLX.cities.first(where: { $0.slug == citySlug }) { parts.append(city.name) }
+        var parts = [site == .olx && !words.isEmpty ? words : (sub?.name ?? top?.name ?? "Поиск")]
+        if site != .olx { parts.insert(site.title, at: 0) }
+        if let city = site.cities.first(where: { $0.slug == citySlug }) { parts.append(city.name) }
         if !priceTo.isEmpty { parts.append("до \(priceTo)") }
         return parts.joined(separator: " · ")
     }
@@ -661,10 +669,18 @@ struct AddSubSheet: View {
                     .disabled(!canSave)
                 }
             }
+            .onChange(of: site) { _, newSite in
+                top = nil
+                sub = nil
+                citySlug = ""
+                words = ""
+                if newSite == .kaspi { mode = .link }
+            }
             .onChange(of: top) { _, newTop in
                 sub = nil
                 subcategories = []
-                guard let newTop else { return }
+                subsNote = ""
+                guard let newTop, site == .olx else { return }
                 loadingSubs = true
                 Task {
                     let result = await OLX.subcategories(of: newTop.path)
@@ -677,12 +693,29 @@ struct AddSubSheet: View {
     }
 
     @ViewBuilder private var pickForm: some View {
+        Section {
+            Picker("Площадка", selection: $site) {
+                ForEach(Site.allCases) { s in Text(verbatim: "\(s.emoji) \(s.title)").tag(s) }
+            }
+        }
+        if site == .kaspi {
+            Section {
+                Text("У Kaspi Объявлений выбора кнопками нет: откройте поиск на kaspi.kz, скопируйте ссылку и вставьте во вкладке «Ссылка».")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Перейти к ссылке") { mode = .link }
+            }
+        } else {
+            sitePickForm
+        }
+    }
+
+    @ViewBuilder private var sitePickForm: some View {
         Section("Рубрика") {
             Picker("Рубрика", selection: $top) {
-                Text("Все рубрики").tag(OLX.Category?.none)
-                ForEach(OLX.topCategories) { c in Text(verbatim: c.name).tag(Optional(c)) }
+                Text(site == .olx ? "Все рубрики" : "Выберите").tag(OLX.Category?.none)
+                ForEach(site.categories) { c in Text(verbatim: c.name).tag(Optional(c)) }
             }
-            if top != nil {
+            if top != nil && site == .olx {
                 if loadingSubs {
                     HStack { Text("Подрубрики"); Spacer(); ProgressView() }
                 } else if !subcategories.isEmpty {
@@ -701,13 +734,15 @@ struct AddSubSheet: View {
         Section("Город") {
             Picker("Город", selection: $citySlug) {
                 Text("Весь Казахстан").tag("")
-                ForEach(OLX.cities, id: \.slug) { c in Text(verbatim: c.name).tag(c.slug) }
+                ForEach(site.cities, id: \.slug) { c in Text(verbatim: c.name).tag(c.slug) }
             }
         }
         Section {
-            TextField(text: $words, prompt: Text(verbatim: "необязательно: iphone 13, hp 250")) { Text(verbatim: "Слова") }
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            if site == .olx {
+                TextField(text: $words, prompt: Text(verbatim: "необязательно: iphone 13, hp 250")) { Text(verbatim: "Слова") }
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
             HStack {
                 TextField(text: $priceFrom, prompt: Text(verbatim: "Цена от")) { Text(verbatim: "От") }
                     .keyboardType(.numberPad)
@@ -715,23 +750,25 @@ struct AddSubSheet: View {
                     .keyboardType(.numberPad)
             }
         } header: {
-            Text("Слова и цена — необязательно")
+            Text(verbatim: site == .olx ? "Слова и цена — необязательно" : "Цена — необязательно")
         } footer: {
-            Text("Можно выбрать только рубрику — без слов придут все новые объявления в ней. Слова нужны, только если рубрика «Все». Первый проход запоминает, что уже есть, — дальше приходят только новые.")
+            Text(verbatim: site == .olx
+                 ? "Можно выбрать только рубрику — без слов придут все новые объявления в ней. Слова нужны, только если рубрика «Все». Первый проход запоминает, что уже есть, — дальше приходят только новые."
+                 : "Марку, модель, комнаты и прочие фильтры \(site.title) задайте на сайте и вставьте ссылку во вкладке «Ссылка». Первый проход запоминает, что уже есть, — дальше приходят только новые.")
         }
     }
 
     @ViewBuilder private var linkForm: some View {
         Section {
-            TextField(text: $url, prompt: Text(verbatim: "https://www.olx.kz/d/…"), axis: .vertical) { Text(verbatim: "Ссылка") }
+            TextField(text: $url, prompt: Text(verbatim: "https://kolesa.kz/cars/… или olx.kz, krisha.kz, kaspi.kz"), axis: .vertical) { Text(verbatim: "Ссылка") }
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             Button("Вставить из буфера") { url = UIPasteboard.general.string ?? url }
         } header: {
-            Text("Ссылка на поиск OLX")
+            Text("Ссылка на поиск: OLX, Kolesa, Krisha, Kaspi")
         } footer: {
-            Text("На olx.kz настройте поиск и скопируйте ссылку из адресной строки.")
+            Text("На сайте настройте поиск (марка, модель, комнаты, цена — что угодно) и скопируйте ссылку из адресной строки. Турбо «раньше поиска» — пока только у OLX; Kolesa, Krisha и Kaspi проверяются поиском.")
         }
     }
 }

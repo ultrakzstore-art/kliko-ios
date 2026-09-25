@@ -1,0 +1,270 @@
+import Foundation
+
+/// Площадки кроме OLX: Kolesa.kz, Krisha.kz (один движок Kolesa Group) и Kaspi Объявления.
+/// Как в боте: поиск «сначала новые», номера объявлений из ссылок выдачи, подробности — из
+/// карточки (метки og и JSON-LD, которые сайты кладут для поисковиков). Новизна — по номеру:
+/// новое для поиска — номер больше самого большого, что поиск уже видел. Турбо — только OLX.
+/// Устройство этих сайтов изнутри не проверено — разбор написан по общим правилам.
+enum Site: String, CaseIterable, Identifiable, Codable {
+    case olx, kolesa, krisha, kaspi
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .olx: return "OLX"
+        case .kolesa: return "Kolesa"
+        case .krisha: return "Krisha"
+        case .kaspi: return "Kaspi Объявления"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .olx: return "🟣"
+        case .kolesa: return "🚗"
+        case .krisha: return "🏠"
+        case .kaspi: return "🔴"
+        }
+    }
+
+    var host: String { "\(rawValue).kz" }
+    var base: String { "https://\(host)" }
+
+    /// Сдвиг номера в ленте: номера разных площадок могут совпасть, а лента общая.
+    var idOffset: Int {
+        switch self {
+        case .olx: return 0
+        case .kolesa: return 10_000_000_000
+        case .krisha: return 20_000_000_000
+        case .kaspi: return 30_000_000_000
+        }
+    }
+
+    static func of(url: String) -> Site? {
+        guard let host = URLComponents(string: url.trimmingCharacters(in: .whitespacesAndNewlines))?.host?.lowercased() else { return nil }
+        return allCases.first { host == $0.host || host.hasSuffix(".\($0.host)") }
+    }
+
+    static func of(adId: Int) -> Site {
+        allCases.last { adId >= $0.idOffset } ?? .olx
+    }
+
+    /// Выбор кнопками. У Kaspi его нет — только ссылкой с сайта.
+    var categories: [OLX.Category] {
+        switch self {
+        case .olx: return OLX.topCategories
+        case .kolesa:
+            let list: [(String, String)] = [("Легковые авто", "cars"), ("Мото", "moto"), ("Спецтехника", "spectehnika"), ("Запчасти", "zapchasti")]
+            return list.map { OLX.Category(name: $0.0, path: $0.1) }
+        case .krisha:
+            let list: [(String, String)] = [("Продажа квартир", "prodazha/kvartiry"), ("Аренда квартир", "arenda/kvartiry"),
+                                            ("Продажа домов", "prodazha/doma"), ("Аренда домов", "arenda/doma"), ("Участки", "prodazha/uchastkov")]
+            return list.map { OLX.Category(name: $0.0, path: $0.1) }
+        case .kaspi: return []
+        }
+    }
+
+    private static let kolesaCityList: [(String, String)] = [
+        ("Алматы", "almaty"), ("Астана", "astana"), ("Шымкент", "shymkent"), ("Караганда", "karaganda"),
+        ("Актобе", "aktobe"), ("Тараз", "taraz"), ("Павлодар", "pavlodar"), ("Усть-Каменогорск", "ust-kamenogorsk"),
+        ("Семей", "semey"), ("Костанай", "kostanay"), ("Атырау", "atyrau"), ("Актау", "aktau"),
+    ]
+    static let kolesaCities: [OLX.City] = kolesaCityList.map { OLX.City(name: $0.0, slug: $0.1) }
+
+    var cities: [OLX.City] { self == .olx ? OLX.cities : Site.kolesaCities }
+
+    func buildSearchURL(path: String?, city: String?, words: String, priceFrom: Int?, priceTo: Int?) -> String {
+        if self == .olx { return OLX.buildSearchURL(path: path, city: city, words: words, priceFrom: priceFrom, priceTo: priceTo) }
+        var url = "\(base)/\(path ?? categories.first?.path ?? "")/"
+        if let city, !city.isEmpty { url += "\(city)/" }
+        let keys = self == .kolesa ? ("price[from]", "price[to]") : ("das[price][from]", "das[price][to]")
+        var items: [URLQueryItem] = []
+        if let priceFrom { items.append(URLQueryItem(name: keys.0, value: String(priceFrom))) }
+        if let priceTo { items.append(URLQueryItem(name: keys.1, value: String(priceTo))) }
+        guard !items.isEmpty, var c = URLComponents(string: url) else { return url }
+        c.queryItems = items
+        return c.url?.absoluteString ?? url
+    }
+
+    /// Ссылка поиска «сначала новые».
+    func newestFirst(_ raw: String) throws -> URL {
+        if self == .olx { return try OLX.newestFirst(raw) }
+        guard var c = URLComponents(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)), Site.of(url: raw) == self else {
+            throw OLX.Failure.badURL
+        }
+        c.fragment = nil
+        c.scheme = "https"
+        if self != .kaspi {
+            var items = (c.queryItems ?? []).filter { $0.name != "sort_by" }
+            items.append(URLQueryItem(name: "sort_by", value: "add_date-desc"))
+            c.queryItems = items
+        }
+        guard let url = c.url else { throw OLX.Failure.badURL }
+        return url
+    }
+
+    func isAdURL(_ url: String) -> Bool {
+        switch self {
+        case .olx: return OLX.adId(fromURL: url) != nil
+        case .kolesa, .krisha: return url.range(of: #"/a/show/\d+"#, options: .regularExpression) != nil
+        case .kaspi: return false
+        }
+    }
+
+    // MARK: — сеть
+
+    private static let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 20
+        c.httpAdditionalHeaders = ["Accept-Language": "ru-RU,ru;q=0.9,kk;q=0.8", "Accept": "text/html"]
+        return URLSession(configuration: c)
+    }()
+
+    private static func html(_ url: URL) async throws -> String? {
+        let (data, resp) = try await session.data(from: url)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code == 404 || code == 410 { return nil }
+        if code == 403 || code == 429 { throw OLX.Failure.blocked(code) }
+        guard (200..<300).contains(code) else { throw OLX.Failure.http(code) }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Выдача: номера (со сдвигом площадки) и ссылки. Подробности — отдельно, только для нового.
+    func search(_ raw: String) async throws -> [Ad] {
+        if self == .olx { return try await OLX.search(raw) }
+        guard let page = try await Site.html(try newestFirst(raw)) else { throw OLX.Failure.http(404) }
+        var out: [Ad] = []
+        var seen = Set<Int>()
+        func add(_ native: Int, _ url: String) {
+            guard native > 0, seen.insert(native).inserted else { return }
+            var ad = Ad(id: idOffset + native)
+            ad.url = url
+            ad.source = rawValue
+            out.append(ad)
+        }
+        switch self {
+        case .kolesa, .krisha:
+            for m in Site.matches(#"/a/show/(\d{5,})"#, in: page) {
+                if let n = Int(m) { add(n, "\(base)/a/show/\(n)") }
+            }
+        case .kaspi:
+            for href in Site.matches(#"href=["']([^"']*(?:obyavleni|/ads?/|advert|classified)[^"']*)["']"#, in: page) {
+                let nums = Site.matches(#"(\d{6,})"#, in: href)
+                guard let last = nums.last, let n = Int(last) else { continue }
+                let full = URL(string: Site.decode(href), relativeTo: URL(string: base))?.absoluteString ?? href
+                add(n, full)
+            }
+        case .olx: break
+        }
+        return out
+    }
+
+    /// Карточка: заголовок, цена, город, фото, описание, дата — из меток og и JSON-LD.
+    func detail(_ ad: Ad) async throws -> Ad? {
+        if self == .olx { return try await OLX.offer(ad.id) }
+        guard let url = URL(string: ad.url), let page = try await Site.html(url) else { return nil }
+        return Site.parseDetail(page, id: ad.id, url: ad.url, source: self)
+    }
+
+    static func parseDetail(_ html: String, id: Int, url: String, source: Site) -> Ad {
+        var ad = Ad(id: id)
+        ad.url = url
+        ad.source = source.rawValue
+        let typeRe = "Product|Offer|Car|Vehicle|Apartment|House|Residence|Accommodation"
+        let product: [String: Any]? = jsonLD(html).first { (x: [String: Any]) -> Bool in
+            if x["offers"] != nil { return true }
+            let type = x["@type"].map { String(describing: $0) } ?? ""
+            return type.range(of: typeRe, options: .regularExpression) != nil
+        }
+        let offers = product?["offers"]
+        let offer: [String: Any]? = (offers as? [[String: Any]])?.first ?? (offers as? [String: Any])
+        ad.title = decode((product?["name"] as? String) ?? meta("og:title", in: html).first ?? matches(#"<title>([^<]*)</title>"#, in: html).first ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        ad.description = String(decode((product?["description"] as? String) ?? meta("og:description", in: html).first ?? meta("description", in: html).first ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).prefix(2000))
+        var images: [String] = []
+        if let img = product?["image"] {
+            for i in (img as? [Any]) ?? [img] {
+                if let s = i as? String { images.append(s) } else if let s = (i as? [String: Any])?["url"] as? String { images.append(s) }
+            }
+        }
+        images += meta("og:image", in: html)
+        var unique: [String] = []
+        for i in images where !unique.contains(i) { unique.append(i) }
+        ad.photo = unique.first ?? ""
+        ad.photos = unique.isEmpty ? nil : Array(unique.prefix(12))
+        var price = number(offer?["price"]) ?? number(offer?["lowPrice"])
+        if price == nil,
+           let raw = matches(#"(\d[\d\s ]{3,})\s*(?:₸|〒|тг|тенге|KZT)"#, in: "\(ad.title) \(ad.description)").first {
+            price = Double(raw.filter(\.isNumber))
+        }
+        if let price, price > 0 {
+            ad.price = price
+            ad.priceLabel = "\(Int(price).formatted(.number.locale(Locale(identifier: "ru_RU")))) ₸"
+        }
+        let address = (product?["address"] as? [String: Any]) ?? ((offer?["availableAtOrFrom"] as? [String: Any])?["address"] as? [String: Any])
+        ad.city = decode(address?["addressLocality"] as? String ?? "")
+        if ad.city.isEmpty, let city = matches(#" в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$"#, in: ad.title).first { ad.city = city }
+        for key in ["datePosted", "datePublished"] {
+            if let s = product?[key] as? String, let d = parseDate(s) { ad.createdAt = d; break }
+        }
+        return ad
+    }
+
+    // MARK: — разбор
+
+    private static func meta(_ prop: String, in html: String) -> [String] {
+        let p = NSRegularExpression.escapedPattern(for: prop)
+        let pattern = #"<meta[^>]+(?:property|name)=["']"# + p + #"["'][^>]*content=["']([^"']*)["']|<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']"# + p + #"["']"#
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let ns = html as NSString
+        return re.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap { m -> String? in
+            for i in 1...2 where m.range(at: i).location != NSNotFound { return decode(ns.substring(with: m.range(at: i))) }
+            return nil
+        }
+    }
+
+    private static func jsonLD(_ html: String) -> [[String: Any]] {
+        var out: [[String: Any]] = []
+        for body in matches(#"<script[^>]+type=["']application/ld\+json["'][^>]*>([\s\S]*?)</script>"#, in: html) {
+            guard let v = try? JSONSerialization.jsonObject(with: Data(body.utf8)) else { continue }
+            for x in (v as? [Any]) ?? [v] {
+                guard let d = x as? [String: Any] else { continue }
+                if let graph = d["@graph"] as? [[String: Any]] { out += graph } else { out.append(d) }
+            }
+        }
+        return out
+    }
+
+    static func matches(_ pattern: String, in text: String) -> [String] {
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let ns = text as NSString
+        return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            m.numberOfRanges > 1 && m.range(at: 1).location != NSNotFound ? ns.substring(with: m.range(at: 1)) : nil
+        }
+    }
+
+    private static func number(_ v: Any?) -> Double? {
+        if let d = v as? Double { return d }
+        if let i = v as? Int { return Double(i) }
+        if let s = v as? String { return Double(s.replacingOccurrences(of: " ", with: "")) }
+        return nil
+    }
+
+    private static func parseDate(_ s: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        return nil   // только дата без времени — не годится для «новое за минуту»
+    }
+
+    static func decode(_ s: String) -> String {
+        var out = s
+        for (a, b) in [("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "), ("&amp;", "&")] {
+            out = out.replacingOccurrences(of: a, with: b)
+        }
+        return out
+    }
+}

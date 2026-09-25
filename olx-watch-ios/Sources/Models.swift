@@ -26,6 +26,8 @@ struct Ad: Codable, Identifiable, Hashable {
     var photos: [String]?
     /// Рубрика словами (из карточки OLX). Необязательное — в старых state.json нет.
     var category: String?
+    /// Площадка: nil — OLX (так в старых state.json), иначе kolesa / krisha / kaspi.
+    var source: String?
 
     /// Пойман «турбо» — по номеру, раньше, чем объявление попало в поиск OLX.
     var early: Bool { via == "turbo" }
@@ -59,13 +61,16 @@ struct Ad: Codable, Identifiable, Hashable {
 
     /// Ссылка с номером после # — сайт эту часть игнорирует, а номер под рукой.
     var link: URL? {
+        if site != .olx { return URL(string: url) }
         let base = url.hasPrefix("http") ? String(url.split(separator: "#").first ?? "") : "\(OLX.base)/d/obyavlenie/-ID\(OLX.encode(id)).html"
         return URL(string: "\(base)#\(id)")
     }
 
+    var site: Site { source.flatMap(Site.init(rawValue:)) ?? .olx }
+
     var sellerURL: URL? {
         // OLX пишет продавца в ссылке коротким кодом — как номер объявления (62-ричная запись).
-        guard let userId, let n = Int(userId), n > 0 else { return nil }
+        guard site == .olx, let userId, let n = Int(userId), n > 0 else { return nil }
         return URL(string: "\(OLX.base)/list/user/\(OLX.encode(n))/")
     }
 
@@ -106,6 +111,12 @@ struct Sub: Codable, Identifiable, Hashable {
     var learnedTotal = 0
     /// Рубрика поиска словами — для подписи в карточках. В старых state.json нет.
     var categoryLabel: String?
+    /// Площадка поиска: nil — OLX.
+    var source: String?
+    /// Самый большой номер, который этот поиск уже видел (для площадок кроме OLX).
+    var watermark: Int?
+
+    var site: Site { source.flatMap(Site.init(rawValue:)) ?? .olx }
 }
 
 struct Stats: Codable, Equatable {
