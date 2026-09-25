@@ -72,7 +72,7 @@ function parseDetail(html, { id, url, currency = '₸' }) {
   // описания; такое не считаем. Только слово-подпись с большой буквы.
   const owner = /kolesa\.kz/i.test(url)
     ? (/"@type"\s*:\s*"(AutoDealer|AutomotiveBusiness|CarDealer)"/i.test(html)
-      || /(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Дилер)(?![а-яё])/.test(html) ? false
+      || /(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Проверенный дилер|Дилл?ер)(?![а-яё])/.test(html) ? false
       : /Частное\s+лицо|Собственник|Хозяин/i.test(html) ? true : null)
     : /Хозяин\s+недвижимости/i.test(html) ? true
     : /(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)/i.test(html) ? false : null;

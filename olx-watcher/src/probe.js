@@ -4,6 +4,7 @@
 const olx = require('./olx');
 const cats = require('./categories');
 const sources = require('./sources');
+const { getHtml, parseDetail } = require('./sources/page');
 
 // Номер объявления (или ссылка на него) — пробуем все известные способы открыть его по номеру:
 // какой из них видит объявления, которые ещё на модерации. Ответ OLX показываем как есть.
@@ -66,6 +67,32 @@ async function deepProbe(id) {
   }
   // Kolesa, Krisha, Kaspi: выдача и карточка самого свежего — как их увидит бот.
   const src = url && sources.byUrl(url);
+  // Ссылка на одно объявление Kolesa / Krisha / Kaspi: как бот понял продавца и почему.
+  if (src && src.key !== 'olx' && src.isAdUrl(url)) {
+    try {
+      const html = await getHtml(url);
+      if (html == null) { console.log('Объявление не найдено (404)'); return; }
+      const d = parseDetail(html, { id: Number((/(\d{6,})\/?$/.exec(new URL(url).pathname) || [])[1]) || 0, url });
+      console.log(`${src.title}: ${d.title || 'без заголовка'} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'}`);
+      console.log(`Продавец: ${d.owner === true ? 'хозяин / частник' : d.owner === false ? 'автосалон / дилер / агент — «только от хозяев» его отсеет' : 'не определён — «только от хозяев» его пропустит'}`);
+      const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ');
+      const words = /(дил+ер|салон|частн|собствен|хозя|компани|агент)/gi;
+      const seen = new Set();
+      console.log('\nГде на странице эти слова (пришлите, если продавец определён неверно):');
+      for (const m of text.matchAll(words)) {
+        const snip = text.slice(Math.max(0, m.index - 50), m.index + 60).trim();
+        if (seen.has(snip) || seen.size >= 12) continue;
+        seen.add(snip);
+        console.log(`  …${snip}…`);
+      }
+      const ld = [...html.matchAll(/"@type"\s*:\s*"([A-Za-z]+)"/g)].map((m) => m[1]);
+      if (ld.length) console.log(`\nРазметка страницы: ${[...new Set(ld)].join(', ')}`);
+    } catch (e) {
+      console.error('Ошибка:', e.message);
+      process.exit(1);
+    }
+    return;
+  }
   if (src && src.key !== 'olx') {
     try {
       const ads = await src.fetchSearch(url);

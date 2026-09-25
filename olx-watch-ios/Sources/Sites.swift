@@ -300,7 +300,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         // «в автосалоне» из описания) или разметка AutoDealer — не хозяин; «Частное лицо» — хозяин.
         if source == .kolesa {
             if html.range(of: #""@type"\s*:\s*"(AutoDealer|AutomotiveBusiness|CarDealer)""#, options: [.regularExpression, .caseInsensitive]) != nil
-                || html.range(of: #"(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Дилер)(?![а-яё])"#, options: .regularExpression) != nil {
+                || html.range(of: #"(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Проверенный дилер|Дилл?ер)(?![а-яё])"#, options: .regularExpression) != nil {
                 ad.owner = false
             } else if html.range(of: #"Частное\s+лицо|Собственник|Хозяин"#, options: [.regularExpression, .caseInsensitive]) != nil {
                 ad.owner = true
