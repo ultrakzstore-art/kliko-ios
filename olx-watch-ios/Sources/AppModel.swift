@@ -779,15 +779,18 @@ final class AppModel {
             return
         }
         // Номер выдаётся при подаче, но пока объявление на проверке у Kaspi (обычно 2–3 мин, бывает
-        // до часа), по нему заглушка. Такие номера — в очереди: первые 10 минут каждые 4 с, потом
-        // раз в 30 с, до часа. Сначала — самые давно проверенные.
+        // до часа), по нему заглушка. Край — последний ОПУБЛИКОВАННЫЙ номер, а те, что на проверке,
+        // почти все впереди него (выданы последними). Поэтому смотрим и дальше вперёд (+3…+40 по
+        // кругу, два за раз), а каждую заглушку — впереди и позади края — держим в очереди: сначала
+        // давно проверенные, первые 10 минут раз в 6 с, потом раз в 30 с. Позади края — до часа,
+        // впереди — до 15 минут.
         let now = Date()
-        var ids = [kaspiFrontier + 1, kaspiFrontier + 2]
-        kaspiJump = kaspiJump % 16 + 1
-        ids.append(kaspiFrontier + 2 + kaspiJump)
+        let f = kaspiFrontier
+        kaspiJump = kaspiJump % 37 + 1
+        var ids = [f + 1, f + 2, f + 3 + kaspiJump, f + 3 + (kaspiJump + 18) % 37 + 1]
         let due = kaspiMisses
-            .filter { $0.key <= kaspiFrontier && !ids.contains($0.key)
-                && now.timeIntervalSince($0.value.checked) >= (now.timeIntervalSince($0.value.added) < 600 ? 4 : 30) }
+            .filter { !ids.contains($0.key)
+                && now.timeIntervalSince($0.value.checked) >= (now.timeIntervalSince($0.value.added) < 600 ? 6 : 30) }
             .sorted { $0.value.checked < $1.value.checked }
             .prefix(4)
         ids += due.map { $0.key }
@@ -808,7 +811,7 @@ final class AppModel {
             kaspiMisses[n] = nil
             // Перескочили через номера — они тоже в очередь: скорее всего, ещё на проверке.
             if n - kaspiFrontier > 1 {
-                for m in (kaspiFrontier + 1)..<n where n - m <= 40 && kaspiMisses[m] == nil { kaspiMisses[m] = (now, now) }
+                for m in (kaspiFrontier + 1)..<n where n - m <= 40 && kaspiMisses[m] == nil { kaspiMisses[m] = (now, .distantPast) }
             }
             bumpKaspi(n)
             guard !seenSet.contains(ad.id) else { continue }
@@ -829,7 +832,9 @@ final class AppModel {
             deliver(ad, to: hit)
             trace(ad.id, "Kaspi по номеру: пришло в «\(hit.map(\.name).joined(separator: "», «"))»")
         }
-        kaspiMisses = kaspiMisses.filter { now.timeIntervalSince($0.value.added) < 3600 && $0.key > kaspiFrontier - 1500 }
+        kaspiMisses = kaspiMisses.filter {
+            now.timeIntervalSince($0.value.added) < ($0.key > kaspiFrontier ? 900 : 3600) && $0.key > kaspiFrontier - 1500
+        }
         save()
     }
 

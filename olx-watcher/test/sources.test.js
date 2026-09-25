@@ -254,6 +254,12 @@ test('Kaspi по номеру: крошки карточки → рубрика 
     w.kaspiMisses.get(123509498).checked = 0;
     await w.kaspiTurboTick();
     assert.deepStrictEqual(sent, ['turbo:123509499', 'turbo:123509498']);
+    // Ближние номера ещё на проверке, а дальний (+10) уже опубликован — находим и его.
+    const far = w.kaspiFrontier + 10;
+    live.set(far, { ...ad, id: far });
+    for (let i = 0; i < 40 && !sent.includes(`turbo:${far}`); i++) await w.kaspiTurboTick();
+    assert.ok(sent.includes(`turbo:${far}`), 'дальний опубликованный номер найден');
+    assert.ok(w.kaspiMisses.has(far - 1), 'перескоченные — в очереди на перепроверку');
   } finally {
     k.fetchById = orig;
   }

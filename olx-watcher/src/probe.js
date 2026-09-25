@@ -71,6 +71,7 @@ async function kaspiWatch(ms) {
   const byNum = new Map();    // номер → когда открылся по номеру
   const misses = new Map();   // номер → сколько раз «нет такого»
   let lastShow = 0;
+  let jump = 0;
   console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин (витрина «Самые новые»). Строки ниже — по мере появления.\n`);
   while (Date.now() - t0 < ms) {
     try {
@@ -123,13 +124,16 @@ async function kaspiWatch(ms) {
           }
         }
       }
-      // По номеру: следующие за самым большим — раньше витрины и поиска.
-      // Пустые номера (заглушка) — на проверке или сняты: позади края перепроверяем до 30 раз.
-      // Номер выдаётся при подаче, но пока объявление на проверке у Kaspi — заглушка. Такие номера
-      // позади края перепроверяем по кругу (давно проверенные — первыми), до часа.
-      const behind = [...misses.entries()].filter(([n, m]) => n < edge && Date.now() - m.added < 3600_000)
-        .sort((x, y) => x[1].checked - y[1].checked).slice(0, 5).map(([n]) => n);
-      for (const n of [...behind, ...Array.from({ length: 4 }, (_, i) => edge + 1 + i)]) {
+      // По номеру. Номер выдаётся при подаче, но пока объявление на проверке у Kaspi — заглушка.
+      // Край — последний опубликованный; те, что на проверке, почти все впереди него. Смотрим
+      // +1, +2 и два номера подальше (+3…+40 по кругу), а каждую заглушку держим в очереди и
+      // перепроверяем по кругу (давно проверенные — первыми): позади края до часа, впереди — 15 мин.
+      jump = (jump % 37) + 1;
+      const ahead = [edge + 1, edge + 2, edge + 3 + jump, edge + 3 + ((jump + 18) % 37) + 1];
+      const behind = [...misses.entries()].filter(([n, m]) => !ahead.includes(n)
+        && Date.now() - m.added < (n > edge ? 15 * 60_000 : 3600_000))
+        .sort((x, y) => (x[1].checked || 0) - (y[1].checked || 0)).slice(0, 5).map(([n]) => n);
+      for (const n of [...ahead, ...behind]) {
         if (byNum.has(n)) continue;
         const d = await k.fetchById(n).catch(() => null);
         if (!d) {
@@ -145,9 +149,10 @@ async function kaspiWatch(ms) {
         const when = d.createdAt ? `подано ${clock(d.createdAt)}, открылось через ${Math.round((Date.now() - d.createdAt) / 1000)} с` : 'время подачи не найдено';
         console.log(`${clock()} ⚡ по номеру ${n} · ${String(d.title).slice(0, 45)} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'} · ${when}${was ? ` · ${was} раз была заглушка — ждало проверки Kaspi` : ''}`);
         if (d.createdAt > last) last = d.createdAt;
+        for (let m = edge + 1; m < n; m++) if (!misses.has(m) && !byNum.has(m)) misses.set(m, { tries: 0, added: Date.now(), checked: 0 });
         edge = Math.max(edge, n);
       }
-      for (const n of misses.keys()) if (n < edge - 200) misses.delete(n);
+      for (const [n, m] of misses) if (n < edge - 1500 || Date.now() - m.added > (n > edge ? 15 * 60_000 : 3600_000)) misses.delete(n);
     } catch (e) {
       console.log(`${clock()} ошибка: ${e.message}`);
     }
@@ -162,7 +167,7 @@ async function kaspiWatch(ms) {
     const up = fresh.slice(1).filter((f, i) => f.id > fresh[i].id).length;
     console.log(`  номер больше предыдущего нового: ${up} из ${fresh.length - 1} — ${up === fresh.length - 1 ? 'номера растут по порядку' : 'номера не по порядку, ловим по дате'}`);
   }
-  console.log(`  номеров на проверке у Kaspi (заглушка) сейчас: ${[...misses.keys()].filter((n) => n < edge).length}`);
+  console.log(`  номеров на проверке у Kaspi (заглушка) сейчас: ${misses.size}`);
   console.log(`  поймано по номеру: ${byNum.size}${byNum.size ? `, из них позже на витрине: ${[...byNum.keys()].filter((id) => onShow.get(id)).length}` : ''} · самый большой номер: ${edge}`);
   if (last) console.log(`  последняя выкладка: ${new Date(last).toLocaleString('ru-RU', tz)}`);
   console.log('\nПришлите весь этот вывод — по нему видно, как Kaspi выдаёт новые объявления.');
