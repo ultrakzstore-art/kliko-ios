@@ -99,6 +99,36 @@ enum Theme {
     /// Кромка панели сверху: зелёный 50 % по центру (светлая), мятный 42 % (тёмная).
     static let панельКромка = цвет(светлый: hex(0x1D7D4A, 0.5), тёмный: hex(0xA3DCC0, 0.42))
 
+    // MARK: - Страница объявления (этап 28, .mk-modal сайта в css/marketplace.min.css)
+
+    /// Подложка значков подзаголовков («ОПИСАНИЕ», «ПРОДАВЕЦ УТВЕРЖДАЕТ»): --mk-mint — #e7f6ee и rgba(22,48,36,.5).
+    static let мята = цвет(светлый: hex(0xE7F6EE), тёмный: hex(0x163024, 0.5))
+    /// Ключевой пункт «Продавец утверждает» (.is-key): --acc-tint rgba(29,125,74,.10); в тёмной все пункты —
+    /// rgba(52,201,151,.14) (html[data-theme=dark] .mk-trustbox-i).
+    static let оттенокАкцента = цвет(светлый: hex(0x1D7D4A, 0.10), тёмный: hex(0x34C997, 0.14))
+    /// Рамка пункта «Продавец утверждает»: линия, в тёмной — rgba(52,201,151,.3).
+    static let рамкаПункта = цвет(светлый: hex(0xE3ECE7), тёмный: hex(0x34C997, 0.30))
+    /// Обычный пункт: серый текст на поверхности; в тёмной — зелёный акцент, как ключевой.
+    static let текстПункта = цвет(0x5F6C63, 0x5CD39A)
+    static let фонПункта = цвет(светлый: hex(0xFFFFFF), тёмный: hex(0x34C997, 0.14))
+    /// Метка «Б/У» на фото (.mk-gcond.used): #b8620c, в тёмной #c96f14. «Новое» — --mk-green2.
+    static let меткаБУ = цвет(0xB8620C, 0xC96F14)
+    /// Подложка фото (.mk-gslide): #0d1512 в обеих темах.
+    static let подложкаФото = Color(uiColor: hex(0x0D1512))
+    /// Кнопки над фото (.mk-mhead .mk-mbtn): rgba(14,20,17,.45) с размытием.
+    static let кнопкаНадФото = Color(uiColor: hex(0x0E1411, 0.45))
+    /// Звезда рейтинга (.mk-st.full): #b07a06 и #e0bd5e.
+    static let звезда = цвет(0xB07A06, 0xE0BD5E)
+    /// Цена со скидкой (.mk-price-drop) — #dc2626; «↓ N%» (.mk-pricedrop-badge): #fee2e2/#b91c1c, в тёмной #3a1414/#f87171.
+    static let ценаСкидка = Color(uiColor: hex(0xDC2626))
+    static let скидкаФон = цвет(0xFEE2E2, 0x3A1414)
+    static let скидкаТекст = цвет(0xB91C1C, 0xF87171)
+    /// Режим работы: «не на месте» — #d97706 (.mk-hours.away), «закрыто» у магазина — #e11d48 (.mk-hours.off).
+    static let оранжевый = Color(uiColor: hex(0xD97706))
+    static let малиновый = Color(uiColor: hex(0xE11D48))
+    /// Значок «Проверен через eGov» (VFY сайта) — #1d9bf0.
+    static let проверен = Color(uiColor: hex(0x1D9BF0))
+
     // MARK: - Скругления (--r-*)
 
     enum Радиус {
@@ -114,6 +144,10 @@ enum Theme {
         static let xl: CGFloat = 20
         /// Низ шапки и верх нижней панели — 22px.
         static let шапка: CGFloat = 22
+        /// --r-2xs: пункты «Продавец утверждает».
+        static let xxs: CGFloat = 6
+        /// --r-sm: кнопки над фото, «Понятно».
+        static let sm: CGFloat = 10
     }
 
     // MARK: - Краски из CSS

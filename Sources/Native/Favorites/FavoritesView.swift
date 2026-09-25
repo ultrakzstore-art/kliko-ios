@@ -178,7 +178,8 @@ struct FavoritesView: View {
  Нажатие сохраняет или убирает сразу, без подтверждений: вернуть — то же одно нажатие.
  */
 struct КнопкаИзбранного: View {
-    enum Место { case карточка, шапка }
+    /// Этап 28: .фото — тёмный квадрат над фото страницы объявления как на сайте (.mk-mhead .mk-mfav).
+    enum Место { case карточка, шапка, фото }
 
     let товар: Listing
     var место: Место = .карточка
@@ -212,6 +213,14 @@ struct КнопкаИзбранного: View {
                     }
                 }
                 .buttonStyle(.plain)
+            } else if место == .фото {
+                Button { избранное.переключить(товар) } label: {
+                    сердце
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(сохранено ? Theme.сердце : Color.white)
+                        .фонКнопкиНадФото()
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
             } else {
                 Button { избранное.переключить(товар) } label: { сердце }
                     .tint(сохранено ? Color.red : Theme.green)

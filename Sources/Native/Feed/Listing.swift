@@ -47,6 +47,32 @@ struct Listing: Identifiable, Hashable {
     /// Раздел объявления из поля category — по нему карточка просит похожие (этап 7, cat=). Нет — нет и похожих.
     var категория: String?
 
+    // ── Страница как на сайте (этап 28, владелец 25.09.2026): поля _api_item, по которым сайт рисует объявление ──
+    /// Состояние как пришло (condition: "new", "used"…). Метка на фото — «Б/У», «С пробегом», «Новостройка» —
+    /// строится из него и раздела (mkCond сайта), поэтому одного isNew мало.
+    var состояние: String?
+    /// Режим работы: hours_mode — "247" (круглосуточно) или "range" с hours_from–hours_to ("09:00"–"18:00").
+    var часыРежим: String?
+    var часыС: String?
+    var часыДо: String?
+    /// «Продавец утверждает»: ключи trust со значением «да» (guarantor, working…) в порядке ответа.
+    var заявления: [String] = []
+    /// warranty_ok: false — гарантию продавец выключил, даже если warranty_days остались (mkTrustBlock сайта).
+    var гарантияВыключена = false
+    /// no_escrow: продавец не работает через гаранта — у услуг тогда внизу «Связаться», а не «Купить безопасно».
+    var безГаранта = false
+    /// Доставка: бесплатная (ship_free) и срок в днях (ship_days) — ключевые пункты «Продавец утверждает».
+    var доставкаБесплатно = false
+    var доставкаДней: String?
+    /// Аренда: "day" или "month" (rent_period) — «₸/сут» или «₸/М» у цены.
+    var периодАренды: String?
+    /// «с 2026 г.» в карточке продавца (seller_since).
+    var продавецС: String?
+    /// Звонок и WhatsApp открыты (has_phone и contact.call.ok / contact.wa.ok) — кнопки нижней панели (этап 29).
+    /// Поле не пришло — false: кнопки, которой сайт бы не показал, нет и здесь.
+    var звонок = false
+    var whatsApp = false
+
     struct Характеристика: Hashable {
         let ключ: String
         let значение: String
@@ -171,6 +197,52 @@ extension Listing: Decodable {
         }
         характеристики = х
         категория = непусто(строка("category"))
+            ?? непусто((try? c.decode([String].self, forKey: Ключ("category")))?.first)
+
+        /* Этап 28. Поля страницы сайта — так же терпимо: не пришло или другого вида — пусто, карточка от этого не
+           ломается. category у сайта бывает и массивом (Array.isArray(t.category) в mkCatRoot) — берём первый. */
+        состояние = непусто(строка("condition"))
+        часыРежим = непусто(строка("hours_mode"))
+        часыС = непусто(строка("hours_from"))
+        часыДо = непусто(строка("hours_to"))
+        /// Да или нет в любом виде PHP: true, 1, "1".
+        struct ДаНет: Decodable {
+            let да: Bool
+            init(from decoder: Decoder) throws {
+                let з = try decoder.singleValueContainer()
+                if let b = try? з.decode(Bool.self) {
+                    self.да = b
+                } else if let i = try? з.decode(Int.self) {
+                    self.да = i != 0
+                } else if let s = try? з.decode(String.self) {
+                    self.да = s == "1" || s.lowercased() == "true"
+                } else {
+                    self.да = false
+                }
+            }
+        }
+        struct Канал: Decodable {
+            let ok: ДаНет?
+        }
+        struct Связь: Decodable {
+            let call: Канал?
+            let wa: Канал?
+        }
+        if let доверие = try? c.decode([String: ДаНет].self, forKey: Ключ("trust")) {
+            /* Порядок ключей JSON словарь не хранит — берём порядок справочника сайта (TRUST_LABELS), он же порядок
+               ответа: сайт кладёт ключи в trust по нему. Неизвестные сайту ключи он не показывает — и мы тоже. */
+            заявления = ListingPageText.ключиЗаявлений.filter { доверие[$0]?.да == true }
+        }
+        гарантияВыключена = (try? c.decode(Bool.self, forKey: Ключ("warranty_ok"))) == false
+        безГаранта = да("no_escrow")
+        доставкаБесплатно = да("ship_free")
+        доставкаДней = непусто(строка("ship_days")).flatMap { $0 == "0" ? nil : $0 }
+        периодАренды = непусто(строка("rent_period"))
+        продавецС = непусто(строка("seller_since"))
+        let телефон = да("has_phone")
+        let связь = try? c.decode(Связь.self, forKey: Ключ("contact"))
+        звонок = телефон && (связь?.call?.ok?.да ?? false)
+        whatsApp = телефон && (связь?.wa?.ok?.да ?? false)
     }
 }
 

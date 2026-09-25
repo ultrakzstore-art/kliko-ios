@@ -9,6 +9,9 @@ import SwiftUI
  */
 struct ПолосаПохожих: View {
     let состояние: Похожие.Состояние
+    /// Заголовок полосы. Этап 28: у страницы как на сайте — «Похожие объявления» или «Ещё в этой категории» (у услуг,
+    /// _similarBlock сайта). nil — прежний «Похожие».
+    var заголовок: String? = nil
 
     var body: some View {
         switch состояние {
@@ -37,9 +40,11 @@ struct ПолосаПохожих: View {
     private func рамка<Карточки: View>(@ViewBuilder _ карточки: () -> Карточки) -> some View {
         let содержимое = карточки()
         return VStack(alignment: .leading, spacing: 10) {
-            Text(SimilarText.т("title"))
-                .font(.headline)
-                .padding(.horizontal, 16)
+            Text(заголовок ?? SimilarText.т("title"))
+                .font(Config.дизайнКакНаСайте ? Font.system(size: 18, weight: .heavy) : Font.headline)
+                .foregroundStyle(Config.дизайнКакНаСайте ? Theme.текст : Color.primary)
+                .padding(.horizontal, Config.дизайнКакНаСайте ? 20 : 16)
+                .accessibilityAddTraits(.isHeader)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 10) {
                     содержимое
