@@ -414,6 +414,18 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         return out
     }
 
+    /// Витрина Kaspi: самые новые объявления всего Kaspi (главная, city = "") или города — первая
+    /// страница «сначала новые». Такой страницы нет — nil.
+    static func kaspiShowcase(city: String) async throws -> [Ad]? {
+        let link = "https://obyavleniya.kaspi.kz/" + (city.isEmpty ? "" : "\(city)/")
+        do {
+            let name = city.isEmpty ? "" : kaspiCityName(city)
+            return try await Site.kaspi.searchOne(link, pages: 1).map { var a = $0; if a.city.isEmpty { a.city = name }; return a }
+        } catch OLX.Failure.http(let code) where code == 404 {
+            return nil
+        }
+    }
+
     /// Kaspi по номеру: /a/<номер>/ открывает объявление без названия. Нет (или на проверке) — nil.
     static func kaspiById(_ n: Int) async throws -> Ad? {
         let link = "https://obyavleniya.kaspi.kz/a/\(n)/"

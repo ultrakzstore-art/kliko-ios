@@ -93,6 +93,7 @@ struct Ad: Codable, Identifiable, Hashable {
         if o.price != nil { price = o.price }
         if !o.priceLabel.isEmpty { priceLabel = o.priceLabel }
         if !o.city.isEmpty { city = o.city }
+        if let c = o.crumbs, !c.isEmpty { crumbs = c }
         if !o.region.isEmpty { region = o.region }
         if !o.photo.isEmpty { photo = o.photo }
         if let more = o.photos, !more.isEmpty { photos = more }

@@ -155,6 +155,10 @@ final class AppModel {
             lastTurbo = Date()
             await turbo()
         }
+        if !siteBlocked(.kaspi), Date().timeIntervalSince(lastShowcase) >= 3 {
+            lastShowcase = Date()
+            await kaspiShowcase()
+        }
         if state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
             lastKaspiTurbo = Date()
             await kaspiTurbo()
@@ -595,6 +599,65 @@ final class AppModel {
 
     /// Следующие 3 номера за границей и один подальше (+5…+20 по кругу — чтобы снятые номера не
     /// держали на месте), плюс недавние промахи. Подошло поиску по рубрике, городу, словам — сразу.
+    // Витрина Kaspi — как лента всей доски у OLX: главная Kaspi и главная одного города по кругу.
+    @ObservationIgnored private var showPages: [String] = Site.kaspiCitySlugs
+    @ObservationIgnored private var showNext = 0
+    @ObservationIgnored private var showRootDead = false
+    @ObservationIgnored private var showSeeded = Set<String>()
+    @ObservationIgnored private var showSeen = Set<Int>()
+    @ObservationIgnored private var lastShowcase = Date.distantPast
+
+    /// Что было на витрине при запуске — только запоминаем; появившееся потом — открываем карточку
+    /// и сверяем со всеми поисками Kaspi. Самый большой номер витрины — край для турбо Kaspi.
+    private func kaspiShowcase() async {
+        let subs = state.subs.filter { !$0.paused && $0.ready && $0.site == .kaspi }
+        guard !subs.isEmpty else { return }
+        var pages: [String] = showRootDead ? [] : [""]
+        if !showPages.isEmpty { pages.append(showPages[showNext % showPages.count]) }
+        showNext += 1
+        for page in pages {
+            let found: [Ad]?
+            do {
+                found = try await Site.kaspiShowcase(city: page)
+                ok(site: .kaspi)
+            } catch {
+                fail(error, site: .kaspi)
+                if siteBlocked(.kaspi) { break }
+                continue
+            }
+            guard let ads = found else {
+                if page.isEmpty { showRootDead = true } else { showPages.removeAll { $0 == page } }
+                continue
+            }
+            if let top = ads.map(\.id).max() { bumpKaspi(top - Site.kaspi.idOffset) }
+            let seed = !showSeeded.contains(page)
+            showSeeded.insert(page)
+            for a in ads where !showSeen.contains(a.id) {
+                showSeen.insert(a.id)
+                if seed || seenSet.contains(a.id) { continue }
+                var ad = a
+                if let full = try? await Site.kaspi.detail(a) { ad.merge(full) }
+                var hit: [Sub] = []
+                for s in subs {
+                    if let why = Site.kaspiMismatch(s, ad) {
+                        trace(ad.id, "витрина Kaspi → «\(s.name)»: не подошло — \(why)")
+                    } else {
+                        hit.append(s)
+                    }
+                }
+                guard !hit.isEmpty else { continue }
+                remember(ad.id)
+                ad.via = "search"
+                ad.foundAt = Date()
+                recordAll(ad)
+                deliver(ad, to: hit)
+                trace(ad.id, "витрина Kaspi: пришло в «\(hit.map(\.name).joined(separator: "», «"))»")
+            }
+        }
+        if showSeen.count > 20_000, let top = showSeen.max() { showSeen = showSeen.filter { $0 > top - 100_000 } }
+        save()
+    }
+
     @ObservationIgnored private var kaspiSynced = false
     @ObservationIgnored private var kaspiStep = 16
     @ObservationIgnored private var kaspiHi = 0
