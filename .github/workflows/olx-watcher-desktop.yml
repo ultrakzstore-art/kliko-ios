@@ -48,10 +48,21 @@ jobs:
       - name: Версия сборки
         run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version
 
-      - name: Установщик и релиз для автообновления
-        run: npm run release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Установщик (и latest.yml для автообновления)
+        run: npm run dist
+
+      - name: Релиз на GitHub — отсюда приложение берёт обновления
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: OLX Watcher 1.0.${{ github.run_number }}
+          body: Установщик для Windows. Уже установленное приложение обновится само.
+          make_latest: true
+          files: |
+            olx-watcher/dist/*.exe
+            olx-watcher/dist/*.blockmap
+            olx-watcher/dist/latest.yml
 
       - uses: actions/upload-artifact@v4
         with:
