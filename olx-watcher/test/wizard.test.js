@@ -97,7 +97,7 @@ test('мастер: рубрика → подрубрика → город → �
     await say('https://www.olx.kz/d/elektronika/q-b/');
     await say('https://www.olx.kz/d/elektronika/q-c/');
     await say('https://www.olx.kz/d/elektronika/q-d/');
-    assert.strictEqual(db.subs(7).length, 3, 'бесплатно — до 3 поисков');
+    assert.strictEqual(db.subs(7).length, 3, 'тестовый доступ — до 3 поисков');
     assert.match(lastText(), /до 3 поисков/);
     assert.strictEqual(db.subs(42).length, 1, 'поиски не смешиваются');
 

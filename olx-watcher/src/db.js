@@ -59,6 +59,9 @@ class Db {
     if (!cols.includes('user_id')) this.db.exec('ALTER TABLE subs ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
     if (!cols.includes('watermark')) this.db.exec('ALTER TABLE subs ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0');
     this.db.exec('DROP TABLE IF EXISTS seen');
+    const ucols = this.db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!ucols.includes('trial_until')) this.db.exec('ALTER TABLE users ADD COLUMN trial_until INTEGER NOT NULL DEFAULT 0');
+    this.trialMs = 7 * DAY;
   }
 
   get(k, fallback = null) {
@@ -72,9 +75,11 @@ class Db {
 
   // ---------- пользователи и доступ ----------
 
+  // Новый пользователь сразу получает тестовый доступ на trialMs (TRIAL_DAYS).
   touchUser(id, name = '', username = '') {
-    this.db.prepare(`INSERT INTO users (id, name, username, created_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET name = excluded.name, username = excluded.username, blocked = 0`).run(id, name, username, Date.now());
+    const now = Date.now();
+    this.db.prepare(`INSERT INTO users (id, name, username, created_at, trial_until) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, username = excluded.username, blocked = 0`).run(id, name, username, now, now + this.trialMs);
     return this.user(id);
   }
 
@@ -89,6 +94,16 @@ class Db {
   isPaid(userOrId, now = Date.now()) {
     const u = typeof userOrId === 'object' ? userOrId : this.user(userOrId);
     return !!u && u.paid_until > now;
+  }
+
+  // Тестовый доступ: ещё не оплачено, но срок теста не вышел.
+  isTrial(userOrId, now = Date.now()) {
+    const u = typeof userOrId === 'object' ? userOrId : this.user(userOrId);
+    return !!u && !this.isPaid(u, now) && u.trial_until > now;
+  }
+
+  hasAccess(userOrId, now = Date.now()) {
+    return this.isPaid(userOrId, now) || this.isTrial(userOrId, now);
   }
 
   // Продление считается от конца текущего срока, если он ещё идёт, — оплаченное не сгорает.

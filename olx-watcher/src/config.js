@@ -21,7 +21,8 @@ module.exports = {
   turboSec: int('TURBO_SEC', 5, 2),
   turboWindow: int('TURBO_WINDOW', 10, 1),
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
-  freeSubs: int('FREE_SUBS', 3, 1),
+  trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней
+  freeSubs: int('FREE_SUBS', 3, 1),              // поисков на тестовом доступе
   paidSubs: int('PAID_SUBS', 20, 1),
   starsPrices: prices('STARS_PRICES'),           // Telegram Stars за 7/14/30 дней
   kaspiPrices: prices('KASPI_PRICES'),           // тенге за 7/14/30 дней

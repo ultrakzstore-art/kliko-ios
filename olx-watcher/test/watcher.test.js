@@ -86,6 +86,31 @@ test('бесплатный и платный доступ, поиск и тур�
   }
 });
 
+test('тестовый доступ: новичку есть, после срока — поиски не проверяются', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  db.trialMs = 7 * DAY;
+  db.touchUser(9, 'Новичок');
+  assert.ok(db.isTrial(9) && db.hasAccess(9) && !db.isPaid(9), 'новичок — на тесте');
+  const sub = db.addSub(9, 'x', 'https://www.olx.kz/d/elektronika/q-x/');
+  db.db.prepare('UPDATE users SET trial_until = ? WHERE id = 9').run(Date.now() - 1000);
+  assert.ok(!db.hasAccess(9), 'тест кончился');
+  let searches = 0;
+  const orig = olx.fetchSearch;
+  olx.fetchSearch = async () => { searches += 1; return { source: 'state', ads: [] }; };
+  try {
+    const w = new Watcher({ db, config: { pollSec: 30, freePollSec: 600, turboSec: 5, turboWindow: 5, freshMs: 1800_000 }, notify: async () => {}, alert: async () => {}, log: () => {} });
+    await w.searchTick();
+    assert.strictEqual(searches, 0, 'без доступа OLX не спрашиваем');
+    db.extend(9, 7);
+    await w.searchTick();
+    assert.strictEqual(searches, 1, 'оплатил — снова проверяем');
+    assert.ok(db.sub(sub.id).initialized);
+  } finally {
+    olx.fetchSearch = orig;
+  }
+});
+
 test('продление доступа считается от конца текущего срока', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-'));
   const db = new Db(path.join(dir, 'w.db'));

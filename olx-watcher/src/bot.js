@@ -1,7 +1,7 @@
 // Телеграм-часть: пользователи, доступ (бесплатный и платный), оплата, карточки объявлений.
 //
-// Бесплатно: проверка раз в 10 минут, без турбо, до FREE_SUBS поисков.
-// Платно (7/14/30 дней): раз в POLL_SEC, турбо, до PAID_SUBS поисков.
+// Тестовый доступ новичку (TRIAL_DAYS): проверка раз в 10 минут, без турбо, до FREE_SUBS поисков.
+// Платно (7/14/30 дней): раз в POLL_SEC, турбо, до PAID_SUBS поисков. Без доступа — не проверяем.
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
 const { Bot, InlineKeyboard, GrammyError } = require('grammy');
@@ -26,6 +26,8 @@ function createBot({ token, db, config, getWatcher, log }) {
       log(`владелец бота: ${admin}`);
     }
     db.touchUser(from.id, [from.first_name, from.last_name].filter(Boolean).join(' '), from.username || '');
+    // Владельцу — доступ без срока: его собственные поиски не должны останавливаться.
+    if (from.id === admin && !db.isPaid(from.id)) db.extend(from.id, 3650);
     return next();
   });
 
@@ -37,8 +39,11 @@ function createBot({ token, db, config, getWatcher, log }) {
       return `💎 <b>Платный доступ</b> до ${fmtDate(u.paid_until)}\n` +
         `Проверка раз в ${config.pollSec} сек, ⚡ турбо — раньше поиска, до ${config.paidSubs} поисков.`;
     }
-    return `🆓 <b>Бесплатный доступ</b>\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, без турбо, до ${config.freeSubs} поисков.\n` +
-      `Платно: раз в ${config.pollSec} сек + ⚡ турбо (ловит объявления раньше, чем они появятся в поиске), до ${config.paidSubs} поисков.`;
+    const paidLine = `Платно: раз в ${config.pollSec} сек + ⚡ турбо (ловит объявления раньше, чем они появятся в поиске), до ${config.paidSubs} поисков.`;
+    if (db.isTrial(u)) {
+      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)}\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, без турбо, до ${config.freeSubs} поисков.\n${paidLine}`;
+    }
+    return `⛔ <b>Тестовый доступ закончился</b> — поиски на паузе, объявления не приходят.\n${paidLine}\nПодключить: /access`;
   }
 
   function limitFor(userId) {
@@ -47,12 +52,13 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   // true — можно добавить поиск; иначе — текст, почему нельзя.
   function canAdd(userId) {
+    if (!db.hasAccess(userId)) return 'Тестовый доступ закончился. Подключите платный, чтобы добавлять поиски: /access';
     const n = db.subs(userId).length;
     const limit = limitFor(userId);
     if (n < limit) return true;
     return db.isPaid(userId)
       ? `Достигнут предел: ${limit} поисков. Удалите ненужный в /list.`
-      : `На бесплатном доступе — до ${limit} поисков. Удалите ненужный в /list или подключите платный: /access`;
+      : `На тестовом доступе — до ${limit} поисков. Удалите ненужный в /list или подключите платный: /access`;
   }
 
   const menu = () => new InlineKeyboard()
@@ -296,7 +302,20 @@ function createBot({ token, db, config, getWatcher, log }) {
   async function remindExpiring() {
     const now = Date.now();
     for (const u of db.users()) {
-      if (u.blocked || !u.paid_until) continue;
+      if (u.blocked) continue;
+      // Тест: за сутки до конца и когда кончился (если не оплатил).
+      if (!db.isPaid(u, now) && u.trial_until) {
+        const tl = u.trial_until - now;
+        const tkey = `trial:${u.id}:${u.trial_until}`;
+        if (tl > 0 && tl < DAY && !db.get(`${tkey}:soon`)) {
+          db.set(`${tkey}:soon`, 1);
+          await send(u.id, `🧪 Тестовый доступ заканчивается ${fmtDate(u.trial_until)}. Чтобы объявления продолжали приходить: /access`);
+        } else if (tl <= 0 && tl > -7 * DAY && !db.get(`${tkey}:over`) && u.paid_until < now) {
+          db.set(`${tkey}:over`, 1);
+          await send(u.id, '⛔ Тестовый доступ закончился — поиски на паузе. Подключить платный доступ: /access');
+        }
+      }
+      if (!u.paid_until) continue;
       const left = u.paid_until - now;
       const key = `remind:${u.id}:${u.paid_until}`;
       if (left > 0 && left < DAY && !db.get(`${key}:soon`)) {
@@ -304,7 +323,7 @@ function createBot({ token, db, config, getWatcher, log }) {
         await send(u.id, `⏳ Платный доступ заканчивается ${fmtDate(u.paid_until)}. Продлить: /access`);
       } else if (left <= 0 && left > -7 * DAY && !db.get(`${key}:over`)) {
         db.set(`${key}:over`, 1);
-        await send(u.id, `Платный доступ закончился — теперь проверка раз в ${Math.round(config.freePollSec / 60)} мин и без турбо. Продлить: /access`);
+        await send(u.id, '⛔ Платный доступ закончился — поиски на паузе, объявления не приходят. Продлить: /access');
       }
     }
   }

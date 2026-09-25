@@ -13,6 +13,7 @@ if (!config.token) {
 }
 
 const db = new Db(config.dbFile);
+db.trialMs = config.trialDays * 86400_000;
 let watcher;
 const { bot, notify, alert } = createBot({ token: config.token, db, config, getWatcher: () => watcher, log });
 watcher = new Watcher({ db, config, notify, alert, log });
