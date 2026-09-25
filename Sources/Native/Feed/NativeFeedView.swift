@@ -61,6 +61,9 @@ struct NativeFeedView: View {
     @State private var видимостьКолонок: NavigationSplitViewVisibility = .all
     /// Широкое окно iPad — лента и карточка рядом (ДвеКолонки.включены).
     @Environment(\.horizontalSizeClass) private var ширинаОкна
+    /// Место внизу под нижней панелью сайта (владелец 25.09.2026, проверка на телефоне, сборка 33): панель теперь слой
+    /// поверх вкладок, и корень ленты оставляет под неё место сам — внутри своего стека. Без нижних вкладок — 0.
+    @Environment(\.местоПодПанельюСайта) private var местоПодПанелью
     /// Какая раскладка была на экране в прошлый раз: true — две колонки, nil — ещё никакой. onAppear раскладки
     /// приходит и при возврате на вкладку «Лента», а выбранное переезжает только при настоящей смене ширины окна.
     @State private var былиКолонки: Bool? = nil
@@ -101,6 +104,7 @@ struct NativeFeedView: View {
     private var раскладкаСтеком: some View {
         NavigationStack(path: путьСтека) {
             лента
+                .оставитьМестоПодПанелью(местоПодПанелью)
                 .navigationDestination(for: Listing.self) { товар in
                     ListingDetailView(товар: товар, открыть: открыть)
                 }
@@ -134,10 +138,12 @@ struct NativeFeedView: View {
         NavigationSplitView(columnVisibility: $видимостьКолонок) {
             /* Колонка ленты шире стандартной боковой: при 400 pt в ней две карточки в ряд, сетка та же (ListingCard.сетка). */
             лента
+                .оставитьМестоПодПанелью(местоПодПанелью)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 560)
         } detail: {
             NavigationStack(path: путьСтека) {
                 колонкаКарточки
+                    .оставитьМестоПодПанелью(местоПодПанелью)
                     .navigationDestination(for: Listing.self) { товар in
                         ListingDetailView(товар: товар, открыть: открыть)
                     }
