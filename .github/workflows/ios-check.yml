@@ -208,6 +208,22 @@ jobs:
           n=0; while read -r u; do case "$u" in http*) url="$u";; //*) url="https:$u";; *) url="https://kliko.kz/${u#/}";; esac
             case "$url" in *kliko.kz*) n=$((n+1)); curl -sSL "$url" -o "shots/site/$(printf %02d $n)-$(basename "${u%%\?*}")" || true;; esac
           done < shots/site/assets.txt
+          # Для совпадения приложения с сайтом по функциям (владелец 25.09.2026: «всё одно и то же, просто код разный»):
+          # что сайт показывает гостю на страницах кабинета (вход, подача, eGov, кошелёк) и полный список страниц сайта по
+          # ссылкам главной и карточки — основа таблицы «страница сайта ↔ экран приложения».
+          mkdir -p shots/site/guest
+          for pth in "kz/ru/cabinet.php" "kz/ru/cabinet?go=add" "kz/ru/cabinet?egov=1" "kz/ru/cabinet.php?go=wallet" "kz/ru/cabinet.php?s=messages"; do
+            f="shots/site/guest/$(echo "$pth" | tr '/?=&' '____').html"
+            curl -sSL -A "$ua" -c shots/site/guest/cookies.txt -b shots/site/guest/cookies.txt "https://kliko.kz/$pth" -o "$f" -w "$pth -> %{http_code} %{url_effective}\n" || true
+          done
+          rm -f shots/site/guest/cookies.txt
+          cat shots/site/guest/*.html | grep -oE '(href|src)="[^"]+\.(css|js)[^"]*"' | sed -E 's/^(href|src)="//;s/"$//' | sort -u > shots/site/guest/assets.txt || true
+          while read -r u; do case "$u" in http*) url="$u";; //*) url="https:$u";; *) url="https://kliko.kz/${u#/}";; esac
+            b=$(basename "${u%%\?*}"); ls shots/site/*-"$b" >/dev/null 2>&1 && continue
+            case "$url" in *kliko.kz*) curl -sSL "$url" -o "shots/site/guest/$b" || true;; esac
+          done < shots/site/guest/assets.txt
+          cat shots/site/*.html shots/site/guest/*.html | grep -oE 'href="(/[^"#]*|https://kliko\.kz/[^"#]*)"' | sed -E 's/^href="//;s/"$//;s#https://kliko.kz##' | sed -E 's/[?&](v|t|utm_[a-z]+)=[^&]*//g' | sort | uniq -c | sort -rn > shots/site/pages.txt || true
+          wc -l shots/site/pages.txt; ls -la shots/site/guest
           ls -la shots/site
           # Уменьшаем и в JPEG: полноразмерные PNG по 2 МБ выгружались в ветку четверть часа.
           for f in shots/*.png; do sips -Z 1300 -s format jpeg -s formatOptions 80 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
