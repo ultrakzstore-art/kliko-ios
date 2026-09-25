@@ -85,3 +85,11 @@ test('обмен и «отдам даром» проходят любой фил
   const c = card({ title: 'HP', price: null, priceLabel: 'Обмен' }, [{ name: 'x' }], 'search');
   assert.ok(c.includes('🔁 Обмен'));
 });
+
+test('ссылка «все объявления автора» — со страницы объявления', () => {
+  const { sellerLinkIn } = require('../src/olx');
+  assert.strictEqual(sellerLinkIn('<a href="/list/user/abcXYZ/" data-testid="user-profile-link">Все объявления автора</a>'), 'https://www.olx.kz/list/user/abcXYZ/');
+  assert.strictEqual(sellerLinkIn('{"url":"https:\\/\\/www.olx.kz\\/d\\/list\\/user\\/Q7mRk\\/"}'), 'https://www.olx.kz/d/list/user/Q7mRk/');
+  assert.strictEqual(sellerLinkIn('<a href="https://vprok.olx.kz/home/">Магазин</a>'), 'https://vprok.olx.kz/home/');
+  assert.strictEqual(sellerLinkIn('<html>ничего</html>'), null);
+});

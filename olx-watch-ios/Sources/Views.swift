@@ -221,8 +221,8 @@ struct ActionButtons: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-                if let seller = ad.sellerURL {
-                    Button { AppLink.open(seller) } label: { Image(systemName: "person.crop.circle") }
+                if ad.hasSeller {
+                    Button { Task { await SellerLink.open(ad) } } label: { Image(systemName: "person.crop.circle") }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Все объявления автора")
                 }
@@ -235,8 +235,8 @@ struct ActionButtons: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-                if let seller = ad.sellerURL {
-                    Button { AppLink.open(seller) } label: { Image(systemName: "person.crop.circle") }
+                if ad.hasSeller {
+                    Button { Task { await SellerLink.open(ad) } } label: { Image(systemName: "person.crop.circle") }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Все объявления автора")
                 }
@@ -526,8 +526,8 @@ struct AdMenu: View {
             ShareLink(item: url) { Label("Поделиться", systemImage: "square.and.arrow.up") }
             Button { UIPasteboard.general.url = url } label: { Label("Скопировать ссылку", systemImage: "doc.on.doc") }
         }
-        if let url = ad.sellerURL {
-            Button { AppLink.open(url) } label: { Label("Все объявления автора", systemImage: "person.crop.circle") }
+        if ad.hasSeller {
+            Button { Task { await SellerLink.open(ad) } } label: { Label("Все объявления автора", systemImage: "person.crop.circle") }
         }
         if !ad.params.isEmpty || !ad.description.isEmpty {
             Section {
@@ -545,6 +545,14 @@ enum AppLink {
         UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
             if !opened { UIApplication.shared.open(url) }
         }
+    }
+}
+
+/// «Все объявления автора»: правильную ссылку берём со страницы самого объявления (её рисует
+/// OLX); не нашли — открываем объявление, там есть кнопка автора.
+enum SellerLink {
+    @MainActor static func open(_ ad: Ad) async {
+        if let url = await OLX.sellerPage(for: ad) { AppLink.open(url) } else if let link = ad.link { AppLink.open(link) }
     }
 }
 

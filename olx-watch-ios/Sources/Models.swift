@@ -77,11 +77,8 @@ struct Ad: Codable, Identifiable, Hashable {
 
     var site: Site { source.flatMap(Site.init(rawValue:)) ?? .olx }
 
-    var sellerURL: URL? {
-        // OLX пишет продавца в ссылке коротким кодом — как номер объявления (62-ричная запись).
-        guard site == .olx, let userId, let n = Int(userId), n > 0 else { return nil }
-        return URL(string: "\(OLX.base)/list/user/\(OLX.encode(n))/")
-    }
+    /// Есть ли автор, чьи объявления можно открыть (ссылку берём со страницы объявления).
+    var hasSeller: Bool { site == .olx && !(userId ?? "").isEmpty }
 
     /// Дополнить данными карточки: непустое из карточки побеждает.
     mutating func merge(_ o: Ad) {

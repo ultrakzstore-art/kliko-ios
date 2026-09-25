@@ -109,6 +109,17 @@ enum OLX {
         return try await search("\(base)/list/")
     }
 
+    /// Ссылка «Все объявления автора» со страницы объявления: /list/user/… или магазин <имя>.olx.kz/home/.
+    static func sellerPage(for ad: Ad) async -> URL? {
+        guard let url = ad.link, let res = try? await get(url, accept: "text/html"), (200..<300).contains(res.1) else { return nil }
+        let html = String(decoding: res.0, as: UTF8.self).replacingOccurrences(of: "\\/", with: "/")
+        if let path = firstMatch(#"(?:https?://(?:www\.)?olx\.kz)?(/(?:d/)?(?:[a-z]{2}/)?list/user/[A-Za-z0-9_-]+/?)"#, in: html) {
+            return URL(string: base + path)
+        }
+        if let shop = firstMatch(#"(https?://[a-z0-9-]+\.olx\.kz/home/?)"#, in: html) { return URL(string: shop) }
+        return nil
+    }
+
     // MARK: — разбор выдачи
 
     /// Сайт кладёт данные страницы в window.__PRERENDERED_STATE__ — JSON внутри JS-строки.

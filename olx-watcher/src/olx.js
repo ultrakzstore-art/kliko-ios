@@ -197,7 +197,29 @@ async function fetchLatest() {
   return (await fetchSearch(`${BASE}/list/`)).ads;
 }
 
+// Ссылка «Все объявления автора» — со страницы самого объявления: её рисует OLX, так что
+// формат всегда верный (/list/user/…, у магазинов — <имя>.olx.kz/home/). Нет — null.
+function sellerLinkIn(html) {
+  const text = String(html).replace(/\\\//g, '/');
+  const m = /(https?:\/\/(?:www\.)?olx\.kz)?(\/(?:d\/)?(?:[a-z]{2}\/)?list\/user\/[A-Za-z0-9_-]+\/?)/.exec(text)
+    || /(https?:\/\/[a-z0-9-]+\.olx\.kz\/home\/?)/.exec(text);
+  if (!m) return null;
+  return m[2] ? `${BASE}${m[2]}` : m[1];
+}
+
+const sellerCache = new Map();   // номер объявления → ссылка (или null)
+async function sellerLink(ad) {
+  if (sellerCache.has(ad.id)) return sellerCache.get(ad.id);
+  const url = ad.url && /^https?:/.test(ad.url) ? ad.url.split('#')[0] : `${BASE}/d/obyavlenie/-ID${encodeId(ad.id)}.html`;
+  let link = null;
+  try { link = sellerLinkIn(await (await get(url, 'text/html')).text()); } catch { link = null; }
+  sellerCache.set(ad.id, link);
+  if (sellerCache.size > 2000) sellerCache.delete(sellerCache.keys().next().value);
+  return link;
+}
+
 module.exports = {
+  sellerLink, sellerLinkIn,
   fetchLatest,
   BASE, decodeId, encodeId, idFromUrl, newestFirst, fetchSearch, parseSearchHtml, fetchOffer, normalizeOffer, HttpError,
 };

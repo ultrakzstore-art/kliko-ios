@@ -367,12 +367,6 @@ function createBot({ token, db, config, getWatcher, log }) {
     if (admin) await send(admin, text, kb ? { reply_markup: kb } : {});
   }
 
-  // OLX пишет продавца в ссылке коротким кодом — как номер объявления (62-ричная запись).
-  function sellerLink(userId) {
-    const n = Number(userId);
-    const code = Number.isFinite(n) && n > 0 ? olx.encodeId(n) : String(userId);
-    return config.sellerUrl.replace('{code}', encodeURIComponent(code)).replace('{id}', encodeURIComponent(userId));
-  }
 
   // Коллаж из первых 4 фото готовим один раз на объявление: первому
   // получателю — загрузкой, остальным — по file_id, который вернул Телеграм.
@@ -407,8 +401,9 @@ function createBot({ token, db, config, getWatcher, log }) {
       return send(userId, `«${subs[0].name}»: слежу. Сейчас в выдаче ${count} объявлений — присылать буду только новые.`);
     }
     const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
-    if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', sellerLink(ad.userId));
-    else if (ad.sellerUrl) kb.row().url('Все объявления автора', ad.sellerUrl);
+    // OLX: ссылку на продавца берём со страницы объявления (формат там всегда верный).
+    const seller = (ad.source || 'olx') === 'olx' ? await olx.sellerLink(ad).catch(() => null) : ad.sellerUrl;
+    if (seller) kb.row().url('Все объявления автора', seller);
     // Одно сообщение: коллаж из до 4 фото, под ним карточка и кнопки. Остальные фото — на сайте.
     const photos = (ad.photos?.length ? ad.photos : ad.photo ? [ad.photo] : []);
     if (photos.length) {
