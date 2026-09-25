@@ -1,28 +1,27 @@
-// Два источника новых объявлений:
-//  • поиск — ссылки, которые вы добавили, проверяются «сначала новые» раз в POLL_SEC;
-//  • турбо — номера объявлений сквозные, поэтому следующие номера после самого свежего
-//    известного проверяются напрямую, раз в TURBO_SEC. Так объявление ловится до того,
-//    как попадёт в поиск (в том числе пока оно на проверке).
-// Оба источника пишут в одну таблицу «видели» — одно объявление приходит один раз.
+// Ловля новых объявлений для всех пользователей.
+//  • поиск — ссылки поисков «сначала новые»; платные — раз в POLL_SEC, бесплатные — раз в
+//    FREE_POLL_SEC (10 минут). Одинаковые ссылки разных людей — один запрос к OLX.
+//  • турбо — только для платных: следующие номера после самого свежего известного,
+//    напрямую и одновременно, раз в TURBO_SEC. Ловит объявление до попадания в поиск.
+// Новизна у каждого поиска своя (водяная отметка по номеру + таблица «отправлено»).
 
 const olx = require('./olx');
 const { learn, matches } = require('./match');
 
-const FRESH_MS = 60 * 60_000;     // «Топ»-объявления бывают старыми: такие не считаем новыми
-const MISS_GIVE_UP = 12;          // номер пустой 12 проверок подряд — пропускаем его
+const MISS_GIVE_UP = 12;
 
 class Watcher {
   constructor({ db, config, notify, alert, log }) {
     this.db = db;
     this.cfg = config;
-    this.notify = notify;   // (ad, subs[], via) → отправить в Телеграм
-    this.alert = alert;     // (text) → служебное сообщение владельцу
+    this.notify = notify;   // (userId, ad, subs[], via)
+    this.alert = alert;     // (text) → владельцу бота
     this.log = log;
-    this.frontier = db.get('frontier', 0);  // самый большой известный номер объявления
-    this.misses = new Map();                // номер → сколько раз оказался пустым
+    this.frontier = db.get('frontier', 0);
+    this.misses = new Map();
     this.backoffUntil = 0;
     this.backoffMs = 0;
-    this.stats = { searchOk: 0, searchErr: 0, turboFound: 0, turboProbes: 0, lastTurboHit: null };
+    this.stats = { searchOk: 0, searchErr: 0, turboFound: 0, turboProbes: 0, lastTurboHit: null, sent: 0 };
     this.timers = [];
   }
 
@@ -36,7 +35,6 @@ class Watcher {
     this.timers.forEach(clearInterval);
   }
 
-  // Бережём себя от блокировки: на 403/429 OLX отдыхаем, с каждым разом дольше (до 15 мин).
   blocked() {
     return Date.now() < this.backoffUntil;
   }
@@ -45,7 +43,7 @@ class Watcher {
     if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) {
       this.backoffMs = Math.min(15 * 60_000, this.backoffMs ? this.backoffMs * 2 : 60_000);
       this.backoffUntil = Date.now() + this.backoffMs;
-      this.alert(`OLX ограничил запросы (${e.status}). Пауза ${Math.round(this.backoffMs / 60_000)} мин. Если повторяется — увеличьте POLL_SEC или включите прокси.`);
+      this.alert(`OLX ограничил запросы (${e.status}). Пауза ${Math.round(this.backoffMs / 60_000)} мин.`);
       return true;
     }
     return false;
@@ -62,110 +60,125 @@ class Watcher {
     }
   }
 
+  isFresh(ad) {
+    return !ad.createdAt || Date.now() - ad.createdAt <= this.cfg.freshMs;
+  }
+
   // ---------- поиск ----------
+
+  intervalFor(sub) {
+    return (this.db.isPaid(sub.user_id) ? this.cfg.pollSec : this.cfg.freePollSec) * 1000;
+  }
 
   async searchTick() {
     if (this.searchBusy || this.blocked()) return;
     this.searchBusy = true;
     try {
       const now = Date.now();
-      const due = this.db.subs().filter((s) => !s.paused && now - s.last_poll >= this.cfg.pollSec * 1000);
-      for (const sub of due) {
+      const due = this.db.subs().filter((s) => {
+        if (s.paused) return false;
+        const u = this.db.user(s.user_id);
+        if (!u || u.blocked) return false;
+        return now - s.last_poll >= this.intervalFor(s);
+      });
+      // Одна ссылка — один запрос, сколько бы людей на неё ни подписалось.
+      const byUrl = new Map();
+      for (const s of due) byUrl.set(s.url, [...(byUrl.get(s.url) || []), s]);
+      for (const [url, subs] of byUrl) {
         if (this.blocked()) break;
-        await this.pollSub(sub);
-        await sleep(1500 + Math.random() * 1500); // не долбим OLX пачкой запросов
+        await this.pollUrl(url, subs);
+        await sleep(1000 + Math.random() * 1000);
       }
     } finally {
       this.searchBusy = false;
     }
   }
 
-  async pollSub(sub) {
-    let result;
+  async pollUrl(url, subs) {
+    let ads;
     try {
-      result = await olx.fetchSearch(sub.url);
+      ads = (await olx.fetchSearch(url)).ads;
       this.okRequest();
       this.stats.searchOk += 1;
     } catch (e) {
       this.stats.searchErr += 1;
-      this.db.updateSub(sub.id, { last_poll: Date.now(), last_error: e.message });
-      if (!this.handleError(e)) this.log(`«${sub.name}»: ${e.message}`);
+      for (const s of subs) this.db.updateSub(s.id, { last_poll: Date.now(), last_error: e.message });
+      if (!this.handleError(e)) this.log(`поиск ${url}: ${e.message}`);
       return;
     }
-    const ads = result.ads;
     for (const a of ads) this.bumpFrontier(a.id);
-    const patch = { last_poll: Date.now(), last_error: ads.length ? '' : 'поиск ничего не вернул', learned: learn(sub.learned, ads.filter((a) => !a.promoted)) };
+    const maxId = ads.reduce((m, a) => Math.max(m, a.id), 0);
+    const enriched = new Map();   // карточка по номеру — одна на всех подписчиков ссылки
+    const enrich = async (ad) => {
+      if (!enriched.has(ad.id)) enriched.set(ad.id, olx.fetchOffer(ad.id).then((f) => (f ? { ...ad, ...stripEmpty(f) } : ad)).catch(() => ad));
+      return enriched.get(ad.id);
+    };
 
-    // Первый проход — только запоминаем, что уже есть, чтобы не засыпать вас старьём.
-    if (!sub.initialized) {
-      for (const a of ads) this.db.markSeen(a.id);
-      patch.initialized = 1;
-      this.db.updateSub(sub.id, patch);
-      this.alert(`«${sub.name}»: слежу. Сейчас в выдаче ${ads.length} объявлений — присылать буду только новые.`);
-      return;
-    }
-    this.db.updateSub(sub.id, patch);
-
-    for (const a of ads) {
-      if (this.db.isSeen(a.id)) continue;
-      if (a.createdAt && Date.now() - a.createdAt > FRESH_MS) { this.db.markSeen(a.id); continue; }
-      this.db.markSeen(a.id);
-      const full = await this.enrich(a);
-      await this.notify(full, [sub], 'search');
-      this.db.updateSub(sub.id, { sent: sub.sent + 1 });
-      sub.sent += 1;
+    for (const sub of subs) {
+      const patch = {
+        last_poll: Date.now(),
+        last_error: ads.length ? '' : 'поиск ничего не вернул',
+        learned: learn(sub.learned, ads.filter((a) => !a.promoted)),
+      };
+      // Первый проход — только отметка: что уже есть, не присылаем.
+      if (!sub.initialized) {
+        this.db.updateSub(sub.id, { ...patch, initialized: 1, watermark: maxId });
+        this.notifyReady(sub, ads.length);
+        continue;
+      }
+      let sent = sub.sent;
+      for (const a of ads) {
+        if (a.id <= sub.watermark || this.db.wasSent(sub.id, a.id)) continue;
+        const full = await enrich(a);
+        if (!this.isFresh(full)) continue;   // поднятое или продвинутое старьё
+        if (!this.db.markSent(sub.id, a.id)) continue;
+        await this.notify(sub.user_id, full, [sub], 'search');
+        this.stats.sent += 1;
+        sent += 1;
+      }
+      this.db.updateSub(sub.id, { ...patch, sent, watermark: Math.max(sub.watermark, maxId) });
     }
   }
 
-  // Подробности (описание, продавец, параметры) — из карточки; не вышло — шлём что есть.
-  async enrich(ad) {
-    try {
-      const full = await olx.fetchOffer(ad.id);
-      return full ? { ...ad, ...stripEmpty(full) } : ad;
-    } catch {
-      return ad;
-    }
+  notifyReady(sub, count) {
+    this.notify(sub.user_id, null, [sub], 'ready', count);
   }
 
-  // ---------- турбо ----------
+  // ---------- турбо (только платные) ----------
 
   async turboTick() {
     if (!this.db.get('turbo', true) || this.turboBusy || this.blocked() || !this.frontier) return;
-    const subs = this.db.subs().filter((s) => !s.paused && s.initialized);
+    const subs = this.db.subs().filter((s) => !s.paused && s.initialized && this.db.isPaid(s.user_id) && !this.db.user(s.user_id)?.blocked);
     if (!subs.length) return;
     this.turboBusy = true;
     try {
       const ids = [];
       for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
-        if ((this.misses.get(id) || 0) < MISS_GIVE_UP && !this.db.isSeen(id)) ids.push(id);
+        if ((this.misses.get(id) || 0) < MISS_GIVE_UP) ids.push(id);
       }
-      for (const id of ids) {
-        if (this.blocked()) break;
-        let offer;
-        try {
-          offer = await olx.fetchOffer(id);
-          this.okRequest();
-          this.stats.turboProbes += 1;
-        } catch (e) {
-          if (this.handleError(e)) break;
-          continue;
-        }
-        if (!offer) {
-          this.misses.set(id, (this.misses.get(id) || 0) + 1);
-          continue;
-        }
+      // Все номера прохода — одновременно.
+      const results = await Promise.all(ids.map((id) => olx.fetchOffer(id).then((o) => ({ id, o }), (e) => ({ id, e }))));
+      for (const { id, o, e } of results) {
+        if (e) { if (this.handleError(e)) break; continue; }
+        this.okRequest();
+        this.stats.turboProbes += 1;
+        if (!o) { this.misses.set(id, (this.misses.get(id) || 0) + 1); continue; }
         this.misses.delete(id);
         this.bumpFrontier(id);
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();
-        if (!this.db.markSeen(id)) continue;
-        const hit = subs.filter((s) => matches(s, offer));
-        if (hit.length) {
-          await this.notify(offer, hit, 'turbo');
-          for (const s of hit) this.db.updateSub(s.id, { sent: s.sent + 1 });
+        if (!this.isFresh(o)) continue;
+        const byUser = new Map();
+        for (const s of subs) {
+          if (!matches(s, o) || !this.db.markSent(s.id, id)) continue;
+          byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
+          this.db.updateSub(s.id, { sent: s.sent + 1 });
+        }
+        for (const [userId, hit] of byUser) {
+          await this.notify(userId, o, hit, 'turbo');
+          this.stats.sent += 1;
         }
       }
-      // Пустые номера далеко позади — забываем, чтобы карта не росла.
       for (const id of this.misses.keys()) if (id < this.frontier - 500) this.misses.delete(id);
     } finally {
       this.turboBusy = false;

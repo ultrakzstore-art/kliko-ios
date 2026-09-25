@@ -20,8 +20,7 @@ watcher = new Watcher({ db, config, notify, alert, log });
 bot.api.setMyCommands([
   { command: 'new', description: 'Новый поиск: рубрика, город, цена' },
   { command: 'list', description: 'Мои поиски' },
-  { command: 'turbo', description: 'Турбо: ловить раньше поиска' },
-  { command: 'status', description: 'Как идут дела' },
+  { command: 'access', description: 'Доступ и оплата' },
   { command: 'help', description: 'Справка' },
 ]).catch(() => {});
 

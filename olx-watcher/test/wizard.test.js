@@ -50,7 +50,9 @@ test('мастер: рубрика → подрубрика → город → �
   let searched = '';
   olx.fetchSearch = async (url) => { searched = url; return { source: 'state', ads: [{ id: 1, title: 'HP 250 G9', priceLabel: '250 000 ₸' }] }; };
 
-  const { bot } = createBot({ token: '1:x', db, config: { pollSec: 30, sellerUrl: '' }, getWatcher: () => null, log: () => {} });
+  const config = { pollSec: 30, freePollSec: 600, freeSubs: 3, paidSubs: 20, sellerUrl: '',
+    starsPrices: [100, 180, 300], kaspiPrices: [1500, 2500, 4500], kaspiDetails: 'Kaspi +7 700 000 00 00' };
+  const { bot } = createBot({ token: '1:x', db, config, getWatcher: () => null, log: () => {} });
   bot.botInfo = { id: 1, is_bot: true, first_name: 'bot', username: 'bot', can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false };
   const sent = [];
   bot.api.config.use(async (prev, method, payload) => {
@@ -82,16 +84,40 @@ test('мастер: рубрика → подрубрика → город → �
     assert.match(lastText(), /HP 250 G9/, 'пробный поиск показан до сохранения');
     assert.strictEqual(searched, 'https://www.olx.kz/d/elektronika/noutbuki/almaty/q-hp-250/?search%5Bfilter_float_price%3Ato%5D=300000');
     await press('w:save');
-    const subs = db.subs();
+    const subs = db.subs(42);
     assert.strictEqual(subs.length, 1);
     assert.strictEqual(subs[0].name.replace(/\u00a0/g, ' '), 'hp 250 · Алматы · до 300 000');
     assert.strictEqual(subs[0].url, searched);
 
-    // Чужой человек боту не нужен.
-    const before = db.subs().length;
-    await bot.handleUpdate({ update_id: ++uid, message: { message_id: uid, date: 0, chat: { id: 7, type: 'private' }, from: { id: 7, is_bot: false, first_name: 'X' }, text: '/new', entities: [{ type: 'bot_command', offset: 0, length: 4 }] } });
-    assert.strictEqual(lastText(), 'Это личный бот.');
-    assert.strictEqual(db.subs().length, before);
+    // Другой человек — тоже пользователь, со своими поисками и бесплатным доступом.
+    const other = { id: 7, is_bot: false, first_name: 'Гость' };
+    const otherChat = { id: 7, type: 'private' };
+    const say = (t) => bot.handleUpdate({ update_id: ++uid, message: { message_id: uid, date: 0, chat: otherChat, from: other, text: t } });
+    await say('https://www.olx.kz/d/elektronika/q-a/');
+    await say('https://www.olx.kz/d/elektronika/q-b/');
+    await say('https://www.olx.kz/d/elektronika/q-c/');
+    await say('https://www.olx.kz/d/elektronika/q-d/');
+    assert.strictEqual(db.subs(7).length, 3, 'бесплатно — до 3 поисков');
+    assert.match(lastText(), /до 3 поисков/);
+    assert.strictEqual(db.subs(42).length, 1, 'поиски не смешиваются');
+
+    // Kaspi: гость жмёт «Я оплатил» → владельцу заявка → «Дать» → доступ на 14 дней.
+    const pressAs = (from, data) => bot.handleUpdate({ update_id: ++uid, callback_query: { id: String(uid), from, chat_instance: 'x', data, message: { message_id: 1, date: 0, chat: { id: from.id, type: 'private' }, from, text: 'заявка' } } });
+    await pressAs(other, 'kaspi:14');
+    assert.match(lastText(), /2\s?500 ₸/);
+    await pressAs(other, 'kpaid:14');
+    const toAdmin = [...sent].reverse().find((x) => x.method === 'sendMessage' && x.payload.chat_id === 42);
+    assert.match(toAdmin.payload.text, /Kaspi/);
+    const approve = toAdmin.payload.reply_markup.inline_keyboard.flat().find((b) => b.callback_data.startsWith('approve:'));
+    await pressAs(other, approve.callback_data);                 // не владелец — не может
+    assert.ok(!db.isPaid(7));
+    await pressAs(from, approve.callback_data);                  // владелец — выдаёт
+    assert.ok(db.isPaid(7), 'после подтверждения — платный доступ');
+
+    // Stars: успешная оплата продлевает автоматически.
+    await bot.handleUpdate({ update_id: ++uid, message: { message_id: uid, date: 0, chat: otherChat, from: other,
+      successful_payment: { currency: 'XTR', total_amount: 100, invoice_payload: 'stars:7:7', telegram_payment_charge_id: 'c1', provider_payment_charge_id: '' } } });
+    assert.ok(db.user(7).paid_until - Date.now() > 20 * 86400_000, '14 + 7 дней');
   } finally {
     olx.fetchSearch = origSearch;
   }
