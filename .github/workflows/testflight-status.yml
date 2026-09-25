@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TESTFLIGHT: ЧТО СО СБОРКАМИ И КОМУ ОНИ ВЫДАНЫ.
+#
+# Владелец 25.09.2026: «я не вижу с iOS его». Заливка кладёт сборку в App Store Connect, но на телефоне она
+# появляется, только когда её выдали группе тестировщиков. Этот прогон без номера сборки показывает группы и
+# последние десять сборок с их состоянием; с номером — дожидается обработки и выдаёт сборку всем внутренним
+# группам (то же делает шаг «Выдать сборку тестировщикам» в ios.yml после каждой заливки).
+# ─────────────────────────────────────────────────────────────────────────────
+name: TestFlight · статус и выдача
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "Номер сборки (пусто — только показать группы и последние сборки)"
+        type: string
+        default: ""
+      version:
+        description: "Версия, например 1.8 (необязательно)"
+        type: string
+        default: ""
+
+jobs:
+  beta:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      KEY_DIR: ${{ github.workspace }}/build/keys
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          [ -n "$KID" ] && [ -n "$P8" ] || { echo "::error::Не заведены секреты ASC_KEY_ID / ASC_KEY_P8"; exit 1; }
+          mkdir -p "$KEY_DIR"
+          out="$KEY_DIR/AuthKey_$KID.p8"
+          if printf %s "$P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$P8" > "$out"
+          else
+            printf %s "$P8" | tr -d "[:space:]" | base64 -D > "$KEY_DIR/decoded" 2>/dev/null || true
+            if head -c 40 "$KEY_DIR/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$KEY_DIR/decoded" "$out"
+            else
+              body=$(printf %s "$P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"; printf %s "$body"; echo; echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$KEY_DIR/decoded"
+          fi
+          chmod 600 "$out"
+          head -1 "$out" | grep -q 'BEGIN PRIVATE KEY' || { echo "::error::ASC_KEY_P8 не похож на ключ"; exit 1; }
+          echo "ASC_KEY_PATH=$out" >> "$GITHUB_ENV"
+
+      - name: fastlane
+        run: command -v fastlane >/dev/null 2>&1 || brew install fastlane
+
+      - name: Статус и выдача
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          IN_BUILD: ${{ inputs.build }}
+          IN_VERSION: ${{ inputs.version }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          FASTLANE_DISABLE_COLORS: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: fastlane ios beta ${IN_BUILD:+build:"$IN_BUILD"} ${IN_VERSION:+version:"$IN_VERSION"}
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"

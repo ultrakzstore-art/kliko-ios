@@ -81,6 +81,76 @@ platform :ios do
   # публикацию на стор». По умолчанию — ПРОВЕРКА: пометки прогона показывают версию, сборку, языки, кадры и данные для
   # проверяющего, а в Apple ничего не уходит. Отправка — только с submit:true.
   # Данные для входа проверяющего и контакты в пометки не печатаются — только «есть / нет».
+  # СБОРКА ВИДНА В TESTFLIGHT НА ТЕЛЕФОНЕ (владелец 25.09.2026: «я не вижу с iOS его»).
+  #
+  # Заливка кладёт сборку в App Store Connect, но на телефоне в TestFlight она появляется, только когда её дали
+  # группе тестировщиков: у внутренней группы без «доступа ко всем сборкам» каждую новую нужно добавить руками.
+  # Этот lane ждёт, пока Apple обработает сборку, добавляет её во все внутренние группы и пишет в итог прогона, что
+  # с ней: состояние обработки, состояние для тестирования, группы. Внешние группы не трогаем — там проверка Apple.
+  #
+  # fastlane ios beta build:26 version:1.8 — одну сборку; без build — показать последние десять и ничего не менять.
+  lane :beta do |options|
+    note = lambda { |title, msg| $stdout.puts("::notice title=#{title}::#{msg}") }
+    warn = lambda { |title, msg| $stdout.puts("::warning title=#{title}::#{msg}") }
+    number = (options[:build] || "").to_s
+    version = (options[:version] || "").to_s
+
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+      in_house: false
+    )
+    app = Spaceship::ConnectAPI::App.find("kz.kliko.app")
+    UI.user_error!("Приложение kz.kliko.app не найдено этим ключом") unless app
+    ios = Spaceship::ConnectAPI::Platform::IOS
+
+    describe = lambda do |b|
+      detail = b.build_beta_detail
+      internal = detail ? detail.internal_build_state : "?"
+      external = detail ? detail.external_build_state : "?"
+      "#{b.app_version} (#{b.version}): обработка #{b.processing_state}, внутреннее тестирование #{internal}, внешнее #{external}#{b.expired ? ', истекла' : ''}"
+    end
+
+    groups = app.get_beta_groups
+    internal_groups = groups.select { |g| g.is_internal_group }
+    note.call("Группы TestFlight", groups.empty? ? "нет ни одной — заведите внутреннюю группу в App Store Connect → TestFlight" :
+      groups.map { |g| "#{g.name} (#{g.is_internal_group ? 'внутренняя' : 'внешняя'}#{g.has_access_to_all_builds ? ', все сборки' : ''})" }.join("; "))
+    warn.call("Нет внутренней группы", "App Store Connect → TestFlight → Internal Testing → «+», добавьте себя тестировщиком") if internal_groups.empty?
+
+    if number.empty?
+      builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, platform: ios, sort: "-uploadedDate", limit: 10)
+      builds.each { |b| note.call("Сборка #{b.version}", describe.call(b)) }
+      next
+    end
+
+    # Ждём обработку: сразу после заливки сборки в списке ещё нет, потом она PROCESSING. До 25 минут.
+    build = nil
+    deadline = Time.now + 25 * 60
+    loop do
+      found = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: (version.empty? ? nil : version),
+                                               build_number: number, platform: ios)
+      build = found.first
+      break if build && build.processing_state != "PROCESSING"
+      UI.user_error!("Сборка #{number} за 25 минут так и не обработалась (#{build ? build.processing_state : 'её нет в списке'})") if Time.now > deadline
+      UI.message("Сборка #{number}: #{build ? build.processing_state : 'ещё не появилась'} — жду минуту")
+      sleep 60
+    end
+    UI.user_error!("Apple не приняла сборку #{number}: #{build.processing_state}") unless build.processing_state == "VALID"
+
+    to_add = internal_groups.reject { |g| g.has_access_to_all_builds }
+    unless to_add.empty?
+      begin
+        build.add_beta_groups(beta_groups: to_add)
+        note.call("Сборка #{number} выдана", to_add.map(&:name).join(", "))
+      rescue => e
+        warn.call("Не удалось выдать сборку группам", e.message)
+      end
+    end
+    fresh = Spaceship::ConnectAPI::Build.all(app_id: app.id, build_number: number, platform: ios).first || build
+    note.call("Сборка #{number}", describe.call(fresh))
+  end
+
   lane :submit do |options|
     version = (options[:version] || "").to_s
     UI.user_error!("Не задана версия: fastlane submit version:1.6") if version.empty?

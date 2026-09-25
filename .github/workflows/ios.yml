@@ -292,6 +292,30 @@ jobs:
             -authenticationKeyID "$KID" \
             -authenticationKeyIssuerID "$ISS"
 
+      # СБОРКА НА ТЕЛЕФОНЕ (владелец 25.09.2026: «я не вижу с iOS его»). Заливка кладёт сборку в App Store Connect,
+      # но в TestFlight на телефоне она видна, только когда её выдали группе тестировщиков. Ждём обработку Apple и
+      # выдаём сборку всем внутренним группам (fastlane ios beta). Не вышло — сборка всё равно залита, прогон зелёный,
+      # а причина — в итоге прогона.
+      - name: Выдать сборку тестировщикам
+        if: success() && (github.event_name != 'workflow_dispatch' || inputs.upload)
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          IN_VERSION: ${{ inputs.version }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          FASTLANE_DISABLE_COLORS: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: |
+          command -v fastlane >/dev/null 2>&1 || brew install fastlane
+          export ASC_KEY_PATH="$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
+          version="$IN_VERSION"
+          if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          fastlane ios beta build:"${{ github.run_number }}" ${version:+version:"$version"}
+
       - name: Убрать ключ
         if: always()
         run: rm -rf "$KEY_DIR"
