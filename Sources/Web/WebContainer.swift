@@ -149,8 +149,9 @@ struct WebContainer: UIViewRepresentable {
         if Config.нативнаяЛента {
             context.coordinator.urlObs = web.observe(\.url, options: [.new]) { [weak coordinator = context.coordinator] w, _ in
                 let наГлавной = w.url.map { Config.главная($0) } ?? false
+                guard let координатор = coordinator else { return }
                 Task { @MainActor in
-                    guard let coordinator else { return }
+                    let coordinator = координатор
                     defer { coordinator.былаГлавная = наГлавной }
                     guard наГлавной, !coordinator.былаГлавная, !WebBridge.shared.сайтВместоЛенты else { return }
                     WebBridge.shared.лентаВидна = true
