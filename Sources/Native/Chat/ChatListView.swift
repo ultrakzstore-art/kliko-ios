@@ -12,6 +12,9 @@ final class ChatListModel: ObservableObject {
     @Published private(set) var грузим = false
     @Published private(set) var ошибка: ChatAPI.Ошибка?
     @Published private(set) var загружено = false
+    /// Сколько раз список сверился с сайтом: пришёл ответ или «нужен вход». По нему вкладки ставят число на иконку
+    /// приложения (этап 11) — после каждой сверки, даже если число то же: пуш сайта мог поставить на иконку своё.
+    @Published private(set) var сверка = 0
 
     func загрузить() async {
         грузим = true
@@ -19,8 +22,16 @@ final class ChatListModel: ObservableObject {
         do {
             диалоги = try await ChatAPI.диалоги()
             ошибка = nil
+            сверка += 1
         } catch let e as ChatAPI.Ошибка {
-            if !Task.isCancelled { ошибка = e }
+            if !Task.isCancelled {
+                ошибка = e
+                /* Вышел из аккаунта — диалоги ушедшего не держим: их непрочитанные остались бы на вкладке и на иконке. */
+                if e == .нуженВход {
+                    диалоги = []
+                    сверка += 1
+                }
+            }
         } catch {
             if !Task.isCancelled { ошибка = .сеть }
         }
@@ -113,6 +124,7 @@ struct ChatListView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Theme.green, in: Capsule())
+                            .accessibilityLabel(String(format: AccessText.т("unread"), д.непрочитано))   // этап 11
                     }
                 }
             }
@@ -136,6 +148,7 @@ struct ChatListView: View {
             }
         }
         .frame(width: 48, height: 48)
+        .accessibilityHidden(true)          // этап 11: обложка — украшение, объявление названо строкой ниже
     }
 }
 

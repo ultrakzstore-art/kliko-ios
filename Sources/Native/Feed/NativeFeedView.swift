@@ -31,7 +31,8 @@ struct NativeFeedView: View {
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
-    private let колонки = [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: 12, alignment: .top)]
+    /// Размер текста в Настройках: при крупном для доступности — сетка в одну колонку (этап 11, ListingCard.сетка).
+    @Environment(\.dynamicTypeSize) private var размерТекста
 
     init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil,
          поиск: Binding<Bool>? = nil) {
@@ -189,9 +190,14 @@ struct NativeFeedView: View {
     private var содержимое: some View {
         if модель.items.isEmpty {
             if модель.грузим || (модель.ошибка == nil && !модель.сДиска) {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 120)
+                /* Этап 11: серые карточки той же сетки вместо колеса. Рубильник выключен — колесо, как раньше. */
+                if Config.скелетЛенты {
+                    СкелетЛенты(колонки: ListingCard.сетка(размерТекста))
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 120)
+                }
             } else if let ошибка = модель.ошибка {
                 заглушкаОшибки(ошибка)
             } else {
@@ -204,7 +210,7 @@ struct NativeFeedView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
             }
-            LazyVGrid(columns: колонки, spacing: 12) {
+            LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
                 ForEach(модель.items) { товар in
                     /* Этап 2: карточка нативная. Рубильник выключен — как на этапе 1, страница сайта. */
                     Group {
@@ -286,8 +292,27 @@ struct NativeFeedView: View {
 }
 
 /// Карточка объявления в сетке ленты.
+///
+/// Этап 11: шрифты — стилями текста, а не точками: при обычном размере те же 16/13/12 pt, а с «Размером текста» в
+/// Настройках растут, но не дальше третьего крупного для доступности. Цена в одну строку ужимается до 0,6, а не
+/// обрезается многоточием; название при крупном тексте — до трёх строк, и сетка тогда в одну колонку (сетка(_:)).
+/// VoiceOver читает карточку одной фразой (Listing.голос), фото — украшение.
 struct ListingCard: View {
     let товар: Listing
+    @Environment(\.dynamicTypeSize) private var размерТекста
+
+    init(товар: Listing) {
+        self.товар = товар
+    }
+
+    /// Колонки сетки карточек. Обычно — по ширине экрана, от 158 pt. При крупном тексте для доступности — от 300 pt: на
+    /// iPhone это одна карточка во всю ширину, иначе цене и названию в узкой карточке не хватит места.
+    static func сетка(_ размер: DynamicTypeSize) -> [GridItem] {
+        if размер.isAccessibilitySize {
+            return [GridItem(.adaptive(minimum: 300, maximum: 520), spacing: 12, alignment: .top)]
+        }
+        return [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: 12, alignment: .top)]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -316,19 +341,21 @@ struct ListingCard: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(Self.цена(товар))
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(.system(.callout, weight: .heavy))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.6)
+                /* Две строки места под название и при коротком — чтобы карточки в ряду были одной высоты; 34 pt — эти
+                   две строки при обычном размере текста. В одну колонку (крупный текст) ровнять не с кем. */
                 Text(товар.title)
-                    .font(.system(size: 13))
+                    .font(.footnote)
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: !крупныйТекст)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
                 if !товар.city.isEmpty {
                     Text(товар.city)
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -340,12 +367,16 @@ struct ListingCard: View {
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .accessibilityElement(children: .combine)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(товар.голос)
     }
+
+    private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
 
     private func метка(_ текст: String, _ фон: Color) -> some View {
         Text(текст)
-            .font(.system(size: 10, weight: .heavy))
+            .font(.system(.caption2, weight: .heavy))
             .foregroundStyle(.white)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(фон, in: Capsule())

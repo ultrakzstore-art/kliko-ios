@@ -14,7 +14,8 @@ struct FavoritesView: View {
     /// «Перейти в ленту» на пустом экране — переключить вкладку. nil — кнопки нет (экран открыт из самой ленты).
     let вЛенту: (() -> Void)?
 
-    private let колонки = [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: 12, alignment: .top)]
+    /// Крупный текст для доступности — сетка в одну колонку, как в ленте (этап 11, ListingCard.сетка).
+    @Environment(\.dynamicTypeSize) private var размерТекста
 
     var body: some View {
         Group {
@@ -33,7 +34,7 @@ struct FavoritesView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
-                        LazyVGrid(columns: колонки, spacing: 12) {
+                        LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
                             ForEach(избранное.товары) { товар in
                                 карточка(товар)
                             }

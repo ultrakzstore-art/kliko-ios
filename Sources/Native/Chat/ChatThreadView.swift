@@ -209,6 +209,9 @@ struct ChatThreadView: View {
             }
             if !с.моё { Spacer(minLength: 48) }
         }
+        /* Этап 11: VoiceOver — одной фразой «Вы: …» или «<собеседник>: …» со временем, а не текст и время порознь. */
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(с.голос(собеседник: заголовок))
     }
 
     @ViewBuilder

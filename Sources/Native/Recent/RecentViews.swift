@@ -80,7 +80,8 @@ private struct МаленькаяКарточка: View {
         }
         .frame(width: Self.ширина, alignment: .leading)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(товар.голос)          // этап 11: одной фразой, как карточка ленты; фото — украшение
     }
 }
 
