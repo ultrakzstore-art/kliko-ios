@@ -67,7 +67,14 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     || (/ в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$/.exec(title) || [])[1] || '';
   const sellerUrl = findSeller(html, url, product, offer);
   // Krisha подписывает продавца: «Хозяин недвижимости» или «Агент» / «Специалист».
-  const owner = /Хозяин\s+недвижимости/i.test(html) ? true
+  // Kolesa: автосалон / дилер — не хозяин; «Частное лицо» — хозяин. Во множественном числе
+  // («Автосалоны», «Дилеры») это пункты меню сайта, а «в автосалоне», «у дилера» — текст
+  // описания; такое не считаем. Только слово-подпись с большой буквы.
+  const owner = /kolesa\.kz/i.test(url)
+    ? (/"@type"\s*:\s*"(AutoDealer|AutomotiveBusiness|CarDealer)"/i.test(html)
+      || /(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Дилер)(?![а-яё])/.test(html) ? false
+      : /Частное\s+лицо|Собственник|Хозяин/i.test(html) ? true : null)
+    : /Хозяин\s+недвижимости/i.test(html) ? true
     : /(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)/i.test(html) ? false : null;
   const posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom || '');
   return {

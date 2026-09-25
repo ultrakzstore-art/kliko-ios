@@ -68,11 +68,12 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // Продавец (только OLX): все, частные или бизнес. По умолчанию — все.
   async function stepSeller(ctx) {
-    if (st().w.source === 'krisha') {
-      // Krisha: только от хозяев (фильтр das[who]=1 в ссылке).
+    if (st().w.source === 'krisha' || st().w.source === 'kolesa') {
+      // Krisha: фильтр das[who]=1 в ссылке. Kolesa: без автосалонов и дилеров.
       st().w.step = 'seller';
-      const kb = new InlineKeyboard().text('👥 Все', 'w:owner:all').text('🏠 Только от хозяев', 'w:owner:1');
-      return show(ctx, `<b>Новый поиск · Krisha</b>\n${summary()}\n\nОт кого?`, kb);
+      const kolesa = st().w.source === 'kolesa';
+      const kb = new InlineKeyboard().text('👥 Все', 'w:owner:all').text(kolesa ? '🚗 Только от хозяев' : '🏠 Только от хозяев', 'w:owner:1');
+      return show(ctx, `<b>Новый поиск · ${kolesa ? 'Kolesa' : 'Krisha'}</b>\n${summary()}\n\nОт кого?`, kb);
     }
     if (st().w.source !== 'olx') return stepConfirm(ctx);
     st().w.step = 'seller';
@@ -87,7 +88,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     const w = st().w;
     w.url = w.source === 'olx'
       ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
-      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: { ...(w.ksub?.params || {}), ...(w.owners ? { 'das[who]': 1 } : {}) }, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo });
+      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: { ...(w.ksub?.params || {}), ...(w.owners && w.source === 'krisha' ? { 'das[who]': 1 } : {}) }, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo });
     let preview;
     try {
       const found = await src().fetchSearch(w.url);
@@ -115,7 +116,7 @@ function registerWizard(bot, { db, log, canAdd }) {
       `Город: ${st().w.city ? esc(st().w.city.name) : 'весь Казахстан'}`,
       st().w.words ? `Слова: ${esc(st().w.words)}` : '',
       price ? `Цена: ${price}` : '',
-      st().w.seller !== 'all' ? `Продавец: ${SELLER[st().w.seller]}` : '',
+      st().w.seller !== 'all' && !st().w.owners ? `Продавец: ${SELLER[st().w.seller]}` : '',
       st().w.owners ? 'Только от хозяев' : '',
     ].filter(Boolean).join('\n');
   }
@@ -225,6 +226,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     if (data === 'w:skipprice') return stepSeller(ctx);
     if (data.startsWith('w:owner:')) {
       st().w.owners = data === 'w:owner:1';
+      if (st().w.source === 'kolesa') st().w.seller = st().w.owners ? 'private' : 'all';
       return stepConfirm(ctx);
     }
     if (data.startsWith('w:seller:')) {

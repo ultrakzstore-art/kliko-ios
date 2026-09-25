@@ -146,3 +146,16 @@ test('Krisha: хозяин или агент по подписи в карточ
     global.fetch = origFetch;
   }
 });
+
+test('Kolesa: автосалон / дилер — не хозяин; «в автосалоне» в описании и меню «Автосалоны» не считаются', () => {
+  const u = { id: 180000001, url: 'https://kolesa.kz/a/show/180000001' };
+  const menu = '<nav><a href="/dealers">Автосалоны</a><a>Дилеры</a></nav>';
+  const dealer = parseDetail(`${menu}<meta property="og:title" content="Toyota Camry"><div class="seller">Автосалон</div>`, u);
+  const ld = parseDetail(`${menu}<meta property="og:title" content="Kia Rio"><script type="application/ld+json">{"@type":"AutoDealer","name":"X"}</script>`, u);
+  const priv = parseDetail(`${menu}<meta property="og:title" content="Lada"><div class="descr">Куплена в автосалоне, обслуживалась у дилера. Салон чистый.</div>`, u);
+  const named = parseDetail(`${menu}<meta property="og:title" content="Lada"><div class="seller">Частное лицо</div>`, u);
+  assert.strictEqual(dealer.owner, false);
+  assert.strictEqual(ld.owner, false);
+  assert.strictEqual(priv.owner, null, 'не угадали — не отсеиваем');
+  assert.strictEqual(named.owner, true);
+});

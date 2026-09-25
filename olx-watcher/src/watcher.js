@@ -15,8 +15,16 @@ const MISS_GIVE_UP = 12;
 // Объявление с номером ниже отметки поиска (было на проверке у OLX и попало в выдачу позже
 // соседей) — всё равно новое, если подано после создания поиска и не старше этого срока.
 const LATE_MS = 3 * 3600_000;
-// Пропуск у края ленты (обычно — на проверке) перепроверяем столько.
-const GAP_LIFE_MS = 30 * 60_000;
+// Пропуск у края ленты (обычно — на проверке) перепроверяем столько: модерация бывает и
+// через час-два, объявление всё равно должно прийти, как только OLX его покажет.
+const GAP_LIFE_MS = LATE_MS;
+// Как часто перепроверять пропуск в зависимости от его возраста: свежие — каждый проход,
+// старше 10 минут — раз в 30 секунд, старше часа — раз в 2 минуты.
+function gapDue(g, now) {
+  const age = now - g.added;
+  const every = age < 10 * 60_000 ? 0 : age < 3600_000 ? 30_000 : 120_000;
+  return now - g.checked >= every;
+}
 
 class Watcher {
   constructor({ db, config, notify, alert, log }) {
@@ -33,8 +41,9 @@ class Watcher {
     this.timers = [];
     this.lockSeen = new Map();
     // Пропуски у края ленты доски — номера, которых в ленте нет: обычно объявления на проверке
-    // (номер выдан при подаче, в ленту попадут после проверки). Турбо перепроверяет их 15 минут.
-    this.gaps = new Map();   // номер → { added, checked }   // VIP-рубрика → номера объявлений из выдачи её поиска
+    // (номер выдан при подаче, в ленту попадут после проверки). Турбо перепроверяет их до 3 часов.
+    this.gaps = new Map();   // номер → { added, checked }
+    this.found = new Set();  // номера, которые уже видели (в ленте или по номеру), — не пропуски   // VIP-рубрика → номера объявлений из выдачи её поиска
     this.lockCache = { at: 0, list: [] };
     this.traceLog = new Map();   // номер → последние события («почему не пришло?»)
     this.lastBoardOK = 0;
@@ -134,6 +143,11 @@ class Watcher {
       this.frontier = id;
       this.db.set('frontier', id);
     }
+  }
+
+  markFound(id) {
+    this.found.add(id);
+    if (this.found.size > 20_000) this.found.delete(this.found.values().next().value);
   }
 
   isFresh(ad, ms = this.cfg.freshMs) {
@@ -251,7 +265,7 @@ class Watcher {
         const pass = (late ? this.lateOk(sub, full, src.key) : this.isFresh(full, window))   // не старьё
           && this.allowed(sub.user_id, full)                                         // чужая VIP-рубрика
           && this.sellerOk(sub, full)                                                // частные / бизнес
-          && !(ownersOnly(sub) && full.owner !== true);                              // Krisha: от хозяев
+          && ownerOk(sub, full);                                                     // Krisha / Kolesa: от хозяев
         if (!this.db.markSent(sub.id, a.id)) continue;
         if (!pass) { this.trace(a.id, `поиск #${sub.id}: отсеяно (старое / продавец / VIP)`); continue; }
         this.trace(a.id, `поиск #${sub.id}: отправлено`);
@@ -319,8 +333,9 @@ class Watcher {
       const now = Date.now();
       const boardWindow = Math.max(this.cfg.freshMs, this.lastBoardOK ? Math.min(24 * 3600_000, now - this.lastBoardOK + 120_000) : 0);
       this.lastBoardOK = now;
+      for (const id of onBoard) this.markFound(id);
       for (let id = Math.max(1, top - 300); id <= top; id++) {
-        if (!onBoard.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
+        if (!this.found.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
       }
       for (const [id, g] of this.gaps) if (now - g.added > GAP_LIFE_MS || onBoard.has(id)) this.gaps.delete(id);
       if (top > this.frontier + this.cfg.turboWindow * 3) {
@@ -331,12 +346,15 @@ class Watcher {
       }
       await this.checkDiscounts('olx', ads, subs, { matcher: true });
       for (const a of [...ads].sort((x, y) => x.id - y.id)) {
-        if (a.promoted || !this.isFresh(a, boardWindow)) continue;
+        // Прошло модерацию поздно (подано час назад, в ленте только сейчас) — тоже новое
+        // для поисков, созданных до подачи: это решает lateOk ниже.
+        if (a.promoted || !this.isFresh(a, Math.max(boardWindow, LATE_MS))) continue;
+        const fresh = this.isFresh(a, boardWindow);
         a.source = 'olx';
         if (!this.traceLog.has(a.id)) this.trace(a.id, `лента: увидели${a.status && a.status !== 'active' ? ' (на модерации)' : ''}`);
         const byUser = new Map();
         for (const s of subs) {
-          if (a.id <= s.watermark && !this.lateOk(s, a)) continue;
+          if ((a.id <= s.watermark || !fresh) && !this.lateOk(s, a)) continue;
           if (this.db.wasSent(s.id, a.id)) continue;
           const why = mismatch(s, a);
           if (why) { this.trace(a.id, `лента → поиск #${s.id}: не подошло — ${why}`); continue; }
@@ -426,7 +444,9 @@ class Watcher {
         .slice(0, Math.ceil(this.cfg.turboWindow / 3));
       ids.push(...retry);
       // И пропуски ниже края ленты — давно не проверенные первыми.
-      const gapIds = [...this.gaps.entries()].sort((a, b) => a[1].checked - b[1].checked || b[0] - a[0])
+      const tickAt = Date.now();
+      const gapIds = [...this.gaps.entries()].filter(([, g]) => gapDue(g, tickAt))
+        .sort((a, b) => a[1].checked - b[1].checked || b[0] - a[0])
         .slice(0, this.cfg.turboWindow).map(([id]) => id).filter((id) => !ids.includes(id));
       for (const id of gapIds) this.gaps.get(id).checked = Date.now();
       ids.push(...gapIds);
@@ -445,11 +465,13 @@ class Watcher {
         this.stats.turboProbes += 1;
         if (!o) { this.misses.set(id, (this.misses.get(id) || 0) + 1); continue; }
         this.misses.delete(id);
-        this.gaps.delete(id);
+        const wasGap = this.gaps.delete(id);
+        this.markFound(id);
         this.bumpFrontier(id);
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();
-        if (!this.isFresh(o, Math.max(this.cfg.freshMs, GAP_LIFE_MS))) { this.trace(id, 'по номеру: подано давно — пропуск'); continue; }
+        // Пропуск, который наконец прошёл модерацию, — новый, даже если подан час-два назад.
+        if (!this.isFresh(o, Math.max(this.cfg.freshMs, wasGap ? GAP_LIFE_MS : 30 * 60_000))) { this.trace(id, 'по номеру: подано давно — пропуск'); continue; }
         o.source = 'olx';
         this.trace(id, `по номеру: нашли${o.status && o.status !== 'active' ? ' — на модерации' : ''}`);
         const byUser = new Map();
@@ -474,9 +496,14 @@ class Watcher {
   }
 }
 
-// Поиск Krisha «только от хозяев» (фильтр das[who]=1 в ссылке — свой или с сайта).
-function ownersOnly(sub) {
-  return (sub.source || 'olx') === 'krisha' && /das(%5B|\[)who(%5D|\])=1/i.test(sub.url);
+// «Только от хозяев». Krisha — фильтр das[who]=1 в ссылке (свой или с сайта): нужна подпись
+// «Хозяин недвижимости». Kolesa — такого фильтра в ссылке нет, выбор хранится как «частные»:
+// отсеиваем то, где на странице автосалон или дилер.
+function ownerOk(sub, ad) {
+  const source = sub.source || 'olx';
+  if (source === 'krisha' && /das(%5B|\[)who(%5D|\])=1/i.test(sub.url)) return ad.owner === true;
+  if (source === 'kolesa' && sub.seller === 'private') return ad.owner !== false;
+  return true;
 }
 
 function stripEmpty(o) {

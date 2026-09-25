@@ -69,11 +69,19 @@ final class AppModel {
     private var backoff: TimeInterval = 0
     private var misses: [Int: Int] = [:]
     /// Пропуски: номера у края ленты, которых в ленте нет, — обычно объявления на проверке
-    /// (номер выдан при подаче, в ленту попадёт после проверки). Перепроверяем по кругу 15 минут.
+    /// (номер выдан при подаче, в ленту попадёт после проверки). Перепроверяем до 3 часов:
+    /// модерация бывает и через час — объявление всё равно придёт, как только OLX его покажет.
     private var gaps: [Int: (added: Date, checked: Date)] = [:]
     private static let gapWindow = 200
     private static let gapsPerPass = 12
-    private static let gapLife: TimeInterval = 30 * 60
+    private static let gapLife: TimeInterval = 3 * 3600
+
+    /// Свежие пропуски — каждый проход, старше 10 минут — раз в 30 с, старше часа — раз в 2 мин.
+    private static func gapDue(_ g: (added: Date, checked: Date), _ now: Date) -> Bool {
+        let age = now.timeIntervalSince(g.added)
+        let every: TimeInterval = age < 600 ? 0 : age < 3600 ? 30 : 120
+        return now.timeIntervalSince(g.checked) >= every
+    }
     private var seenSet = Set<Int>()
     @ObservationIgnored private var subSeenSet = Set<String>()
     @ObservationIgnored private var traceLog: [Int: [String]] = [:]
@@ -274,6 +282,8 @@ final class AppModel {
             // Krisha «только от хозяев»: пропускаем только с подписью «Хозяин недвижимости».
             if site == .krisha, sub.url.range(of: #"das(%5B|\[)who(%5D|\])=1"#, options: [.regularExpression, .caseInsensitive]) != nil,
                ad.owner != true { continue }
+            // Kolesa «только от хозяев»: отсеиваем автосалоны и дилеров.
+            if site == .kolesa, sub.ownersOnly == true, ad.owner == false { continue }
             ad.source = site.rawValue
             ad.via = "search"
             ad.subIds = [sub.id]
@@ -331,7 +341,9 @@ final class AppModel {
         }
         let ready = state.subs.filter { !$0.paused && $0.ready && $0.site == .olx }
         for var ad in ads.sorted(by: { $0.id < $1.id }) where !ad.promoted {
-            if isStale(ad, frontier: 0, window: window) { continue }
+            // Был пропуском (на модерации) и только сейчас появился в ленте — новое, даже если подано час назад.
+            let wasGap = gaps.removeValue(forKey: ad.id) != nil
+            if isStale(ad, frontier: 0, window: wasGap ? max(window ?? 0, Self.gapLife) : window) { continue }
             ad.via = "search"
             ad.foundAt = now
             if !seenSet.contains(ad.id) {
@@ -372,7 +384,7 @@ final class AppModel {
         }
         // И пропуски ниже края ленты (обычно — на модерации): давно не проверенные первыми.
         let now = Date()
-        let gapIds = gaps.sorted { $0.value.checked != $1.value.checked ? $0.value.checked < $1.value.checked : $0.key > $1.key }.prefix(Self.gapsPerPass).map { $0.key }
+        let gapIds = gaps.filter { Self.gapDue($0.value, now) }.sorted { $0.value.checked != $1.value.checked ? $0.value.checked < $1.value.checked : $0.key > $1.key }.prefix(Self.gapsPerPass).map { $0.key }
         for id in gapIds { gaps[id]?.checked = now }
         ids += gapIds.filter { !ids.contains($0) }
         // Все номера прохода — одновременно: быстрее ловим и не ждём каждый ответ по очереди.
@@ -410,11 +422,11 @@ final class AppModel {
             }
             guard var ad = offer else { misses[id, default: 0] += 1; continue }
             misses[id] = nil
-            gaps[id] = nil
+            let wasGap = gaps.removeValue(forKey: id) != nil
             bumpFrontier(id)
             state.stats.turboFound += 1
             state.stats.lastTurboHit = Date()
-            if isStale(ad, frontier: 0) {
+            if isStale(ad, frontier: 0, window: wasGap ? Self.gapLife : nil) {
                 remember(id)
                 trace(id, "по номеру: подано давно — пропуск")
                 continue
@@ -608,7 +620,7 @@ final class AppModel {
 
     // MARK: — поиски
 
-    func addSub(url: String, name: String, categoryLabel: String? = nil) async -> Bool {
+    func addSub(url: String, name: String, categoryLabel: String? = nil, ownersOnly: Bool = false) async -> Bool {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let site = Site.of(url: trimmed) else {
             error = "Нужна ссылка на поиск с olx.kz, kolesa.kz, krisha.kz или Kaspi Объявлений."
@@ -626,6 +638,7 @@ final class AppModel {
         var sub = Sub(id: state.nextSubId, name: String((title.isEmpty ? Self.nameFromURL(trimmed) : title).prefix(60)), url: trimmed)
         sub.categoryLabel = categoryLabel
         sub.source = site == .olx ? nil : site.rawValue
+        if site == .kolesa, ownersOnly { sub.ownersOnly = true }
         state.nextSubId += 1
         state.subs.append(sub)
         error = nil

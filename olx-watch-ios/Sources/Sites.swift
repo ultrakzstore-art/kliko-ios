@@ -248,8 +248,17 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         let address = (product?["address"] as? [String: Any]) ?? ((offer?["availableAtOrFrom"] as? [String: Any])?["address"] as? [String: Any])
         ad.city = decode(address?["addressLocality"] as? String ?? "")
         if ad.city.isEmpty, let city = matches(#" в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$"#, in: ad.title).first { ad.city = city }
+        // Kolesa: подпись «Автосалон» / «Дилер» (с большой буквы, не «Автосалоны» из меню и не
+        // «в автосалоне» из описания) или разметка AutoDealer — не хозяин; «Частное лицо» — хозяин.
+        if source == .kolesa {
+            if html.range(of: #""@type"\s*:\s*"(AutoDealer|AutomotiveBusiness|CarDealer)""#, options: [.regularExpression, .caseInsensitive]) != nil
+                || html.range(of: #"(^|[>\s"])(Автосалон|Автодилер|Официальный дилер|Дилер)(?![а-яё])"#, options: .regularExpression) != nil {
+                ad.owner = false
+            } else if html.range(of: #"Частное\s+лицо|Собственник|Хозяин"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                ad.owner = true
+            }
         // Krisha подписывает продавца: «Хозяин недвижимости» или «Агент» / «Специалист».
-        if html.range(of: #"Хозяин\s+недвижимости"#, options: [.regularExpression, .caseInsensitive]) != nil {
+        } else if html.range(of: #"Хозяин\s+недвижимости"#, options: [.regularExpression, .caseInsensitive]) != nil {
             ad.owner = true
         } else if html.range(of: #"(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)"#, options: [.regularExpression, .caseInsensitive]) != nil {
             ad.owner = false

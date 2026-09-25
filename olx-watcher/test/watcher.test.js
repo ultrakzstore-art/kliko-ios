@@ -298,3 +298,43 @@ test('без провалов: 403 по номеру — не пауза; пос
     Object.assign(olx, { fetchSearch: orig.search, fetchOffer: orig.offer, fetchLatest: orig.latest });
   }
 });
+
+test('без провалов: модерация прошла через 40 минут — по номеру и в ленте всё равно приходит', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-late-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const now = Date.now();
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const orig = { latest: olx.fetchLatest, offer: olx.fetchOffer };
+  const offers = new Map();
+  let latest = [ad(5000, 'iPhone'), ad(4990, 'Диван')];
+  olx.fetchLatest = async () => latest;
+  olx.fetchOffer = async (id) => offers.get(id) || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a, subs, via) => sent.push(`${via}:${a.id}`), alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    db.updateSub(sub.id, { initialized: 1, watermark: 1000 });
+    db.db.prepare('UPDATE subs SET created_at = ?').run(now - 3 * 3600_000);   // поиск создан раньше
+    await w.boardTick();
+    assert.ok(w.gaps.has(4995), 'пропуск запомнен');
+    // 40 минут OLX по номеру отвечает «нет такого»; пропуск всё ещё в очереди.
+    w.gaps.get(4995).added = now - 40 * 60_000;
+    w.gaps.get(4995).checked = 0;
+    await w.turboTick();
+    assert.ok(w.gaps.has(4995), 'через 40 минут всё ещё перепроверяем');
+    // Прошло модерацию: подано 40 минут назад — всё равно новое.
+    offers.set(4995, ad(4995, 'HP 250', { createdAt: now - 40 * 60_000 }));
+    w.gaps.get(4995).checked = 0;
+    await w.turboTick();
+    assert.deepStrictEqual(sent, ['turbo:4995'], 'пришло по номеру');
+    // Другое, прошедшее модерацию поздно, сразу появилось в ленте — тоже приходит.
+    latest = [ad(5010, 'HP 15 поздно', { createdAt: now - 50 * 60_000 }), ...latest];
+    await w.boardTick();
+    assert.ok(sent.includes('search:5010'), 'пришло из ленты');
+  } finally {
+    olx.fetchLatest = orig.latest;
+    olx.fetchOffer = orig.offer;
+  }
+});

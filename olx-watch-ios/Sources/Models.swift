@@ -28,7 +28,7 @@ struct Ad: Codable, Identifiable, Hashable {
     var category: String?
     /// Площадка: nil — OLX (так в старых state.json), иначе kolesa / krisha / kaspi.
     var source: String?
-    /// Krisha: true — «Хозяин недвижимости», false — агент, nil — неизвестно.
+    /// Krisha: true — «Хозяин недвижимости», false — агент; Kolesa: false — автосалон / дилер; nil — неизвестно.
     var owner: Bool?
 
     /// Пойман «турбо» — по номеру, раньше, чем объявление попало в поиск OLX.
@@ -122,6 +122,8 @@ struct Sub: Codable, Identifiable, Hashable {
     var source: String?
     /// Самый большой номер, который этот поиск уже видел (для площадок кроме OLX).
     var watermark: Int?
+    /// Kolesa «только от хозяев»: фильтра в ссылке нет — без автосалонов и дилеров.
+    var ownersOnly: Bool?
 
     var site: Site { source.flatMap(Site.init(rawValue:)) ?? .olx }
 }

@@ -496,6 +496,7 @@ struct Badges: View {
             if ad.site != .olx { Badge(text: "\(ad.site.emoji) \(ad.site.title)", color: .blue) }
             if ad.owner == true { Badge(text: "🏠 от хозяина", color: .green) }
             if ad.owner == false && ad.site == .krisha { Badge(text: "агент", color: .gray) }
+            if ad.owner == false && ad.site == .kolesa { Badge(text: "автосалон", color: .gray) }
             if ad.early { Badge(text: "⚡ раньше поиска", color: .orange) }
             if ad.onReview { Badge(text: "на проверке", color: .yellow) }
             if ad.business { Badge(text: "магазин", color: .indigo) }
@@ -664,7 +665,7 @@ struct AddSubSheet: View {
         if site != .olx { parts.insert(site.title, at: 0) }
         if let city = site.cities.first(where: { $0.slug == citySlug }) { parts.append(city.name) }
         if site == .krisha, rooms > 0, top?.path.hasSuffix("kvartiry") == true { parts.append(rooms == 5 ? "5+ комн" : "\(rooms)-комн") }
-        if site == .krisha, ownersOnly { parts.append("от хозяев") }
+        if site == .krisha || site == .kolesa, ownersOnly { parts.append("от хозяев") }
         if !priceTo.isEmpty { parts.append("до \(priceTo)") }
         return parts.joined(separator: " · ")
     }
@@ -695,7 +696,7 @@ struct AddSubSheet: View {
                         let link = mode == .pick ? builtURL : url
                         let title = name.isEmpty ? autoName : name
                         Task {
-                            if await model.addSub(url: link, name: title, categoryLabel: mode == .pick ? (sub?.name ?? top?.name) : nil) { dismiss() }
+                            if await model.addSub(url: link, name: title, categoryLabel: mode == .pick ? (sub?.name ?? top?.name) : nil, ownersOnly: mode == .pick && site == .kolesa && ownersOnly) { dismiss() }
                             saving = false
                         }
                     }
@@ -753,6 +754,12 @@ struct AddSubSheet: View {
                 if !subsNote.isEmpty {
                     Text(verbatim: subsNote).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+        }
+        if site == .kolesa {
+            Section("Продавец") {
+                Toggle("Только от хозяев", isOn: $ownersOnly)
+                Text("Без автосалонов и дилеров").font(.caption).foregroundStyle(.secondary)
             }
         }
         if site == .krisha {
