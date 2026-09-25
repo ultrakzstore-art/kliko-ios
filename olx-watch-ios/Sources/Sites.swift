@@ -238,7 +238,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
                 let ads = try await searchOne(cityURL.absoluteString, pages: 1)
                 let seed = !r.seeded.contains(city)
                 r.seeded.insert(city)
-                out += ads.map { var a = $0; a.anyOrder = true; if seed { a.seedOnly = true }; return a }
+                out += ads.map { var a = $0; a.anyOrder = true; if a.city.isEmpty { a.city = Site.kaspiCityName(city) }; if seed { a.seedOnly = true }; return a }
             } catch OLX.Failure.http(let code) where code == 404 {
                 r.cities.removeAll { $0 == city }
             }
@@ -253,6 +253,8 @@ enum Site: String, CaseIterable, Identifiable, Codable {
             let url = try newestFirst(raw)
             let split = Site.kaspiSplit(url)
             if split.city.isEmpty { return try await searchAllCities(url, path: split.path) }
+            let name = Site.kaspiCityName(split.city)
+            return try await searchOne(raw).map { var a = $0; if a.city.isEmpty { a.city = name }; return a }
         }
         return try await searchOne(raw)
     }
@@ -340,6 +342,13 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         ad.photo = unique.first ?? ""
         ad.photos = unique.isEmpty ? nil : Array(unique.prefix(12))
         var price = number(offer?["price"]) ?? number(offer?["lowPrice"])
+        // Нет в JSON-LD — метки цены, itemprop=price, элемент с «price» в классе, потом текст.
+        if price == nil { price = (meta("product:price:amount", in: html).first ?? meta("og:price:amount", in: html).first).flatMap { number($0) } }
+        if price == nil, let raw = matches(#"itemprop=["']price["'][^>]*content=["']([\d\s.,]+)["']"#, in: html).first { price = number(raw) }
+        if price == nil, let el = matches(#"<[a-z]+\b[^>]*class=["'][^"']*price[^"']*["'][^>]*>([\s\S]{0,200}?)</[a-z]+>"#, in: html).first,
+           let raw = matches(#"(\d[\d\s ]{2,})\s*(?:₸|〒|тг|тенге|KZT)"#, in: decode(stripTags(el))).first {
+            price = Double(raw.filter(\.isNumber))
+        }
         if price == nil,
            let raw = matches(#"(\d[\d\s ]{3,})\s*(?:₸|〒|тг|тенге|KZT)"#, in: "\(ad.title) \(ad.description)").first {
             price = Double(raw.filter(\.isNumber))
@@ -369,7 +378,17 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         for key in ["datePosted", "datePublished"] {
             if let s = product?[key] as? String, let d = parseDate(s) { ad.createdAt = d; break }
         }
-        if source == .kaspi { ad.crumbs = breadcrumbs(html, url: url) }
+        if ad.createdAt == nil, let s = meta("article:published_time", in: html).first ?? matches(#"itemprop=["']datePublished["'][^>]*content=["']([^"']+)"#, in: html).first {
+            ad.createdAt = parseDate(s)
+        }
+        if ad.createdAt == nil { ad.createdAt = postedFromText(html) }
+        if source == .kaspi {
+            ad.crumbs = breadcrumbs(html, url: url)
+            // Город Kaspi — из крошек (/astana/…), если его нет в разметке.
+            if ad.city.isEmpty, let slug = (ad.crumbs ?? []).map({ String($0.split(separator: "/").first ?? "") }).first(where: { kaspiCitySlugs.contains($0) }) {
+                ad.city = kaspiCityName(slug)
+            }
+        }
         return ad
     }
 
@@ -488,6 +507,64 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         if let d = v as? Double { return d }
         if let i = v as? Int { return Double(i) }
         if let s = v as? String { return Double(s.replacingOccurrences(of: " ", with: "")) }
+        return nil
+    }
+
+    static let kaspiCityNames: [String: String] = [
+        "almaty": "Алматы", "astana": "Астана", "shymkent": "Шымкент", "karaganda": "Караганда", "aktobe": "Актобе",
+        "taraz": "Тараз", "pavlodar": "Павлодар", "ust-kamenogorsk": "Усть-Каменогорск", "semey": "Семей",
+        "kostanay": "Костанай", "atyrau": "Атырау", "aktau": "Актау", "uralsk": "Уральск", "kyzylorda": "Кызылорда",
+        "petropavlovsk": "Петропавловск", "taldykorgan": "Талдыкорган", "turkestan": "Туркестан", "kokshetau": "Кокшетау",
+        "ekibastuz": "Экибастуз", "temirtau": "Темиртау", "zhezkazgan": "Жезказган", "rudnyy": "Рудный",
+        "balkhash": "Балхаш", "satpaev": "Сатпаев", "kaskelen": "Каскелен", "konaev": "Конаев", "zhanaozen": "Жанаозен",
+        "aksay": "Аксай", "stepnogorsk": "Степногорск", "shchuchinsk": "Щучинск",
+    ]
+
+    static func kaspiCityName(_ slug: String) -> String {
+        kaspiCityNames[slug] ?? (slug.prefix(1).uppercased() + slug.dropFirst().replacingOccurrences(of: "-", with: " "))
+    }
+
+    private static func stripTags(_ s: String) -> String {
+        s.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+    }
+
+    /// Дата подачи из текста: «Опубликовано 25.09.2026 в 14:02», «Размещено: сегодня, 09:15», «вчера»,
+    /// «3 августа 2026». Время — алматинское.
+    static func postedFromText(_ html: String) -> Date? {
+        let text = decode(stripTags(html.replacingOccurrences(of: #"<script[\s\S]*?</script>|<style[\s\S]*?</style>"#, with: " ", options: [.regularExpression, .caseInsensitive])))
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        guard let s = matches(#"(?:опубликован|размещен|добавлен|создан|подано|дата (?:публикации|размещения))[а-я]*:?\s*([^|]{0,40})"#, in: text).first?.lowercased() else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Almaty") ?? .current
+        var c = DateComponents()
+        if let hm = matches(#"(\d{1,2}:\d{2})"#, in: s).first {
+            let p = hm.split(separator: ":")
+            c.hour = Int(p[0]); c.minute = Int(p[1])
+        }
+        let now = cal.dateComponents([.year, .month, .day], from: Date())
+        if s.contains("сегодня") || s.contains("вчера") {
+            c.year = now.year; c.month = now.month; c.day = now.day
+            guard let d = cal.date(from: c) else { return nil }
+            return s.contains("вчера") ? d.addingTimeInterval(-86400) : d
+        }
+        if let dmy = matches(#"(\d{1,2}\.\d{1,2}\.\d{2,4})"#, in: s).first {
+            let p = dmy.split(separator: ".").compactMap { Int($0) }
+            guard p.count == 3 else { return nil }
+            c.day = p[0]; c.month = p[1]; c.year = p[2] < 100 ? 2000 + p[2] : p[2]
+            return cal.date(from: c)
+        }
+        let months = ["январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"]
+        if let re = try? NSRegularExpression(pattern: #"(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?"#),
+           let m = re.firstMatch(in: s, range: NSRange(location: 0, length: (s as NSString).length)) {
+            let ns = s as NSString
+            let word = ns.substring(with: m.range(at: 2))
+            if let mo = months.firstIndex(where: { word.hasPrefix($0) }) {
+                c.day = Int(ns.substring(with: m.range(at: 1)))
+                c.month = mo + 1
+                c.year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : now.year
+                return cal.date(from: c)
+            }
+        }
         return nil
     }
 
