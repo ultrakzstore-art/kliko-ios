@@ -15,6 +15,7 @@ const MISS_GIVE_UP = 12;
 // Объявление с номером ниже отметки поиска (было на проверке у OLX и попало в выдачу позже
 // соседей) — всё равно новое, если подано после создания поиска и не старше этого срока.
 const LATE_MS = 3 * 3600_000;
+const KASPI_SLACK_MS = 60 * 60_000;   // Kaspi: насколько раньше последней выкладки ещё «новое»
 // Пропуск у края ленты (обычно — на проверке) перепроверяем столько: модерация бывает и
 // через час-два, объявление всё равно должно прийти, как только OLX его покажет.
 const GAP_LIFE_MS = LATE_MS;
@@ -114,7 +115,8 @@ class Watcher {
       this.timers.push(setInterval(() => this.recheckTick().catch((e) => this.log(`скидки: ${e.message}`)), 10_000));
     }
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
-    this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
+    // Номера Kaspi идут не по порядку — ловля по номеру только по желанию (KASPI_TURBO=1).
+    if (this.cfg.kaspiTurbo) this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
     this.timers.push(setInterval(() => this.kaspiShowcaseTick().catch((e) => this.log(`витрина Kaspi: ${e.message}`)), 3_000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
@@ -170,13 +172,21 @@ class Watcher {
     return !ad.createdAt || Date.now() - ad.createdAt <= ms;
   }
 
-  // Kaspi: платные (поднятые, «в топе») стоят сверху и при «Самых новых» — это старьё. Точное
-  // время подачи (dateCreate) их отсекает; нет его — день подачи старше вчерашнего, а нет и дня —
-  // номер сильно ниже самого нового известного (запас — на вышедшие с модерации позже соседей).
-  kaspiOld(ad, edge = this.kaspiFrontier || 0) {
-    if (ad.createdAt) return Date.now() - ad.createdAt > LATE_MS;
+  // Kaspi: номера идут не по порядку, поэтому новизна — только по дате подачи (dateCreate).
+  // Платные и поднятые стоят сверху и при «Самых новых» — это старьё: подано больше 3 ч назад
+  // или сильно раньше последней выкладки, что мы видели (запас 60 мин — на долгую модерацию).
+  // Есть только день — старое, если раньше вчерашнего. Даты нет совсем — не отсекаем.
+  kaspiOld(ad) {
+    if (ad.createdAt) {
+      return Date.now() - ad.createdAt > LATE_MS || (this.kaspiLast > 0 && ad.createdAt < this.kaspiLast - KASPI_SLACK_MS);
+    }
     if (ad.postedDay) return Date.now() - ad.postedDay > 48 * 3600_000;
-    return edge > 0 && ad.id < edge - 500;
+    return false;
+  }
+
+  // Последняя выкладка Kaspi — самое позднее время подачи среди увиденных новых.
+  kaspiSaw(ad) {
+    if (ad?.createdAt && ad.createdAt <= Date.now() + 60_000 && ad.createdAt > (this.kaspiLast || 0)) this.kaspiLast = ad.createdAt;
   }
 
   // Номер ниже отметки поиска: новое, только если подано после создания поиска и недавно
@@ -281,7 +291,8 @@ class Watcher {
         // Kaspi «весь Казахстан»: город впервые после запуска — только запоминаем, что уже есть.
         if (a.seedOnly) { this.db.markSent(sub.id, a.id); continue; }
         // Номера из разных городов идут вперемешку: для них «ниже отметки» ничего не значит.
-        const late = !a.anyOrder && a.id <= sub.watermark;
+        // Kaspi: номера идут не по порядку — «ниже отметки» не значит «старое», решает дата.
+        const late = !a.anyOrder && src.key !== 'kaspi' && a.id <= sub.watermark;
         // Ниже отметки: по дате из выдачи сразу отсекаем то, что было ещё до поиска.
         if (late && (src.key !== 'olx' || a.promoted || (a.createdAt && a.createdAt <= sub.created_at))) continue;
         const full = await enrich(a);
@@ -296,6 +307,7 @@ class Watcher {
           && this.allowed(sub.user_id, full)                                         // чужая VIP-рубрика
           && this.sellerOk(sub, full)                                                // частные / бизнес
           && ownerOk(sub, full);                                                     // Krisha / Kolesa: от хозяев
+        if (src.key === 'kaspi' && !this.kaspiOld(full)) this.kaspiSaw(full);
         if (!this.db.markSent(sub.id, a.id)) continue;
         if (!pass) { this.trace(a.id, `поиск #${sub.id}: отсеяно (старое / продавец / VIP)`); continue; }
         this.trace(a.id, `поиск #${sub.id}: отправлено`);
@@ -373,7 +385,8 @@ class Watcher {
           // (до 3 ч), а без даты — если номер не сильно меньше края на момент запуска (запас —
           // на вышедшие с модерации позже соседей).
           // Только день (без времени) — старое, если раньше вчерашнего.
-          if (this.kaspiOld(ad, st.startEdge)) { this.trace(a.id, 'витрина Kaspi: поднятое старое — пропуск'); continue; }
+          if (this.kaspiOld(ad)) { this.trace(a.id, 'витрина Kaspi: поднятое / платное старое — пропуск'); continue; }
+          this.kaspiSaw(ad);
           this.trace(a.id, `витрина Kaspi: увидели${page ? ` (${ad.city || page})` : ''}`);
           for (const s of subs) {
             if (this.db.wasSent(s.id, a.id)) continue;

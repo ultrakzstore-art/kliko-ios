@@ -91,6 +91,9 @@ final class AppModel {
     /// Последний известный номер Kaspi (край) и найден ли он точно — для монитора.
     private(set) var kaspiEdgeShown = UserDefaults.standard.integer(forKey: "kaspi_frontier")
     private(set) var kaspiEdgeExact = false
+    /// Последняя выкладка Kaspi — самое позднее время подачи среди увиденных новых.
+    private(set) var kaspiLast: Date?
+    @ObservationIgnored private let kaspiByNumber = false
     private var busy = false
 
     private(set) var pushStatus = ""
@@ -164,7 +167,8 @@ final class AppModel {
             lastShowcase = Date()
             await kaspiShowcase()
         }
-        if state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
+        // Kaspi по номеру выключен: номера идут не по порядку — новое ловим витриной и поиском по дате.
+        if kaspiByNumber, state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
             lastKaspiTurbo = Date()
             await kaspiTurbo()
         }
@@ -287,7 +291,7 @@ final class AppModel {
         let mark = sub.watermark ?? top
         sub.watermark = max(mark, top)
         state.subs[index] = sub
-        for var ad in ads.sorted(by: { $0.id < $1.id }) where (ad.anyOrder == true || ad.id > mark) && !seenSet.contains(ad.id) {
+        for var ad in ads.sorted(by: { $0.id < $1.id }) where (ad.anyOrder == true || site == .kaspi || ad.id > mark) && !seenSet.contains(ad.id) {
             remember(ad.id)
             if ad.seedOnly == true { continue }   // Kaspi: город впервые — только запоминаем
             if let full = try? await site.detail(ad) { ad.merge(full) }
@@ -298,7 +302,8 @@ final class AppModel {
                 continue
             }
             // Kaspi: платные (поднятые) стоят сверху и при «Самых новых» — это старьё.
-            if site == .kaspi, kaspiOld(ad) { trace(ad.id, "Kaspi: платное / поднятое старое — пропуск"); continue }
+            if site == .kaspi, kaspiOld(ad) { trace(ad.id, "поиск «\(sub.name)»: платное / поднятое старое — пропуск"); continue }
+            if site == .kaspi { kaspiSaw(ad) }
             // Krisha «только от хозяев»: пропускаем только с подписью «Хозяин недвижимости».
             if site == .krisha, sub.url.range(of: #"das(%5B|\[)who(%5D|\])=1"#, options: [.regularExpression, .caseInsensitive]) != nil,
                ad.owner != true { continue }
@@ -669,7 +674,8 @@ final class AppModel {
                 if let full = try? await Site.kaspi.detail(a) { ad.merge(full) }
                 trace(ad.id, "витрина\(page.isEmpty ? "" : " (\(Site.kaspiCityName(page)))"): новое на витрине — \(kaspiInfo(ad))")
                 // Поднятое / платное старое тоже всплывает наверх витрины.
-                if kaspiOld(ad) { trace(ad.id, "витрина Kaspi: поднятое старое — пропуск"); continue }
+                if kaspiOld(ad) { trace(ad.id, "витрина: платное / поднятое старое — пропуск"); continue }
+                kaspiSaw(ad)
                 var hit: [Sub] = []
                 for s in subs {
                     if let why = Site.kaspiMismatch(s, ad) {
@@ -691,11 +697,19 @@ final class AppModel {
         save()
     }
 
-    /// Kaspi: старьё — подано больше 3 ч назад (точное время из dateCreate), а без даты — номер
-    /// сильно ниже самого нового известного (запас — на вышедшие с модерации позже соседей).
+    /// Kaspi: номера идут не по порядку, поэтому новизна — только по дате подачи (dateCreate).
+    /// Старьё (платное, поднятое) — подано больше 3 ч назад или больше чем на час раньше последней
+    /// выкладки (час — запас на долгую модерацию). Даты нет — не отсекаем.
     private func kaspiOld(_ ad: Ad) -> Bool {
-        if let created = ad.createdAt { return Date().timeIntervalSince(created) > 3 * 3600 }
-        return kaspiFrontier > 0 && ad.id - Site.kaspi.idOffset < kaspiFrontier - 500
+        guard let created = ad.createdAt else { return false }
+        if Date().timeIntervalSince(created) > 3 * 3600 { return true }
+        if let last = kaspiLast, created < last.addingTimeInterval(-3600) { return true }
+        return false
+    }
+
+    private func kaspiSaw(_ ad: Ad) {
+        guard let created = ad.createdAt, created <= Date().addingTimeInterval(60) else { return }
+        if kaspiLast.map({ created > $0 }) ?? true { kaspiLast = created }
     }
 
     @ObservationIgnored private var kaspiSynced = false

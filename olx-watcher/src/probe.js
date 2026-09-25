@@ -55,47 +55,47 @@ async function deepProbe(id) {
   console.log('\nЕсли объявление на модерации видит только один из способов — пришлите этот вывод.');
 }
 
-// «kaspi watch» — 5 минут наблюдаем, как у Kaspi появляются новые объявления: витрина раз в 5 с,
-// номера за самым большим — по одному. Итог: сколько новых в минуту, идут ли номера подряд, как
-// быстро номер попадает на витрину после того, как открылся по ссылке.
+// «kaspi watch» — 5 минут наблюдаем витрину Kaspi «Самые новые» раз в 5 с: каждое новое — с
+// временем подачи; платное / поднятое помечаем. Итог: сколько новых в минуту, за сколько после
+// подачи попадает на витрину, растут ли номера.
 async function kaspiWatch(ms) {
   const k = sources.get('kaspi');
   const t0 = Date.now();
-  const clock = () => new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' });
+  const tz = { timeZone: 'Asia/Almaty' };
+  const clock = (t = Date.now()) => new Date(t).toLocaleTimeString('ru-RU', tz);
   const onShow = new Map();   // номер → когда впервые на витрине
-  const byNum = new Map();    // номер → когда впервые открылся по ссылке
-  const dead = new Set();
+  const fresh = [];           // новые: { id, posted, seen }
   let first = true;
-  let edge = 0;
-  console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин. Строки ниже — по мере появления.\n`);
+  let last = 0;               // последняя выкладка — самое позднее время подачи
+  console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин (витрина «Самые новые»). Строки ниже — по мере появления.\n`);
   while (Date.now() - t0 < ms) {
     try {
       const show = await k.fetchShowcase('');
       if (show == null) { console.log('Витрины (главной) нет — наблюдать нечего'); return; }
-      const ids = show.map((a) => a.id);
       if (first) {
-        edge = Math.max(...ids);
-        console.log(`${clock()} старт: на витрине ${ids.length}, номера ${Math.min(...ids)}…${edge}`);
-        console.log(`   порядок на витрине: ${ids.slice(0, 12).join(', ')}${ids.length > 12 ? ', …' : ''}`);
-        ids.forEach((id) => onShow.set(id, 0));
+        console.log(`${clock()} старт: на витрине ${show.length}`);
+        console.log(`   номера по порядку витрины: ${show.slice(0, 12).map((a) => a.id).join(', ')}${show.length > 12 ? ', …' : ''}`);
+        // Время подачи первых трёх — видно, по дате ли порядок и где платные.
+        for (const a of show.slice(0, 3)) {
+          const d = await k.fetchDetail(a).catch(() => null);
+          console.log(`   ${a.id}: ${d?.createdAt ? `подано ${new Date(d.createdAt).toLocaleString('ru-RU', tz)}` : 'время подачи не найдено'} · ${String(d?.title || '').slice(0, 40)}`);
+          if (d?.createdAt > last) last = d.createdAt;
+        }
+        show.forEach((a) => onShow.set(a.id, 0));
         first = false;
       } else {
-        for (const [i, id] of ids.entries()) {
-          if (onShow.has(id)) continue;
-          onShow.set(id, Date.now());
-          const seenByNum = byNum.get(id);
-          console.log(`${clock()} витрина: новое ${id} (место ${i + 1})${id < edge ? ` — НИЖЕ прежнего края ${edge}` : ''}${seenByNum ? ` — по номеру открылось раньше на ${Math.round((Date.now() - seenByNum) / 1000)} с` : ''}`);
-          if (id > edge) edge = id;
-        }
-      }
-      // Номера за краем: открываются ли раньше витрины.
-      for (let n = edge + 1; n <= edge + 3; n++) {
-        if (byNum.has(n) || dead.has(n)) continue;
-        const d = await k.fetchById(n).catch(() => null);
-        if (d) {
-          byNum.set(n, Date.now());
-          const when = d.createdAt ? `подано ${new Date(d.createdAt).toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' })} (${Math.round((Date.now() - d.createdAt) / 1000)} с назад)` : 'время подачи не найдено';
-          console.log(`${clock()} ⚡ по номеру: открылся ${n} · ${String(d.title).slice(0, 50)} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'} · ${when}${onShow.has(n) ? '' : ' — на витрине его ещё нет'}`);
+        for (const [i, a] of show.entries()) {
+          if (onShow.has(a.id)) continue;
+          onShow.set(a.id, Date.now());
+          const d = await k.fetchDetail(a).catch(() => null);
+          const posted = d?.createdAt || 0;
+          const old = posted && (Date.now() - posted > 3 * 3600_000 || (last && posted < last - 3600_000));
+          const when = posted ? `подано ${clock(posted)}, на витрине через ${Math.round((Date.now() - posted) / 1000)} с` : 'время подачи не найдено';
+          console.log(`${clock()} ${old ? '⏭ платное / поднятое' : '🆕 новое'} ${a.id} (место ${i + 1}) · ${String(d?.title || '').slice(0, 45)} · ${d?.priceLabel || 'цена —'} · ${d?.city || 'город —'} · ${when}`);
+          if (!old) {
+            fresh.push({ id: a.id, posted, seen: Date.now() });
+            if (posted > last) last = posted;
+          }
         }
       }
     } catch (e) {
@@ -103,16 +103,16 @@ async function kaspiWatch(ms) {
     }
     await new Promise((r) => setTimeout(r, 5000));
   }
-  const fresh = [...onShow.entries()].filter(([, t]) => t).map(([id]) => id).sort((a, b) => a - b);
   const mins = (Date.now() - t0) / 60_000;
   console.log('\nИтог:');
-  console.log(`  новых на витрине: ${fresh.length} за ${mins.toFixed(1)} мин (${(fresh.length / mins).toFixed(1)} в минуту)`);
+  console.log(`  новых: ${fresh.length} за ${mins.toFixed(1)} мин (${(fresh.length / mins).toFixed(1)} в минуту)`);
+  const lag = fresh.filter((f) => f.posted).map((f) => (f.seen - f.posted) / 1000);
+  if (lag.length) console.log(`  от подачи до витрины: мин ${Math.min(...lag).toFixed(0)} с, макс ${Math.max(...lag).toFixed(0)} с, в среднем ${(lag.reduce((x, y) => x + y, 0) / lag.length).toFixed(0)} с`);
   if (fresh.length > 1) {
-    const steps = fresh.slice(1).map((id, i) => id - fresh[i]);
-    console.log(`  шаг между соседними новыми номерами: мин ${Math.min(...steps)}, макс ${Math.max(...steps)}, средний ${(steps.reduce((a, b) => a + b, 0) / steps.length).toFixed(1)}`);
-    console.log(`  номера за время наблюдения выросли на ${fresh[fresh.length - 1] - fresh[0]}`);
+    const up = fresh.slice(1).filter((f, i) => f.id > fresh[i].id).length;
+    console.log(`  номер больше предыдущего нового: ${up} из ${fresh.length - 1} — ${up === fresh.length - 1 ? 'номера растут по порядку' : 'номера не по порядку, ловим по дате'}`);
   }
-  console.log(`  открылись по номеру раньше витрины: ${[...byNum.keys()].filter((id) => !onShow.get(id) || onShow.get(id) > byNum.get(id)).length} из ${byNum.size}`);
+  if (last) console.log(`  последняя выкладка: ${new Date(last).toLocaleString('ru-RU', tz)}`);
   console.log('\nПришлите весь этот вывод — по нему видно, как Kaspi выдаёт новые объявления.');
 }
 

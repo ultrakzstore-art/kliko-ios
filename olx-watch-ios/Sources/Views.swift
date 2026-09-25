@@ -1020,8 +1020,9 @@ struct KaspiMonitorSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Последний номер", value: model.kaspiEdgeShown > 0
-                ? "№\(model.kaspiEdgeShown)" + (model.kaspiEdgeExact ? "" : " · ищу точный") : "ещё не знаю")
+            LabeledContent("Последняя выкладка", value: model.kaspiLast.map {
+                $0.formatted(date: Calendar.current.isDateInToday($0) ? .omitted : .abbreviated, time: .standard)
+            } ?? "ещё не видел")
             LabeledContent("Сортировка", value: "Самые новые")
             if model.kaspiLive.isEmpty {
                 Text("Пока пусто — новое появится здесь, как только выйдет.").font(.footnote).foregroundStyle(.secondary)
@@ -1042,7 +1043,7 @@ struct KaspiMonitorSection: View {
         } header: {
             Text("Монитор Kaspi")
         } footer: {
-            Text("⚡ — поймано по номеру раньше выдачи; «витрина» — новое на главной Kaspi; «поиск» — в выдаче вашего поиска. «Пропуск» — платное или поднятое старое. Работает, пока приложение открыто.")
+            Text("Номера Kaspi идут не по порядку, поэтому новое определяется по времени подачи. «Витрина» — новое на главной Kaspi, «поиск» — в выдаче вашего поиска (обе — «Самые новые»). «Пропуск» — платное или поднятое: подано давно или намного раньше последней выкладки. Работает, пока приложение открыто.")
         }
     }
 }

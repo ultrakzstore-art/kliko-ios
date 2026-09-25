@@ -183,7 +183,8 @@ test('Kaspi «весь Казахстан»: города берутся со с
   const orig = { search: k.fetchSearch, detail: k.fetchDetail };
   let batch = [];
   k.fetchSearch = async () => batch;
-  k.fetchDetail = async (ad) => ({ title: `Ноутбук ${ad.id}`, createdAt: ad.id === 960 ? Date.now() - 2 * 86400_000 : undefined });
+  const posted = { 601: 2, 950: 1, 960: 2 * 24 * 60, 100: 100, 50: 3 };   // подано N минут назад
+  k.fetchDetail = async (ad) => ({ title: `Ноутбук ${ad.id}`, createdAt: posted[ad.id] ? Date.now() - posted[ad.id] * 60_000 : undefined });
   const sent = [];
   const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
     notify: async (userId, a) => { if (a) sent.push(a.id); }, alert: async () => {}, log: () => {} });
@@ -195,9 +196,9 @@ test('Kaspi «весь Казахстан»: города берутся со с
     await w.pollUrl(sub.url, [db.sub(sub.id)]);           // первый проход: только запомнили
     batch = [{ id: 600, url: 'u', anyOrder: true, seedOnly: true }];
     await w.pollUrl(sub.url, [db.sub(sub.id)]);           // новый город впервые: тоже только запомнили
-    batch = [{ id: 600, url: 'u', anyOrder: true }, { id: 601, url: 'u', anyOrder: true }, { id: 950, url: 'u', anyOrder: true }, { id: 960, url: 'u', anyOrder: true }, { id: 100, url: 'u', anyOrder: true }];
+    batch = [{ id: 600, url: 'u', anyOrder: true }, { id: 601, url: 'u', anyOrder: true }, { id: 950, url: 'u', anyOrder: true }, { id: 960, url: 'u', anyOrder: true }, { id: 100, url: 'u', anyOrder: true }, { id: 50, url: 'u' }];
     await w.pollUrl(sub.url, [db.sub(sub.id)]);
-    assert.deepStrictEqual(sent.sort((a, b) => a - b), [601, 950], '601 ниже отметки 900, но из другого города — новое; платные 960 (подано 2 дня назад) и 100 (номер далеко позади) — нет');
+    assert.deepStrictEqual(sent.sort((a, b) => a - b), [50, 601, 950], 'номера Kaspi не по порядку — решает дата: 601 и 50 ниже отметки, но поданы только что; платные 960 (2 дня назад) и 100 (на 99 мин раньше последней выкладки) — нет');
   } finally {
     Object.assign(k, { fetchSearch: orig.search, fetchDetail: orig.detail });
   }
@@ -305,7 +306,7 @@ test('витрина Kaspi: при запуске только запомина�
   }
 });
 
-test('витрина Kaspi: поднятое старое (маленький номер или старая дата) — не новинка', async () => {
+test('витрина Kaspi: поднятое / платное старое (по дате подачи, номер не важен) — не новинка', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-bump-'));
   const db = new Db(path.join(dir, 'w.db'));
   const k = sources.get('kaspi');
@@ -314,9 +315,10 @@ test('витрина Kaspi: поднятое старое (маленький н
   k.fetchShowcase = async (city) => (city ? [] : showcase);
   const crumbs = ['almaty', 'almaty/elektronika/computery/noutbuki'];
   const cards = {
-    120000000: { title: 'Ноутбук старый, поднят', crumbs, price: 1 },
+    120000000: { title: 'Ноутбук, поднят платно', crumbs, price: 1, createdAt: Date.now() - 2 * 3600_000 },
+    99000000: { title: 'Ноутбук новый, номер маленький', crumbs, price: 1, createdAt: Date.now() - 60_000 },
     123599990: { title: 'Ноутбук вчерашний', crumbs, price: 1, createdAt: Date.now() - 20 * 3600_000 },
-    123600005: { title: 'Ноутбук новый', crumbs, price: 1 },
+    123600005: { title: 'Ноутбук новый', crumbs, price: 1, createdAt: Date.now() - 30_000 },
   };
   k.fetchDetail = async (a) => cards[a.id] || null;
   const sent = [];
@@ -328,9 +330,9 @@ test('витрина Kaspi: поднятое старое (маленький н
     const s = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
     db.updateSub(s.id, { initialized: 1 });
     await w.kaspiShowcaseTick();
-    showcase = [{ id: 123600005, url: 'u5' }, { id: 120000000, url: 'u1' }, { id: 123599990, url: 'u2' }, ...showcase];
+    showcase = [{ id: 123600005, url: 'u5' }, { id: 120000000, url: 'u1' }, { id: 123599990, url: 'u2' }, { id: 99000000, url: 'u9' }, ...showcase];
     await w.kaspiShowcaseTick();
-    assert.deepStrictEqual(sent, [123600005]);
+    assert.deepStrictEqual(sent, [123600005, 99000000], '2 ч назад — раньше последней выкладки больше чем на час; 20 ч — старьё');
   } finally {
     Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
   }
