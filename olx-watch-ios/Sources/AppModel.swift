@@ -288,6 +288,8 @@ final class AppModel {
             if let full = try? await site.detail(ad) { ad.merge(full) }
             // Дата подачи есть не у всех карточек; есть и старше часа — это не новое.
             if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) { continue }
+            // Kaspi: платные (поднятые) стоят сверху и при «Самых новых» — это старьё.
+            if site == .kaspi, kaspiOld(ad) { trace(ad.id, "Kaspi: платное / поднятое старое — пропуск"); continue }
             // Krisha «только от хозяев»: пропускаем только с подписью «Хозяин недвижимости».
             if site == .krisha, sub.url.range(of: #"das(%5B|\[)who(%5D|\])=1"#, options: [.regularExpression, .caseInsensitive]) != nil,
                ad.owner != true { continue }
@@ -637,6 +639,8 @@ final class AppModel {
                 if seed || seenSet.contains(a.id) { continue }
                 var ad = a
                 if let full = try? await Site.kaspi.detail(a) { ad.merge(full) }
+                // Поднятое / платное старое тоже всплывает наверх витрины.
+                if kaspiOld(ad) { trace(ad.id, "витрина Kaspi: поднятое старое — пропуск"); continue }
                 var hit: [Sub] = []
                 for s in subs {
                     if let why = Site.kaspiMismatch(s, ad) {
@@ -656,6 +660,13 @@ final class AppModel {
         }
         if showSeen.count > 20_000, let top = showSeen.max() { showSeen = showSeen.filter { $0 > top - 100_000 } }
         save()
+    }
+
+    /// Kaspi: старьё — подано больше 3 ч назад (точное время из dateCreate), а без даты — номер
+    /// сильно ниже самого нового известного (запас — на вышедшие с модерации позже соседей).
+    private func kaspiOld(_ ad: Ad) -> Bool {
+        if let created = ad.createdAt { return Date().timeIntervalSince(created) > 3 * 3600 }
+        return kaspiFrontier > 0 && ad.id - Site.kaspi.idOffset < kaspiFrontier - 500
     }
 
     @ObservationIgnored private var kaspiSynced = false

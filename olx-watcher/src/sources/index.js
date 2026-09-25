@@ -180,7 +180,9 @@ function kaspiSort(html) {
   }
   return null;
 }
-let kaspiSortParam;   // undefined — ещё не искали, null — на странице не нашлось
+// «Самые новые» у Kaspi — sortBy[date]=desc (из ссылки пользователя). По умолчанию там
+// «Рекомендуемые», поэтому ставим её сами. undefined — искать на странице, null — не нашлось.
+let kaspiSortParam = ['sortBy[date]', 'desc'];
 
 // «Весь Казахстан» у Kaspi — такой выдачи нет: без города в ссылке сайт показывает один город.
 // Поэтому ссылку без города обходим по городам по кругу — за проверку несколько городов, первая
@@ -219,7 +221,7 @@ const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
   isAdUrl: (url) => { try { return /^\/a\/(?:.+-)?\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
-  // Сортировку «сначала новые» ссылкой Kaspi не включить (не нашёл как) — смотрим 3 страницы.
+  // Сортировка «Самые новые» — sortBy[date]=desc, ставится в fetchOne.
   async fetchSearch(url) {
     const { city } = kaspiSplit(this.normalize(url));
     if (!city) return this.fetchAllCities(url);
@@ -283,7 +285,7 @@ const KASPI = {
 
   async fetchOne(url, pages = 3) {
     let base = this.normalize(url);
-    const hasSort = (u) => /[?&](sort|order|sortBy|sort_by|orderBy)=/i.test(u);
+    const hasSort = (u) => /[?&](sort|order|sortBy|sort_by|orderBy)(=|\[|%5B)/i.test(u);
     if (!hasSort(base) && kaspiSortParam) base = withParam(base, kaspiSortParam);
     let html = await getHtml(base);
     if (html == null) throw new Error('Kaspi ответил 404 — проверьте ссылку');

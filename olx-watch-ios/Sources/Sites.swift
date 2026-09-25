@@ -165,7 +165,8 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     /// Kaspi: сортировка «сначала новые». Как она зовётся в ссылке, заранее неизвестно — ищем
     /// на первой странице выдачи (ссылка или пункт списка «Сначала новые» / «Новые» / «По дате»).
     /// nil — ещё не искали; ("", "") — искали, не нашлось.
-    static var kaspiSort: (name: String, value: String)?
+    /// «Самые новые» у Kaspi — sortBy[date]=desc (из ссылки пользователя): ставим сразу.
+    static var kaspiSort: (name: String, value: String)? = ("sortBy[date]", "desc")
     /// По умолчанию у Kaspi — «Рекомендуемые»; нужна «Самые новые». «По дате» и «старые» не берём.
     private static let sortWords = #"^(?!.*(стар|oldest|asc|возраст)).*(сначала\s+нов|сам(ые|ое)\s+нов|нов(ые|ее|инки)|свеж|недавн|newest)"#
 
@@ -263,7 +264,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     private func searchOne(_ raw: String, pages: Int = 3) async throws -> [Ad] {
         if self == .olx { return try await OLX.search(raw) }
         var firstURL = try newestFirst(raw)
-        let hasSort = firstURL.absoluteString.range(of: #"[?&](sort|order|sortBy|sort_by|orderBy)="#, options: [.regularExpression, .caseInsensitive]) != nil
+        let hasSort = firstURL.absoluteString.range(of: #"[?&](sort|order|sortBy|sort_by|orderBy)(=|\[|%5B)"#, options: [.regularExpression, .caseInsensitive]) != nil
         if self == .kaspi, !hasSort, let s = Site.kaspiSort, !s.name.isEmpty { firstURL = Site.adding(s, to: firstURL) }
         guard var page = try await Site.html(firstURL) else { throw OLX.Failure.http(404) }
         if self == .kaspi, Site.kaspiSort == nil {

@@ -183,7 +183,7 @@ test('Kaspi «весь Казахстан»: города берутся со с
   const orig = { search: k.fetchSearch, detail: k.fetchDetail };
   let batch = [];
   k.fetchSearch = async () => batch;
-  k.fetchDetail = async (ad) => ({ title: `Ноутбук ${ad.id}` });
+  k.fetchDetail = async (ad) => ({ title: `Ноутбук ${ad.id}`, createdAt: ad.id === 960 ? Date.now() - 2 * 86400_000 : undefined });
   const sent = [];
   const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
     notify: async (userId, a) => { if (a) sent.push(a.id); }, alert: async () => {}, log: () => {} });
@@ -193,11 +193,11 @@ test('Kaspi «весь Казахстан»: города берутся со с
     const sub = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
     batch = [{ id: 500, url: 'u', anyOrder: true, seedOnly: true }, { id: 900, url: 'u', anyOrder: true, seedOnly: true }];
     await w.pollUrl(sub.url, [db.sub(sub.id)]);           // первый проход: только запомнили
-    batch = [{ id: 300, url: 'u', anyOrder: true, seedOnly: true }];
+    batch = [{ id: 600, url: 'u', anyOrder: true, seedOnly: true }];
     await w.pollUrl(sub.url, [db.sub(sub.id)]);           // новый город впервые: тоже только запомнили
-    batch = [{ id: 300, url: 'u', anyOrder: true }, { id: 301, url: 'u', anyOrder: true }, { id: 950, url: 'u', anyOrder: true }];
+    batch = [{ id: 600, url: 'u', anyOrder: true }, { id: 601, url: 'u', anyOrder: true }, { id: 950, url: 'u', anyOrder: true }, { id: 960, url: 'u', anyOrder: true }, { id: 100, url: 'u', anyOrder: true }];
     await w.pollUrl(sub.url, [db.sub(sub.id)]);
-    assert.deepStrictEqual(sent.sort((a, b) => a - b), [301, 950], '301 ниже отметки 900, но из другого города — новое');
+    assert.deepStrictEqual(sent.sort((a, b) => a - b), [601, 950], '601 ниже отметки 900, но из другого города — новое; платные 960 (подано 2 дня назад) и 100 (номер далеко позади) — нет');
   } finally {
     Object.assign(k, { fetchSearch: orig.search, fetchDetail: orig.detail });
   }

@@ -170,6 +170,15 @@ class Watcher {
     return !ad.createdAt || Date.now() - ad.createdAt <= ms;
   }
 
+  // Kaspi: платные (поднятые, «в топе») стоят сверху и при «Самых новых» — это старьё. Точное
+  // время подачи (dateCreate) их отсекает; нет его — день подачи старше вчерашнего, а нет и дня —
+  // номер сильно ниже самого нового известного (запас — на вышедшие с модерации позже соседей).
+  kaspiOld(ad, edge = this.kaspiFrontier || 0) {
+    if (ad.createdAt) return Date.now() - ad.createdAt > LATE_MS;
+    if (ad.postedDay) return Date.now() - ad.postedDay > 48 * 3600_000;
+    return edge > 0 && ad.id < edge - 500;
+  }
+
   // Номер ниже отметки поиска: новое, только если подано после создания поиска и недавно
   // (OLX; у других площадок даты подачи надёжно нет — там ниже отметки ничего не шлём).
   lateOk(sub, ad, source = sub.source || 'olx') {
@@ -283,6 +292,7 @@ class Watcher {
           : Math.max(this.cfg.freshMs, Math.min(24 * 3600_000, Date.now() - sub.last_poll + 120_000));
         // Решение принято — больше это объявление этому поиску не проверяем.
         const pass = (late ? this.lateOk(sub, full, src.key) : this.isFresh(full, window))   // не старьё
+          && !(src.key === 'kaspi' && this.kaspiOld(full))                            // Kaspi: платное старьё
           && this.allowed(sub.user_id, full)                                         // чужая VIP-рубрика
           && this.sellerOk(sub, full)                                                // частные / бизнес
           && ownerOk(sub, full);                                                     // Krisha / Kolesa: от хозяев
@@ -363,10 +373,7 @@ class Watcher {
           // (до 3 ч), а без даты — если номер не сильно меньше края на момент запуска (запас —
           // на вышедшие с модерации позже соседей).
           // Только день (без времени) — старое, если раньше вчерашнего.
-          const old = ad.createdAt ? Date.now() - ad.createdAt > LATE_MS
-            : ad.postedDay ? Date.now() - ad.postedDay > 48 * 3600_000
-              : a.id < st.startEdge - 500;
-          if (old) { this.trace(a.id, 'витрина Kaspi: поднятое старое — пропуск'); continue; }
+          if (this.kaspiOld(ad, st.startEdge)) { this.trace(a.id, 'витрина Kaspi: поднятое старое — пропуск'); continue; }
           this.trace(a.id, `витрина Kaspi: увидели${page ? ` (${ad.city || page})` : ''}`);
           for (const s of subs) {
             if (this.db.wasSent(s.id, a.id)) continue;
