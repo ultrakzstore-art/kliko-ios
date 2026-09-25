@@ -56,3 +56,49 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tee build.log | grep -E "error:|warning: .*Sendable|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
+
+  # СВЕРКА С ЖИВЫМ API (этап 22, владелец 25.09.2026: «давай следующие этапы»). Нативные экраны писались по
+  # контракту июля без доступа к сайту; раннер GitHub сайт видит. Этот шаг ничего не проверяет на «годен/не годен» —
+  # он печатает в итог прогона, что реально отдают публичные адреса, чтобы модели (Listing, ЧатОтвет) сверялись с
+  # правдой, а не с памятью. Только чтение, без входа: лента, одно объявление, ответ dm.php гостю.
+  api-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - name: Что отдаёт сайт
+        run: |
+          base="https://kliko.kz"
+          ua="KlikoApp/1.10 (api-probe)"
+          show() {  # заголовок, код, тип и тело (JSON — красиво и укорочено)
+            echo "### $1" >> "$GITHUB_STEP_SUMMARY"
+            code=$(curl -sS -A "$ua" -H 'Accept: application/json' -o body -w '%{http_code} %{content_type}' "$2" || echo "curl-failed")
+            echo "HTTP $code" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            if python3 -c 'import json;json.load(open("body"))' 2>/dev/null; then
+              python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("body"))
+          def cut(x, depth=0):
+              if isinstance(x, list):
+                  return [cut(v, depth+1) for v in x[:2]] + ([f"… ещё {len(x)-2}"] if len(x) > 2 else [])
+              if isinstance(x, dict):
+                  return {k: cut(v, depth+1) for k, v in x.items()}
+              if isinstance(x, str) and len(x) > 120:
+                  return x[:120] + "…"
+              return x
+          print(json.dumps(cut(d), ensure_ascii=False, indent=1)[:6000])
+          PY
+            else
+              head -c 1500 body | tee -a "$GITHUB_STEP_SUMMARY"; echo
+            fi
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          }
+          show "Лента: /api/listings.php?sort=reco&page=1&per=3" "$base/api/listings.php?sort=reco&page=1&per=3"
+          id=$(python3 -c 'import json;d=json.load(open("body"));print((d.get("items") or [{}])[0].get("id",""))' 2>/dev/null || true)
+          cat_=$(python3 -c 'import json;d=json.load(open("body"));print((d.get("items") or [{}])[0].get("category",""))' 2>/dev/null || true)
+          echo "первый id: $id, category: $cat_"
+          [ -n "$id" ] && show "Объявление: /api/listings.php?id=$id" "$base/api/listings.php?id=$id"
+          [ -n "$cat_" ] && show "Раздел: /api/listings.php?cat=$cat_&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&cat=$cat_"
+          show "Поиск: /api/listings.php?q=iphone&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&q=iphone"
+          show "Чат гостю: /dm.php?action=list" "$base/dm.php?action=list"
