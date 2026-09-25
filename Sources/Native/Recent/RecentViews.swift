@@ -62,14 +62,11 @@ private struct МаленькаяКарточка: View {
             Color(.tertiarySystemGroupedBackground)
                 .frame(width: Self.ширина, height: Self.ширина * 3 / 4)
                 .overlay {
-                    AsyncImage(url: товар.обложка) { фаза in
-                        if case .success(let картинка) = фаза {
-                            картинка.resizable().scaledToFill()
-                        } else {
-                            Image(systemName: "photo")
-                                .font(.system(size: 18))
-                                .foregroundStyle(.tertiary)
-                        }
+                    /* Проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage (FeedImages.swift). */
+                    КартинкаЛенты(товар.обложка, пунктов: Self.ширина) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.tertiary)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

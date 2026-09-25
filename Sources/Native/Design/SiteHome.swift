@@ -210,12 +210,10 @@ struct ПлиткаРаздела: View {
                     .fill(сплошная ? Color.white.opacity(0.14) : Color(uiColor: краска).opacity(тёмная ? 0.16 : 0.1))
                     .frame(width: 104, height: 104)
                     .offset(x: 22, y: 30)
-                AsyncImage(url: раздел.картинка) { фаза in
-                    if case .success(let картинка) = фаза {
-                        картинка.resizable().scaledToFit()
-                    } else {
-                        Color.clear
-                    }
+                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — WebP плитки
+                   распаковывается не на главной очереди и хранится в памяти (FeedImages.swift). */
+                КартинкаЛенты(раздел.картинка, пунктов: размерКартинки, заполнить: false) {
+                    Color.clear
                 }
                 .frame(width: размерКартинки, height: размерКартинки)
                 .shadow(color: Color(red: 10 / 255, green: 28 / 255, blue: 20 / 255).opacity(0.26), radius: 6, x: 0, y: 6)
@@ -227,7 +225,17 @@ struct ПлиткаРаздела: View {
             }
             .frame(height: высота)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-            .shadow(color: сплошная && !тёмная ? Color(uiColor: краска).opacity(0.3) : Color.clear, radius: 10, x: 0, y: 8)
+            /* Проверка на телефоне, сборка 33 («лента подвисает»): тень — у подложки той же формы и заливкой
+               (ShapeStyle.shadow), и только у сплошной плитки в светлой теме. Раньше .shadow висел на всей обрезанной
+               плитке (градиент, круг, картинка, подписи) у всех шести — у светлых прозрачным цветом, но всё равно. */
+            .background {
+                if сплошная && !тёмная {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                        .fill(Color(uiColor: краска)
+                            .shadow(.drop(color: Color(uiColor: краска).opacity(0.3), radius: 10, x: 0, y: 8)))
+                        .accessibilityHidden(true)
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         }
         .buttonStyle(НажатиеСайта())

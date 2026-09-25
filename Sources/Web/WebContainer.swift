@@ -140,7 +140,20 @@ struct WebContainer: UIViewRepresentable {
         /* Настоящий прогресс загрузки для прелоадера — доля, которую считает сам WebKit. */
         context.coordinator.progressObs = web.observe(\.estimatedProgress, options: [.initial, .new]) { w, _ in
             let p = w.estimatedProgress
-            Task { @MainActor in WebBridge.shared.progress = p }
+            Task { @MainActor in
+                let мост = WebBridge.shared
+                /* Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): каждый шаг загрузки
+                   страницы (их десятки) публиковал WebBridge, а его целиком наблюдают корень, вкладки и лента — и на
+                   каждом шаге заново собиралась вся лента с рядами и сеткой, пока человек её листал: на запуске и после
+                   возврата с сайта страница грузится как раз под ней. Под лентой прогресс-бару сплэша показывать
+                   некому, ленте нужен только конец загрузки (город в шапке) — публикуем лишь переход «грузится ↔
+                   догрузилась». Лента спрятана — каждый шаг, как раньше: его показывает сплэш. */
+                if Config.нативнаяЛента && мост.лентаВидна {
+                    if (p >= 1) != (мост.progress >= 1) { мост.progress = p }
+                } else if мост.progress != p {
+                    мост.progress = p
+                }
+            }
         }
         /* ГЛАВНАЯ СЕЙЧАС — НАТИВНАЯ ЛЕНТА. Страница ушла на главную (логотип, «Главная» в нижней панели, свайп назад
            с объявления, переход внутри страницы через history.pushState) — показываем ленту вместо веб-главной.
@@ -694,7 +707,8 @@ struct WebContainer: UIViewRepresentable {
             }
             webView.scrollView.refreshControl?.endRefreshing()
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
-            bridge.loadFailed = false
+            /* Проверка на телефоне, сборка 33: без лишней публикации — она пересобирала бы ленту на каждой загрузке. */
+            if bridge.loadFailed { bridge.loadFailed = false }
             if !bridge.isLoaded { bridge.isLoaded = true }
             if wipeAfterLogout, let адрес = webView.url?.absoluteString, адрес.contains("bye=1") {
                 wipeAfterLogout = false

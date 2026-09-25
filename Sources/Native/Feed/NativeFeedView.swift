@@ -48,7 +48,11 @@ struct NativeFeedView: View {
     /// Тема на экране — кнопка темы в шапке (этап 25) показывает луну в светлой и солнце в тёмной, как на сайте.
     @Environment(\.colorScheme) private var схема
 
-    @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
+    /// Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): начальное значение @State считается
+    /// при КАЖДОМ создании NativeFeedView, а создаётся она на каждую перерисовку вкладок — и каждый раз снимок читался с
+    /// диска и разбирался JSONDecoder на главной очереди. Теперь — один раз за запуск (FeedStore.разделыНаЗапуске);
+    /// @State и раньше брал только первое значение, так что показ тот же.
+    @State private var разделы: [FeedSnapshot.Row] = FeedStore.разделыНаЗапуске
 
     /// Размер текста в Настройках: при крупном для доступности — сетка в одну колонку (этап 11, ListingCard.сетка).
     @Environment(\.dynamicTypeSize) private var размерТекста
@@ -975,14 +979,11 @@ struct ListingCard: View {
                 Color(.tertiarySystemGroupedBackground)
                     .aspectRatio(4 / 3, contentMode: .fit)
                     .overlay {
-                        AsyncImage(url: товар.обложка) { фаза in
-                            if case .success(let картинка) = фаза {
-                                картинка.resizable().scaledToFill()
-                            } else {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 22))
-                                    .foregroundStyle(.tertiary)
-                            }
+                        /* Проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — см. FeedImages.swift. */
+                        КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 520 : 260) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .clipped()
@@ -1041,14 +1042,12 @@ struct ListingCard: View {
             Theme.поверхность2
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
-                    AsyncImage(url: товар.обложка) { фаза in
-                        if case .success(let картинка) = фаза {
-                            картинка.resizable().scaledToFill()
-                        } else {
-                            Image(systemName: "photo")
-                                .font(.system(size: 26))
-                                .foregroundStyle(Theme.текстВторой.opacity(0.5))
-                        }
+                    /* Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): не AsyncImage, а
+                       КартинкаЛенты — уменьшенная до ячейки, распакованная не на главной очереди и из памяти. */
+                    КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 520 : 260) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 26))
+                            .foregroundStyle(Theme.текстВторой.opacity(0.5))
                     }
                 }
                 .clipped()
@@ -1123,9 +1122,12 @@ struct ListingCard: View {
         .foregroundStyle(Color.white)
         .padding(.horizontal, 8)
         .frame(height: 24)
-        .background(LinearGradient(colors: [Theme.топНачало, Theme.топКонец], startPoint: .topLeading, endPoint: .bottomTrailing),
+        /* Проверка на телефоне, сборка 33 («лента подвисает»): тень метки — заливкой подложки (ShapeStyle.shadow), а не
+           .shadow на метке: та считалась вне экрана каждый кадр прокрутки, внутри и без того затенённой карточки. */
+        .background(LinearGradient(colors: [Theme.топНачало, Theme.топКонец], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .shadow(.drop(color: Color(red: 176 / 255, green: 132 / 255, blue: 24 / 255).opacity(0.5),
+                                      radius: 4, x: 0, y: 3)),
                     in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-        .shadow(color: Color(red: 176 / 255, green: 132 / 255, blue: 24 / 255).opacity(0.5), radius: 4, x: 0, y: 3)
     }
 
     /// «Новое» — той же формы, что «★ ТОП», в зелёном бренда.

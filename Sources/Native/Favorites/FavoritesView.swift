@@ -241,8 +241,10 @@ struct КнопкаИзбранного: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(сохранено ? Theme.сердце : Theme.текстВторой)
                             .frame(width: 32, height: 32)
-                            .background(Theme.поверхность.opacity(0.82), in: Circle())
-                            .background(.ultraThinMaterial, in: Circle())
+                            /* Проверка на телефоне, сборка 33 («лента подвисает»): без .ultraThinMaterial — размытие
+                               фона под кружком пересчитывалось каждый кадр прокрутки на каждой карточке, а под
+                               поверхностью 82 % его почти не было видно. Поверхность 90 % — тот же вид. */
+                            .background(Theme.поверхность.opacity(0.9), in: Circle())
                             .padding(8)
                             .contentShape(Rectangle())
                     } else {

@@ -239,9 +239,22 @@ private struct ТеньКарточкиСайта: ViewModifier {
                     .allowsHitTesting(false)
             }
         } else {
-            content
-                .shadow(color: Color(red: 16 / 255, green: 40 / 255, blue: 28 / 255).opacity(0.06), radius: 1, x: 0, y: 1)
-                .shadow(color: Color(red: 16 / 255, green: 40 / 255, blue: 28 / 255).opacity(0.16), radius: 4, x: 0, y: 5)
+            /* Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): две тени .shadow висели на
+               всём содержимом карточки — фото, текстах, обрезке. У такой тени нет готовой формы: её каждый кадр
+               прокрутки заново считают по прозрачности всей карточки вне экрана, два раза на карточку, 6–8 карточек на
+               экране. Теперь те же две тени — у простой подложки той же формы под карточкой, заливкой со встроенной
+               тенью (ShapeStyle.shadow): рисуются вместе с фигурой и от фото и текста не зависят. Карточки сплошные —
+               подложку под ними не видно, остаётся одна тень. */
+            content.background {
+                RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                    .fill(Theme.поверхность
+                        .shadow(.drop(color: Self.тень.opacity(0.06), radius: 1, x: 0, y: 1))
+                        .shadow(.drop(color: Self.тень.opacity(0.16), radius: 4, x: 0, y: 5)))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
     }
+
+    private static let тень = Color(red: 16 / 255, green: 40 / 255, blue: 28 / 255)
 }
