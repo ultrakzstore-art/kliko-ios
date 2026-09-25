@@ -162,12 +162,60 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// Kaspi: сортировка «сначала новые». Как она зовётся в ссылке, заранее неизвестно — ищем
+    /// на первой странице выдачи (ссылка или пункт списка «Сначала новые» / «Новые» / «По дате»).
+    /// nil — ещё не искали; ("", "") — искали, не нашлось.
+    static var kaspiSort: (name: String, value: String)?
+    private static let sortWords = #"(сначала\s+нов|нов(ые|ее|инки)|по\s+дат|свеж|недавн|newest|date)"#
+
+    static func findSort(_ html: String) -> (name: String, value: String)? {
+        let text = html.replacingOccurrences(of: "&amp;", with: "&")
+        let ns = text as NSString
+        let keys = #"(?:sort|order|sortBy|sort_by|orderBy)"#
+        if let re = try? NSRegularExpression(pattern: #"<a\b[^>]*href=["']([^"']*[?&]"# + keys + #"=[^"']*)["'][^>]*>([\s\S]{0,120}?)</a>"#, options: [.caseInsensitive]) {
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let label = ns.substring(with: m.range(at: 2)).replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+                guard label.range(of: sortWords, options: [.regularExpression, .caseInsensitive]) != nil,
+                      let u = URLComponents(string: ns.substring(with: m.range(at: 1))) else { continue }
+                if let item = u.queryItems?.first(where: { $0.name.range(of: "^" + keys + "$", options: [.regularExpression, .caseInsensitive]) != nil }),
+                   let v = item.value { return (item.name, v) }
+            }
+        }
+        if let re = try? NSRegularExpression(pattern: #"<select\b[^>]*name=["']("# + keys + #")["'][^>]*>([\s\S]*?)</select>"#, options: [.caseInsensitive]),
+           let m = re.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let name = ns.substring(with: m.range(at: 1)), body = ns.substring(with: m.range(at: 2))
+            let bns = body as NSString
+            if let opt = try? NSRegularExpression(pattern: #"<option\b[^>]*value=["']([^"']+)["'][^>]*>([^<]*)<"#, options: [.caseInsensitive]) {
+                for o in opt.matches(in: body, range: NSRange(location: 0, length: bns.length))
+                where bns.substring(with: o.range(at: 2)).range(of: sortWords, options: [.regularExpression, .caseInsensitive]) != nil {
+                    return (name, bns.substring(with: o.range(at: 1)))
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func adding(_ sort: (name: String, value: String), to url: URL) -> URL {
+        guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        c.queryItems = (c.queryItems ?? []).filter { $0.name != sort.name } + [URLQueryItem(name: sort.name, value: sort.value)]
+        return c.url ?? url
+    }
+
     /// Выдача: номера (со сдвигом площадки) и ссылки. Подробности — отдельно, только для нового.
     func search(_ raw: String) async throws -> [Ad] {
         if self == .olx { return try await OLX.search(raw) }
-        let firstURL = try newestFirst(raw)
+        var firstURL = try newestFirst(raw)
+        let hasSort = firstURL.absoluteString.range(of: #"[?&](sort|order|sortBy|sort_by|orderBy)="#, options: [.regularExpression, .caseInsensitive]) != nil
+        if self == .kaspi, !hasSort, let s = Site.kaspiSort, !s.name.isEmpty { firstURL = Site.adding(s, to: firstURL) }
         guard var page = try await Site.html(firstURL) else { throw OLX.Failure.http(404) }
-        // Kaspi: «сначала новые» ссылкой не включить — смотрим ещё 2 страницы.
+        if self == .kaspi, Site.kaspiSort == nil {
+            Site.kaspiSort = Site.findSort(page) ?? ("", "")
+            if let s = Site.kaspiSort, !s.name.isEmpty, !hasSort {
+                firstURL = Site.adding(s, to: firstURL)
+                if let sorted = try await Site.html(firstURL) { page = sorted }
+            }
+        }
+        // Kaspi: даже с сортировкой смотрим ещё 2 страницы — на случай продвигаемых сверху.
         if self == .kaspi {
             for n in 2...3 {
                 guard var c = URLComponents(url: firstURL, resolvingAgainstBaseURL: false) else { break }

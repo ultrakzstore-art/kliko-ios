@@ -73,7 +73,7 @@ final class AppModel {
     /// модерация бывает и через час — объявление всё равно придёт, как только OLX его покажет.
     private var gaps: [Int: (added: Date, checked: Date)] = [:]
     private static let gapWindow = 200
-    private static let gapsPerPass = 12
+    private static let gapsPerPass = 6
     private static let gapLife: TimeInterval = 3 * 3600
 
     /// Свежие пропуски — каждый проход, старше 10 минут — раз в 30 с, старше часа — раз в 2 мин.
@@ -134,11 +134,11 @@ final class AppModel {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        if let until = blockedUntil, until > Date() { return }
+        let olxBlocked = siteBlocked(.olx)
         // Лента всей доски: при открытии — сразу, дальше раз в 1,5–5 с. Отсюда приходит большая
         // часть нового; турбо добирает номера за её краем и объявления на модерации; поиски —
         // то, что по признакам не подошло (рубрика ещё не выучена и т.п.).
-        if Date().timeIntervalSince(lastAnchor) >= speed.board {
+        if !olxBlocked, Date().timeIntervalSince(lastAnchor) >= speed.board {
             lastAnchor = Date()
             await anchor()
         }
@@ -146,13 +146,12 @@ final class AppModel {
         // пройдут все поиски подряд.
         let now = Date()
         let due = state.subs.filter { sub in
-            !sub.paused && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
+            !sub.paused && !siteBlocked(sub.site) && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
         }
-        if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }),
-           !(blockedUntil.map { $0 > Date() } ?? false) {
+        if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }) {
             await poll(next.id)
         }
-        if state.turbo, Date().timeIntervalSince(lastTurbo) >= speed.turbo {
+        if state.turbo, !siteBlocked(.olx), Date().timeIntervalSince(lastTurbo) >= speed.turbo {
             lastTurbo = Date()
             await turbo()
         }
@@ -248,11 +247,11 @@ final class AppModel {
         let ads: [Ad]
         do {
             ads = try await site.search(found.url)
-            ok()
+            ok(site: site)
             state.stats.searchOk += 1
         } catch {
             state.stats.searchErr += 1
-            fail(error)
+            fail(error, site: site)
             updateSub(found.id) { $0.lastPoll = Date(); $0.error = error.localizedDescription }
             save()
             return
@@ -397,6 +396,15 @@ final class AppModel {
             var out: [(Int, Result<Ad?, Error>)] = []
             for await r in group { out.append(r) }
             return out.sorted { $0.0 < $1.0 }
+        }
+        // 403 на все номера прохода — это не скрытые объявления, а OLX закрыл доступ: пауза.
+        let all403 = results.count >= 5 && results.allSatisfy {
+            if case .failure(let e) = $0.1, let f = e as? OLX.Failure, case .blocked(403) = f { return true }
+            return false
+        }
+        if all403, case .failure(let e) = results[0].1 {
+            fail(e)
+            return
         }
         var failed = false
         for (id, result) in results {
@@ -565,7 +573,24 @@ final class AppModel {
         return false
     }
 
-    private func fail(_ error: Error) {
+    /// Пауза Kolesa / Krisha / Kaspi — своя: OLX ограничил — остальные работают, и их удачный
+    /// ответ не сбрасывает паузу OLX (и наоборот).
+    @ObservationIgnored private var siteBlock: [Site: (until: Date, backoff: TimeInterval)] = [:]
+
+    private func siteBlocked(_ site: Site) -> Bool {
+        if site == .olx { return blockedUntil.map { $0 > Date() } ?? false }
+        return (siteBlock[site]?.until ?? .distantPast) > Date()
+    }
+
+    private func fail(_ error: Error, site: Site = .olx) {
+        if site != .olx {
+            if Self.isBlocked(error) {
+                let b = min(900, max(60, (siteBlock[site]?.backoff ?? 0) * 2))
+                siteBlock[site] = (Date().addingTimeInterval(b), b)
+            }
+            self.error = "\(site.title): \(error.localizedDescription)"
+            return
+        }
         health.lastFailure = Date()
         health.lastError = error.localizedDescription
         if let f = error as? OLX.Failure {
@@ -581,7 +606,8 @@ final class AppModel {
         self.error = error.localizedDescription
     }
 
-    private func ok() {
+    private func ok(site: Site = .olx) {
+        if site != .olx { siteBlock[site] = nil; return }
         health.lastSuccess = Date()
         health.lastCode = 200
         backoff = 0
