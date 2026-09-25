@@ -65,6 +65,7 @@ function parseDetail(html, { id, url, currency = '₸' }) {
   }
   const city = decode(product?.address?.addressLocality || offer?.availableAtOrFrom?.address?.addressLocality || '')
     || (/ в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$/.exec(title) || [])[1] || '';
+  const sellerUrl = findSeller(html, url, product, offer);
   const posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom || '');
   return {
     id,
@@ -82,10 +83,37 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     business: false,
     userId: null,
     userName: '',
+    sellerUrl,
     params: [],
     photo: [...new Set(images)][0] || '',
     photos: [...new Set(images)].slice(0, 12),
   };
+}
+
+// Страница продавца — «все объявления автора». Сначала из JSON-LD (seller/author с url),
+// потом из ссылок карточки на тот же сайт вида /user/…, /pro/…, /seller/…, /company/….
+// Не нашлась — пусто, и кнопки не будет.
+function findSeller(html, url, product, offer) {
+  let host;
+  try { host = new URL(url).host; } catch { return ''; }
+  const sameSite = (u) => {
+    try {
+      const x = new URL(decode(u), `https://${host}`);
+      const base = (h) => h.replace(/^(www|m)\./, '');
+      return base(x.host) === base(host) && x.protocol.startsWith('http') ? x.href : '';
+    } catch { return ''; }
+  };
+  for (const p of [offer?.seller, product?.seller, offer?.offeredBy, product?.author]) {
+    const u = p && (typeof p === 'string' ? p : p.url || p['@id']);
+    const ok = u && sameSite(u);
+    if (ok) return ok;
+  }
+  const re = /href=["']([^"']*\/(?:user|users|seller|sellers|profile|pro|agent|agents|company|companies|shop|dealer|dealers)\/[\w.-]+\/?[^"'#]*)["']/gi;
+  for (const m of html.matchAll(re)) {
+    const ok = sameSite(m[1]);
+    if (ok && !/\/(login|register|auth|settings|cabinet)\b/i.test(ok)) return ok;
+  }
+  return '';
 }
 
 function decode(s) {

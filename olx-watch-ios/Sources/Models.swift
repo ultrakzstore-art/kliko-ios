@@ -24,6 +24,8 @@ struct Ad: Codable, Identifiable, Hashable {
     var subIds: [Int] = []
     /// Все фото объявления. Необязательное: в state.json версий до 1.3 его нет.
     var photos: [String]?
+    /// Рубрика словами (из карточки OLX). Необязательное — в старых state.json нет.
+    var category: String?
 
     /// Пойман «турбо» — по номеру, раньше, чем объявление попало в поиск OLX.
     var early: Bool { via == "turbo" }
@@ -84,6 +86,7 @@ struct Ad: Codable, Identifiable, Hashable {
         if !o.userName.isEmpty { userName = o.userName }
         if !o.params.isEmpty { params = o.params }
         if !o.description.isEmpty { description = o.description }
+        if let c = o.category, !c.isEmpty { category = c }
     }
 }
 
@@ -100,14 +103,25 @@ struct Sub: Codable, Identifiable, Hashable {
     var learnedCategories: [Int] = []
     var learnedCities: [String] = []
     var learnedTotal = 0
+    /// Рубрика поиска словами — для подписи в карточках. В старых state.json нет.
+    var categoryLabel: String?
 }
 
-struct Stats: Codable {
+struct Stats: Codable, Equatable {
     var searchOk = 0
     var searchErr = 0
     var turboProbes = 0
     var turboFound = 0
     var lastTurboHit: Date?
+}
+
+/// Связь с OLX — для индикатора «работает / пауза / нет связи» в настройках.
+struct Health: Equatable {
+    var lastSuccess: Date?
+    var lastFailure: Date?
+    var lastCode: Int?
+    var lastError = ""
+    var lastLatencyMs: Int?
 }
 
 /// Всё состояние приложения, одним файлом.

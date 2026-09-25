@@ -49,6 +49,14 @@ test('выдача: номера из ссылок /a/show/; карточка: o
   assert.match(ad.description, /8 707 123 45 67/);
   assert.ok(ad.createdAt > 0);
 
+  assert.strictEqual(ad.sellerUrl, '');
+
+  // Ссылка на продавца: из JSON-LD или из ссылок карточки на тот же сайт; чужие сайты — нет.
+  const withSeller = parseDetail('<a href="https://evil.example/user/1">x</a><a href="/user/55123/">Все объявления</a>', { id: 2, url: 'https://kolesa.kz/a/show/2' });
+  assert.strictEqual(withSeller.sellerUrl, 'https://kolesa.kz/user/55123/');
+  const ldSeller = parseDetail('<script type="application/ld+json">{"@type":"Apartment","name":"x","offers":{"price":"1","seller":{"url":"https://krisha.kz/pro/agency-7"}}}</script>', { id: 3, url: 'https://krisha.kz/a/show/3' });
+  assert.strictEqual(ldSeller.sellerUrl, 'https://krisha.kz/pro/agency-7');
+
   // Без JSON-LD — цена из заголовка, город из «… в Алматы».
   const bare = parseDetail('<meta property="og:title" content="3-комнатная квартира, 75 м² за 55 000 000 〒 в Алматы">', { id: 1, url: 'u' });
   assert.strictEqual(bare.price, 55000000);

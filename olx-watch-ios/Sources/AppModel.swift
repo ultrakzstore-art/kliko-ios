@@ -44,7 +44,18 @@ final class AppModel {
         didSet { UserDefaults.standard.set(freshnessMinutes, forKey: "freshness_min") }
     }
 
-    private(set) var state = Persisted()
+    /// Всё сохраняемое. Не наблюдается напрямую: пометки «номер уже видели», граница турбо и
+    /// счётчики меняются по нескольку раз в секунду, и каждая такая мелочь перерисовывала бы
+    /// ленту целиком. Экрану отдаём отдельные части — и только когда они правда изменились.
+    @ObservationIgnored private(set) var state = Persisted()
+    private(set) var ads: [Ad] = []
+    private(set) var allAds: [Ad] = []
+    private(set) var subs: [Sub] = []
+    private(set) var stats = Stats()
+    private(set) var frontier = 0
+    private(set) var turboOn = true
+    /// Живое состояние связи с OLX — для индикатора в настройках.
+    private(set) var health = Health()
     var error: String?
     var highlightedAdId: Int?
     private(set) var blockedUntil: Date?
@@ -57,15 +68,23 @@ final class AppModel {
     private var seenSet = Set<Int>()
     private var busy = false
 
-    var ads: [Ad] { state.ads }
-    var subs: [Sub] { state.subs }
-    var allAds: [Ad] { state.all ?? [] }
     private(set) var pushStatus = ""
 
     init() {
         // Кэш для фото: пролистанное не грузится заново.
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 300 << 20)
         load()
+    }
+
+    /// Переносит изменившиеся части state в наблюдаемые свойства (только если изменились).
+    func publish() {
+        if ads != state.ads { ads = state.ads }
+        let all = state.all ?? []
+        if allAds != all { allAds = all }
+        if subs != state.subs { subs = state.subs }
+        if stats != state.stats { stats = state.stats }
+        if frontier != state.frontier { frontier = state.frontier }
+        if turboOn != state.turbo { turboOn = state.turbo }
     }
 
     // MARK: — жизненный цикл
@@ -76,6 +95,7 @@ final class AppModel {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.tick()
+                self?.publish()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -110,6 +130,7 @@ final class AppModel {
     /// Проверить все поиски сейчас (кнопка и фоновое обновление).
     func pollAll() async {
         for sub in state.subs where !sub.paused { await poll(sub.id) }
+        publish()
     }
 
     // MARK: — поиск
@@ -280,6 +301,14 @@ final class AppModel {
     }
 
     private func fail(_ error: Error) {
+        health.lastFailure = Date()
+        health.lastError = error.localizedDescription
+        if let f = error as? OLX.Failure {
+            switch f {
+            case .blocked(let code), .http(let code): health.lastCode = code
+            case .badURL: break
+            }
+        }
         if Self.isBlocked(error) {
             backoff = min(900, max(60, backoff * 2))
             blockedUntil = Date().addingTimeInterval(backoff)
@@ -288,13 +317,45 @@ final class AppModel {
     }
 
     private func ok() {
+        health.lastSuccess = Date()
+        health.lastCode = 200
         backoff = 0
         error = nil
     }
 
+    /// «Проверить связь сейчас»: один запрос к OLX, код ответа и время.
+    func checkConnection() async -> String {
+        let url = state.subs.first?.url ?? "\(OLX.base)/d/elektronika/"
+        let started = Date()
+        do {
+            let ads = try await OLX.search(url)
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
+            ok()
+            health.lastLatencyMs = ms
+            return "OLX отвечает: 200 за \(ms) мс, в выдаче \(ads.count) объявлений"
+        } catch {
+            fail(error)
+            return "OLX не ответил: \(error.localizedDescription)"
+        }
+    }
+
+    /// Рубрика для подписи в карточке: из поиска, который поймал объявление, иначе — из карточки
+    /// OLX, иначе — из поиска, который уже видел такую рубрику.
+    func categoryText(for ad: Ad) -> String? {
+        for sub in subs where ad.subIds.contains(sub.id) {
+            if let label = sub.categoryLabel, !label.isEmpty { return label }
+        }
+        if let c = ad.category, !c.isEmpty { return c }
+        if let cat = ad.categoryId,
+           let sub = subs.first(where: { $0.learnedCategories.contains(cat) && !($0.categoryLabel ?? "").isEmpty }) {
+            return sub.categoryLabel
+        }
+        return nil
+    }
+
     // MARK: — поиски
 
-    func addSub(url: String, name: String) async -> Bool {
+    func addSub(url: String, name: String, categoryLabel: String? = nil) async -> Bool {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if OLX.adId(fromURL: trimmed) != nil {
             error = "Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком."
@@ -305,11 +366,13 @@ final class AppModel {
             return false
         }
         let title = name.trimmingCharacters(in: .whitespaces)
-        let sub = Sub(id: state.nextSubId, name: String((title.isEmpty ? Self.nameFromURL(trimmed) : title).prefix(60)), url: trimmed)
+        var sub = Sub(id: state.nextSubId, name: String((title.isEmpty ? Self.nameFromURL(trimmed) : title).prefix(60)), url: trimmed)
+        sub.categoryLabel = categoryLabel
         state.nextSubId += 1
         state.subs.append(sub)
         error = nil
         save()
+        publish()
         await poll(sub.id)   // первый проход сразу
         return true
     }
@@ -317,22 +380,26 @@ final class AppModel {
     func togglePause(_ sub: Sub) {
         updateSub(sub.id) { $0.paused.toggle() }
         save()
+        publish()
     }
 
     func delete(_ sub: Sub) {
         state.subs.removeAll { $0.id == sub.id }
         save()
+        publish()
     }
 
     func setTurbo(_ on: Bool) {
         state.turbo = on
         save()
+        publish()
     }
 
     func clearFeed() {
         state.ads.removeAll()
         state.all = []
         save()
+        publish()
     }
 
     private func updateSub(_ id: Int, _ change: (inout Sub) -> Void) {
@@ -356,11 +423,11 @@ final class AppModel {
 
     // MARK: — будильник через APNs
     //
-    // iOS не даёт приложению работать в фоне. Сервер на kliko.kz (wake.php по cron) раз в
+    // iOS не даёт приложению работать в фоне. Свой сервер (wake.php по cron) раз в
     // несколько минут шлёт тихий пуш — iPhone ненадолго будит приложение, и оно само проверяет
     // OLX с телефона. Сервер к OLX не ходит. Настройка необязательна.
 
-    static let defaultPushEndpoint = "https://kliko.kz/olx-watch/api.php"
+    static let defaultPushEndpoint = ""
     var pushEndpoint: String = UserDefaults.standard.string(forKey: "push_endpoint") ?? AppModel.defaultPushEndpoint
     var pushKey: String = Keychain.read("push_key") ?? ""
     private var deviceToken: String? = UserDefaults.standard.string(forKey: "device_token")
@@ -413,6 +480,7 @@ final class AppModel {
         let before = state.ads.count
         await pollAll()
         await turbo()
+        publish()
         saveNow()
         return state.ads.count > before
     }
@@ -438,6 +506,7 @@ final class AppModel {
         let work = Task { @MainActor in
             await self.pollAll()
             await self.turbo()
+            self.publish()
             self.saveNow()
             task.setTaskCompleted(success: true)
         }
@@ -460,6 +529,7 @@ final class AppModel {
               let saved = try? JSONDecoder().decode(Persisted.self, from: data) else { return }
         state = saved
         seenSet = Set(saved.seen)
+        publish()
     }
 
     /// Сохранение — не чаще раза в 3 секунды и не в главном потоке: кодирование всей ленты

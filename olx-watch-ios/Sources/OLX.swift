@@ -140,6 +140,7 @@ enum OLX {
         let loc = a["location"] as? [String: Any] ?? [:]
         ad.city = loc["cityName"] as? String ?? (loc["city"] as? [String: Any])?["name"] as? String ?? ""
         ad.categoryId = int((a["category"] as? [String: Any])?["id"] ?? a["categoryId"])
+        ad.category = categoryName(a["category"] as? [String: Any])
         ad.createdAt = date(a["createdTime"] ?? a["created_time"])
         let promo = a["promotion"] as? [String: Any] ?? [:]
         ad.promoted = bool(a["isPromoted"]) || bool(promo["top_ad"]) || bool(promo["highlighted"])
@@ -149,6 +150,20 @@ enum OLX {
         ad.photo = photos.first ?? ""
         ad.photos = photos.isEmpty ? nil : Array(photos.prefix(12))
         return ad
+    }
+
+    /// Рубрика словами: название, если OLX его отдал, иначе — по типу раздела.
+    static func categoryName(_ c: [String: Any]?) -> String? {
+        guard let c else { return nil }
+        for key in ["name", "label", "title"] {
+            if let v = c[key] as? String, !v.isEmpty { return v }
+        }
+        let types = ["electronics": "Электроника", "automotive": "Транспорт", "real_estate": "Недвижимость",
+                     "job": "Работа", "services": "Услуги", "goods": "Товары", "agriculture": "Хозяйство",
+                     "animals": "Животные", "fashion": "Мода", "home_garden": "Дом и сад", "kids": "Детский мир",
+                     "hobby": "Хобби и спорт", "business": "Для бизнеса"]
+        if let t = c["type"] as? String { return types[t] }
+        return nil
     }
 
     private static func normalizeOffer(_ o: [String: Any]) -> Ad? {
@@ -171,6 +186,7 @@ enum OLX {
         ad.city = (loc["city"] as? [String: Any])?["name"] as? String ?? ""
         ad.region = (loc["region"] as? [String: Any])?["name"] as? String ?? ""
         ad.categoryId = int((o["category"] as? [String: Any])?["id"])
+        ad.category = categoryName(o["category"] as? [String: Any])
         ad.createdAt = date(o["created_time"])
         ad.status = o["status"] as? String ?? ""
         let promo = o["promotion"] as? [String: Any] ?? [:]

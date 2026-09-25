@@ -140,6 +140,7 @@ struct AdRow: View {
             .contentShape(Rectangle())
             .onTapGesture { if let url = ad.link { openURL(url) } }
 
+            AdDetails(ad: ad)
             ActionButtons(ad: ad)
         }
         .padding(.vertical, 6)
@@ -148,7 +149,8 @@ struct AdRow: View {
     }
 }
 
-/// Кнопки действий: позвонить, открыть на OLX, все объявления автора.
+/// Кнопки действий. Номер есть — «Позвонить» звонит сразу. Номера нет — главная кнопка
+/// ведёт ко всем объявлениям автора (если автор известен), иначе — на само объявление.
 struct ActionButtons: View {
     let ad: Ad
     var compact = false
@@ -159,31 +161,87 @@ struct ActionButtons: View {
         HStack(spacing: 8) {
             if let phone = phones.first, let tel = URL(string: "tel:\(phone)") {
                 Button { openURL(tel) } label: {
-                    Label(compact ? "Позвонить" : Phone.pretty(phone), systemImage: "phone.fill")
+                    Label(compact ? "Позвонить" : "Позвонить · \(Phone.pretty(phone))", systemImage: "phone.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-            }
-            if let url = ad.link {
+                if let seller = ad.sellerURL {
+                    Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Все объявления автора")
+                }
+            } else if let seller = ad.sellerURL {
+                Button { openURL(seller) } label: {
+                    Label("Все объявления автора", systemImage: "person.crop.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.watchAccent)
+            } else if let url = ad.link {
                 Button { openURL(url) } label: {
-                    Label(phones.isEmpty ? "Открыть — позвонить на OLX" : "OLX", systemImage: "arrow.up.right.square")
-                        .frame(maxWidth: phones.isEmpty ? .infinity : nil)
+                    Label("Открыть на OLX", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
             }
-            if !compact, let seller = ad.sellerURL {
-                Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+            if (!phones.isEmpty || ad.sellerURL != nil), let url = ad.link {
+                Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Открыть на OLX")
             }
         }
         .font(.subheadline.weight(.semibold))
         .labelStyle(.titleAndIcon)
+        .lineLimit(1)
         .controlSize(compact ? .small : .regular)
     }
 }
 
-/// Строка «Все новые»: название, ссылка, цена, город и время — компактно, с маленьким фото.
+/// Рубрика, характеристики и описание — сразу в карточке, без перехода на OLX.
+struct AdDetails: View {
+    let ad: Ad
+    @Environment(AppModel.self) private var model
+    @State private var expanded = false
+
+    var body: some View {
+        let category = model.categoryText(for: ad)
+        VStack(alignment: .leading, spacing: 6) {
+            if category != nil || !ad.params.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        if let category {
+                            Label { Text(verbatim: category) } icon: { Image(systemName: "folder") }
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.watchAccent.opacity(0.15), in: Capsule())
+                        }
+                        ForEach(ad.params, id: \.self) { p in
+                            Text(verbatim: p)
+                                .font(.caption)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                        }
+                    }
+                }
+            }
+            if !ad.description.isEmpty {
+                Text(verbatim: ad.description)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                if ad.description.count > 140 {
+                    Button(expanded ? "Свернуть" : "Ещё") { withAnimation(.easeOut(duration: 0.2)) { expanded.toggle() } }
+                        .font(.footnote.weight(.semibold))
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+}
+
+/// Строка «Все новые»: фото листаются сверху, дальше название, ссылка, цена, рубрика, описание.
 struct LinkRow: View {
     let ad: Ad
     @Environment(\.openURL) private var openURL
@@ -191,42 +249,38 @@ struct LinkRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 10) {
-                if let first = ad.gallery.first {
-                    CachedImage(url: PhotoSize.thumb(first))
-                        .frame(width: 64, height: 64)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .onTapGesture { viewer = .init(index: 0) }
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
-                    if let url = ad.link {
-                        Text(verbatim: url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
-                            .font(.caption)
-                            .foregroundStyle(Color.watchAccent)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    HStack(spacing: 4) {
-                        if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
-                        if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
-                        Text("· \(ad.postedDate, style: .relative) назад")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    if let lag = ad.lagText {
-                        Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { if let url = ad.link { openURL(url) } }
+            if !ad.gallery.isEmpty {
+                PhotoCarousel(photos: ad.gallery, height: 160) { index in viewer = .init(index: index) }
             }
-            if !ad.phones.isEmpty { ActionButtons(ad: ad, compact: true) }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                if let url = ad.link {
+                    Text(verbatim: url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
+                        .font(.caption)
+                        .foregroundStyle(Color.watchAccent)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                HStack(spacing: 4) {
+                    if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
+                    if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
+                    Text("· \(ad.postedDate, style: .relative) назад")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                if let lag = ad.lagText {
+                    Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { if let url = ad.link { openURL(url) } }
+            AdDetails(ad: ad)
+            ActionButtons(ad: ad, compact: true)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .fullScreenCover(item: $viewer) { start in PhotoViewer(photos: ad.gallery, start: start.index) }
     }
 }
@@ -544,7 +598,7 @@ struct AddSubSheet: View {
                         let link = mode == .pick ? builtURL : url
                         let title = name.isEmpty ? autoName : name
                         Task {
-                            if await model.addSub(url: link, name: title) { dismiss() }
+                            if await model.addSub(url: link, name: title, categoryLabel: mode == .pick ? (sub?.name ?? top?.name) : nil) { dismiss() }
                             saving = false
                         }
                     }
@@ -633,8 +687,10 @@ struct SettingsView: View {
     @State private var checking = false
 
     var body: some View {
-        let st = model.state.stats
+        let st = model.stats
         Form {
+            StatusSection()
+
             Section {
                 LabeledContent("Проверка", value: model.running ? "идёт, пока приложение открыто" : "на паузе")
                 if let until = model.blockedUntil, until > Date() {
@@ -667,13 +723,13 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Турбо: раньше поиска", isOn: Binding(get: { model.state.turbo }, set: { model.setTurbo($0) }))
+                Toggle("Турбо: раньше поиска", isOn: Binding(get: { model.turboOn }, set: { model.setTurbo($0) }))
                 LabeledContent("Проверено номеров", value: "\(st.turboProbes)")
                 LabeledContent("Найдено по номерам", value: "\(st.turboFound)")
                 if let hit = st.lastTurboHit {
                     LabeledContent("Последняя находка", value: hit.formatted(date: .omitted, time: .shortened))
                 }
-                LabeledContent("Последний номер", value: model.state.frontier > 0 ? "\(model.state.frontier)" : "—")
+                LabeledContent("Последний номер", value: model.frontier > 0 ? "\(model.frontier)" : "—")
                 LabeledContent("Запросов поиска", value: "\(st.searchOk) / ошибок \(st.searchErr)")
             } header: {
                 Text("Турбо")
@@ -692,7 +748,7 @@ struct SettingsView: View {
     }
 }
 
-/// Тихие пуши-будильники: сервер на kliko.kz будит приложение, и оно проверяет OLX в фоне.
+/// Тихие пуши-будильники: свой сервер будит приложение, и оно проверяет OLX в фоне.
 struct PushSection: View {
     @Environment(AppModel.self) private var model
     @State private var endpoint = ""
@@ -701,7 +757,7 @@ struct PushSection: View {
 
     var body: some View {
         Section {
-            TextField(text: $endpoint, prompt: Text(verbatim: AppModel.defaultPushEndpoint)) { Text(verbatim: "Сервер") }
+            TextField(text: $endpoint, prompt: Text(verbatim: "https://ваш-сервер/olx-watch/api.php")) { Text(verbatim: "Сервер") }
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -717,11 +773,98 @@ struct PushSection: View {
         } header: {
             Text("Будильник через пуши (необязательно)")
         } footer: {
-            Text("Сервер на kliko.kz раз в несколько минут шлёт тихий пуш — iPhone будит приложение, и оно проверяет OLX с телефона даже когда закрыто. Сервер к OLX не ходит.")
+            Text("Свой сервер раз в несколько минут шлёт тихий пуш — iPhone будит приложение, и оно проверяет OLX с телефона даже когда закрыто. Сервер к OLX не ходит.")
         }
         .onAppear {
             endpoint = model.pushEndpoint
             key = model.pushKey
         }
+    }
+}
+
+/// Работает ли сервис на самом деле: когда OLX последний раз ответил, с каким кодом и
+/// как быстро. Зелёный — ответ был недавно; жёлтый — давно тишина; красный — ошибка.
+struct StatusSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var checking = false
+    @State private var result = ""
+
+    var body: some View {
+        Section {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let s = status(now: context.date)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Circle().fill(s.color).frame(width: 12, height: 12)
+                        Text(verbatim: s.title).font(.headline)
+                    }
+                    Text(verbatim: s.detail).font(.footnote).foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
+            }
+            let h = model.health
+            if let code = h.lastCode {
+                LabeledContent("Последний код OLX", value: "\(code)")
+            }
+            if let ms = h.lastLatencyMs {
+                LabeledContent("Скорость ответа", value: "\(ms) мс")
+            }
+            if let hit = model.stats.lastTurboHit {
+                LabeledContent("Турбо последний раз поймало", value: hit.formatted(date: .omitted, time: .standard))
+            }
+            if let fail = h.lastFailure, !h.lastError.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Последняя ошибка · \(fail.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
+                    Text(verbatim: h.lastError).font(.caption).foregroundStyle(.red)
+                }
+            }
+            Button(checking ? "Проверяю связь…" : "Проверить связь с OLX сейчас") {
+                checking = true
+                Task {
+                    result = await model.checkConnection()
+                    checking = false
+                }
+            }
+            .disabled(checking)
+            if !result.isEmpty {
+                Text(verbatim: result).font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Статус")
+        } footer: {
+            Text("Кнопка делает один настоящий запрос к OLX с этого телефона и показывает код ответа и время. 200 — всё работает; 403 или 429 — OLX временно ограничил запросы, сборщик сам сделает паузу.")
+        }
+    }
+
+    private func status(now: Date) -> (color: Color, title: String, detail: String) {
+        let h = model.health
+        if let until = model.blockedUntil, until > now {
+            return (.orange, "OLX ограничил запросы", "Пауза до \(until.formatted(date: .omitted, time: .shortened)), потом продолжу сам.")
+        }
+        if model.subs.isEmpty && h.lastSuccess == nil {
+            return (.gray, "Нет поисков", "Добавьте поиск во вкладке «Поиски».")
+        }
+        if let fail = h.lastFailure, fail > (h.lastSuccess ?? .distantPast) {
+            return (.red, "Ошибка связи", "\(ago(fail, now)): \(h.lastError)")
+        }
+        guard let ok = h.lastSuccess else {
+            return (.yellow, "Ещё не было ответа", model.running ? "Жду первый ответ OLX…" : "Проверка начнётся, когда приложение откроется.")
+        }
+        let limit = max(model.speed.poll, model.speed.turbo) * 3 + 10
+        if model.running && now.timeIntervalSince(ok) <= limit {
+            return (.green, "Работает", "OLX ответил \(ago(ok, now)).")
+        }
+        if !model.running {
+            return (.gray, "На паузе", "Приложение было в фоне. Последний ответ OLX — \(ago(ok, now)).")
+        }
+        return (.yellow, "Давно нет ответа", "Последний ответ OLX — \(ago(ok, now)).")
+    }
+
+    private func ago(_ date: Date, _ now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(date)))
+        if s < 5 { return "только что" }
+        if s < 60 { return "\(s) с назад" }
+        if s < 3600 { return "\(s / 60) мин назад" }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }

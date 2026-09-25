@@ -327,6 +327,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const caption = card(ad, subs, via);
     const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
     if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', config.sellerUrl.replace('{id}', encodeURIComponent(ad.userId)));
+    else if (ad.sellerUrl) kb.row().url('Все объявления автора', ad.sellerUrl);
     try {
       if (!ad.photo) throw new Error('без фото');
       await bot.api.sendPhoto(userId, ad.photo, { caption, parse_mode: 'HTML', reply_markup: kb });
