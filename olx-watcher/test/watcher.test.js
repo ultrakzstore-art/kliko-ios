@@ -116,3 +116,29 @@ test('продление доступа считается от конца те�
   assert.ok(Math.abs(second - first - 14 * DAY) < 1000, '14 дней добавлены к концу 7-дневного срока');
   assert.ok(db.isPaid(5));
 });
+
+test('лента всей доски: подходящее новое приходит сразу, граница прыгает к краю ленты', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-board-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const now = Date.now();
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const origLatest = olx.fetchLatest;
+  let latest = [];
+  olx.fetchLatest = async () => latest;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a) => sent.push(`${userId}:${a.id}`), alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    db.updateSub(sub.id, { initialized: 1, watermark: 1000 });
+    latest = [ad(5000, 'HP 250 G9'), ad(4999, 'iPhone 13'), ad(900, 'HP старое, ниже отметки'), ad(4998, 'HP старьё', { createdAt: now - 5 * 3600_000 })];
+    await w.boardTick();
+    assert.deepStrictEqual(sent, ['1:5000'], 'только подходящее, свежее и новее отметки');
+    assert.strictEqual(w.frontier, 4995, 'турбо продолжит от края ленты');
+    await w.boardTick();
+    assert.deepStrictEqual(sent, ['1:5000'], 'второй раз не приходит');
+  } finally {
+    olx.fetchLatest = origLatest;
+  }
+});

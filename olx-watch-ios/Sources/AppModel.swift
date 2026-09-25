@@ -21,16 +21,18 @@ final class AppModel {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .normal: return "Обычная — поиск 30 с, турбо 10 с"
-            case .fast: return "Быстрая — поиск 15 с, турбо 5 с"
-            case .max: return "Максимум — поиск 10 с, турбо 3 с"
+            case .normal: return "Обычная — вся доска раз в 5 с"
+            case .fast: return "Быстрая — вся доска раз в 3 с"
+            case .max: return "Максимум — вся доска раз в 1,5 с"
             }
         }
+        /// Как часто смотреть самые свежие объявления всей доски — главный источник новых.
+        var board: TimeInterval { self == .normal ? 5 : self == .fast ? 3 : 1.5 }
         var poll: TimeInterval { self == .normal ? 30 : self == .fast ? 15 : 10 }
         var turbo: TimeInterval { self == .normal ? 10 : self == .fast ? 5 : 3 }
     }
 
-    var speed: Speed = Speed(rawValue: UserDefaults.standard.string(forKey: "speed") ?? "") ?? .fast {
+    var speed: Speed = Speed(rawValue: UserDefaults.standard.string(forKey: "speed") ?? "") ?? .max {
         didSet { UserDefaults.standard.set(speed.rawValue, forKey: "speed") }
     }
     private static let turboWindow = 8
@@ -98,7 +100,7 @@ final class AppModel {
             while !Task.isCancelled {
                 await self?.tick()
                 self?.publish()
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .milliseconds(500))
             }
         }
     }
@@ -116,8 +118,9 @@ final class AppModel {
         busy = true
         defer { busy = false }
         if let until = blockedUntil, until > Date() { return }
-        // Где сейчас OLX: при открытии — сразу, дальше с частотой поиска.
-        if Date().timeIntervalSince(lastAnchor) >= speed.poll {
+        // Лента всей доски: при открытии — сразу, дальше раз в 1,5–5 с. Отсюда приходит большая
+        // часть нового; турбо добирает номера за её краем, поиски — остальное.
+        if Date().timeIntervalSince(lastAnchor) >= speed.board {
             lastAnchor = Date()
             await anchor()
         }

@@ -44,6 +44,7 @@ class Watcher {
 
   start() {
     this.timers.push(setInterval(() => this.searchTick().catch((e) => this.log(`поиск: ${e.message}`)), 1_000));
+    this.timers.push(setInterval(() => this.boardTick().catch((e) => this.log(`доска: ${e.message}`)), (this.cfg.boardSec || 2) * 1000));
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
@@ -209,6 +210,52 @@ class Watcher {
 
   notifyReady(sub, count) {
     this.notify(sub.user_id, null, [sub], 'ready', count);
+  }
+
+  // ---------- лента всей доски ----------
+  // Самые свежие объявления всего OLX.kz раз в BOARD_SEC: отсюда приходит большая часть нового
+  // — сразу, без ожидания своего поиска. Граница турбо прыгает к краю ленты, а не бредёт по
+  // номерам. Подходит ли объявление поиску — как у турбо (слова, цена, выученные рубрика и город).
+
+  async boardTick() {
+    if (this.boardBusy || this.blocked()) return;
+    const subs = this.db.subs().filter((s) => (s.source || 'olx') === 'olx' && !s.paused && s.initialized
+      && this.db.hasAccess(s.user_id, 'olx') && !this.db.user(s.user_id)?.blocked);
+    if (!subs.length) return;
+    this.boardBusy = true;
+    try {
+      let ads;
+      try {
+        ads = await olx.fetchLatest();
+        this.okRequest();
+      } catch (e) {
+        if (!this.handleError(e)) this.log(`доска: ${e.message}`);
+        return;
+      }
+      const top = ads.reduce((m, a) => Math.max(m, a.id), 0);
+      if (top > this.frontier + this.cfg.turboWindow * 3) {
+        this.frontier = top - this.cfg.turboWindow;   // прыжок: турбо проверит последние номера сам
+        this.db.set('frontier', this.frontier);
+      } else {
+        this.bumpFrontier(top);
+      }
+      for (const a of [...ads].sort((x, y) => x.id - y.id)) {
+        if (a.promoted || !this.isFresh(a)) continue;
+        a.source = 'olx';
+        const byUser = new Map();
+        for (const s of subs) {
+          if (a.id <= s.watermark || !matches(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
+          byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
+          this.db.updateSub(s.id, { sent: s.sent + 1 });
+        }
+        for (const [userId, hit] of byUser) {
+          await this.notify(userId, a, hit, 'search');
+          this.stats.sent += 1;
+        }
+      }
+    } finally {
+      this.boardBusy = false;
+    }
   }
 
   // ---------- турбо (только платные) ----------

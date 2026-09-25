@@ -184,6 +184,20 @@ function stripHtml(s) {
   return s.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Самые свежие объявления всей доски OLX.kz: через тот же API, что и карточки (в списке сразу
+// описание и фото), не вышло — страница всей доски.
+async function fetchLatest() {
+  try {
+    const res = await get(`${BASE}/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc`, 'application/json');
+    const list = (await res.json())?.data;
+    if (Array.isArray(list) && list.length) return list.map(normalizeOffer);
+  } catch (e) {
+    if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw e;
+  }
+  return (await fetchSearch(`${BASE}/list/`)).ads;
+}
+
 module.exports = {
+  fetchLatest,
   BASE, decodeId, encodeId, idFromUrl, newestFirst, fetchSearch, parseSearchHtml, fetchOffer, normalizeOffer, HttpError,
 };

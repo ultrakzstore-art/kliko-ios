@@ -19,6 +19,7 @@ const DEFAULTS = {
   PAID_SUBS: '20',
   FRESH_MIN: '30',
   TURBO_SEC: '1',
+  BOARD_SEC: '2',
   TURBO_WINDOW: '10',
   CARD_SECTIONS: 'specs,description,seller',
   WATERMARK: 'auto',
