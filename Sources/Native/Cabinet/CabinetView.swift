@@ -41,6 +41,8 @@ struct CabinetView: View {
     /// body: body пересчитывается на каждый шаг загрузки страницы (WebBridge.progress), а LAContext не бесплатен.
     @State private var способВхода = "passcode"
     @State private var ошибкаЗамка: String? = nil
+    /// Этап 16: лист «Что нового» по строке в «О приложении».
+    @State private var показатьНовое = false
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
@@ -82,6 +84,7 @@ struct CabinetView: View {
         .onChange(of: фаза) { _, стала in
             if стала == .active { Task { await освежить() } }
         }
+        .sheet(isPresented: $показатьНовое) { ЭкранЧтоНового() }
     }
 
     // MARK: - Шапка: вошёл или нет
@@ -301,6 +304,19 @@ struct CabinetView: View {
         Section {
             LabeledContent(CabinetText.т("version"), value: Self.изПлиста("CFBundleShortVersionString"))
             LabeledContent(CabinetText.т("build"), value: Self.изПлиста("CFBundleVersion"))
+            /* Этап 16: тот же список, что лист после обновления, — и для тех, кто его смахнул или поставил приложение
+               впервые (на первой установке лист сам не показывается). */
+            if Config.чтоНового {
+                Button {
+                    показатьНовое = true
+                } label: {
+                    Label {
+                        Text(WhatsNewText.т("row")).foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "sparkles").foregroundStyle(Theme.green2)
+                    }
+                }
+            }
         } header: {
             Text(CabinetText.т("about"))
         }

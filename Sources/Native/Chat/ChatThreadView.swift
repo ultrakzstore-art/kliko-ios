@@ -152,6 +152,9 @@ struct ChatThreadView: View {
             await модель.начать()
             await модель.опрос()
         }
+        /* Этап 16: переписка на экране — просьба оценить её не перебивает (ПросьбаОценить). */
+        .onAppear { ПросьбаОценить.shared.делоНаЭкране() }
+        .onDisappear { ПросьбаОценить.shared.делоУшло(карточка: false) }
     }
 
     private var лента: some View {

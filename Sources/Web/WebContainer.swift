@@ -712,6 +712,7 @@ struct WebContainer: UIViewRepresentable {
                 Task { @MainActor in ЗначокПриложения.снять() }   // и его непрочитанные с иконки (этап 11)
                 Task { @MainActor in SavedSearchStore.shared.стереть() }   // и его сохранённые поиски с проверкой (этап 12)
                 ListingDetailCache.стереть()     // и копии его объявлений для карточки без сети (этап 13)
+                Task { @MainActor in ПросьбаОценить.shared.стереть() }   // и номера его объявлений в счёте просьбы оценить (этап 16)
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

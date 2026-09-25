@@ -53,6 +53,8 @@ struct RootWebView: View {
                     .opacity(bridge.лентаВидна ? 1 : 0)
                     .allowsHitTesting(bridge.лентаВидна)
                     .accessibilityHidden(!bridge.лентаВидна)
+                    /* Этап 16: «Что нового» листом над этим слоем и просьба оценить после удачных моментов в нём. */
+                    .чтоНовогоИОценка()
             }
 
             if bridge.лентаВидна {

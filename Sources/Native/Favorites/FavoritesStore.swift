@@ -38,7 +38,12 @@ final class FavoritesStore: ObservableObject {
     func есть(_ id: String) -> Bool { номера.contains(id) }
 
     func переключить(_ товар: Listing) {
-        if номера.contains(товар.id) { убрать(товар.id) } else { добавить(товар) }
+        if номера.contains(товар.id) {
+            убрать(товар.id)
+        } else {
+            добавить(товар)
+            ПросьбаОценить.shared.вИзбранное(товар.id)   // этап 16: сердечко — удачный момент для просьбы оценить
+        }
     }
 
     func добавить(_ товар: Listing) {
