@@ -236,7 +236,9 @@ function runProbe(url) {
     const add = (d) => { out.push(d.toString()); send('probe', out.join('')); };
     child.stdout?.on('data', add);
     child.stderr?.on('data', add);
-    const timer = setTimeout(() => { out.push('\n…долго нет ответа — остановил проверку.'); child.kill(); }, 90_000);
+    // «kaspi watch» — наблюдение на 5 минут; остальные проверки — до 90 секунд.
+    const limit = /^kaspi\s*watch$/i.test(url) ? 6 * 60_000 : 90_000;
+    const timer = setTimeout(() => { out.push('\n…долго нет ответа — остановил проверку.'); child.kill(); }, limit);
     child.on('exit', () => { clearTimeout(timer); resolve(out.join('') || 'Пусто — площадка ничего не вернула.'); });
   });
 }

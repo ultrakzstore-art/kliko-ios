@@ -55,6 +55,66 @@ async function deepProbe(id) {
   console.log('\nЕсли объявление на модерации видит только один из способов — пришлите этот вывод.');
 }
 
+// «kaspi watch» — 5 минут наблюдаем, как у Kaspi появляются новые объявления: витрина раз в 5 с,
+// номера за самым большим — по одному. Итог: сколько новых в минуту, идут ли номера подряд, как
+// быстро номер попадает на витрину после того, как открылся по ссылке.
+async function kaspiWatch(ms) {
+  const k = sources.get('kaspi');
+  const t0 = Date.now();
+  const clock = () => new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' });
+  const onShow = new Map();   // номер → когда впервые на витрине
+  const byNum = new Map();    // номер → когда впервые открылся по ссылке
+  const dead = new Set();
+  let first = true;
+  let edge = 0;
+  console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин. Строки ниже — по мере появления.\n`);
+  while (Date.now() - t0 < ms) {
+    try {
+      const show = await k.fetchShowcase('');
+      if (show == null) { console.log('Витрины (главной) нет — наблюдать нечего'); return; }
+      const ids = show.map((a) => a.id);
+      if (first) {
+        edge = Math.max(...ids);
+        console.log(`${clock()} старт: на витрине ${ids.length}, номера ${Math.min(...ids)}…${edge}`);
+        console.log(`   порядок на витрине: ${ids.slice(0, 12).join(', ')}${ids.length > 12 ? ', …' : ''}`);
+        ids.forEach((id) => onShow.set(id, 0));
+        first = false;
+      } else {
+        for (const [i, id] of ids.entries()) {
+          if (onShow.has(id)) continue;
+          onShow.set(id, Date.now());
+          const seenByNum = byNum.get(id);
+          console.log(`${clock()} витрина: новое ${id} (место ${i + 1})${id < edge ? ` — НИЖЕ прежнего края ${edge}` : ''}${seenByNum ? ` — по номеру открылось раньше на ${Math.round((Date.now() - seenByNum) / 1000)} с` : ''}`);
+          if (id > edge) edge = id;
+        }
+      }
+      // Номера за краем: открываются ли раньше витрины.
+      for (let n = edge + 1; n <= edge + 3; n++) {
+        if (byNum.has(n) || dead.has(n)) continue;
+        const d = await k.fetchById(n).catch(() => null);
+        if (d) {
+          byNum.set(n, Date.now());
+          console.log(`${clock()} по номеру: открылся ${n} · ${String(d.title).slice(0, 50)}${onShow.has(n) ? '' : ' — на витрине его ещё нет'}`);
+        }
+      }
+    } catch (e) {
+      console.log(`${clock()} ошибка: ${e.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  const fresh = [...onShow.entries()].filter(([, t]) => t).map(([id]) => id).sort((a, b) => a - b);
+  const mins = (Date.now() - t0) / 60_000;
+  console.log('\nИтог:');
+  console.log(`  новых на витрине: ${fresh.length} за ${mins.toFixed(1)} мин (${(fresh.length / mins).toFixed(1)} в минуту)`);
+  if (fresh.length > 1) {
+    const steps = fresh.slice(1).map((id, i) => id - fresh[i]);
+    console.log(`  шаг между соседними новыми номерами: мин ${Math.min(...steps)}, макс ${Math.max(...steps)}, средний ${(steps.reduce((a, b) => a + b, 0) / steps.length).toFixed(1)}`);
+    console.log(`  номера за время наблюдения выросли на ${fresh[fresh.length - 1] - fresh[0]}`);
+  }
+  console.log(`  открылись по номеру раньше витрины: ${[...byNum.keys()].filter((id) => !onShow.get(id) || onShow.get(id) > byNum.get(id)).length} из ${byNum.size}`);
+  console.log('\nПришлите весь этот вывод — по нему видно, как Kaspi выдаёт новые объявления.');
+}
+
 // Kaspi по номеру: ссылка на объявление — /a/<название>-<номер>/. Пробуем, открывается ли оно без
 // названия (сайт может перенаправить на полный адрес) — тогда объявления можно ловить по номерам.
 async function kaspiProbe(id) {
@@ -116,6 +176,7 @@ async function kaspiProbe(id) {
   }
   // Kolesa, Krisha, Kaspi: выдача и карточка самого свежего — как их увидит бот.
   // «kaspi 123558941» — номер объявления Kaspi без ссылки: какие адреса по нему открываются.
+  if (/^kaspi\s*watch$/i.test(String(url || '').trim())) return kaspiWatch(5 * 60_000);
   const kaspiNum = /^kaspi\D*(\d{6,})$/i.exec(String(url || '').trim());
   if (kaspiNum) return kaspiProbe(Number(kaspiNum[1]));
   const src = url && sources.byUrl(url);
