@@ -124,7 +124,8 @@ struct WebContainer: UIViewRepresentable {
         web.backgroundColor = .systemBackground
         web.scrollView.backgroundColor = .systemBackground
         if #available(iOS 15.0, *) { web.underPageBackgroundColor = .systemBackground }
-        web.overrideUserInterfaceStyle = .unspecified             // следуем системной теме (prefers-color-scheme)
+        // Своей темы нет — берём тему окна (prefers-color-scheme): iPhone или выбранную в кабинете (этап 15, ВыборТемы).
+        web.overrideUserInterfaceStyle = .unspecified
         #if DEBUG
         if #available(iOS 16.4, *) { web.isInspectable = true }
         #endif

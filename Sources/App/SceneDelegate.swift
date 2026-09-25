@@ -17,8 +17,23 @@ final class KlikoHostingController: UIHostingController<AnyView> {
             UIView.animate(withDuration: 0.2) { self.setNeedsStatusBarAppearanceUpdate() }
         }
     }
-    override var preferredStatusBarStyle: UIStatusBarStyle { стильСтроки }
+    /* Этап 15: .default — «по теме», а тему теперь может навязать кабинет (окну — overrideUserInterfaceStyle). Не гадаем,
+       чью тему система возьмёт для .default — iPhone или окна: решаем сами по теме этого контроллера, а она от окна.
+       Тёмная — светлые часы, светлая — тёмные. Сплэш, замок, «нет связи» и нативный слой стоят на systemBackground, и он
+       перекрашивается той же темой окна, так что часы совпадают с фоном. Стиль страницы (klikoBars) — как был. */
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        guard стильСтроки == .default else { return стильСтроки }
+        return traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
+    }
     override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .fade }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        /* Тема сменилась — выбором в кабинете или самим iPhone при «Системной» — спросить стиль часов заново: сам
+           UIKit явный .lightContent/.darkContent не пересчитывает. */
+        registerForTraitChanges([UITraitUserInterfaceStyle.self],
+                                action: #selector(UIViewController.setNeedsStatusBarAppearanceUpdate))
+    }
 }
 
 /// Окно приложения. Раньше его создавал SwiftUI (WindowGroup в KlikoApp.swift); теперь — сцена UIKit, чтобы корнем стал
@@ -26,14 +41,36 @@ final class KlikoHostingController: UIHostingController<AnyView> {
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var подписка: AnyCancellable?
+    /// Этап 15: смена темы в кабинете → окно.
+    private var подпискаТемы: AnyCancellable?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let сцена = scene as? UIWindowScene else { return }
         let корень = KlikoHostingController(rootView: AnyView(RootWebView().tint(Theme.green)))
         let окно = UIWindow(windowScene: сцена)
         окно.rootViewController = корень
+        /* Этап 15: тема из кабинета — окну целиком и до показа, иначе первый кадр мелькнул бы темой iPhone. От окна её
+           берут SwiftUI, системные окна поверх и страница сайта (WKWebView без своей темы → prefers-color-scheme). */
+        окно.overrideUserInterfaceStyle = ВыборТемы.shared.тема.стильОкна
         window = окно
         окно.makeKeyAndVisible()
+
+        /* Сменили тему в кабинете — перекрашиваем окно наплывом. Первое значение уже стоит на окне (dropFirst); значение
+           берём из события, а не из ВыборТемы: @Published шлёт его до записи. Часы перестроит KlikoHostingController —
+           он слушает смену темы сам. */
+        подпискаТемы = ВыборТемы.shared.$тема
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak окно] тема in
+                guard let окноСцены = окно else { return }
+                let стиль = тема.стильОкна
+                guard окноСцены.overrideUserInterfaceStyle != стиль else { return }
+                UIView.transition(with: окноСцены, duration: 0.3,
+                                  options: [.transitionCrossDissolve, .allowUserInteraction],
+                                  animations: { окноСцены.overrideUserInterfaceStyle = стиль },
+                                  completion: nil)
+            }
 
         let мост = WebBridge.shared
         let замок = AppLock.shared
