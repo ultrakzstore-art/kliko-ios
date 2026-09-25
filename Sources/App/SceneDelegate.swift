@@ -94,9 +94,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         /* Пока виден сплэш, экран «нет связи» или замок входа — системный стиль: под ними подложка systemBackground, а не
            страница. Потом — то, что сказала страница: светлые часы на тёмном верху, тёмные на светлом. */
         let замокВиден = замок.$locked.combineLatest(замок.$cover, замок.$enabled).map { заперт, закрыт, вкл in вкл && (заперт || закрыт) }
-        /* Нативная лента на экране — тоже системный стиль: у неё системный фон, а не верх страницы (nil — системный). */
-        let стильСтраницы = мост.$statusBarLight.combineLatest(мост.$лентаВидна)
-            .map { светлые, лента -> UIStatusBarStyle? in лента ? nil : (светлые ? .lightContent : .darkContent) }
+        /* Нативная лента на экране — тоже системный стиль: у неё системный фон, а не верх страницы (nil — системный).
+           Этап 25: кроме корня ленты с зелёной шапкой сайта — там часы светлые в обеих темах, как у сайта. */
+        let вид = ВидСайта.shared
+        let зелёныйВерх = вид.$кореньЛенты.combineLatest(вид.$вкладкаЛенты)
+            .map { корень, вкладка -> Bool in корень && вкладка }
+        let стильСтраницы = мост.$statusBarLight.combineLatest(мост.$лентаВидна, зелёныйВерх)
+            .map { светлые, лента, зелёный -> UIStatusBarStyle? in
+                if лента { return зелёный ? UIStatusBarStyle.lightContent : nil }
+                return светлые ? UIStatusBarStyle.lightContent : UIStatusBarStyle.darkContent
+            }
         подписка = Publishers.CombineLatest4(стильСтраницы, мост.$splashDone, мост.$loadFailed, замокВиден)
             .receive(on: DispatchQueue.main)
             .sink { [weak корень] стиль, сплэшУшёл, нетСвязи, подЗамком in

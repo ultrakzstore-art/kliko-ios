@@ -39,6 +39,12 @@ struct NativeFeedView: View {
     @State private var поисковПолно = false
     /// Лист «Уточнить» (этап 18) — город, цена, «только новые» по загруженному.
     @State private var уточнятьПоказан = false
+    /// Поле поиска зелёной шапки в фокусе (этап 25) — вместо isPresented у .searchable.
+    @FocusState private var полеВФокусе: Bool
+    /// Что на экране у нативного слоя: строка состояния над шапкой, город, главная для нижней панели (этапы 25, 27).
+    @ObservedObject private var вид = ВидСайта.shared
+    /// Тема на экране — кнопка темы в шапке (этап 25) показывает луну в светлой и солнце в тёмной, как на сайте.
+    @Environment(\.colorScheme) private var схема
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
@@ -79,6 +85,10 @@ struct NativeFeedView: View {
             }
         }
         .task { await модель.начать() }
+        /* Этап 25: зелёная шапка под часами — только на корне ленты в стеке; SceneDelegate красит по этому часы. */
+        .onAppear { отметитьКорень() }
+        .onChange(of: путьСтека.wrappedValue.count) { _, _ in отметитьКорень() }
+        .onChange(of: ширинаОкна) { _, _ in отметитьКорень() }
     }
 
     /// Стек ленты (этапы 1–13): карточка, чат и избранное ложатся поверх ленты.
@@ -156,7 +166,31 @@ struct NativeFeedView: View {
     }
 
     /// Сама лента: «Вы смотрели», разделы, сетка, шапка и поиск — одна и та же в стеке и в левой колонке.
+    /// Этап 25: шапка — либо зелёная как на сайте (лентаСайта), либо системная с .searchable, как раньше (лентаПрежняя);
+    /// общее у них — ниже.
     private var лента: some View {
+        Group {
+            if Config.дизайнКакНаСайте {
+                лентаСайта
+            } else {
+                лентаПрежняя
+            }
+        }
+        .alert(SavedSearchText.т("full"), isPresented: $поисковПолно) {
+            Button(SavedSearchText.т("ok"), role: .cancel) {}
+        } message: {
+            Text(String(format: SavedSearchText.т("full_msg"), SavedSearchStore.предел))
+        }
+        /* Сохранённый поиск снаружи (этап 12): пришёл, пока лента на экране, — onChange; раньше, чем она
+           появилась (холодный старт по уведомлению), — onAppear. */
+        .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
+        .onAppear { применитьСнаружи() }
+        /* Этап 18: лист уточнения — на самой ленте, поэтому один и тот же в стеке iPhone и в левой колонке iPad. */
+        .sheet(isPresented: $уточнятьПоказан) { ЛистУточнения(модель: модель) }
+    }
+
+    /// Прежний вид (этапы 1–24): системная панель со знаком Kliko и .searchable.
+    private var лентаПрежняя: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if показатьНедавние {
@@ -223,17 +257,195 @@ struct NativeFeedView: View {
         .onChange(of: модель.поиск) { _, текст in
             if текст.isEmpty { модель.поискОчищен() }
         }
-        .alert(SavedSearchText.т("full"), isPresented: $поисковПолно) {
-            Button(SavedSearchText.т("ok"), role: .cancel) {}
-        } message: {
-            Text(String(format: SavedSearchText.т("full_msg"), SavedSearchStore.предел))
+    }
+
+    // MARK: - Вид как на сайте (этап 25)
+
+    /**
+     Этап 25: зелёная шапка сайта вместо системной панели и .searchable. Шапка — вставкой над прокруткой
+     (safeAreaInset): лента уходит под её скруглённый низ, как под фиксированную шапку сайта, а «потяни — обновится»
+     появляется под ней. Системная панель спрятана только у корня: карточка и чат поверх ленты — со своей.
+     */
+    private var лентаСайта: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if показатьИсторию { историяПоиска }
+                if показатьНедавние {
+                    ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
+                        withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
+                    }, выбрать: выборНедавнего)
+                }
+                if !разделы.isEmpty || Config.уточнениеЛенты { полосаРазделов }
+                if показатьСохранитьПоиск { полосаСохранитьПоиск }
+                содержимое
+            }
+            .padding(.top, 4)
+            .padding(.bottom, 24)
         }
-        /* Сохранённый поиск снаружи (этап 12): пришёл, пока лента на экране, — onChange; раньше, чем она
-           появилась (холодный старт по уведомлению), — onAppear. */
-        .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
-        .onAppear { применитьСнаружи() }
-        /* Этап 18: лист уточнения — на самой ленте, поэтому один и тот же в стеке iPhone и в левой колонке iPad. */
-        .sheet(isPresented: $уточнятьПоказан) { ЛистУточнения(модель: модель) }
+        .scrollDismissesKeyboard(.immediately)
+        .background(Theme.фонСтраницы)
+        .refreshable { await модель.обновить() }
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) { шапкаСайта }
+        .onChange(of: модель.поиск) { _, текст in
+            if текст.isEmpty { модель.поискОчищен() }
+        }
+        /* Этап 10: «Поиск» с иконки — фокус в поле. Фокус ушёл — поиск закрыт, как «Отменить» у .searchable: следующее
+           быстрое действие снова сменит значение и снова даст фокус. */
+        .onChange(of: поискПоказан.wrappedValue) { _, показан in
+            if показан && !полеВФокусе { полеВФокусе = true }
+        }
+        .onChange(of: полеВФокусе) { _, вФокусе in
+            if поискПоказан.wrappedValue != вФокусе { поискПоказан.wrappedValue = вФокусе }
+        }
+        .onAppear {
+            if поискПоказан.wrappedValue { полеВФокусе = true }
+        }
+        /* Город в шапке — как на странице сайта: спрашиваем её, когда она догрузилась и когда лента снова на экране
+           (человек мог выбрать город на сайте). */
+        .onReceive(WebBridge.shared.$progress.removeDuplicates()) { доля in
+            if доля >= 1 { Task { await обновитьГород() } }
+        }
+        .onReceive(WebBridge.shared.$лентаВидна.removeDuplicates()) { видна in
+            if видна { Task { await обновитьГород() } }
+        }
+    }
+
+    private var шапкаСайта: some View {
+        ШапкаСайта(текст: $модель.поиск, фокус: $полеВФокусе, город: вид.город ?? DesignText.т("all_kz"),
+                   открытьГород: { if let u = Config.лентаСайта { открыть(u) } },
+                   поискПоФото: { if let u = Config.лентаСайта { открыть(u) } },
+                   найти: { отправитьПоиск() },
+                   справа: { кнопкиШапкиСайта },
+                   уПоиска: { кнопкиУПоискаСайта })
+    }
+
+    /// Первый ряд шапки справа: тема, как переключатель .mk-theme-sw сайта (луна в светлой, солнце в тёмной). Выбор —
+    /// тот же, что в кабинете (этап 15): на всё приложение и страницы сайта.
+    @ViewBuilder
+    private var кнопкиШапкиСайта: some View {
+        if Config.выборТемы {
+            Button {
+                ВыборТемы.shared.тема = схема == .dark ? .светлая : .тёмная
+            } label: {
+                КругШапкиСайта(значок: схема == .dark ? "sun.max" : "moon")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(DesignText.т("theme"))
+        }
+    }
+
+    /// Рядом с полем — где у сайта «Карта»: колокольчик сохранённого поиска (этап 12), а без нижних вкладок — избранное,
+    /// сообщения и кабинет, которые раньше жили в системной панели.
+    @ViewBuilder
+    private var кнопкиУПоискаСайта: some View {
+        if показатьСохранитьПоиск { колокольчикСайта }
+        if Config.избранное && !Config.нижниеВкладки {
+            ссылкаВШапкеСайта(ИзбранноеЦель.список, значок: "heart", подпись: FavoritesText.т("title"))
+        }
+        if Config.нативныйЧат && !Config.нижниеВкладки {
+            ссылкаВШапкеСайта(ЧатЦель.список, значок: "bubble.left.and.bubble.right", подпись: ChatText.т("title"))
+        }
+        if !Config.нижниеВкладки {
+            Button {
+                if let u = Config.url("/cabinet.php") { открыть(u) }
+            } label: {
+                КругШапкиСайта(значок: "person")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(FeedText.т("cabinet"))
+        }
+    }
+
+    private var колокольчикСайта: some View {
+        let искомое = модель.действующее
+        let сохранён = сохранённые.есть(искомое)
+        return Button { переключитьСохранённый(искомое) } label: {
+            КругШапкиСайта(значок: сохранён ? "bell.fill" : "bell")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(SavedSearchText.т(сохранён ? "unsave" : "save"))
+    }
+
+    /// Как ссылкаШапки, только кружком шапки сайта: в стеке — ссылка, в две колонки — в стек правой колонки.
+    @ViewBuilder
+    private func ссылкаВШапкеСайта<Цель: Hashable>(_ цель: Цель, значок: String, подпись: String) -> some View {
+        if двеКолонки {
+            Button { путьСтека.wrappedValue.append(цель) } label: {
+                КругШапкиСайта(значок: значок)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(подпись)
+        } else {
+            NavigationLink(value: цель) {
+                КругШапкиСайта(значок: значок)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(подпись)
+        }
+    }
+
+    /// «Найти» на клавиатуре — то же, что onSubmit(of: .search) прежнего вида.
+    private func отправитьПоиск() {
+        модель.искать()
+        if Config.недавние { недавние.запомнитьЗапрос(модель.поиск) }
+    }
+
+    /// История поиска (этап 6) под пустым полем в фокусе — вместо .searchSuggestions.
+    private var показатьИсторию: Bool {
+        Config.недавние && полеВФокусе && модель.поиск.isEmpty && !недавние.запросы.isEmpty
+    }
+
+    private var историяПоиска: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(недавние.запросы, id: \.self) { запрос in
+                Button { искатьСнова(запрос) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundStyle(Theme.текстВторой)
+                        Text(запрос)
+                            .foregroundStyle(Theme.текст)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.body)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(RecentText.т("query_hint"))
+                Divider().padding(.leading, 46)
+            }
+            Button(role: .destructive) { недавние.очиститьЗапросы() } label: {
+                Label(RecentText.т("clear_history"), systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.red)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .теньКарточкиСайта()
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+    }
+
+    /// Спросить подпись города у страницы. Сменилась — лента уже не про тот город: заново с первой страницы.
+    private func обновитьГород() async {
+        guard let подпись = await SiteSession.город() else { return }
+        let было = вид.город
+        guard было != подпись else { return }
+        вид.город = подпись
+        if было != nil { await модель.обновить() }
+    }
+
+    /// Корень ленты в стеке на экране — зелёная шапка под часами (ВидСайта.кореньЛенты).
+    private func отметитьКорень() {
+        let корень = Config.дизайнКакНаСайте && !двеКолонки && путьСтека.wrappedValue.isEmpty
+        if вид.кореньЛенты != корень { вид.кореньЛенты = корень }
     }
 
     // MARK: - Лента и карточка рядом (этап 14)

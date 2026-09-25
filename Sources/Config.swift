@@ -135,6 +135,25 @@ enum Config {
         return URL(string: p, relativeTo: apiBase)
     }
 
+    /// Страница сайта под языком телефона: «/kz/<язык>/<хвост>» — так сайт сам ссылается на свои страницы (выбор языка в
+    /// шапке главной: /kz/ru/, /kz/kz/, /kz/en/, /kz/ar/; «Разместить» — /kz/ru/cabinet?go=add). Язык — тот же, что у
+    /// текстов приложения: казахский телефона на сайте — «kz», прочие, кроме английского и арабского, — русский.
+    static func страницаСайта(_ хвост: String) -> URL? {
+        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let код: String
+        switch язык {
+        case "kk": код = "kz"
+        case "en", "ar": код = язык
+        default: код = "ru"
+        }
+        return url("/kz/\(код)/" + хвост)
+    }
+
+    /// Лента сайта без главной (этап 25): ?all=1 — MH.all в js/marketplace-home.js, главная с плитками не строится, а
+    /// шапка с выбором города и поиском по фото та же. Не главная для Config.главная (есть параметр) — её показывает
+    /// сайт, а не нативный слой.
+    static var лентаСайта: URL? { страницаСайта("?all=1") }
+
     /// Своя схема приложения: kliko://open?u=<полный адрес страницы>. Регистрирует CFBundleURLTypes (project.yml).
     static let scheme = "kliko"
 

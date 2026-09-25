@@ -168,15 +168,24 @@ private func kEaseOut(_ x: Double) -> Double { 1 - pow(1 - max(0, min(1, x)), 3)
 // MARK: - Надпись «Klıko.kz»: brand_logo_wordmark() — viewBox 296×74, маяк над «ı» в (79, 15).
 struct KlikoWordmark: View {
     let height: CGFloat
+    /// Цвет «Kliko»; nil — чернила бренда, как было. Шапка вида «как на сайте» (этап 25) пишет его белым на зелёном.
+    var надпись: Color? = nil
+    /// Цвет «.kz»; nil — родные краски картинки. На зелёной шапке сайта — мятный #a3dcc0 (.klk-wm tspan).
+    var домен: Color? = nil
 
     var body: some View {
         let s = height / 74
         let w = 296 * s
         ZStack(alignment: .topLeading) {
-            Image("WmKliko").resizable().renderingMode(.template).foregroundStyle(kInk)
+            Image("WmKliko").resizable().renderingMode(.template).foregroundStyle(надпись ?? kInk)
                 .frame(width: w, height: height)
-            Image("WmKz").resizable().renderingMode(.original)
-                .frame(width: w, height: height)
+            if let домен {
+                Image("WmKz").resizable().renderingMode(.template).foregroundStyle(домен)
+                    .frame(width: w, height: height)
+            } else {
+                Image("WmKz").resizable().renderingMode(.original)
+                    .frame(width: w, height: height)
+            }
             // Маяк рисуем с запасом над надписью: кольцо растёт выше строки и не должно обрезаться.
             TimelineView(.animation) { tl in
                 Canvas { ctx, _ in
