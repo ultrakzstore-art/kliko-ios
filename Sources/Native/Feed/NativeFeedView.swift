@@ -37,6 +37,8 @@ struct NativeFeedView: View {
     @ObservedObject private var сохранённые = SavedSearchStore.shared
     /// Сохранённых поисков уже предел — объяснить, а не вытеснять старый молча.
     @State private var поисковПолно = false
+    /// Лист «Уточнить» (этап 18) — город, цена, «только новые» по загруженному.
+    @State private var уточнятьПоказан = false
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
@@ -162,7 +164,8 @@ struct NativeFeedView: View {
                         withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
                     }, выбрать: выборНедавнего)
                 }
-                if !разделы.isEmpty { полосаРазделов }
+                /* Этап 18: «Уточнить» живёт в полосе разделов — и без снимка разделов полоса есть, с одной этой кнопкой. */
+                if !разделы.isEmpty || Config.уточнениеЛенты { полосаРазделов }
                 if показатьСохранитьПоиск { полосаСохранитьПоиск }
                 содержимое
             }
@@ -229,6 +232,8 @@ struct NativeFeedView: View {
            появилась (холодный старт по уведомлению), — onAppear. */
         .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
         .onAppear { применитьСнаружи() }
+        /* Этап 18: лист уточнения — на самой ленте, поэтому один и тот же в стеке iPhone и в левой колонке iPad. */
+        .sheet(isPresented: $уточнятьПоказан) { ЛистУточнения(модель: модель) }
     }
 
     // MARK: - Лента и карточка рядом (этап 14)
@@ -402,9 +407,14 @@ struct NativeFeedView: View {
     private var полосаРазделов: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                чип(ключ: "", название: FeedText.т("all"), краска: nil)
-                ForEach(разделы) { р in
-                    чип(ключ: р.k, название: р.название, краска: р.c)
+                if Config.уточнениеЛенты {
+                    ЧипУточнения(уточнено: модель.уточнено) { уточнятьПоказан = true }
+                }
+                if !разделы.isEmpty {
+                    чип(ключ: "", название: FeedText.т("all"), краска: nil)
+                    ForEach(разделы) { р in
+                        чип(ключ: р.k, название: р.название, краска: р.c)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -459,8 +469,18 @@ struct NativeFeedView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
             }
+            /* Этап 18: лента уточнена — сколько подходит из загруженного; нажатие — лист, крестик — сброс. */
+            if модель.уточнено {
+                ПолосаУточнения(видно: модель.видимые.count, загружено: модель.items.count,
+                                открыть: { уточнятьПоказан = true },
+                                сбросить: { модель.уточнение = УточнениеЛенты() })
+                if модель.видимые.isEmpty {
+                    заглушка(значок: "line.3.horizontal.decrease.circle", заголовок: RefineText.т("none"),
+                             подпись: RefineText.т("none_sub"))
+                }
+            }
             LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
-                ForEach(модель.items) { товар in
+                ForEach(модель.видимые) { товар in
                     /* Этап 2: карточка нативная. Рубильник выключен — как на этапе 1, страница сайта. Этап 14: в две
                        колонки карточка не уводит с ленты, а открывается справа, и выбранная обведена. */
                     Group {
@@ -479,7 +499,35 @@ struct NativeFeedView: View {
                 }
             }
             .padding(.horizontal, 12)
+            if модель.уточнено { низУточнённой }
             низЛенты
+        }
+    }
+
+    /**
+     Низ выдачи под уточнением (этап 18). Подходящих мало — последняя видимая карточка уже на экране и второй раз
+     onAppear не получит, а подгруженная страница могла не добавить ни одной подходящей. Отметка внизу просит следующую
+     страницу, когда видна и когда число загруженного сменилось (task(id:) перезапускается), — до предела пустых
+     подгрузок подряд; дальше решает человек кнопкой «Искать дальше».
+     */
+    @ViewBuilder
+    private var низУточнённой: some View {
+        Color.clear
+            .frame(height: 1)
+            .task(id: "\(модель.items.count)/\(модель.грузим)") { модель.дальшеУточнённой() }
+        if модель.пустыхПодряд >= FeedModel.пустыхПодрядПредел && модель.можноЕщё && !модель.грузим
+            && модель.ошибка == nil {
+            VStack(spacing: 6) {
+                Text(RefineText.т("more_sub"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button(RefineText.т("more")) { модель.искатьДальше() }
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
         }
     }
 
