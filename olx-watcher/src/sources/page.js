@@ -66,6 +66,9 @@ function parseDetail(html, { id, url, currency = '₸' }) {
   const city = decode(product?.address?.addressLocality || offer?.availableAtOrFrom?.address?.addressLocality || '')
     || (/ в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$/.exec(title) || [])[1] || '';
   const sellerUrl = findSeller(html, url, product, offer);
+  // Krisha подписывает продавца: «Хозяин недвижимости» или «Агент» / «Специалист».
+  const owner = /Хозяин\s+недвижимости/i.test(html) ? true
+    : /(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)/i.test(html) ? false : null;
   const posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom || '');
   return {
     id,
@@ -84,6 +87,8 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     userId: null,
     userName: '',
     sellerUrl,
+    owner,
+    business: owner === false,
     params: [],
     photo: [...new Set(images)][0] || '',
     photos: [...new Set(images)].slice(0, 12),

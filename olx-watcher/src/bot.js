@@ -480,6 +480,8 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   if (via === 'turbo') flags.push('⚡ эксклюзив');
   if (ad.status && ad.status !== 'active') flags.push('⏳ на проверке');
   if (ad.promoted) flags.push('📣 продвигается');
+  if (ad.owner === true) flags.push('🏠 От хозяина');
+  else if (ad.owner === false && ad.source === 'krisha') flags.push('🧑‍💼 Агент');
   // Номер, который продавец написал в тексте, — Телеграм сам делает его нажимаемым (звонок).
   const phone = phonesIn(`${ad.title || ''}\n${ad.description || ''}`)[0];
   const label = String(ad.priceLabel || '');

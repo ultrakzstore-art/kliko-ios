@@ -28,6 +28,8 @@ struct Ad: Codable, Identifiable, Hashable {
     var category: String?
     /// Площадка: nil — OLX (так в старых state.json), иначе kolesa / krisha / kaspi.
     var source: String?
+    /// Krisha: true — «Хозяин недвижимости», false — агент, nil — неизвестно.
+    var owner: Bool?
 
     /// Пойман «турбо» — по номеру, раньше, чем объявление попало в поиск OLX.
     var early: Bool { via == "turbo" }
@@ -100,6 +102,7 @@ struct Ad: Codable, Identifiable, Hashable {
         if !o.params.isEmpty { params = o.params }
         if !o.description.isEmpty { description = o.description }
         if let c = o.category, !c.isEmpty { category = c }
+        if let ow = o.owner { owner = ow }
     }
 }
 

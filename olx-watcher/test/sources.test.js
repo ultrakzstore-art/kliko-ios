@@ -110,3 +110,37 @@ test('Kaspi Объявления: весь Казахстан, город, сл�
     + '<a href="/ad/123456789/">Ноутбук</a><a href="https://obyavleniya.kaspi.kz/offer/987654321?x=1">Ещё</a><a href="/ad/123456789/">дубль</a>';
   assert.deepStrictEqual(sources.kaspiIds(html).map((a) => a.id), [123456789, 987654321]);
 });
+
+test('Krisha: хозяин или агент по подписи в карточке; «только от хозяев» пропускает только хозяев', async () => {
+  const owner = parseDetail('<meta property="og:title" content="2-комнатная квартира"><div class="owners__label">Хозяин недвижимости</div>', { id: 1007150930, url: 'https://krisha.kz/a/show/1007150930' });
+  const agent = parseDetail('<meta property="og:title" content="3-комнатная квартира"><div class="label">Агент</div>', { id: 1012391406, url: 'https://krisha.kz/a/show/1012391406' });
+  assert.strictEqual(owner.owner, true);
+  assert.strictEqual(agent.owner, false);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-krisha-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  let listing = [1000000001];
+  const pages = { 1000000002: 'Хозяин недвижимости', 1000000003: 'Агент' };
+  const origFetch = global.fetch;
+  global.fetch = async (url) => {
+    const u = String(url);
+    const m = /show\/(\d+)/.exec(u);
+    const html = m ? `<meta property="og:title" content="Квартира ${m[1]}"><span>${pages[m[1]] || ''}</span>` : listing.map((id) => `<a href="/a/show/${id}">x</a>`).join('');
+    return { ok: true, status: 200, text: async () => html };
+  };
+  const sent = [];
+  try {
+    db.touchUser(1, 'Я');
+    db.extend(1, 7, ['krisha']);
+    const sub = db.addSub(1, 'Квартиры от хозяев', 'https://krisha.kz/prodazha/kvartiry/almaty/?das[who]=1', 'krisha');
+    const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+      notify: async (u, a, s, via) => { if (via !== 'ready') sent.push(a.id); }, alert: async () => {}, log: () => {} });
+    await w.searchTick();
+    listing = [1000000003, 1000000002, 1000000001];
+    db.updateSub(sub.id, { last_poll: 0 });
+    await w.searchTick();
+    assert.deepStrictEqual(sent, [1000000002], 'агент отсеян, хозяин пришёл');
+  } finally {
+    global.fetch = origFetch;
+  }
+});

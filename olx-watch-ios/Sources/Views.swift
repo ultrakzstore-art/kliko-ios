@@ -494,6 +494,8 @@ struct Badges: View {
     var body: some View {
         HStack(spacing: 6) {
             if ad.site != .olx { Badge(text: "\(ad.site.emoji) \(ad.site.title)", color: .blue) }
+            if ad.owner == true { Badge(text: "🏠 от хозяина", color: .green) }
+            if ad.owner == false && ad.site == .krisha { Badge(text: "агент", color: .gray) }
             if ad.early { Badge(text: "⚡ раньше поиска", color: .orange) }
             if ad.onReview { Badge(text: "на проверке", color: .yellow) }
             if ad.business { Badge(text: "магазин", color: .indigo) }

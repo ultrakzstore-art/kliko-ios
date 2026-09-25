@@ -237,6 +237,12 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         let address = (product?["address"] as? [String: Any]) ?? ((offer?["availableAtOrFrom"] as? [String: Any])?["address"] as? [String: Any])
         ad.city = decode(address?["addressLocality"] as? String ?? "")
         if ad.city.isEmpty, let city = matches(#" в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$"#, in: ad.title).first { ad.city = city }
+        // Krisha подписывает продавца: «Хозяин недвижимости» или «Агент» / «Специалист».
+        if html.range(of: #"Хозяин\s+недвижимости"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            ad.owner = true
+        } else if html.range(of: #"(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            ad.owner = false
+        }
         for key in ["datePosted", "datePublished"] {
             if let s = product?[key] as? String, let d = parseDate(s) { ad.createdAt = d; break }
         }

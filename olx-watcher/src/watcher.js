@@ -189,6 +189,7 @@ class Watcher {
         if (!this.isFresh(full)) continue;   // поднятое или продвинутое старьё
         if (!this.allowed(sub.user_id, full)) continue;   // чужая VIP-рубрика
         if (!this.sellerOk(sub, full)) continue;         // частные / бизнес
+        if (ownersOnly(sub) && full.owner !== true) continue;   // Krisha: только от хозяев
         if (!this.db.markSent(sub.id, a.id)) continue;
         await this.notify(sub.user_id, full, [sub], 'search');
         this.stats.sent += 1;
@@ -390,6 +391,11 @@ class Watcher {
       this.turboBusy = false;
     }
   }
+}
+
+// Поиск Krisha «только от хозяев» (фильтр das[who]=1 в ссылке — свой или с сайта).
+function ownersOnly(sub) {
+  return (sub.source || 'olx') === 'krisha' && /das(%5B|\[)who(%5D|\])=1/i.test(sub.url);
 }
 
 function stripEmpty(o) {

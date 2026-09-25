@@ -238,6 +238,9 @@ final class AppModel {
             if let full = try? await site.detail(ad) { ad.merge(full) }
             // Дата подачи есть не у всех карточек; есть и старше часа — это не новое.
             if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) { continue }
+            // Krisha «только от хозяев»: пропускаем только с подписью «Хозяин недвижимости».
+            if site == .krisha, sub.url.range(of: #"das(%5B|\[)who(%5D|\])=1"#, options: [.regularExpression, .caseInsensitive]) != nil,
+               ad.owner != true { continue }
             ad.source = site.rawValue
             ad.via = "search"
             ad.subIds = [sub.id]
