@@ -55,6 +55,23 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window = окно
         окно.makeKeyAndVisible()
 
+        #if DEBUG
+        /* СЪЁМКА ЭКРАНОВ В CI (этап 23): аргументы запуска `-klikoOpen <адрес>` и `-klikoSite <адрес>` (UserDefaults читает
+           их сам). Открыть ссылку через simctl openurl нельзя: iOS каждый раз спрашивает «Открыть в Kliko?», и вопрос
+           попадает на снимок. klikoOpen — как вход снаружи (нативная карточка); klikoSite — страница сайта в обёртке
+           приложения: эталон, на который равняются нативные экраны (у сайта в Safari сверху ещё плашка «В приложении
+           удобнее»). Только в отладочной сборке. */
+        let аргументы = UserDefaults.standard
+        if let строка = аргументы.string(forKey: "klikoOpen"), let адрес = URL(string: строка) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { WebBridge.shared.открытьСнаружи(адрес) }
+        } else if let строка = аргументы.string(forKey: "klikoSite"), let адрес = URL(string: строка) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                WebBridge.shared.открытьСайтВместоЛенты()
+                WebBridge.shared.pendingURL = адрес
+            }
+        }
+        #endif
+
         /* Сменили тему в кабинете — перекрашиваем окно наплывом. Первое значение уже стоит на окне (dropFirst); значение
            берём из события, а не из ВыборТемы: @Published шлёт его до записи. Часы перестроит KlikoHostingController —
            он слушает смену темы сам. */

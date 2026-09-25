@@ -182,31 +182,26 @@ jobs:
           id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
           echo "объявление для карточки: $id"
           snap() { xcrun simctl io "$UDID" screenshot "shots/$1.png"; }
+          xcrun simctl install "$UDID" "$APP"
+          run() {  # имя снимка, пауза, аргументы запуска
+            name=$1; wait=$2; shift 2
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            xcrun simctl launch "$UDID" kz.kliko.app -klikoNoPushPrompt YES "$@"
+            sleep "$wait"; snap "$name"
+          }
           for theme in light dark; do
             xcrun simctl ui "$UDID" appearance "$theme"
-            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
-            xcrun simctl install "$UDID" "$APP"
-            xcrun simctl launch "$UDID" kz.kliko.app
-            sleep 25; snap "1-lenta-$theme"
-            if [ -n "$id" ]; then
-              xcrun simctl openurl "$UDID" "kliko://open?u=https%3A%2F%2Fkliko.kz%2Fmarketplace%3Fitem%3D$id"
-              sleep 12; snap "2-kartochka-$theme"
-            fi
+            run "1-lenta-$theme" 25
+            [ -n "$id" ] && run "2-kartochka-$theme" 15 -klikoOpen "https://kliko.kz/marketplace?item=$id"
+            # Эталон: сайт в обёртке приложения (без плашки Safari «В приложении удобнее»). ?ci=1 — чтобы адрес не
+            # считался главной и не уходил в нативную ленту.
+            run "3-sait-glavnaya-$theme" 25 -klikoSite "https://kliko.kz/kz/ru/?ci=1"
+            [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
-          # Сайт в Safari на том же симуляторе — эталон, на который равняются нативные экраны (владелец 25.09.2026:
-          # «приложение должно быть почти 100% похоже на то, что есть на сайте, но нативное»).
-          for theme in light dark; do
-            xcrun simctl ui "$UDID" appearance "$theme"
-            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
-            xcrun simctl openurl "$UDID" "https://kliko.kz/"
-            sleep 20; snap "3-sait-glavnaya-$theme"
-            if [ -n "$id" ]; then
-              xcrun simctl openurl "$UDID" "https://kliko.kz/marketplace?item=$id"
-              sleep 15; snap "4-sait-kartochka-$theme"
-            fi
-          done
+          # Уменьшаем и в JPEG: полноразмерные PNG по 2 МБ выгружались в ветку четверть часа.
+          for f in shots/*.png; do sips -Z 1300 -s format jpeg -s formatOptions 80 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
           ls -la shots
-          [ -n "$(ls shots/*.png 2>/dev/null)" ] || { echo "::error::Снимков нет"; exit 1; }
+          [ -n "$(ls shots/*.jpg 2>/dev/null)" ] || { echo "::error::Снимков нет"; exit 1; }
 
       - name: Выложить в ветку ci/screenshots
         run: |

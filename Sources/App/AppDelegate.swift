@@ -35,6 +35,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// Разрешение на пуши (первый запуск). Разрешили → регистрируемся в APNs.
     func requestPushAuthorization() {
+        #if DEBUG
+        /* Съёмка экранов в CI (этап 23): системное окно разрешения закрывало бы ленту на снимке. */
+        if UserDefaults.standard.bool(forKey: "klikoNoPushPrompt") { return }
+        #endif
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
             guard granted else { return }
             DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
