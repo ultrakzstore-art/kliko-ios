@@ -128,6 +128,13 @@ struct ОблакоСайта: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(моё ? Theme.пузырьМой : Theme.пузырьЧужой, in: форма)
+        /* Этап 31: чужое облако — --mk-surf2 на --mk-surf, в тёмной это #1c1c26 на #16161f, и край облака теряется.
+           Тонкая кромка цвета линии возвращает его, не меняя краски сайта. */
+        .overlay {
+            if !моё {
+                форма.stroke(Theme.линия, lineWidth: 1)
+            }
+        }
     }
 
     private var форма: UnevenRoundedRectangle {
@@ -168,6 +175,7 @@ struct ПолеПерепискиСайта: View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField(ChatText.т("placeholder"), text: $текст, axis: .vertical)
                 .font(.system(size: 16))
+                .foregroundStyle(Theme.текст)
                 .lineLimit(1...5)
                 .focused(фокус)
                 .padding(.horizontal, 14)

@@ -63,9 +63,12 @@ private struct КарточкаПохожего: View {
 
     static let ширина: CGFloat = 150
 
+    /// Этап 31: в виде сайта — карточка .mh-c: поверхность и краски сайта в обеих темах, тень (в тёмной — линия).
+    private var сайт: Bool { Config.дизайнКакНаСайте }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Color(.tertiarySystemGroupedBackground)
+            (сайт ? Theme.поверхность2 : Color(.tertiarySystemGroupedBackground))
                 .frame(width: Self.ширина, height: Self.ширина * 3 / 4)
                 .overlay {
                     AsyncImage(url: товар.обложка) { фаза in
@@ -82,19 +85,19 @@ private struct КарточкаПохожего: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(ListingCard.цена(товар))
                     .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(сайт ? Theme.текст : Color.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(товар.title)
                     .font(.system(size: 12))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(сайт ? Theme.текст : Color.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
                 if !товар.city.isEmpty {
                     Text(товар.city)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(сайт ? Theme.текстВторой : Color.secondary)
                         .lineLimit(1)
                 }
             }
@@ -103,11 +106,25 @@ private struct КарточкаПохожего: View {
             .padding(.bottom, 10)
         }
         .frame(width: Self.ширина, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(сайт ? Theme.поверхность : Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .modifier(ТеньПохожего(сайт: сайт))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(товар.голос)          // этап 11: одной фразой, как карточка ленты; фото — украшение
+    }
+}
+
+/// Этап 31: тень карточки сайта — только в виде сайта; прежний вид без тени.
+private struct ТеньПохожего: ViewModifier {
+    let сайт: Bool
+
+    func body(content: Content) -> some View {
+        if сайт {
+            content.теньКарточкиСайта()
+        } else {
+            content
+        }
     }
 }
 
@@ -128,7 +145,7 @@ private struct ЗаготовкаПохожего: View {
             .padding(.bottom, 14)
         }
         .frame(width: КарточкаПохожего.ширина, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

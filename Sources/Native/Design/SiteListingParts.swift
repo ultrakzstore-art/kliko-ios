@@ -256,7 +256,7 @@ struct ГалереяСайта: View {
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(метка.новое ? Theme.зелёный2 : Theme.меткаБУ,
+                    .background(метка.новое ? Theme.меткаНовое : Theme.меткаБУ,
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
                     .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
             }
@@ -628,6 +628,8 @@ struct ЛистДоверия: View {
             .padding(20)
         }
         .background(Theme.поверхность.ignoresSafeArea())
+        /* Этап 31: лист целиком на поверхности сайта — иначе в тёмной теме по краям видна системная подложка. */
+        .presentationBackground(Theme.поверхность)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }

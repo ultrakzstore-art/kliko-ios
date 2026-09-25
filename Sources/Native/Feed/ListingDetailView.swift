@@ -137,7 +137,8 @@ struct ListingDetailView: View {
                 }
             }
         }
-        .background(Color(.systemBackground))
+        /* Этап 31: заготовка по ссылке в виде сайта — на поверхности сайта (#16161f в тёмной), а не на чёрном системном. */
+        .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.systemBackground))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             /* Заготовку по ссылке в избранное не кладём: сохранилась бы пустая запись (этап 8). */

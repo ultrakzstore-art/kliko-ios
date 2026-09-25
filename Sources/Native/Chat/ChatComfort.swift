@@ -41,10 +41,13 @@ struct КнопкаВнизЧата: View {
         Button(action: действие) {
             Image(systemName: "chevron.down")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.green2)
+                .foregroundStyle(Config.дизайнКакНаСайте ? Theme.акцент : Theme.green2)
                 .frame(width: 44, height: 44)
                 .background(.regularMaterial, in: Circle())
-                .overlay { Circle().strokeBorder(Color(.separator), lineWidth: 0.5) }
+                .overlay {
+                    /* Этап 31: в виде сайта — кромка цвета линии сайта, в тёмной теме она заметнее системной. */
+                    Circle().strokeBorder(Config.дизайнКакНаСайте ? Theme.линия : Color(.separator), lineWidth: 0.5)
+                }
                 .shadow(color: Color.black.opacity(0.15), radius: 6, y: 2)
                 .overlay(alignment: .top) {
                     if новых > 0 {
@@ -52,7 +55,7 @@ struct КнопкаВнизЧата: View {
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Theme.green, in: Capsule())
+                            .background(Config.дизайнКакНаСайте ? Theme.непрочитано : Theme.green, in: Capsule())
                             .offset(y: -10)
                     }
                 }
