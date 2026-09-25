@@ -186,7 +186,7 @@ jobs:
           run() {  # имя снимка, пауза, аргументы запуска
             name=$1; wait=$2; shift 2
             xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
-            xcrun simctl launch "$UDID" kz.kliko.app -klikoNoPushPrompt YES "$@"
+            xcrun simctl launch "$UDID" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@"
             sleep "$wait"; snap "$name"
           }
           for theme in light dark; do
@@ -198,6 +198,17 @@ jobs:
             run "3-sait-glavnaya-$theme" 25 -klikoSite "https://kliko.kz/kz/ru/?ci=1"
             [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
+          # Исходники сайта рядом со снимками: HTML главной и карточки, все подключённые CSS — точные цвета, картинки
+          # плиток и адреса кнопок для нативных экранов.
+          mkdir -p shots/site
+          ua="Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 KlikoApp/1.10"
+          curl -sSL -A "$ua" "https://kliko.kz/kz/ru/" -o shots/site/home.html || true
+          [ -n "$id" ] && curl -sSL -A "$ua" "https://kliko.kz/marketplace?item=$id" -o shots/site/item.html || true
+          cat shots/site/*.html | grep -oE '(href|src)="[^"]+\.(css|js)[^"]*"' | sed -E 's/^(href|src)="//;s/"$//' | sort -u > shots/site/assets.txt || true
+          n=0; while read -r u; do case "$u" in http*) url="$u";; //*) url="https:$u";; *) url="https://kliko.kz/${u#/}";; esac
+            case "$url" in *kliko.kz*) n=$((n+1)); curl -sSL "$url" -o "shots/site/$(printf %02d $n)-$(basename "${u%%\?*}")" || true;; esac
+          done < shots/site/assets.txt
+          ls -la shots/site
           # Уменьшаем и в JPEG: полноразмерные PNG по 2 МБ выгружались в ветку четверть часа.
           for f in shots/*.png; do sips -Z 1300 -s format jpeg -s formatOptions 80 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
           ls -la shots
