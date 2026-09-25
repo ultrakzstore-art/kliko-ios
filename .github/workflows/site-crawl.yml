@@ -1,0 +1,178 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# СНИМОК СТРАНИЦ САЙТА ДЛЯ НАТИВНЫХ ЭКРАНОВ (владелец 25.09.2026: «всё одно и то же, просто код разный»).
+#
+# Нативные экраны повторяют сайт, а страницы кабинета (вход, подача, сделка, кошелёк) сайт собирает на сервере — их
+# кода в публичной выдаче главной нет. Этот прогон сохраняет:
+#   1) что сайт показывает гостю на страницах кабинета;
+#   2) если заведены секреты KLIKO_TEST_PHONE / KLIKO_TEST_PASSWORD (ТЕСТОВЫЙ аккаунт) — те же страницы после входа,
+#      и страницы, на которые кабинет ссылается.
+# 🔴 ТОЛЬКО ЧТЕНИЕ. Входит через форму входа со страницы, дальше — только GET. Формы не отправляет, ссылки выхода,
+#    удаления, оплаты и любые action= не открывает. Номер и пароль вычищаются из сохранённых файлов.
+# Результат — ветка ci/site (HTML, JS, CSS, список страниц, отчёт входа). Отдельно от проверки сборки, чтобы новые
+# пуши его не отменяли.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Сайт · снимок страниц
+
+on:
+  push:
+    branches-ignore: [main]
+    paths: [".github/workflows/site-crawl.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: site-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Снять страницы
+        env:
+          PHONE: ${{ secrets.KLIKO_TEST_PHONE }}
+          PASS: ${{ secrets.KLIKO_TEST_PASSWORD }}
+        run: |
+          mkdir -p out/guest out/user out/assets
+          python3 - <<'PY'
+          import os, re, json, html, http.cookiejar, urllib.request, urllib.parse
+          BASE = "https://kliko.kz"
+          UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 KlikoApp/1.10"
+          phone, pw = os.environ.get("PHONE", ""), os.environ.get("PASS", "")
+          report = []
+          def opener():
+              jar = http.cookiejar.CookieJar()
+              return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar)), jar
+          def get(op, url):
+              req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "ru"})
+              try:
+                  with op.open(req, timeout=30) as r:
+                      return r.status, r.geturl(), r.read().decode("utf-8", "ignore")
+              except urllib.error.HTTPError as e:
+                  return e.code, url, e.read().decode("utf-8", "ignore")
+              except Exception as e:
+                  return 0, url, str(e)
+          def post(op, url, data, as_json=False, extra=None):
+              body = json.dumps(data).encode() if as_json else urllib.parse.urlencode(data).encode()
+              h = {"User-Agent": UA, "Content-Type": "application/json" if as_json else "application/x-www-form-urlencoded", "Accept": "application/json, text/html"}
+              if extra: h.update(extra)
+              req = urllib.request.Request(url, data=body, headers=h, method="POST")
+              try:
+                  with op.open(req, timeout=30) as r:
+                      return r.status, r.geturl(), r.read().decode("utf-8", "ignore")
+              except urllib.error.HTTPError as e:
+                  return e.code, url, e.read().decode("utf-8", "ignore")
+          def clean(t):
+              for s in (phone, pw):
+                  if s and len(s) >= 4:
+                      t = t.replace(s, "«СКРЫТО»")
+                  digits = re.sub(r"\D", "", s or "")
+                  if len(digits) >= 7:
+                      t = t.replace(digits, "«СКРЫТО»")
+              return t
+          def fname(path):
+              return re.sub(r"[^A-Za-z0-9._-]+", "_", path.strip("/"))[:120] or "root"
+          def save(folder, path, text):
+              open(f"out/{folder}/{fname(path)}.html", "w").write(clean(text))
+          SKIP = re.compile(r"logout|delete|remove|pay|promote|action=|unsubscribe|block|report|withdraw|cancel|confirm|accept|decline|\.(jpg|jpeg|png|webp|gif|svg|pdf|ics)(\?|$)", re.I)
+          START = ["/kz/ru/cabinet.php", "/kz/ru/cabinet?go=add", "/kz/ru/cabinet?egov=1", "/kz/ru/cabinet.php?go=wallet", "/kz/ru/cabinet.php?s=messages"]
+
+          # 1) Гость.
+          gop, _ = opener()
+          guest_pages = {}
+          for p in START:
+              st, u, t = get(gop, BASE + p); guest_pages[p] = t
+              save("guest", p, t); report.append(f"гость {p} -> {st} {u}")
+
+          # 2) Вход — через форму со страницы кабинета (ищем форму с полем пароля).
+          logged = False
+          uop, jar = opener()
+          if phone and pw:
+              st, u, page = get(uop, BASE + "/kz/ru/cabinet.php")
+              forms = re.findall(r"<form\b[^>]*>.*?</form>", page, re.S | re.I)
+              report.append(f"форм на странице входа: {len(forms)}")
+              for f in forms:
+                  if not re.search(r'type=["\']?password', f, re.I):
+                      continue
+                  action = (re.search(r'action=["\']([^"\']*)', f, re.I) or [None, ""])[1] or "/kz/ru/cabinet.php"
+                  method = ((re.search(r'method=["\']?(\w+)', f, re.I) or [None, "post"])[1]).lower()
+                  fields = {}
+                  for inp in re.findall(r"<input\b[^>]*>", f, re.I):
+                      name = re.search(r'name=["\']([^"\']+)', inp)
+                      if not name: continue
+                      name = name.group(1)
+                      typ = (re.search(r'type=["\']?([\w-]+)', inp) or [None, "text"])[1].lower()
+                      val = html.unescape((re.search(r'value=["\']([^"\']*)', inp) or [None, ""])[1])
+                      if typ == "password": val = pw
+                      elif typ in ("tel",) or re.search(r"phone|tel|login", name, re.I): val = phone
+                      elif typ in ("checkbox",): continue
+                      fields[name] = val
+                  url = urllib.parse.urljoin(u, html.unescape(action))
+                  report.append(f"форма входа: {method.upper()} {url} поля={sorted(fields)}")
+                  if method == "post":
+                      st2, u2, t2 = post(uop, url, fields)
+                  else:
+                      st2, u2, t2 = get(uop, url + ("&" if "?" in url else "?") + urllib.parse.urlencode(fields))
+                  save("user", "login-response", t2[:20000])
+                  report.append(f"ответ входа: {st2} {u2}")
+                  break
+              # Проверка: признак входа на странице (window.KlikoUser с id или _MK_AUTH = 1).
+              st, u, check = get(uop, BASE + "/kz/ru/cabinet.php")
+              m = re.search(r'window\.KlikoUser=\{"id":"([^"]*)"', check)
+              logged = bool(m and m.group(1)) or bool(re.search(r"_MK_AUTH\s*=\s*1", check))
+              report.append(f"вход удался: {logged}")
+          else:
+              report.append("секретов KLIKO_TEST_PHONE / KLIKO_TEST_PASSWORD нет — только гость")
+
+          # 3) Страницы кабинета после входа: START + ссылки кабинета (GET, без опасных), до 60 страниц.
+          pages = []
+          if logged:
+              seen, queue = set(), list(START)
+              while queue and len(seen) < 60:
+                  p = queue.pop(0)
+                  if p in seen or SKIP.search(p): continue
+                  seen.add(p)
+                  st, u, t = get(uop, BASE + p)
+                  save("user", p, t); pages.append(f"{st} {p}")
+                  for href in re.findall(r'href=["\']([^"\'#]+)', t):
+                      href = html.unescape(href)
+                      if href.startswith("http"):
+                          if not href.startswith(BASE): continue
+                          href = href[len(BASE):]
+                      if not href.startswith("/"): href = urllib.parse.urljoin(p, href)
+                      if re.search(r"cabinet|deal|wallet|escrow|orders|my|profile|settings|favorites|subs", href, re.I) and href not in seen and not SKIP.search(href):
+                          queue.append(href)
+          open("out/pages-user.txt", "w").write("\n".join(pages))
+
+          # 4) JS/CSS, которые подключают эти страницы.
+          assets = set()
+          for folder in ("guest", "user"):
+              for fn in os.listdir(f"out/{folder}"):
+                  t = open(f"out/{folder}/{fn}").read()
+                  for a in re.findall(r'(?:src|href)=["\']([^"\']+\.(?:js|css)[^"\']*)', t):
+                      if a.startswith("//"): a = "https:" + a
+                      elif a.startswith("/"): a = BASE + a
+                      if a.startswith(BASE): assets.add(a)
+          for a in sorted(assets):
+              st, u, t = get(gop, a)
+              name = re.sub(r"[^A-Za-z0-9._-]+", "_", a[len(BASE):].split("?")[0].strip("/"))
+              open(f"out/assets/{name}", "w").write(t)
+          report.append(f"JS/CSS: {len(assets)}")
+          open("out/report.txt", "w").write("\n".join(report))
+          print("\n".join(report))
+          PY
+          ls -la out out/guest out/user | head -120
+          cat out/report.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Выложить в ветку ci/site
+        run: |
+          cd out
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "Снимок страниц сайта: коммит %s\n" "$GITHUB_SHA" > README.md
+          git add -A
+          git commit -qm "Страницы сайта $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/site
