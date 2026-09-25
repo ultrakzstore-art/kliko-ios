@@ -189,7 +189,8 @@ final class AppModel {
         if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }) {
             await poll(next.id)
         }
-        if Date().timeIntervalSince(lastShowcase) >= 3 {
+        // Витрина — почти одно платное: раз в 15 с хватает (новое ловится по номеру и поиском).
+        if Date().timeIntervalSince(lastShowcase) >= 15 {
             lastShowcase = Date()
             await kaspiShowcase()
         }
@@ -697,6 +698,9 @@ final class AppModel {
             for a in ads where !showSeen.contains(a.id) {
                 showSeen.insert(a.id)
                 if seed || seenSet.contains(a.id) { continue }
+                // Номера идут по порядку подачи: далеко позади последнего — платное / поднятое старое,
+                // карточку не открываем (на витрине таких почти все).
+                if kaspiFrontier > 0, a.id - Site.kaspi.idOffset < kaspiFrontier - 5000 { continue }
                 var ad = a
                 if let full = try? await Site.kaspi.detail(a) { ad.merge(full) }
                 trace(ad.id, "витрина\(page.isEmpty ? "" : " (\(Site.kaspiCityName(page)))"): новое на витрине — \(kaspiInfo(ad))")
@@ -818,17 +822,30 @@ final class AppModel {
             .filter { !ids.contains($0.key)
                 && now.timeIntervalSince($0.value.checked) >= (now.timeIntervalSince($0.value.added) < 600 ? 6 : 30) }
             .sorted { $0.value.checked < $1.value.checked }
-            .prefix(4)
+            .prefix(6)
         ids += due.map { $0.key }
-        for n in ids {
+        // Все номера прохода — одновременно: очередь на проверке у Kaspi — 20–30 номеров, по одному
+        // каждый перепроверялся бы раз в полминуты.
+        let results = await withTaskGroup(of: (Int, Result<Ad?, Error>).self) { group in
+            for n in ids {
+                group.addTask {
+                    do { return (n, .success(try await Site.kaspiById(n))) } catch { return (n, .failure(error)) }
+                }
+            }
+            var out: [(Int, Result<Ad?, Error>)] = []
+            for await r in group { out.append(r) }
+            return out.sorted { $0.0 < $1.0 }
+        }
+        resultsLoop: for (n, result) in results {
             let found: Ad?
-            do {
-                found = try await Site.kaspiById(n)
+            switch result {
+            case .success(let a):
+                found = a
                 ok(site: .kaspi)
-            } catch {
+            case .failure(let error):
                 fail(error, site: .kaspi)
-                if siteBlocked(.kaspi) { break }
-                continue
+                if siteBlocked(.kaspi) { break resultsLoop }
+                continue resultsLoop
             }
             guard var ad = found else {
                 kaspiMisses[n] = (kaspiMisses[n]?.added ?? now, now)

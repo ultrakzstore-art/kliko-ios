@@ -112,6 +112,8 @@ async function kaspiWatch(ms) {
         for (const [i, a] of show.entries()) {
           if (onShow.has(a.id)) continue;
           onShow.set(a.id, Date.now());
+          // Номера идут по порядку подачи: далеко позади края — платное / поднятое, карточку не открываем.
+          if (a.id < edge - 5000) { console.log(`${clock()} ⏭ платное / поднятое ${a.id} (место ${i + 1}) — номер на ${edge - a.id} позади`); continue; }
           const d = await k.fetchDetail(a).catch(() => null);
           const posted = d?.createdAt || 0;
           const old = posted && (Date.now() - posted > 3 * 3600_000 || (last && posted < last - 3600_000));
@@ -132,10 +134,12 @@ async function kaspiWatch(ms) {
       const ahead = [edge + 1, edge + 2, edge + 3 + jump, edge + 3 + ((jump + 18) % 37) + 1];
       const behind = [...misses.entries()].filter(([n, m]) => !ahead.includes(n)
         && Date.now() - m.added < (n > edge ? 15 * 60_000 : 3600_000))
-        .sort((x, y) => (x[1].checked || 0) - (y[1].checked || 0)).slice(0, 5).map(([n]) => n);
-      for (const n of [...ahead, ...behind]) {
-        if (byNum.has(n)) continue;
-        const d = await k.fetchById(n).catch(() => null);
+        .sort((x, y) => (x[1].checked || 0) - (y[1].checked || 0)).slice(0, 8).map(([n]) => n);
+      // Все номера прохода — одновременно.
+      const batch = [...ahead, ...behind].filter((n) => !byNum.has(n));
+      const got = new Map(await Promise.all(batch.map((n) => k.fetchById(n).catch(() => null).then((d) => [n, d]))));
+      for (const n of batch.sort((x, y) => x - y)) {
+        const d = got.get(n);
         if (!d) {
           const m = misses.get(n) || { tries: 0, added: Date.now() };
           m.tries += 1;

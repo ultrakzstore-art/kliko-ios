@@ -118,7 +118,7 @@ class Watcher {
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
     // Kaspi по номеру: номера идут по порядку подачи (KASPI_TURBO=0 — выключить).
     if (this.cfg.kaspiTurbo) this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
-    this.timers.push(setInterval(() => this.kaspiShowcaseTick().catch((e) => this.log(`витрина Kaspi: ${e.message}`)), 3_000));
+    this.timers.push(setInterval(() => this.kaspiShowcaseTick().catch((e) => this.log(`витрина Kaspi: ${e.message}`)), 15_000));   // почти одно платное
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
 
@@ -380,6 +380,9 @@ class Watcher {
           if (st.seen.has(a.id)) continue;
           st.seen.add(a.id);
           if (seed) continue;   // что уже было на витрине при запуске — не новое
+          // Номера идут по порядку подачи: далеко позади последнего — платное / поднятое старое,
+          // карточку не открываем (на витрине таких почти все).
+          if (this.kaspiFrontier && a.id < this.kaspiFrontier - 5000) continue;
           let ad;
           try {
             const d = await k.fetchDetail(a);
@@ -489,22 +492,23 @@ class Watcher {
       const due = [...this.kaspiMisses.entries()]
         .filter(([id, m]) => !ids.includes(id) && now - m.checked >= (now - m.added < 10 * 60_000 ? 6_000 : 30_000))
         .sort((x, y) => x[1].checked - y[1].checked)
-        .slice(0, 4);
+        .slice(0, 6);
       ids.push(...due.map(([id]) => id));
+      // Все номера прохода — одновременно: очередь на проверке у Kaspi — 20–30 номеров, по одному
+      // каждый перепроверялся бы раз в полминуты.
+      const got = new Map(await Promise.all(ids.map((id) => k.fetchById(id).then((ad) => [id, { ad }], (err) => [id, { err }]))));
       const miss = (id) => {
         const m = this.kaspiMisses.get(id) || { added: now, checked: 0 };
         m.checked = now;
         this.kaspiMisses.set(id, m);
       };
-      for (const id of ids) {
-        let ad;
-        try {
-          ad = await k.fetchById(id);
-          this.okRequest('kaspi');
-        } catch (e) {
-          if (this.handleError(e, 'kaspi')) break;
+      for (const id of [...ids].sort((a, b) => a - b)) {
+        const { ad, err } = got.get(id);
+        if (err) {
+          if (this.handleError(err, 'kaspi')) break;
           continue;
         }
+        this.okRequest('kaspi');
         if (!ad) { miss(id); continue; }
         this.kaspiMisses.delete(id);
         // Перескочили через номера — они тоже в очередь: скорее всего, ещё на проверке.

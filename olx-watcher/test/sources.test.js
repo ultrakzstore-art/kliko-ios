@@ -318,7 +318,7 @@ test('витрина Kaspi: при запуске только запомина�
   }
 });
 
-test('витрина Kaspi: поднятое / платное старое (по дате подачи, номер не важен) — не новинка', async () => {
+test('витрина Kaspi: поднятое / платное старое (по дате подачи, а номер далеко позади — даже без карточки) — не новинка', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-bump-'));
   const db = new Db(path.join(dir, 'w.db'));
   const k = sources.get('kaspi');
@@ -328,7 +328,7 @@ test('витрина Kaspi: поднятое / платное старое (по
   const crumbs = ['almaty', 'almaty/elektronika/computery/noutbuki'];
   const cards = {
     120000000: { title: 'Ноутбук, поднят платно', crumbs, price: 1, createdAt: Date.now() - 2 * 3600_000 },
-    99000000: { title: 'Ноутбук новый, номер маленький', crumbs, price: 1, createdAt: Date.now() - 60_000 },
+    99000000: { title: 'Поднятое: номер на 24 млн позади', crumbs, price: 1, createdAt: Date.now() - 60_000 },
     123599990: { title: 'Ноутбук вчерашний', crumbs, price: 1, createdAt: Date.now() - 20 * 3600_000 },
     123600005: { title: 'Ноутбук новый', crumbs, price: 1, createdAt: Date.now() - 30_000 },
   };
@@ -344,7 +344,7 @@ test('витрина Kaspi: поднятое / платное старое (по
     await w.kaspiShowcaseTick();
     showcase = [{ id: 123600005, url: 'u5' }, { id: 120000000, url: 'u1' }, { id: 123599990, url: 'u2' }, { id: 99000000, url: 'u9' }, ...showcase];
     await w.kaspiShowcaseTick();
-    assert.deepStrictEqual(sent, [123600005, 99000000], '2 ч назад — раньше последней выкладки больше чем на час; 20 ч — старьё');
+    assert.deepStrictEqual(sent, [123600005], '2 ч назад — раньше последней выкладки больше чем на час; 20 ч — старьё; номер далеко позади — не открываем');
   } finally {
     Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
   }
