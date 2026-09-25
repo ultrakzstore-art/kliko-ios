@@ -64,9 +64,14 @@ function renderStatus() {
 function renderVersion() {
   if (!state) return;
   const u = state.update || {};
-  const tail = u.status === 'downloading' ? ` · скачиваю обновление ${u.version}…`
-    : u.status === 'ready' ? ` · обновление ${u.version} скачано — поставится при перезапуске`
-      : u.status === 'latest' ? ' · последняя версия' : '';
+  const tail = u.status === 'checking' ? ' · проверяю обновления…'
+    : u.status === 'downloading' ? ` · скачиваю обновление ${u.version}…`
+      : u.status === 'ready' ? ` · обновление ${u.version} скачано — нажмите «Обновить»`
+        : u.status === 'latest' ? ' · у вас последняя версия'
+          : u.status === 'error' ? ' · не удалось проверить обновления (нет интернета?)'
+            : u.status === 'dev' ? ' · запуск из исходников — обновления не проверяются' : '';
+  $('btn-update').textContent = u.status === 'ready' ? 'Обновить' : 'Проверить обновления';
+  $('btn-update').disabled = u.status === 'checking' || u.status === 'downloading';
   $('version-line').textContent = `Версия ${state.version}${tail}. Обновления приходят сами.`;
 }
 
@@ -89,6 +94,8 @@ function apply(s) {
 }
 
 setInterval(renderStatus, 1000);   // «без перерыва N мин» тикает
+
+$('btn-update').addEventListener('click', () => window.app.checkUpdate());
 
 // ---------- кнопки бота ----------
 $('btn-start').addEventListener('click', () => window.app.start());

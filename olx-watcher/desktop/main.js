@@ -339,24 +339,25 @@ function tellUser(userId, text) {
 // при следующем выходе из приложения.
 
 const update = { status: '', version: '' };
+let askInstall = null;   // показать вопрос «обновить сейчас?» снова (по кнопке)
 function setupAutoUpdate() {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged) {
+    ipcMain.handle('check-update', () => { update.status = 'dev'; pushState(); return false; });
+    return;
+  }
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch { return; }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-available', (i) => { update.status = 'downloading'; update.version = i.version; log(`Есть обновление ${i.version} — скачиваю…`); pushState(); });
   autoUpdater.on('update-not-available', () => { update.status = 'latest'; pushState(); });
-  autoUpdater.on('error', (e) => log(`Обновление: ${e.message}`));
-  autoUpdater.on('update-downloaded', async (i) => {
-    update.status = 'ready';
-    update.version = i.version;
-    pushState();
-    log(`Обновление ${i.version} скачано`);
+  autoUpdater.on('checking-for-update', () => { if (update.status !== 'ready') { update.status = 'checking'; pushState(); } });
+  autoUpdater.on('error', (e) => { update.status = 'error'; log(`Обновление: ${e.message}`); pushState(); });
+  askInstall = async () => {
     const r = await dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
       type: 'info',
       title: 'OLX Watcher',
-      message: `Вышло обновление ${i.version}`,
+      message: `Вышло обновление ${update.version}`,
       detail: 'Перезапустить сейчас? Бот остановится на несколько секунд и запустится снова с новой версией.',
       buttons: ['Обновить сейчас', 'Позже'],
       defaultId: 0,
@@ -367,11 +368,23 @@ function setupAutoUpdate() {
       await stopBot();
       autoUpdater.quitAndInstall(true, true);
     }
+  };
+  autoUpdater.on('update-downloaded', async (i) => {
+    update.status = 'ready';
+    update.version = i.version;
+    pushState();
+    log(`Обновление ${i.version} скачано`);
+    await askInstall();
   });
   const check = () => autoUpdater.checkForUpdates().catch((e) => log(`Обновление: ${e.message}`));
   setTimeout(check, 10_000);
   setInterval(check, 3600_000);
-  ipcMain.handle('check-update', () => { check(); return true; });
+  // Кнопка «Проверить обновления» — работает и пока бот запущен (бот не останавливается).
+  ipcMain.handle('check-update', async () => {
+    if (update.status === 'ready' && askInstall) { await askInstall(); return true; }
+    check();
+    return true;
+  });
 }
 
 // ---------- IPC ----------
