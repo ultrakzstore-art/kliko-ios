@@ -821,6 +821,7 @@ struct SettingsView: View {
         let st = model.stats
         Form {
             StatusSection()
+            WhySection()
 
             Section {
                 LabeledContent("Проверка", value: model.running ? "идёт, пока приложение открыто" : "на паузе")
@@ -943,6 +944,9 @@ struct StatusSection: View {
             if let hit = model.stats.lastTurboHit {
                 LabeledContent("Турбо последний раз поймало", value: hit.formatted(date: .omitted, time: .standard))
             }
+            if let hidden = model.stats.hiddenProbes, hidden > 0 {
+                LabeledContent("Номеров скрыто OLX (403)", value: "\(hidden)")
+            }
             if let fail = h.lastFailure, !h.lastError.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Последняя ошибка · \(fail.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
@@ -997,5 +1001,34 @@ struct StatusSection: View {
         if s < 60 { return "\(s) с назад" }
         if s < 3600 { return "\(s / 60) мин назад" }
         return date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+/// «Почему не пришло?» — номер объявления (из Lotify, с сайта) → что приложение о нём знает:
+/// видело ли, когда и откуда, кому подошло и почему нет.
+struct WhySection: View {
+    @Environment(AppModel.self) private var model
+    @State private var number = ""
+    @State private var answer = ""
+
+    var body: some View {
+        Section {
+            HStack {
+                TextField(text: $number, prompt: Text(verbatim: "Номер, например 401225253")) { Text(verbatim: "Номер") }
+                    .keyboardType(.numberPad)
+                Button("Проверить") {
+                    let digits = number.filter(\.isNumber)
+                    if let id = OLX.adId(fromURL: number) ?? Int(digits) { answer = model.why(id) }
+                }
+                .disabled(number.isEmpty)
+            }
+            if !answer.isEmpty {
+                Text(verbatim: answer).font(.footnote).textSelection(.enabled)
+            }
+        } header: {
+            Text("Почему не пришло?")
+        } footer: {
+            Text("Вставьте номер или ссылку на объявление — приложение покажет, видело ли его и почему не прислало. Хранит историю по последним 4000 номерам, пока приложение открыто.")
+        }
     }
 }

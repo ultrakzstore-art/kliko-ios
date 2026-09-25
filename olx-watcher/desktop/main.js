@@ -153,6 +153,7 @@ function startBot() {
   child.stdout?.on('data', (d) => log(d.toString()));
   child.stderr?.on('data', (d) => log(d.toString()));
   child.on('message', (m) => {
+    if (m?.type === 'why') { whyWaiters.get(m.reqId)?.(m.text); whyWaiters.delete(m.reqId); return; }
     if (m?.type === 'ready') {
       bot.status = 'running';
       bot.error = '';
@@ -209,6 +210,20 @@ function stopBot() {
     const kill = setTimeout(() => child.kill(), 5000);
     child.once('exit', () => { clearTimeout(kill); resolve(); });
     child.postMessage({ type: 'stop' });
+  });
+}
+
+// ---------- «почему не пришло?» — спросить работающего бота ----------
+
+const whyWaiters = new Map();
+let whySeq = 0;
+function askWhy(id) {
+  if (!bot.child || bot.status !== 'running') return Promise.resolve('');
+  const reqId = ++whySeq;
+  return new Promise((resolve) => {
+    whyWaiters.set(reqId, resolve);
+    bot.child.postMessage({ type: 'why', id, reqId });
+    setTimeout(() => { if (whyWaiters.delete(reqId)) resolve(''); }, 3000);
   });
 }
 
@@ -452,6 +467,7 @@ ipcMain.handle('start', () => startBot());
 ipcMain.handle('stop', () => stopBot());
 ipcMain.handle('restart', async () => { await stopBot(); startBot(); });
 ipcMain.handle('probe', (_e, url) => runProbe(String(url || '').trim()));
+ipcMain.handle('why', (_e, id) => askWhy(Number(id)));
 ipcMain.handle('open-data', () => shell.openPath(app.getPath('userData')));
 ipcMain.handle('open-url', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
 

@@ -26,24 +26,31 @@ function learn(learned, ads) {
   return { categoryIds: [...cats], cities: [...cities].slice(0, 50), total };
 }
 
-function matches(sub, ad) {
+// Почему объявление не подходит поиску (null — подходит). Для ленты и турбо: поиск OLX
+// фильтрует сам, а тут фильтры восстанавливаем из ссылки и из выученного по выдаче.
+function mismatch(sub, ad) {
   const f = filtersFromUrl(sub.url);
   const L = sub.learned || {};
   const title = `${ad.title} ${ad.description || ''}`.toLowerCase();
   // Слова — по основе: «ноутбуки» найдёт «ноутбук», «ноутбука»; поиск OLX тоже так ищет.
-  if (f.words.length && !f.words.every((w) => title.includes(stem(w)))) return false;
+  const missing = f.words.find((w) => !title.includes(stem(w)));
+  if (missing) return `нет слова «${missing}»`;
   // Обмен, «Отдам даром» и объявления без цены проходят любой фильтр цены.
   if (!noPrice(ad)) {
-    if (f.priceFrom && ad.price < f.priceFrom) return false;
-    if (f.priceTo && ad.price > f.priceTo) return false;
+    if (f.priceFrom && ad.price < f.priceFrom) return 'цена ниже «от»';
+    if (f.priceTo && ad.price > f.priceTo) return 'цена выше «до»';
   }
   // Рубрика: пока поиск не показал ни одной — не судим; потом только знакомые рубрики.
-  if ((L.categoryIds || []).length && ad.categoryId && !L.categoryIds.includes(ad.categoryId)) return false;
+  if ((L.categoryIds || []).length && ad.categoryId && !L.categoryIds.includes(ad.categoryId)) return `рубрика ${ad.categoryId} в этом поиске ещё не встречалась`;
   // Город: если за 20+ объявлений поиск показывал ровно один город — значит, в ссылке фильтр по городу.
-  if ((L.total || 0) >= 20 && (L.cities || []).length === 1 && ad.city && ad.city !== L.cities[0]) return false;
-  // Совсем без фильтров (ни слов, ни рубрик ещё не выучено) турбо не шлёт — иначе полетит весь OLX.
-  if (!f.words.length && !(L.categoryIds || []).length) return false;
-  return true;
+  if ((L.total || 0) >= 20 && (L.cities || []).length === 1 && ad.city && ad.city !== L.cities[0]) return `город ${ad.city}, а поиск — ${L.cities[0]}`;
+  // Совсем без фильтров (ни слов, ни рубрик ещё не выучено) не шлём — иначе полетит весь OLX.
+  if (!f.words.length && !(L.categoryIds || []).length) return 'поиск ещё не выучил рубрику';
+  return null;
+}
+
+function matches(sub, ad) {
+  return mismatch(sub, ad) === null;
 }
 
 // Без цены: обмен, бесплатно (цена 0) или цена не указана.
@@ -56,4 +63,4 @@ function stem(w) {
   return w.length > 5 ? w.slice(0, w.length - 2) : w;
 }
 
-module.exports = { filtersFromUrl, learn, matches, stem, noPrice };
+module.exports = { filtersFromUrl, learn, matches, mismatch, stem, noPrice };

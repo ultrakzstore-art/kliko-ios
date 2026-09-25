@@ -253,3 +253,48 @@ test('без провалов: вышло с проверки позже сос�
     olx.fetchOffer = origOffer;
   }
 });
+
+test('без провалов: 403 по номеру — не пауза; после простоя ПК поданное за это время приходит; не подошедшее в ленте приносит поиск', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-nomiss-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 1, city: 'Алматы', categoryId: 1, createdAt: Date.now() + 1000, ...extra });
+  const orig = { search: olx.fetchSearch, offer: olx.fetchOffer, latest: olx.fetchLatest };
+  let listing = [ad(100, 'HP старое', { createdAt: Date.now() - 7200_000 })];
+  let latest = [];
+  const hidden = new Set();
+  olx.fetchSearch = async () => ({ source: 'state', ads: listing });
+  olx.fetchLatest = async () => latest;
+  olx.fetchOffer = async (id) => { if (hidden.has(id)) throw new olx.HttpError(403, 'u'); return null; };
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (u, a, s, via) => { if (via !== 'ready') sent.push(`${via}:${a.id}`); }, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    db.db.prepare('UPDATE subs SET created_at = ?').run(Date.now() - 10 * 3600_000);
+    await w.searchTick();                                          // первый проход
+    // 1) 403 по номеру — скрытое объявление, а не блокировка: паузы нет.
+    w.frontier = 200;
+    hidden.add(201);
+    await w.turboTick();
+    assert.ok(!w.blocked(), '403 по одному номеру не ставит бота на паузу');
+    assert.match(w.why(201), /403/);
+    // 2) ПК спал 2 часа: объявление подано 90 минут назад (старше FRESH_MIN=30) — всё равно новое.
+    db.updateSub(sub.id, { last_poll: Date.now() - 2 * 3600_000 });
+    listing = [ad(150, 'HP подано пока ПК спал', { createdAt: Date.now() - 90 * 60_000 }), ...listing];
+    await w.searchTick();
+    assert.ok(sent.includes('search:150'), 'поданное во время простоя пришло');
+    // 3) В ленте объявление не подошло (рубрика 7 поиску ещё не встречалась) — не теряется: его приносит поиск.
+    db.updateSub(sub.id, { learned: { categoryIds: [1], cities: ['Алматы'], total: 5 } });
+    latest = [ad(160, 'HP в новой подрубрике', { categoryId: 7 })];
+    await w.boardTick();
+    assert.ok(!sent.includes('search:160'), 'по признакам в ленте не подошло');
+    assert.match(w.why(160), /рубрика 7/);
+    listing = [ad(160, 'HP в новой подрубрике', { categoryId: 7 }), ...listing];
+    db.updateSub(sub.id, { last_poll: 0 });
+    await w.searchTick();
+    assert.ok(sent.includes('search:160'), 'поиск принёс то, что лента не отправила');
+  } finally {
+    Object.assign(olx, { fetchSearch: orig.search, fetchOffer: orig.offer, fetchLatest: orig.latest });
+  }
+});

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('app', {
   stop: () => ipcRenderer.invoke('stop'),
   restart: () => ipcRenderer.invoke('restart'),
   probe: (url) => ipcRenderer.invoke('probe', url),
+  why: (id) => ipcRenderer.invoke('why', id),
   openData: () => ipcRenderer.invoke('open-data'),
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
   users: () => ipcRenderer.invoke('users'),

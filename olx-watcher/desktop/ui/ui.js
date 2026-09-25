@@ -269,8 +269,11 @@ async function probe(url) {
   $('probe-url').value = url;
   $('btn-probe').disabled = true;
   $('probe-out').textContent = `Проверяю ${url} …`;
+  // Номер — сначала спросим работающего бота, что он о нём знает.
+  const num = /^\d{6,}$/.test(url) ? url : (/-ID([0-9A-Za-z]+)\.html/.exec(url) ? '' : '');
+  const known = num ? await window.app.why(num) : '';
   const out = await window.app.probe(url);
-  $('probe-out').textContent = out;
+  $('probe-out').textContent = (known ? `Что знает бот о номере ${num}:\n${known}\n\n──────────\n` : '') + out;
   $('btn-probe').disabled = false;
 }
 $('btn-probe').addEventListener('click', () => probe($('probe-url').value.trim()));

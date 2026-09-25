@@ -75,6 +75,9 @@ final class AppModel {
     private static let gapsPerPass = 12
     private static let gapLife: TimeInterval = 30 * 60
     private var seenSet = Set<Int>()
+    @ObservationIgnored private var subSeenSet = Set<String>()
+    @ObservationIgnored private var traceLog: [Int: [String]] = [:]
+    @ObservationIgnored private var traceOrder: [Int] = []
     private var busy = false
 
     private(set) var pushStatus = ""
@@ -125,17 +128,21 @@ final class AppModel {
         defer { busy = false }
         if let until = blockedUntil, until > Date() { return }
         // Лента всей доски: при открытии — сразу, дальше раз в 1,5–5 с. Отсюда приходит большая
-        // часть нового; турбо добирает номера за её краем, поиски — остальное.
+        // часть нового; турбо добирает номера за её краем и объявления на модерации; поиски —
+        // то, что по признакам не подошло (рубрика ещё не выучена и т.п.).
         if Date().timeIntervalSince(lastAnchor) >= speed.board {
             lastAnchor = Date()
             await anchor()
         }
-        // Сначала поиск: он переставляет «последний номер» на самые свежие объявления, и турбо
-        // после долгой паузы не бредёт по вчерашним номерам.
-        for sub in state.subs where !sub.paused {
-            if let last = sub.lastPoll, Date().timeIntervalSince(last) < speed.poll { continue }
-            if let until = blockedUntil, until > Date() { break }
-            await poll(sub.id)
+        // Поиски — по одному за проход (самый давно проверенный): лента и турбо не ждут, пока
+        // пройдут все поиски подряд.
+        let now = Date()
+        let due = state.subs.filter { sub in
+            !sub.paused && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
+        }
+        if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }),
+           !(blockedUntil.map { $0 > Date() } ?? false) {
+            await poll(next.id)
         }
         if state.turbo, Date().timeIntervalSince(lastTurbo) >= speed.turbo {
             lastTurbo = Date()
@@ -156,9 +163,10 @@ final class AppModel {
         if found.site != .olx { return await pollSite(found) }
         let url = found.url
         let frontierBefore = state.frontier
-        let ads: [Ad]
+        let prevPoll = found.lastPoll
+        var list: [Ad]
         do {
-            ads = try await OLX.search(url)
+            list = try await OLX.search(url)
             ok()
             state.stats.searchOk += 1
         } catch {
@@ -168,16 +176,30 @@ final class AppModel {
             save()
             return
         }
-        for ad in ads { bumpFrontier(ad.id) }
+        // Первый проход — 3 страницы: запоминаем, что уже есть, и учим рубрики и город поиска.
+        // Потом — если вся первая страница новая для поиска (приложение было закрыто или рубрика
+        // очень живая), дочитываем ещё до 2 страниц: уехавшее со страницы 1 не теряется.
+        let firstPass = !found.ready
+        let regular = list.filter { !$0.promoted }
+        let allNew = regular.count >= 20 && !regular.contains(where: { subSeenSet.contains(Self.sk(id, $0.id)) })
+        if firstPass || allNew {
+            for page in 2...3 {
+                guard let more = try? await OLX.search(url, page: page) else { break }
+                let fresh = more.filter { a in !list.contains { $0.id == a.id } }
+                if fresh.isEmpty { break }
+                list += fresh
+                if !firstPass, fresh.contains(where: { subSeenSet.contains(Self.sk(id, $0.id)) }) { break }
+            }
+        }
+        for ad in list { bumpFrontier(ad.id) }
         guard let index = state.subs.firstIndex(where: { $0.id == id }) else { return }
         var sub = state.subs[index]
         sub.lastPoll = Date()
-        sub.error = ads.isEmpty ? "Поиск ничего не вернул" : ""
-        learn(&sub, from: ads.filter { !$0.promoted })
+        sub.error = list.isEmpty ? "Поиск ничего не вернул" : ""
+        learn(&sub, from: list.filter { !$0.promoted })
 
-        // Первый проход — только запоминаем выдачу, чтобы не засыпать старьём.
-        if !sub.ready {
-            ads.forEach { remember($0.id) }
+        if firstPass {
+            for ad in list { markSub(id, ad.id) }
             sub.ready = true
             state.subs[index] = sub
             save()
@@ -185,17 +207,28 @@ final class AppModel {
         }
         state.subs[index] = sub
 
-        for var ad in ads where !seenSet.contains(ad.id) {
-            remember(ad.id)
-            if isStale(ad, frontier: frontierBefore) { continue }
+        // Окно новизны: не меньше 30 минут, а если поиск не проверялся дольше (приложение было
+        // закрыто) — всё время с прошлой проверки, иначе поданное за это время терялось бы.
+        let window = prevPoll.map { min(24 * 3600, Date().timeIntervalSince($0) + 120) }
+        for var ad in list where !subSeenSet.contains(Self.sk(id, ad.id)) {
+            markSub(id, ad.id)
+            if isStale(ad, frontier: frontierBefore, window: window) {
+                trace(ad.id, "поиск «\(sub.name)»: подано давно — пропуск")
+                continue
+            }
             if let full = try? await OLX.offer(ad.id) { ad.merge(full) }
-            // Дата подачи часто есть только в карточке — проверяем ещё раз, уже с ней.
-            if isStale(ad, frontier: frontierBefore) { continue }
+            if isStale(ad, frontier: frontierBefore, window: window) {
+                trace(ad.id, "поиск «\(sub.name)»: подано давно — пропуск")
+                continue
+            }
             ad.via = "search"
-            ad.subIds = [id]
             ad.foundAt = Date()
-            recordAll(ad)
-            add(ad, subs: [sub])
+            if !seenSet.contains(ad.id) {
+                remember(ad.id)
+                recordAll(ad)
+            }
+            deliver(ad, to: [sub])
+            trace(ad.id, "поиск «\(sub.name)»: пришло")
         }
         save()
     }
@@ -246,20 +279,19 @@ final class AppModel {
             ad.subIds = [sub.id]
             ad.foundAt = Date()
             recordAll(ad)
-            add(ad, subs: [sub])
+            deliver(ad, to: [sub])
         }
         save()
     }
 
-    /// Новое — это подано меньше часа назад. Старое, которое подняли или продвинули, всплывает
-    /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
-    /// старья он сильно меньше самых свежих номеров.
-    private func isStale(_ ad: Ad, frontier: Int) -> Bool {
-        // Без провалов: объявление, которое вышло с модерации позже соседей, подано давно, но для
-        // всех оно новое — поэтому для не продвигаемых окно не меньше 30 минут. Короткое окно из
-        // настроек строго действует только на продвигаемые (Топ) — это и есть «старьё сверху».
-        let minutes = ad.promoted ? freshnessMinutes : max(freshnessMinutes, 30)
-        if let created = ad.createdAt { return Date().timeIntervalSince(created) > TimeInterval(minutes * 60) }
+    /// Старьё — поданное давно (поднятое, продвинутое). Окно: не меньше 30 минут для обычных
+    /// объявлений (вышедшее с модерации позже соседей подано давно, но для всех оно новое) и не
+    /// меньше времени с прошлой проверки (после паузы). Продвигаемые (Топ) — строго по настройке.
+    /// Даты нет — по номеру: у поднятого старья он сильно меньше самых свежих.
+    private func isStale(_ ad: Ad, frontier: Int, window: TimeInterval? = nil) -> Bool {
+        let base = TimeInterval((ad.promoted ? freshnessMinutes : max(freshnessMinutes, 30)) * 60)
+        let limit = ad.promoted ? base : max(base, window ?? 0)
+        if let created = ad.createdAt { return Date().timeIntervalSince(created) > limit }
         return frontier > 0 && ad.id < frontier - 5_000
     }
 
@@ -274,8 +306,8 @@ final class AppModel {
     // MARK: — турбо: следующие номера напрямую, раньше поиска
 
     /// Самые свежие объявления всей доски: турбо перескакивает к ним, а не бредёт от номера,
-    /// на котором приложение закрыли (после часа паузы это тысячи номеров, и всё старше
-    /// минуты отбрасывается — лента стояла пустой). Свежее из них сразу идёт в ленту.
+    /// на котором приложение закрыли. Каждое сверяем со всеми поисками — не подошло поиску
+    /// сейчас, проверим снова на следующем проходе (и его сам поиск ещё может принести).
     private func anchor() async {
         let ads: [Ad]
         do {
@@ -286,8 +318,10 @@ final class AppModel {
             return
         }
         guard let top = ads.map(\.id).max() else { return }
-        let onBoard = Set(ads.map(\.id))
         let now = Date()
+        let window = state.lastBoardOK.map { min(24 * 3600, now.timeIntervalSince($0) + 120) }
+        state.lastBoardOK = now
+        let onBoard = Set(ads.map(\.id))
         for id in max(1, top - Self.gapWindow)...top where !onBoard.contains(id) && !seenSet.contains(id) && gaps[id] == nil {
             gaps[id] = (now, .distantPast)
         }
@@ -296,17 +330,35 @@ final class AppModel {
             state.frontier = top - Self.turboWindow   // прыжок; последние номера турбо ещё проверит
         }
         let ready = state.subs.filter { !$0.paused && $0.ready && $0.site == .olx }
-        for var ad in ads.sorted(by: { $0.id < $1.id }) where !seenSet.contains(ad.id) && !ad.promoted {
-            if isStale(ad, frontier: 0) { continue }
-            remember(ad.id)
-            let hit = ready.filter { OLX.matches($0, ad) }
+        for var ad in ads.sorted(by: { $0.id < $1.id }) where !ad.promoted {
+            if isStale(ad, frontier: 0, window: window) { continue }
             ad.via = "search"
-            ad.subIds = hit.map(\.id)
-            ad.foundAt = Date()
-            recordAll(ad)
-            if !hit.isEmpty { add(ad, subs: hit) }
+            ad.foundAt = now
+            if !seenSet.contains(ad.id) {
+                remember(ad.id)
+                recordAll(ad)
+                trace(ad.id, "лента: увидели\(ad.onReview ? " (на модерации)" : "")")
+            }
+            deliverMatching(ad, subs: ready, from: "лента")
         }
         publish()
+    }
+
+    /// Разослать объявление поискам, которым оно подходит и которым его ещё не присылали.
+    /// Не подошло — не помечаем: подойдёт позже (поиск выучит рубрику) или его принесёт поиск.
+    private func deliverMatching(_ ad: Ad, subs: [Sub], from source: String) {
+        var hit: [Sub] = []
+        for s in subs where !subSeenSet.contains(Self.sk(s.id, ad.id)) {
+            if let reason = OLX.mismatch(s, ad) {
+                trace(ad.id, "\(source) → «\(s.name)»: не подошло — \(reason)")
+            } else {
+                hit.append(s)
+            }
+        }
+        guard !hit.isEmpty else { return }
+        for s in hit { markSub(s.id, ad.id) }
+        deliver(ad, to: hit)
+        trace(ad.id, "\(source): пришло в «\(hit.map(\.name).joined(separator: "», «"))»")
     }
 
     private func turbo() async {
@@ -318,7 +370,7 @@ final class AppModel {
             if (misses[n] ?? 0) < Self.missGiveUp && !seenSet.contains(n) { ids.append(n) }
             n += 1
         }
-        // И столько же пропусков ниже края — давно не проверенные первыми.
+        // И пропуски ниже края ленты (обычно — на модерации): давно не проверенные первыми.
         let now = Date()
         let gapIds = gaps.sorted { $0.value.checked != $1.value.checked ? $0.value.checked < $1.value.checked : $0.key > $1.key }.prefix(Self.gapsPerPass).map { $0.key }
         for id in gapIds { gaps[id]?.checked = now }
@@ -334,6 +386,7 @@ final class AppModel {
             for await r in group { out.append(r) }
             return out.sorted { $0.0 < $1.0 }
         }
+        var failed = false
         for (id, result) in results {
             let offer: Ad?
             switch result {
@@ -342,7 +395,17 @@ final class AppModel {
                 ok()
                 state.stats.turboProbes += 1
             case .failure(let error):
-                fail(error)
+                // 403 по одному номеру — не блокировка (лента и поиски при этом отвечают): так OLX,
+                // похоже, отвечает на скрытые объявления — на модерации, удалённые. Паузу не
+                // включаем, только считаем. Пауза — если OLX ограничил ленту или поиск (или 429).
+                if let f = error as? OLX.Failure, case .blocked(403) = f {
+                    state.stats.hiddenProbes = (state.stats.hiddenProbes ?? 0) + 1
+                    misses[id, default: 0] += 1
+                    trace(id, "по номеру: OLX ответил 403 — объявление скрыто")
+                } else if !failed {
+                    failed = true
+                    fail(error)
+                }
                 continue
             }
             guard var ad = offer else { misses[id, default: 0] += 1; continue }
@@ -351,16 +414,19 @@ final class AppModel {
             bumpFrontier(id)
             state.stats.turboFound += 1
             state.stats.lastTurboHit = Date()
-            guard !seenSet.contains(id) else { continue }
-            remember(id)
-            if isStale(ad, frontier: 0) { continue }   // после долгой паузы — не вчерашнее
-            let hit = ready.filter { OLX.matches($0, ad) }
+            if isStale(ad, frontier: 0) {
+                remember(id)
+                trace(id, "по номеру: подано давно — пропуск")
+                continue
+            }
             ad.via = "turbo"
-            ad.subIds = hit.map(\.id)
             ad.foundAt = Date()
-            recordAll(ad)                 // «Все новые» — любое пойманное объявление
-            guard !hit.isEmpty else { continue }
-            add(ad, subs: hit)            // «По запросам» и уведомление — только подходящее
+            if !seenSet.contains(id) {
+                remember(id)
+                recordAll(ad)                 // «Все новые» — любое пойманное объявление
+                trace(id, "по номеру: нашли\(ad.onReview ? " — на модерации" : "")")
+            }
+            deliverMatching(ad, subs: ready, from: "по номеру")
         }
         misses = misses.filter { $0.key > state.frontier - 500 }
         save()
@@ -368,11 +434,83 @@ final class AppModel {
 
     // MARK: — найденное
 
-    private func add(_ ad: Ad, subs: [Sub]) {
-        state.ads.insert(ad, at: 0)
+    /// В «По запросам» и уведомление. Уже есть (другой поиск прислал) — только добавляем поиск,
+    /// второго уведомления нет.
+    private func deliver(_ ad: Ad, to subs: [Sub]) {
+        if let i = state.ads.firstIndex(where: { $0.id == ad.id }) {
+            let newIds = subs.map(\.id).filter { !state.ads[i].subIds.contains($0) }
+            guard !newIds.isEmpty else { return }
+            state.ads[i].subIds += newIds
+            for sid in newIds { updateSub(sid) { $0.sent += 1 } }
+            return
+        }
+        var item = ad
+        item.subIds = subs.map(\.id)
+        state.ads.insert(item, at: 0)
         if state.ads.count > 500 { state.ads.removeLast(state.ads.count - 500) }
         for s in subs { updateSub(s.id) { $0.sent += 1 } }
-        notify(ad, subs: subs)
+        notify(item, subs: subs)
+    }
+
+    // MARK: — что какому поиску решено, и «почему не пришло»
+
+    private static func sk(_ subId: Int, _ adId: Int) -> String { "\(subId):\(adId)" }
+
+    private func markSub(_ subId: Int, _ adId: Int) {
+        let k = Self.sk(subId, adId)
+        guard subSeenSet.insert(k).inserted else { return }
+        if state.subSeen == nil { state.subSeen = [] }
+        state.subSeen?.append(k)
+        if let c = state.subSeen?.count, c > 32_000 {
+            let drop = Array(state.subSeen!.prefix(c - 30_000))
+            drop.forEach { subSeenSet.remove($0) }
+            state.subSeen!.removeFirst(drop.count)
+        }
+    }
+
+    private static let clock: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    /// Короткая история по номеру: где видели, кому подошло, почему нет. Последние 4000 номеров.
+    private func trace(_ id: Int, _ line: String) {
+        var lines = traceLog[id] ?? []
+        if lines.last?.hasSuffix(line) == true { return }
+        if traceLog[id] == nil {
+            traceOrder.append(id)
+            if traceOrder.count > 4_000 { traceLog[traceOrder.removeFirst()] = nil }
+        }
+        lines.append("\(Self.clock.string(from: Date())) \(line)")
+        if lines.count > 8 { lines.removeFirst(lines.count - 8) }
+        traceLog[id] = lines
+    }
+
+    /// «Почему не пришло?» — по номеру объявления.
+    func why(_ id: Int) -> String {
+        var out: [String] = []
+        if let ad = state.ads.first(where: { $0.id == id }) {
+            let names = state.subs.filter { ad.subIds.contains($0.id) }.map(\.name)
+            out.append("✅ Пришло в «По запросам»\(names.isEmpty ? "" : ": «" + names.joined(separator: "», «") + "»").")
+        } else if (state.all ?? []).contains(where: { $0.id == id }) {
+            out.append("Есть во «Все новые», но ни к одному поиску не подошло.")
+        }
+        if let lines = traceLog[id] { out += lines }
+        if let g = gaps[id] {
+            out.append("Сейчас в очереди перепроверки с \(Self.clock.string(from: g.added)) — его нет в ленте OLX (обычно это модерация).")
+        }
+        if let m = misses[id] { out.append("По номеру OLX ответил «нет такого» \(m) раз.") }
+        if out.isEmpty {
+            if seenSet.contains(id) {
+                out.append("Номер видели, но подробностей уже нет (давно или до перезапуска приложения).")
+            } else if id > state.frontier {
+                out.append("До этого номера приложение ещё не дошло — он новее последнего известного (\(state.frontier)).")
+            } else {
+                out.append("Приложение этот номер не видело: ни в ленте, ни в поисках, ни по номеру. Так бывает, если объявление было на модерации и OLX по номеру его не отдавал, или приложение было закрыто.")
+            }
+        }
+        return out.joined(separator: "\n")
     }
 
     private func notify(_ ad: Ad, subs: [Sub]) {
@@ -651,6 +789,11 @@ final class AppModel {
               let saved = try? JSONDecoder().decode(Persisted.self, from: data) else { return }
         state = saved
         seenSet = Set(saved.seen)
+        subSeenSet = Set(saved.subSeen ?? [])
+        // Обновились с версии без «что какому поиску решено»: уже присланное — помечаем.
+        if saved.subSeen == nil {
+            for ad in saved.ads { for sid in ad.subIds { markSub(sid, ad.id) } }
+        }
         publish()
     }
 

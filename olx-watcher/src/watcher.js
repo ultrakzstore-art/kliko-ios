@@ -8,7 +8,7 @@
 
 const olx = require('./olx');
 const sources = require('./sources');
-const { learn, matches } = require('./match');
+const { learn, matches, mismatch } = require('./match');
 const vip = require('./vip');
 
 const MISS_GIVE_UP = 12;
@@ -36,6 +36,46 @@ class Watcher {
     // (номер выдан при подаче, в ленту попадут после проверки). Турбо перепроверяет их 15 минут.
     this.gaps = new Map();   // номер → { added, checked }   // VIP-рубрика → номера объявлений из выдачи её поиска
     this.lockCache = { at: 0, list: [] };
+    this.traceLog = new Map();   // номер → последние события («почему не пришло?»)
+    this.lastBoardOK = 0;
+  }
+
+  // История по номеру: где видели, кому подошло, почему нет. Последние 4000 номеров.
+  trace(id, line) {
+    const lines = this.traceLog.get(id) || [];
+    if (lines.length && lines[lines.length - 1].endsWith(line)) return;
+    if (!this.traceLog.has(id) && this.traceLog.size >= 4000) this.traceLog.delete(this.traceLog.keys().next().value);
+    const t = new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' });
+    lines.push(`${t} ${line}`);
+    if (lines.length > 10) lines.shift();
+    this.traceLog.set(id, lines);
+  }
+
+  // «Почему не пришло?» — по номеру объявления OLX.
+  why(id) {
+    const out = [...(this.traceLog.get(id) || [])];
+    const g = this.gaps.get(id);
+    if (g) out.push(`Сейчас в очереди перепроверки — его нет в ленте OLX (обычно это модерация).`);
+    const m = this.misses.get(id);
+    if (m) out.push(`По номеру OLX ответил «нет такого» ${m} раз.`);
+    const sent = this.db.subsSent(id);
+    if (sent.length) out.unshift(`✅ Отправлено поискам: ${sent.map((sid) => `#${sid}`).join(', ')}`);
+    if (!out.length) {
+      out.push(id > this.frontier
+        ? `До этого номера бот ещё не дошёл — он новее последнего известного (${this.frontier}).`
+        : 'Бот этот номер не видел: ни в ленте, ни в поисках, ни по номеру. Так бывает, если объявление было на модерации и OLX по номеру его не отдавал, или бот был выключен.');
+    }
+    return out.join('\n');
+  }
+
+  // 403 по одному номеру — не блокировка (лента и поиски при этом отвечают): так OLX, похоже,
+  // отвечает на скрытые объявления — на модерации, удалённые. Паузу не включаем, только считаем.
+  hiddenOffer(id, e) {
+    if (!(e instanceof olx.HttpError) || e.status !== 403) return false;
+    this.stats.hidden = (this.stats.hidden || 0) + 1;
+    this.misses.set(id, (this.misses.get(id) || 0) + 1);
+    this.trace(id, 'по номеру: OLX ответил 403 — объявление скрыто');
+    return true;
   }
 
   // VIP-рубрики (раз в 2 секунды из базы — их мало, а спрашиваем на каждое объявление).
@@ -202,12 +242,19 @@ class Watcher {
         // Ниже отметки: по дате из выдачи сразу отсекаем то, что было ещё до поиска.
         if (late && (src.key !== 'olx' || a.promoted || (a.createdAt && a.createdAt <= sub.created_at))) continue;
         const full = await enrich(a);
+        // Окно новизны: не меньше FRESH_MIN, а если поиск не проверялся дольше (ПК спал, бот был
+        // выключен) — всё время с прошлой проверки, иначе поданное за это время терялось бы.
+        // Продвигаемые (Топ) — строго: это и есть «старьё сверху».
+        const window = full.promoted || !sub.last_poll ? this.cfg.freshMs
+          : Math.max(this.cfg.freshMs, Math.min(24 * 3600_000, Date.now() - sub.last_poll + 120_000));
         // Решение принято — больше это объявление этому поиску не проверяем.
-        const pass = (late ? this.lateOk(sub, full, src.key) : this.isFresh(full))   // не старьё
+        const pass = (late ? this.lateOk(sub, full, src.key) : this.isFresh(full, window))   // не старьё
           && this.allowed(sub.user_id, full)                                         // чужая VIP-рубрика
           && this.sellerOk(sub, full)                                                // частные / бизнес
           && !(ownersOnly(sub) && full.owner !== true);                              // Krisha: от хозяев
-        if (!this.db.markSent(sub.id, a.id) || !pass) continue;
+        if (!this.db.markSent(sub.id, a.id)) continue;
+        if (!pass) { this.trace(a.id, `поиск #${sub.id}: отсеяно (старое / продавец / VIP)`); continue; }
+        this.trace(a.id, `поиск #${sub.id}: отправлено`);
         await this.notify(sub.user_id, full, [sub], 'search');
         this.stats.sent += 1;
         sent += 1;
@@ -270,6 +317,8 @@ class Watcher {
       const top = ads.reduce((m, a) => Math.max(m, a.id), 0);
       const onBoard = new Set(ads.map((a) => a.id));
       const now = Date.now();
+      const boardWindow = Math.max(this.cfg.freshMs, this.lastBoardOK ? Math.min(24 * 3600_000, now - this.lastBoardOK + 120_000) : 0);
+      this.lastBoardOK = now;
       for (let id = Math.max(1, top - 300); id <= top; id++) {
         if (!onBoard.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
       }
@@ -282,12 +331,17 @@ class Watcher {
       }
       await this.checkDiscounts('olx', ads, subs, { matcher: true });
       for (const a of [...ads].sort((x, y) => x.id - y.id)) {
-        if (a.promoted || !this.isFresh(a)) continue;
+        if (a.promoted || !this.isFresh(a, boardWindow)) continue;
         a.source = 'olx';
+        if (!this.traceLog.has(a.id)) this.trace(a.id, `лента: увидели${a.status && a.status !== 'active' ? ' (на модерации)' : ''}`);
         const byUser = new Map();
         for (const s of subs) {
           if (a.id <= s.watermark && !this.lateOk(s, a)) continue;
-          if (!matches(s, a) || !this.sellerOk(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
+          if (this.db.wasSent(s.id, a.id)) continue;
+          const why = mismatch(s, a);
+          if (why) { this.trace(a.id, `лента → поиск #${s.id}: не подошло — ${why}`); continue; }
+          if (!this.sellerOk(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
+          this.trace(a.id, `лента → поиск #${s.id}: отправлено`);
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }
@@ -338,7 +392,7 @@ class Watcher {
       const ids = this.db.toRecheck(3);
       for (const id of ids) {
         let o;
-        try { o = await olx.fetchOffer(id); this.okRequest(); } catch (e) { this.handleError(e); break; }
+        try { o = await olx.fetchOffer(id); this.okRequest(); } catch (e) { if (this.hiddenOffer(id, e)) continue; this.handleError(e); break; }
         if (o) {
           const subs = this.db.subsSent(id).map((sid) => this.db.sub(sid)).filter(Boolean);
           await this.checkDiscounts('olx', [o], subs, { onlySent: true });
@@ -382,7 +436,11 @@ class Watcher {
       // Все номера прохода — одновременно.
       const results = await Promise.all(ids.map((id) => olx.fetchOffer(id).then((o) => ({ id, o }), (e) => ({ id, e }))));
       for (const { id, o, e } of results) {
-        if (e) { if (this.handleError(e)) break; continue; }
+        if (e) {
+          if (this.hiddenOffer(id, e)) continue;
+          if (this.handleError(e)) break;
+          continue;
+        }
         this.okRequest();
         this.stats.turboProbes += 1;
         if (!o) { this.misses.set(id, (this.misses.get(id) || 0) + 1); continue; }
@@ -391,12 +449,16 @@ class Watcher {
         this.bumpFrontier(id);
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();
-        if (!this.isFresh(o, Math.max(this.cfg.freshMs, GAP_LIFE_MS))) continue;
+        if (!this.isFresh(o, Math.max(this.cfg.freshMs, GAP_LIFE_MS))) { this.trace(id, 'по номеру: подано давно — пропуск'); continue; }
         o.source = 'olx';
+        this.trace(id, `по номеру: нашли${o.status && o.status !== 'active' ? ' — на модерации' : ''}`);
         const byUser = new Map();
         for (const s of subs) {
           if (o.createdAt && o.createdAt <= s.created_at) continue;   // подано ещё до поиска
-          if (!matches(s, o) || !this.sellerOk(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
+          const why = mismatch(s, o);
+          if (why) { this.trace(id, `по номеру → поиск #${s.id}: не подошло — ${why}`); continue; }
+          if (!this.sellerOk(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
+          this.trace(id, `по номеру → поиск #${s.id}: отправлено`);
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }

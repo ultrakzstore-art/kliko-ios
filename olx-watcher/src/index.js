@@ -67,6 +67,8 @@ if (parent) {
   setTimeout(snapshot, 1500);
   parent.on('message', (e) => {
     if (e.data?.type === 'stop') { watcher.stop(); bot.stop().finally(() => process.exit(0)); }
+    // «Почему не пришло?» из вкладки «Проверка площадок».
+    if (e.data?.type === 'why') report({ type: 'why', reqId: e.data.reqId, text: watcher.why(Number(e.data.id)) });
     // Приложение выдало или забрало доступ — сообщаем человеку от имени бота.
     if (e.data?.type === 'tell') bot.api.sendMessage(e.data.userId, e.data.text).catch(() => {});
   });

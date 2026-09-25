@@ -75,8 +75,13 @@ enum OLX {
         return url
     }
 
-    static func search(_ raw: String) async throws -> [Ad] {
-        let (data, code) = try await get(try newestFirst(raw), accept: "text/html")
+    static func search(_ raw: String, page: Int = 1) async throws -> [Ad] {
+        var url = try newestFirst(raw)
+        if page > 1, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.queryItems = (c.queryItems ?? []).filter { $0.name != "page" } + [URLQueryItem(name: "page", value: String(page))]
+            url = c.url ?? url
+        }
+        let (data, code) = try await get(url, accept: "text/html")
         if code == 403 || code == 429 { throw Failure.blocked(code) }
         guard (200..<300).contains(code) else { throw Failure.http(code) }
         return parseSearch(String(decoding: data, as: UTF8.self))
@@ -248,21 +253,33 @@ enum OLX {
         return Filters(words: words, priceFrom: from, priceTo: to)
     }
 
-    static func matches(_ sub: Sub, _ ad: Ad) -> Bool {
+    static func matches(_ sub: Sub, _ ad: Ad) -> Bool { mismatch(sub, ad) == nil }
+
+    /// Почему объявление не подходит поиску (nil — подходит). Для ленты и турбо: поиск OLX
+    /// фильтрует сам, а тут фильтры восстанавливаем из ссылки и из выученного по выдаче.
+    static func mismatch(_ sub: Sub, _ ad: Ad) -> String? {
         let f = filters(from: sub.url)
         let text = (ad.title + " " + ad.description).lowercased()
-        if !f.words.allSatisfy({ text.contains($0) }) { return false }
+        // Слова — по основе: «ноутбуки» найдёт «ноутбук», «ноутбука» (поиск OLX тоже так ищет).
+        if let w = f.words.first(where: { !text.contains(stem($0)) }) { return "нет слова «\(w)»" }
         // Обмен, «Отдам даром» и без цены проходят любой фильтр цены.
         if !ad.noPrice, let p = ad.price {
-            if let from = f.priceFrom, p < from { return false }
-            if let to = f.priceTo, p > to { return false }
+            if let from = f.priceFrom, p < from { return "цена ниже «от»" }
+            if let to = f.priceTo, p > to { return "цена выше «до»" }
         }
-        if !sub.learnedCategories.isEmpty, let cat = ad.categoryId, !sub.learnedCategories.contains(cat) { return false }
-        if sub.learnedTotal >= 20, sub.learnedCities.count == 1, !ad.city.isEmpty, ad.city != sub.learnedCities[0] { return false }
-        // Без слов и без выученных рубрик турбо не шлёт — иначе полетит весь OLX.
-        if f.words.isEmpty && sub.learnedCategories.isEmpty { return false }
-        return true
+        if !sub.learnedCategories.isEmpty, let cat = ad.categoryId, !sub.learnedCategories.contains(cat) {
+            return "рубрика \(cat) в этом поиске ещё не встречалась"
+        }
+        if sub.learnedTotal >= 20, sub.learnedCities.count == 1, !ad.city.isEmpty, ad.city != sub.learnedCities[0] {
+            return "город \(ad.city), а поиск — \(sub.learnedCities[0])"
+        }
+        // Без слов и без выученных рубрик не шлём — иначе полетит весь OLX.
+        if f.words.isEmpty && sub.learnedCategories.isEmpty { return "поиск ещё не выучил рубрику" }
+        return nil
     }
+
+    /// Грубая основа слова: у длинных слов отбрасываем окончание (до 2 букв).
+    static func stem(_ w: String) -> String { w.count > 5 ? String(w.dropLast(2)) : w }
 
     // MARK: — рубрики и ссылка из выбранного
 

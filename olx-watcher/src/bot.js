@@ -274,9 +274,19 @@ function createBot({ token, db, config, getWatcher, log }) {
       `Поиск: ${w.stats.searchOk} удачных, ${w.stats.searchErr} ошибок · турбо: проверено ${w.stats.turboProbes}, найдено ${w.stats.turboFound}`,
       `Отправлено объявлений: ${w.stats.sent} · последний номер ${w.frontier || '—'}`,
       `На проверке у OLX (перепроверяю): ${w.gaps?.size ?? 0} номеров · круг ≈ ${Math.round(((w.gaps?.size ?? 0) / Math.max(1, config.turboWindow)) * config.turboSec)} с`,
+      `Номеров скрыто OLX (ответ 403): ${w.stats.hidden || 0}`,
       w.blocked() ? `⏸ OLX ограничил запросы — ещё ${Math.ceil((w.backoffUntil - Date.now()) / 60_000)} мин` : '',
       `Оплаты: ${money}`,
     ].filter(Boolean).join('\n'));
+  });
+
+  // «Почему не пришло?» — /why <номер или ссылка на объявление OLX>.
+  bot.command('why', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const arg = String(ctx.match || '').trim();
+    const id = olx.idFromUrl(arg) || Number(arg.replace(/\D/g, ''));
+    if (!id) return ctx.reply('Формат: /why 401225253 — или ссылка на объявление OLX.');
+    await ctx.reply(`Номер ${id}:\n${getWatcher().why(id)}`);
   });
 
   bot.command('turbo', async (ctx) => {
@@ -491,7 +501,8 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
     : '';
   const head = [
     drop,
-    `${src.emoji} <b>${esc(ad.title || 'Объявление')}</b>`,
+    // Заголовок — ссылка на объявление: нажал на название — открылось объявление.
+    `${src.emoji} <a href="${esc(adLink(ad))}"><b>${esc(ad.title || 'Объявление')}</b></a>`,
     price && !drop ? (/^[🔁🎁]/u.test(price) ? `<b>${esc(price)}</b>` : `💰 <b>${esc(price)}</b>`) : '',
     place ? `📍 ${esc(place)}` : '',
     ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}` : '',
