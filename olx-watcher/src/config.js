@@ -32,6 +32,8 @@ module.exports = {
   }])),
   // Разделы карточки объявления: характеристики, описание, продавец (через запятую).
   cardSections: new Set(String(process.env.CARD_SECTIONS ?? 'specs,description,seller').split(',').map((s) => s.trim()).filter(Boolean)),
+  // Водяной знак на фото: auto — @имя_бота, off — без знака, любой другой текст — он.
+  watermark: (process.env.WATERMARK ?? 'auto').trim(),
   kaspiDetails: (process.env.KASPI_DETAILS || '').trim(),
   sellerUrl: process.env.SELLER_URL || 'https://www.olx.kz/list/user/{code}/',
   dbFile: process.env.DB_FILE || path.join(__dirname, '..', 'data', 'watcher.db'),

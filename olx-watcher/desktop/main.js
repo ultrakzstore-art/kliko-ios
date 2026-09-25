@@ -23,6 +23,7 @@ const DEFAULTS = {
   TURBO_SEC: '5',
   TURBO_WINDOW: '10',
   CARD_SECTIONS: 'specs,description,seller',
+  WATERMARK: 'auto',
   KASPI_DETAILS: 'Перевод на Kaspi по номеру +7 7XX XXX XX XX (Имя Ф.)',
   STARS_PRICES_OLX: '100,180,300',
   STARS_PRICES_KOLESA: '100,180,300',

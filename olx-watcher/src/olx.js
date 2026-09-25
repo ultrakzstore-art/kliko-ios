@@ -151,14 +151,13 @@ function normalizeOffer(o) {
     business: !!o.business,
     userId: o.user?.id ?? null,
     userName: o.user?.name || '',
-    // Продавец: с какого времени на OLX, когда был в сети, частное лицо или бизнес.
+    // Продавец: с какого времени на OLX, частное лицо или бизнес.
     sellerSince: time(o.user?.created),
-    sellerLastSeen: time(o.user?.last_seen),
-    sellerOnline: !!o.user?.is_online,
     sellerCompany: o.user?.company_name || '',
     sellerAbout: stripHtml(o.user?.about || '').slice(0, 200),
     params: params.filter((p) => p !== priceParam).map((p) => `${p.name}: ${p.value?.label ?? p.value?.value ?? ''}`).slice(0, 6),
     photo: photoUrl(o.photos?.[0]),
+    photos: (o.photos || []).map(photoUrl).filter(Boolean).slice(0, 10),
   };
 }
 

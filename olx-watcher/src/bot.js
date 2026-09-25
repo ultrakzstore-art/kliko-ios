@@ -4,7 +4,8 @@
 // Платно (7/14/30 дней): раз в POLL_SEC, турбо, до PAID_SUBS поисков. Без доступа — не проверяем.
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
-const { Bot, InlineKeyboard, GrammyError } = require('grammy');
+const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
+const { watermark, fetchImage } = require('./watermark');
 const olx = require('./olx');
 const sources = require('./sources');
 const { registerWizard } = require('./wizard');
@@ -328,6 +329,36 @@ function createBot({ token, db, config, getWatcher, log }) {
     return config.sellerUrl.replace('{code}', encodeURIComponent(code)).replace('{id}', encodeURIComponent(userId));
   }
 
+  // Фото с водяным знаком готовим один раз на объявление: первому получателю — загрузкой,
+  // остальным — по file_id, который вернул Телеграм (без повторной обработки и загрузки).
+  const albums = new Map();   // ключ объявления → [file_id]
+  function watermarkText() {
+    const w = config.watermark;
+    if (!w || w === 'off') return '';
+    return w === 'auto' ? (bot.botInfo?.username ? `@${bot.botInfo.username}` : '') : w;
+  }
+
+  async function sendAlbum(userId, ad, urls) {
+    const key = `${ad.source || 'olx'}:${ad.id}`;
+    let media = albums.get(key);
+    if (!media) {
+      const mark = watermarkText();
+      media = mark
+        ? await Promise.all(urls.map(async (u) => {
+          try { return new InputFile(await watermark(await fetchImage(u), mark), 'photo.jpg'); } catch { return u; }
+        }))
+        : urls;
+    }
+    const sent = media.length === 1
+      ? [await bot.api.sendPhoto(userId, media[0])]
+      : await bot.api.sendMediaGroup(userId, media.map((m) => ({ type: 'photo', media: m })));
+    const ids = sent.map((m) => m.photo?.[m.photo.length - 1]?.file_id).filter(Boolean);
+    if (ids.length === media.length) {
+      albums.set(key, ids);
+      if (albums.size > 300) albums.delete(albums.keys().next().value);
+    }
+  }
+
   async function notify(userId, ad, subs, via, count) {
     if (via === 'ready') {
       return send(userId, `«${subs[0].name}»: слежу. Сейчас в выдаче ${count} объявлений — присылать буду только новые.`);
@@ -336,11 +367,19 @@ function createBot({ token, db, config, getWatcher, log }) {
     const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
     if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', sellerLink(ad.userId));
     else if (ad.sellerUrl) kb.row().url('Все объявления автора', ad.sellerUrl);
-    // Текстом, а фото — большим превью над ним: так влезает вся карточка (у подписи к фото
-    // лимит 1024 знака, у сообщения — 4096).
-    const preview = ad.photo
-      ? { url: ad.photo, prefer_large_media: true, show_above_text: true }
-      : { is_disabled: true };
+    // Сначала все фото одним альбомом (с водяным знаком), под ним — карточка с кнопками.
+    // Альбом не удался — фото хотя бы превью над карточкой.
+    let preview = { is_disabled: true };
+    const photos = (ad.photos?.length ? ad.photos : ad.photo ? [ad.photo] : []).slice(0, 10);
+    if (photos.length) {
+      try {
+        await sendAlbum(userId, ad, photos);
+      } catch (e) {
+        if (e instanceof GrammyError && e.error_code === 403) { db.setBlocked(userId, true); return; }
+        log(`альбом ${ad.id}: ${e.message}`);
+        preview = { url: photos[0], prefer_large_media: true, show_above_text: true };
+      }
+    }
     try {
       await bot.api.sendMessage(userId, caption, { parse_mode: 'HTML', reply_markup: kb, link_preview_options: preview });
     } catch (e) {
@@ -419,8 +458,6 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   const seller = [];
   if (ad.userName || ad.sellerCompany) seller.push(`👤 ${esc(ad.sellerCompany || ad.userName)} · ${ad.business ? 'бизнес' : 'частное лицо'}`);
   if (ad.sellerSince) seller.push(`📅 На ${esc(src.title)} с ${fmtMonth(ad.sellerSince)} (${since(ad.sellerSince)})`);
-  if (ad.sellerOnline) seller.push('🟢 Сейчас в сети');
-  else if (ad.sellerLastSeen) seller.push(`⚪ Был(а) в сети ${ago(ad.sellerLastSeen)} назад`);
   if (ad.sellerAbout) seller.push(`ℹ️ ${esc(ad.sellerAbout)}`);
   const sellerBlock = seller.length && sections.has('seller') ? ['', '<b>Продавец</b>', ...seller] : [];
 
