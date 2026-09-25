@@ -99,13 +99,13 @@ struct СтраницаОбъявленияСайта: View {
             ГалереяСайта(адреса: товар.фотоАдреса, страница: $страница, верх: верх, ширина: ширина,
                          метка: товар.меткаСостояния, аренда: товар.forRent, открыть: открытьФото)
                 .background {
+                    /* Нижний край галереи на экране: ушёл выше часов — фото больше не под ними. */
                     GeometryReader { г in
-                        Color.clear.preference(key: НизФотоСайта.self, value: г.frame(in: CoordinateSpace.global).maxY)
+                        Color.clear
+                            .onChange(of: г.frame(in: CoordinateSpace.global).maxY < верх + 8, initial: true) { _, стало in
+                                if стало != прокручено { прокручено = стало }
+                            }
                     }
-                }
-                .onPreferenceChange(НизФотоСайта.self) { низ in
-                    let стало = низ < верх + 8
-                    if стало != прокручено { прокручено = стало }
                 }
             ВерхСтраницы(товар: товар, магазин: магазин, названия: названия, листДоверия: $листДоверия)
                 .padding(.horizontal, 20)
@@ -140,8 +140,8 @@ struct СтраницаОбъявленияСайта: View {
 
     @ViewBuilder
     private var кнопкаПоделиться: some View {
-        if let поделитьсяКартинкой {
-            КнопкаНадФото(значок: "square.and.arrow.up", подпись: FeedText.т("share"), действие: поделитьсяКартинкой)
+        if let картинкой = поделитьсяКартинкой {
+            КнопкаНадФото(значок: "square.and.arrow.up", подпись: FeedText.т("share"), действие: картинкой)
                 .accessibilityHint(ShareCardText.т("hint"))
         } else if let адрес = товар.адрес {
             ShareLink(item: адрес) {
@@ -173,14 +173,6 @@ struct СтраницаОбъявленияСайта: View {
     private func отметиться() {
         let запись = КарточкаНаЭкране(стек: стек, фотоПодЧасами: !прокручено)
         if вид.карточки[метка] != запись { вид.карточки[метка] = запись }
-    }
-}
-
-/// Нижний край галереи на экране — пока он ниже часов, фото под ними.
-private struct НизФотоСайта: PreferenceKey {
-    static let defaultValue: CGFloat = .greatestFiniteMagnitude
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

@@ -72,16 +72,16 @@ struct ПустоСайта: View {
                 .foregroundStyle(Theme.текст)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            if let подпись {
-                Text(подпись)
+            if let текст = подпись {
+                Text(текст)
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let кнопка, let действие {
-                Button(action: действие) {
-                    Text(кнопка)
+            if let надпись = кнопка, let нажать = действие {
+                Button(action: нажать) {
+                    Text(надпись)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 26)
@@ -91,8 +91,8 @@ struct ПустоСайта: View {
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 .padding(.top, 4)
             }
-            if let вторая, let второеДействие {
-                Button(вторая, action: второеДействие)
+            if let надпись = вторая, let нажать = второеДействие {
+                Button(надпись, action: нажать)
                     .font(.system(size: 15, weight: .bold))
                     .tint(Theme.акцент)
             }
@@ -228,7 +228,7 @@ struct СтрокаДиалогаСайта: View {
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     Text(ЧатВремя.коротко(диалог.последнееКогда))
-                        .font(.system(size: 12, weight: диалог.непрочитано > 0 ? .bold : .regular))
+                        .font(.system(size: 12, weight: диалог.непрочитано > 0 ? Font.Weight.bold : Font.Weight.regular))
                         .monospacedDigit()
                         .foregroundStyle(диалог.непрочитано > 0 ? Theme.акцент : Theme.текстВторой)
                 }
@@ -240,7 +240,7 @@ struct СтрокаДиалогаСайта: View {
                 }
                 HStack(spacing: 8) {
                     Text((диалог.последнееМоё ? ChatText.т("you") : "") + диалог.последнее)
-                        .font(.system(size: 14, weight: диалог.непрочитано > 0 ? .semibold : .regular))
+                        .font(.system(size: 14, weight: диалог.непрочитано > 0 ? Font.Weight.semibold : Font.Weight.regular))
                         .foregroundStyle(диалог.непрочитано > 0 ? Theme.текст : Theme.текстВторой)
                         .lineLimit(1)
                     Spacer(minLength: 4)

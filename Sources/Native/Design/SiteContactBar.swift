@@ -117,8 +117,8 @@ struct ПанельСвязиСайта: View {
     /// «Предложить цену» / «Связаться»: нативный чат, без него — страница объявления на сайте.
     @ViewBuilder
     private func кЧату(значок: String, заголовок: String, подпись: String) -> some View {
-        if let чат {
-            NavigationLink(value: чат) {
+        if let цель = чат {
+            NavigationLink(value: цель) {
                 ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
@@ -197,8 +197,8 @@ struct ПанельСвязиСайта: View {
             .frame(width: 44, height: 44)
             .background(Color.white.opacity(0.16), in: Circle())
             .contentShape(Circle())
-        if let чат {
-            NavigationLink(value: чат) { значок }
+        if let цель = чат {
+            NavigationLink(value: цель) { значок }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
                 .accessibilityLabel(ListingPageText.т("chat"))
         } else {
@@ -304,8 +304,8 @@ private struct ПодписьПанелиСвязи: View {
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                if let подпись {
-                    Text(подпись)
+                if let строка = подпись {
+                    Text(строка)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.78))
                         .lineLimit(1)
@@ -423,7 +423,6 @@ enum КонтактыПродавца {
     }
 
     /// mkTrackEv сайта: GET /marketplace.php?ev=call|msg&id=<номер> — счётчик обращений у продавца. Ответ не нужен.
-    @MainActor
     static func отметить(_ событие: String, объявление: String) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("marketplace.php"), resolvingAgainstBaseURL: false)
         ч?.queryItems = [URLQueryItem(name: "ev", value: событие), URLQueryItem(name: "id", value: объявление)]

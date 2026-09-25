@@ -249,14 +249,14 @@ struct ГалереяСайта: View {
     /// .mk-gcond: «Б/У» оранжевым (#b8620c), «Новое» — зелёным; «Аренда» — синим градиентом.
     private var метки: some View {
         HStack(spacing: 6) {
-            if let метка {
-                Text(метка.текст)
+            if let состояние = метка {
+                Text(состояние.текст)
                     .font(.system(size: 11, weight: .bold))
                     .tracking(0.44)
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(метка.новое ? Theme.меткаНовое : Theme.меткаБУ,
+                    .background(состояние.новое ? Theme.меткаНовое : Theme.меткаБУ,
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
                     .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
             }
@@ -298,15 +298,15 @@ private struct СлайдФото: View {
     var body: some View {
         ZStack(alignment: .top) {
             Theme.подложкаФото
-            if let картинка {
-                Image(uiImage: картинка)
+            if let снимок = картинка {
+                Image(uiImage: снимок)
                     .resizable()
                     .scaledToFill()
                     .frame(width: ширина, height: высота)
                     .blur(radius: 26, opaque: true)
                     .overlay(Color.black.opacity(0.3))
                     .clipped()
-                Image(uiImage: картинка)
+                Image(uiImage: снимок)
                     .resizable()
                     .scaledToFit()
                     .frame(width: ширина, height: max(1, высота - верх))
@@ -466,8 +466,8 @@ struct БлокЧасов: View {
                 .shadow(color: состояние == .закрыто ? Color.clear : краска.opacity(0.45), radius: 6, x: 0, y: 4)
                 .accessibilityHidden(true)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if let подпись {
-                    Text(подпись.uppercased())
+                if let надпись = подпись {
+                    Text(надпись.uppercased())
                         .font(.system(size: 11, weight: .bold))
                         .tracking(0.4)
                         .foregroundStyle(Theme.текстВторой)
@@ -563,7 +563,7 @@ struct ПунктДоверияСайта: View {
                 .foregroundStyle(Theme.акцент)
                 .accessibilityHidden(true)
             Text(пункт.текст)
-                .font(.system(size: 14, weight: пункт.ключевой ? .bold : .semibold))
+                .font(.system(size: 14, weight: пункт.ключевой ? Font.Weight.bold : Font.Weight.semibold))
                 .foregroundStyle(пункт.ключевой ? Theme.акцент : Theme.текстПункта)
                 .lineLimit(1)
         }
@@ -800,8 +800,8 @@ struct БлокОписанияСайта: View {
                     }
                 }
             }
-            if let описание {
-                Text(описание)
+            if let текст = описание {
+                Text(текст)
                     .font(.system(size: 15))
                     .lineSpacing(6)
                     .foregroundStyle(Theme.текст)
@@ -810,8 +810,8 @@ struct БлокОписанияСайта: View {
             }
             if добавлено != nil || (просмотры ?? 0) > 0 {
                 HStack(spacing: 16) {
-                    if let добавлено {
-                        Label(String(format: ListingPageText.т("added"), добавлено), systemImage: "clock")
+                    if let когда = добавлено {
+                        Label(String(format: ListingPageText.т("added"), когда), systemImage: "clock")
                     }
                     if let п = просмотры, п > 0 {
                         Label(String(п), systemImage: "eye")
