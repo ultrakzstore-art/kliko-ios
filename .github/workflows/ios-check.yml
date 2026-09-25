@@ -162,18 +162,19 @@ jobs:
           id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
           echo "объявление для карточки: $id"
           snap() { xcrun simctl io "$UDID" screenshot "shots/$1.png"; }
-          for тема in light dark; do
-            xcrun simctl ui "$UDID" appearance "$тема"
+          for theme in light dark; do
+            xcrun simctl ui "$UDID" appearance "$theme"
             xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
             xcrun simctl install "$UDID" "$APP"
             xcrun simctl launch "$UDID" kz.kliko.app
-            sleep 25; snap "1-lenta-$тема"
+            sleep 25; snap "1-lenta-$theme"
             if [ -n "$id" ]; then
               xcrun simctl openurl "$UDID" "kliko://open?u=https%3A%2F%2Fkliko.kz%2Fmarketplace%3Fitem%3D$id"
-              sleep 12; snap "2-kartochka-$тема"
+              sleep 12; snap "2-kartochka-$theme"
             fi
           done
           ls -la shots
+          [ -n "$(ls shots/*.png 2>/dev/null)" ] || { echo "::error::Снимков нет"; exit 1; }
 
       - name: Выложить в ветку ci/screenshots
         run: |
