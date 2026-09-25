@@ -108,8 +108,8 @@ extension Listing: Decodable {
         negotiable = да("price_negotiable")
         forRent = да("for_rent")
         rentPriceDay = число("rent_price_day")
-        let фото = (try? c.decode([String].self, forKey: Ключ("images")))?.first
-        thumb = непусто(строка("thumb")) ?? непусто(строка("img")) ?? непусто(фото)
+        let первоеФото = (try? c.decode([String].self, forKey: Ключ("images")))?.first
+        thumb = непусто(строка("thumb")) ?? непусто(строка("img")) ?? непусто(первоеФото)
         city = непусто(строка("city")) ?? ""
         isTop = да("is_top")
         isNew = строка("condition") == "new"
