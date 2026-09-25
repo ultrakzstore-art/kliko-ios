@@ -142,3 +142,44 @@ test('лента всей доски: подходящее новое прихо
     olx.fetchLatest = origLatest;
   }
 });
+
+test('скидки: цена знакомого объявления упала — «Цена снижена» один раз; и по уже присланным', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-disc-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const now = Date.now();
+  const ad = (id, price, extra = {}) => ({ id, title: `HP ${id}`, url: 'u', price, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const origSearch = olx.fetchSearch;
+  const origOffer = olx.fetchOffer;
+  let listing = [ad(100, 300000)];
+  const offers = new Map();
+  olx.fetchSearch = async () => ({ source: 'state', ads: listing });
+  olx.fetchOffer = async (id) => offers.get(id) || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000, minDropPct: 3 },
+    notify: async (userId, a, subs, via) => { if (via !== 'ready') sent.push(`${via}:${a.id}:${a.oldPrice || ''}->${a.price}`); },
+    alert: async () => {}, log: () => {} });
+  const tick = async () => { for (const s of db.subs()) db.updateSub(s.id, { last_poll: 0 }); await w.searchTick(); };
+  try {
+    db.touchUser(1, 'Я');
+    db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    await tick();                                   // первый проход: цены запомнили
+    listing = [ad(100, 299000)];                    // −0,3% — меньше порога
+    await tick();
+    assert.deepStrictEqual(sent, []);
+    listing = [ad(100, 250000)];                    // −16%
+    await tick();
+    await tick();
+    assert.deepStrictEqual(sent, ['discount:100:299000->250000'], 'скидка — один раз');
+
+    // Новое пришло поиском, потом продавец снизил цену — ловим фоновой перепроверкой.
+    listing = [ad(105, 500000), ad(100, 250000)];
+    await tick();
+    assert.ok(sent.includes('search:105:->500000'));
+    offers.set(105, ad(105, 450000));
+    await w.recheckTick();
+    assert.ok(sent.includes('discount:105:500000->450000'), 'скидка на уже присланное');
+  } finally {
+    olx.fetchSearch = origSearch;
+    olx.fetchOffer = origOffer;
+  }
+});

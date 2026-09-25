@@ -18,7 +18,10 @@ module.exports = {
   adminId: parseInt(process.env.ADMIN_ID || process.env.OWNER_ID || '', 10) || null,
   pollSec: int('POLL_SEC', 2, 1),                // поиск раз в N сек (тест и платный)
   turboSec: int('TURBO_SEC', 1, 1),
-  boardSec: int('BOARD_SEC', 2, 1),              // лента всей доски раз в N сек
+  boardSec: int('BOARD_SEC', 2, 1),
+  // Скидки: «📉 Цена снижена», если цена знакомого объявления упала хотя бы на MIN_DROP %.
+  discounts: !/^(0|off|no|false)$/i.test(process.env.DISCOUNTS || 'on'),
+  minDropPct: int('MIN_DROP', 3, 1),              // лента всей доски раз в N сек
   turboWindow: int('TURBO_WINDOW', 10, 1),
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
   trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней

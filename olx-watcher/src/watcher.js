@@ -45,6 +45,9 @@ class Watcher {
   start() {
     this.timers.push(setInterval(() => this.searchTick().catch((e) => this.log(`поиск: ${e.message}`)), 1_000));
     this.timers.push(setInterval(() => this.boardTick().catch((e) => this.log(`доска: ${e.message}`)), (this.cfg.boardSec || 2) * 1000));
+    if (this.cfg.discounts !== false) {
+      this.timers.push(setInterval(() => this.recheckTick().catch((e) => this.log(`скидки: ${e.message}`)), 10_000));
+    }
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
@@ -154,6 +157,9 @@ class Watcher {
       return enriched.get(ad.id);
     };
 
+    // Скидки: цена знакомого объявления из этой выдачи стала ниже — всем поискам этой ссылки.
+    await this.checkDiscounts(src.key, ads, subs);
+
     for (const sub of subs) {
       const patch = {
         last_poll: Date.now(),
@@ -239,6 +245,7 @@ class Watcher {
       } else {
         this.bumpFrontier(top);
       }
+      await this.checkDiscounts('olx', ads, subs, { matcher: true });
       for (const a of [...ads].sort((x, y) => x.id - y.id)) {
         if (a.promoted || !this.isFresh(a)) continue;
         a.source = 'olx';
@@ -255,6 +262,57 @@ class Watcher {
       }
     } finally {
       this.boardBusy = false;
+    }
+  }
+
+  // ---------- скидки ----------
+  // Цену каждого объявления, которое видим (выдача поисков, лента доски, турбо, перепроверка),
+  // запоминаем. Стала ниже хотя бы на MIN_DROP % — «📉 Цена снижена» тем, чьему поиску оно
+  // подходит (или кому уже приходило). Одна и та же скидка — один раз.
+
+  async checkDiscounts(source, ads, subs, { onlySent = false, matcher = false } = {}) {
+    if (this.cfg.discounts === false) return;
+    const minDrop = (this.cfg.minDropPct ?? 3) / 100;
+    for (const a of ads) {
+      const old = this.db.notePrice(source, a.id, a.price);
+      if (!old || a.price > old * (1 - minDrop)) continue;
+      const full = { ...a, source, oldPrice: old };
+      const sentTo = new Set(this.db.subsSent(a.id));
+      const byUser = new Map();
+      for (const s of subs) {
+        if (!s.initialized || s.paused) continue;
+        if (onlySent && !sentTo.has(s.id)) continue;
+        if (matcher && !matches(s, full)) continue;   // лента доски: только подходящим поискам
+        if (!this.db.hasAccess(s.user_id, source) || this.db.user(s.user_id)?.blocked) continue;
+        if (!this.allowed(s.user_id, full) || !this.db.markDiscount(s.id, a.id, a.price)) continue;
+        byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
+      }
+      for (const [userId, hit] of byUser) {
+        await this.notify(userId, full, hit, 'discount');
+        this.stats.discounts = (this.stats.discounts || 0) + 1;
+      }
+    }
+  }
+
+  // Фоном: объявления OLX, которые уже кому-то приходили, — не снизили ли цену.
+  async recheckTick() {
+    if (this.recheckBusy || this.blocked()) return;
+    this.recheckBusy = true;
+    try {
+      const ids = this.db.toRecheck(3);
+      for (const id of ids) {
+        let o;
+        try { o = await olx.fetchOffer(id); this.okRequest(); } catch (e) { this.handleError(e); break; }
+        if (o) {
+          const subs = this.db.subsSent(id).map((sid) => this.db.sub(sid)).filter(Boolean);
+          await this.checkDiscounts('olx', [o], subs, { onlySent: true });
+        }
+        // Проверено (или объявление снято) — в конец очереди.
+        this.db.db.prepare(`INSERT INTO ad_prices (source, ad_id, price, checked_at) VALUES ('olx', ?, 0, ?)
+          ON CONFLICT(source, ad_id) DO UPDATE SET checked_at = excluded.checked_at`).run(id, Date.now());
+      }
+    } finally {
+      this.recheckBusy = false;
     }
   }
 

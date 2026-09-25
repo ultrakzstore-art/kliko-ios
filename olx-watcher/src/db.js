@@ -54,6 +54,19 @@ class Db {
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS ad_prices (
+        source TEXT NOT NULL,
+        ad_id INTEGER NOT NULL,
+        price REAL NOT NULL,                  -- последняя известная цена
+        checked_at INTEGER NOT NULL,          -- когда последний раз видели цену
+        PRIMARY KEY (source, ad_id)
+      );
+      CREATE TABLE IF NOT EXISTS discount_sent (
+        sub_id INTEGER NOT NULL,
+        ad_id INTEGER NOT NULL,
+        price REAL NOT NULL,
+        PRIMARY KEY (sub_id, ad_id, price)
+      );
       CREATE TABLE IF NOT EXISTS vip_locks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,             -- VIP, за которым закреплена рубрика
@@ -281,6 +294,35 @@ class Db {
 
   prune() {
     this.db.prepare('DELETE FROM sent WHERE at < ?').run(Date.now() - 7 * DAY);
+    this.db.prepare('DELETE FROM ad_prices WHERE checked_at < ?').run(Date.now() - 14 * DAY);
+  }
+
+  // ---------- цены и скидки ----------
+
+  // Запомнить цену; вернуть прежнюю, если новая ниже (иначе null).
+  notePrice(source, adId, price, now = Date.now()) {
+    if (!(price > 0)) return null;
+    const row = this.db.prepare('SELECT price FROM ad_prices WHERE source = ? AND ad_id = ?').get(source, adId);
+    this.db.prepare(`INSERT INTO ad_prices (source, ad_id, price, checked_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(source, ad_id) DO UPDATE SET price = excluded.price, checked_at = excluded.checked_at`).run(source, adId, price, now);
+    return row && price < row.price ? row.price : null;
+  }
+
+  // true — эту скидку (объявление + новая цена) этому поиску ещё не присылали; отмечаем.
+  markDiscount(subId, adId, price) {
+    return this.db.prepare('INSERT OR IGNORE INTO discount_sent (sub_id, ad_id, price) VALUES (?, ?, ?)').run(subId, adId, price).changes > 0;
+  }
+
+  // Объявления OLX, которые приходили за последние дни, — давно не проверенные первыми.
+  toRecheck(limit, since = Date.now() - 3 * DAY) {
+    return this.db.prepare(`SELECT DISTINCT s.ad_id AS id FROM sent s
+      LEFT JOIN ad_prices p ON p.source = 'olx' AND p.ad_id = s.ad_id
+      WHERE s.at > ? ORDER BY COALESCE(p.checked_at, 0) LIMIT ?`).all(since, limit).map((r) => r.id);
+  }
+
+  // Поиски, которым это объявление уже отправляли.
+  subsSent(adId) {
+    return this.db.prepare('SELECT sub_id FROM sent WHERE ad_id = ?').all(adId).map((r) => r.sub_id);
   }
 }
 

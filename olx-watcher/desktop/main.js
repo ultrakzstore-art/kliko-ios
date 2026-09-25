@@ -20,6 +20,8 @@ const DEFAULTS = {
   FRESH_MIN: '30',
   TURBO_SEC: '1',
   BOARD_SEC: '2',
+  DISCOUNTS: 'on',
+  MIN_DROP: '3',
   TURBO_WINDOW: '10',
   CARD_SECTIONS: 'specs,description,seller',
   WATERMARK: 'auto',
