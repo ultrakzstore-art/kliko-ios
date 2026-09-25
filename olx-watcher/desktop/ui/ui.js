@@ -61,6 +61,15 @@ function renderStatus() {
   }
 }
 
+function renderVersion() {
+  if (!state) return;
+  const u = state.update || {};
+  const tail = u.status === 'downloading' ? ` · скачиваю обновление ${u.version}…`
+    : u.status === 'ready' ? ` · обновление ${u.version} скачано — поставится при перезапуске`
+      : u.status === 'latest' ? ' · последняя версия' : '';
+  $('version-line').textContent = `Версия ${state.version}${tail}. Обновления приходят сами.`;
+}
+
 function renderSettings() {
   if (!state || settingsDirty) return;
   const s = state.settings;
@@ -76,6 +85,7 @@ function apply(s) {
   state = s;
   renderStatus();
   renderSettings();
+  renderVersion();
 }
 
 setInterval(renderStatus, 1000);   // «без перерыва N мин» тикает

@@ -4,6 +4,8 @@
 # и вручную: Actions → «OLX Watcher · Windows» → Run workflow. Установщик — в артефакте
 # прогона («OLX-Watcher-Setup», внизу страницы прогона).
 # Без подписи кода: SmartScreen при первом запуске → «Подробнее» → «Выполнить в любом случае».
+# Каждая сборка получает версию 1.0.<номер прогона> и выкладывается в GitHub Releases —
+# установленное приложение само находит её, скачивает и предлагает перезапуститься.
 # ─────────────────────────────────────────────────────────────────────────────
 name: OLX Watcher · Windows
 
@@ -13,6 +15,9 @@ on:
     paths:
       - "olx-watcher/**"
       - ".github/workflows/olx-watcher-desktop.yml"
+
+permissions:
+  contents: write   # выложить релиз для автообновления
 
 concurrency:
   group: olx-watcher-desktop-${{ github.ref }}
@@ -40,8 +45,13 @@ jobs:
           npm run check
           npm test
 
-      - name: Установщик
-        run: npm run dist
+      - name: Версия сборки
+        run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version
+
+      - name: Установщик и релиз для автообновления
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:

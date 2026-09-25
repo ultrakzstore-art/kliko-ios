@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, safeStorage, utilityProcess, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, safeStorage, utilityProcess, Notification, dialog } = require('electron');
 
 const BOT_ENTRY = path.join(__dirname, '..', 'src', 'index.js');
 const PROBE_ENTRY = path.join(__dirname, '..', 'src', 'probe.js');
@@ -121,6 +121,7 @@ function publicState() {
     bot: { status: bot.status, username: bot.username, error: bot.error, startedAt: bot.startedAt, stats: bot.stats },
     dataDir: app.getPath('userData'),
     version: app.getVersion(),
+    update,
     log: logLines.slice(-300),
   };
 }
@@ -332,6 +333,47 @@ function tellUser(userId, text) {
   if (bot.child) bot.child.postMessage({ type: 'tell', userId, text });
 }
 
+// ---------- автообновление ----------
+// Новые версии выкладываются в GitHub Releases (репозиторий открытый). Раз в час проверяем,
+// скачиваем в фоне и спрашиваем: перезапустить сейчас или позже. «Позже» — поставится само
+// при следующем выходе из приложения.
+
+const update = { status: '', version: '' };
+function setupAutoUpdate() {
+  if (!app.isPackaged) return;
+  let autoUpdater;
+  try { ({ autoUpdater } = require('electron-updater')); } catch { return; }
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-available', (i) => { update.status = 'downloading'; update.version = i.version; log(`Есть обновление ${i.version} — скачиваю…`); pushState(); });
+  autoUpdater.on('update-not-available', () => { update.status = 'latest'; pushState(); });
+  autoUpdater.on('error', (e) => log(`Обновление: ${e.message}`));
+  autoUpdater.on('update-downloaded', async (i) => {
+    update.status = 'ready';
+    update.version = i.version;
+    pushState();
+    log(`Обновление ${i.version} скачано`);
+    const r = await dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
+      type: 'info',
+      title: 'OLX Watcher',
+      message: `Вышло обновление ${i.version}`,
+      detail: 'Перезапустить сейчас? Бот остановится на несколько секунд и запустится снова с новой версией.',
+      buttons: ['Обновить сейчас', 'Позже'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (r.response === 0) {
+      quitting = true;
+      await stopBot();
+      autoUpdater.quitAndInstall(true, true);
+    }
+  });
+  const check = () => autoUpdater.checkForUpdates().catch((e) => log(`Обновление: ${e.message}`));
+  setTimeout(check, 10_000);
+  setInterval(check, 3600_000);
+  ipcMain.handle('check-update', () => { check(); return true; });
+}
+
 // ---------- IPC ----------
 
 ipcMain.handle('state', () => publicState());
@@ -413,6 +455,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'tray.png')));
     tray.on('click', showWindow);
+    setupAutoUpdate();
     updateTray();
     if (settings.autoStart && getToken()) startBot();
   });

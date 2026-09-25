@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('app', {
   vipOptions: () => ipcRenderer.invoke('vip-options'),
   vipGrant: (userId, path, city, days) => ipcRenderer.invoke('vip-grant', { userId, path, city, days }),
   vipEnd: (lockId) => ipcRenderer.invoke('vip-end', { lockId }),
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
   onState: (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
   onLog: (fn) => ipcRenderer.on('log', (_e, lines) => fn(lines)),
   onProbe: (fn) => ipcRenderer.on('probe', (_e, text) => fn(text)),
