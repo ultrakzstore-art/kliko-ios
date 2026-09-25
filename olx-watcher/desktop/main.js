@@ -16,8 +16,6 @@ const DEFAULTS = {
   ADMIN_ID: '',
   TRIAL_DAYS: '7',
   POLL_SEC: '2',
-  FREE_POLL_SEC: '600',
-  FREE_SUBS: '3',
   PAID_SUBS: '20',
   FRESH_MIN: '30',
   TURBO_SEC: '1',
@@ -283,6 +281,49 @@ async function quit() {
   app.quit();
 }
 
+// ---------- подписчики ----------
+// Та же база, что у бота (SQLite в режиме WAL — читать и писать можно одновременно).
+
+const PRODUCT_SOURCES = {
+  all: ['olx', 'kolesa', 'krisha', 'kaspi'], olx: ['olx'], kolesa: ['kolesa'], krisha: ['krisha'], kaspi: ['kaspi'],
+};
+const PRODUCT_TITLES = { all: 'Все площадки', olx: 'OLX', kolesa: 'Kolesa', krisha: 'Krisha', kaspi: 'Kaspi Объявления' };
+let dbHandle = null;
+function db() {
+  if (!dbHandle) {
+    const { Db } = require('../src/db');
+    dbHandle = new Db(path.join(app.getPath('userData'), 'watcher.db'));
+    dbHandle.trialMs = (parseInt(settings.env.TRIAL_DAYS, 10) || 7) * 86400_000;
+  }
+  return dbHandle;
+}
+
+function listUsers() {
+  const d = db();
+  const now = Date.now();
+  return d.users().map((u) => {
+    const access = d.accessList(u.id);
+    const paid = d.isPaid(u, 'any', now);
+    const trial = !paid && d.isTrial(u, now);
+    return {
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      createdAt: u.created_at,
+      status: paid ? 'paid' : trial ? 'trial' : 'none',
+      trialUntil: u.trial_until,
+      access,
+      subs: d.subs(u.id).length,
+      blocked: !!u.blocked,
+      payments: d.db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS sum FROM payments WHERE user_id = ? AND status = 'paid' AND method != 'admin'").get(u.id),
+    };
+  });
+}
+
+function tellUser(userId, text) {
+  if (bot.child) bot.child.postMessage({ type: 'tell', userId, text });
+}
+
 // ---------- IPC ----------
 
 ipcMain.handle('state', () => publicState());
@@ -311,6 +352,23 @@ ipcMain.handle('forget-token', async () => {
   pushState();
 });
 
+ipcMain.handle('users', () => { try { return { ok: true, users: listUsers() }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('grant', (_e, { userId, days, product }) => {
+  const sources = PRODUCT_SOURCES[product];
+  if (!sources || ![7, 14, 30].includes(days)) return { ok: false };
+  const until = db().extend(userId, days, sources);
+  db().addPayment({ userId, method: 'admin', product, days, status: 'paid' });
+  const date = new Date(until).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  tellUser(userId, `🎁 Вам открыт доступ: ${PRODUCT_TITLES[product]} — до ${date}.`);
+  log(`Выдан доступ ${userId}: ${PRODUCT_TITLES[product]} +${days} дн`);
+  return { ok: true };
+});
+ipcMain.handle('revoke', (_e, { userId }) => {
+  db().revoke(userId);
+  tellUser(userId, '⛔ Доступ закрыт. Подключить снова: /access');
+  log(`Закрыт доступ ${userId}`);
+  return { ok: true };
+});
 ipcMain.handle('start', () => startBot());
 ipcMain.handle('stop', () => stopBot());
 ipcMain.handle('restart', async () => { await stopBot(); startBot(); });

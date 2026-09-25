@@ -16,14 +16,12 @@ function prices(name) {
 module.exports = {
   token: (process.env.BOT_TOKEN || '').trim(),
   adminId: parseInt(process.env.ADMIN_ID || process.env.OWNER_ID || '', 10) || null,
-  pollSec: int('POLL_SEC', 2, 1),                // платные: поиск раз в N сек
-  freePollSec: int('FREE_POLL_SEC', 600, 60),    // бесплатные: раз в 10 минут
+  pollSec: int('POLL_SEC', 2, 1),                // поиск раз в N сек (тест и платный)
   turboSec: int('TURBO_SEC', 1, 1),
   turboWindow: int('TURBO_WINDOW', 10, 1),
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
   trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней
-  freeSubs: int('FREE_SUBS', 3, 1),              // поисков на тестовом доступе
-  paidSubs: int('PAID_SUBS', 20, 1),
+  paidSubs: int('PAID_SUBS', 20, 1),             // поисков у пользователя (тест и платный)
   // Цены за 7/14/30 дней по тарифам: отдельная площадка или «всё сразу» (комбо).
   // STARS_PRICES / KASPI_PRICES без суффикса — старые настройки, считаются ценой за OLX.
   prices: Object.fromEntries(['olx', 'kolesa', 'krisha', 'kaspi', 'all'].map((k) => [k, {

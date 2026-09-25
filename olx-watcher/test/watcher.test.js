@@ -10,7 +10,7 @@ const olx = require('../src/olx');
 const { Db, DAY } = require('../src/db');
 const { Watcher } = require('../src/watcher');
 
-test('бесплатный и платный доступ, поиск и турбо', async () => {
+test('тест и платный работают одинаково: поиск, турбо; без доступа — ничего', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-'));
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
@@ -26,17 +26,19 @@ test('бесплатный и платный доступ, поиск и тур�
 
   const sent = [];
   const w = new Watcher({
-    db, config: { pollSec: 30, freePollSec: 600, turboSec: 5, turboWindow: 5, freshMs: 30 * 60_000 },
+    db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 30 * 60_000 },
     notify: async (userId, a, subs, via) => { if (via !== 'ready') sent.push({ user: userId, id: a.id, via }); },
     alert: async () => {}, log: () => {},
   });
+  const both = () => { for (const s of db.subs()) db.updateSub(s.id, { last_poll: 0 }); };
+  const byUser = (list) => [...list].sort((x, y) => x.user - y.user);
   try {
     db.touchUser(1, 'Платный');
-    db.touchUser(2, 'Бесплатный');
+    db.touchUser(2, 'Тест');
     db.extend(1, 7);
     const url = 'https://www.olx.kz/d/elektronika/q-hp-250/';
     const paidSub = db.addSub(1, 'HP платный', url);
-    const freeSub = db.addSub(2, 'HP бесплатный', url);
+    db.addSub(2, 'HP тест', url);
 
     // Первый проход: одна ссылка у двоих — один запрос; никому ничего не шлём.
     await w.searchTick();
@@ -44,42 +46,36 @@ test('бесплатный и платный доступ, поиск и тур�
     assert.deepStrictEqual(sent, []);
     assert.strictEqual(db.sub(paidSub.id).watermark, 100);
 
-    // Новое объявление. Сразу после — платному пора (прошло 30+ сек), бесплатному нет (10 мин).
+    // Новое объявление — приходит обоим сразу, каждому один раз.
     listing = [ad(105, 'HP 250 G9 новое'), ...listing];
-    db.updateSub(paidSub.id, { last_poll: 0 });
+    both();
     await w.searchTick();
-    assert.deepStrictEqual(sent, [{ user: 1, id: 105, via: 'search' }], 'бесплатному ещё рано');
-
-    // Через 10 минут доходит очередь и до бесплатного — он тоже получает 105, но один раз.
-    db.updateSub(freeSub.id, { last_poll: Date.now() - 11 * 60_000 });
-    await w.searchTick();
-    assert.deepStrictEqual(sent.slice(1), [{ user: 2, id: 105, via: 'search' }]);
+    assert.deepStrictEqual(byUser(sent), [{ user: 1, id: 105, via: 'search' }, { user: 2, id: 105, via: 'search' }]);
 
     // Поднятое старьё (подано 3 часа назад) — не новое ни для кого.
     listing = [ad(106, 'HP 250 из Топа', { createdAt: now - 3 * 3600_000, promoted: true }), ...listing];
-    db.updateSub(paidSub.id, { last_poll: 0 });
+    both();
     await w.searchTick();
     assert.strictEqual(sent.length, 2, 'старьё не прислано');
 
-    // Турбо: только платному. 107 — чужое (телефон), 108 — наше, на проверке.
+    // Турбо — и платному, и тесту. 107 — чужое (телефон), 108 — наше, на проверке.
     offers.set(107, ad(107, 'iPhone 13', { categoryId: 555 }));
     offers.set(108, ad(108, 'HP 250 G8 на проверке', { status: 'moderated' }));
     await w.turboTick();
-    assert.deepStrictEqual(sent.slice(2), [{ user: 1, id: 108, via: 'turbo' }], 'турбо — только платному');
+    assert.deepStrictEqual(byUser(sent.slice(2)), [{ user: 1, id: 108, via: 'turbo' }, { user: 2, id: 108, via: 'turbo' }]);
 
-    // Когда 108 доедет до поиска — платному второй раз не придёт, бесплатному придёт в свою очередь.
+    // Когда 108 доедет до поиска — второй раз не придёт никому.
     listing = [ad(108, 'HP 250 G8'), ...listing];
-    db.updateSub(paidSub.id, { last_poll: 0 });
-    db.updateSub(freeSub.id, { last_poll: 0 });
+    both();
     await w.searchTick();
-    assert.deepStrictEqual(sent.slice(3), [{ user: 2, id: 108, via: 'search' }]);
+    assert.strictEqual(sent.length, 4, 'повтора нет');
 
-    // Платный срок кончился — турбо ему больше не работает.
+    // Сроки кончились у обоих — турбо больше не работает.
     db.db.prepare('UPDATE access SET until = ? WHERE user_id = 1').run(Date.now() - DAY);
+    db.db.prepare('UPDATE users SET trial_until = ?').run(Date.now() - DAY);
     offers.set(110, ad(110, 'HP 250 G10'));
-    const before = sent.length;
     await w.turboTick();
-    assert.strictEqual(sent.length, before, 'без платного доступа — без турбо');
+    assert.strictEqual(sent.length, 4, 'без доступа — без турбо');
   } finally {
     olx.fetchSearch = origSearch;
     olx.fetchOffer = origOffer;
@@ -99,7 +95,7 @@ test('тестовый доступ: новичку есть, после сро�
   const orig = olx.fetchSearch;
   olx.fetchSearch = async () => { searches += 1; return { source: 'state', ads: [] }; };
   try {
-    const w = new Watcher({ db, config: { pollSec: 30, freePollSec: 600, turboSec: 5, turboWindow: 5, freshMs: 1800_000 }, notify: async () => {}, alert: async () => {}, log: () => {} });
+    const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 }, notify: async () => {}, alert: async () => {}, log: () => {} });
     await w.searchTick();
     assert.strictEqual(searches, 0, 'без доступа OLX не спрашиваем');
     db.extend(9, 7);

@@ -8,6 +8,7 @@ document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click
   document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${b.dataset.tab}`));
   if (b.dataset.tab === 'log') scrollLog();
+  if (b.dataset.tab === 'users') loadUsers();
 }));
 
 document.querySelectorAll('[data-url]').forEach((a) => a.addEventListener('click', (e) => {
@@ -139,6 +140,77 @@ $('btn-forget').addEventListener('click', async () => {
 });
 
 $('btn-data').addEventListener('click', () => window.app.openData());
+
+// ---------- подписчики ----------
+const EMOJI = { olx: '🟣', kolesa: '🚗', krisha: '🏠', kaspi: '🔴' };
+let users = [];
+let userFilter = 'all';
+const day = (ts) => new Date(ts).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function loadUsers() {
+  const r = await window.app.users();
+  $('u-error').classList.toggle('hidden', r.ok);
+  if (!r.ok) { $('u-error').textContent = `Не открылась база: ${r.error}`; return; }
+  users = r.users;
+  renderUsers();
+}
+
+function renderUsers() {
+  const q = $('u-search').value.trim().toLowerCase().replace(/^@/, '');
+  const count = { all: users.length, paid: 0, trial: 0, none: 0 };
+  users.forEach((u) => { count[u.status] += 1; });
+  for (const k of Object.keys(count)) $(`uc-${k}`).textContent = count[k];
+  const list = users.filter((u) => (userFilter === 'all' || u.status === userFilter)
+    && (!q || `${u.name} ${u.username} ${u.id}`.toLowerCase().includes(q)));
+  $('u-empty').classList.toggle('hidden', users.length > 0);
+  $('u-rows').innerHTML = list.map((u) => {
+    const badge = u.status === 'paid' ? '<span class="badge paid">💎 платный</span>'
+      : u.status === 'trial' ? `<span class="badge trial">🧪 тест до ${day(u.trialUntil)}</span>`
+        : '<span class="badge none">⛔ нет доступа</span>';
+    const access = u.access.map((a) => `${EMOJI[a.source] || ''} до ${day(a.until)}`).join('<br>');
+    const pay = u.payments.n ? `${u.payments.n} · ${Number(u.payments.sum).toLocaleString('ru-RU')}` : '—';
+    return `<tr>
+      <td><div class="u-name">${escHtml(u.name || 'Без имени')}</div>
+        <div class="u-id">${u.username ? `@${escHtml(u.username)} · ` : ''}${u.id}</div>
+        ${u.blocked ? '<div class="muted">остановил бота</div>' : ''}</td>
+      <td>${badge}<div class="muted">${access}</div></td>
+      <td>${u.subs}</td>
+      <td>${pay}</td>
+      <td>${day(u.createdAt)}</td>
+      <td><div class="u-actions">
+        <button class="secondary" data-grant="7" data-user="${u.id}">+7 дн</button>
+        <button class="secondary" data-grant="14" data-user="${u.id}">+14</button>
+        <button class="secondary" data-grant="30" data-user="${u.id}">+30</button>
+        ${u.status !== 'none' ? `<button class="danger" data-revoke="${u.id}">Забрать</button>` : ''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+$('u-rows').addEventListener('click', async (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const u = users.find((x) => String(x.id) === (b.dataset.user || b.dataset.revoke));
+  if (!u) return;
+  if (b.dataset.grant) {
+    const product = $('u-product').value;
+    const title = $('u-product').selectedOptions[0].textContent.trim();
+    if (!confirm(`Выдать ${u.name || u.id}: ${title} на ${b.dataset.grant} дней?`)) return;
+    await window.app.grant(u.id, Number(b.dataset.grant), product);
+  } else if (b.dataset.revoke) {
+    if (!confirm(`Забрать весь доступ у ${u.name || u.id}? Поиски встанут на паузу.`)) return;
+    await window.app.revoke(u.id);
+  }
+  loadUsers();
+});
+$('u-search').addEventListener('input', renderUsers);
+document.querySelectorAll('#u-filters .chip').forEach((b) => b.addEventListener('click', () => {
+  userFilter = b.dataset.filter;
+  document.querySelectorAll('#u-filters .chip').forEach((x) => x.classList.toggle('active', x === b));
+  renderUsers();
+}));
+setInterval(() => { if ($('tab-users').classList.contains('active')) loadUsers(); }, 10_000);
 
 // ---------- проверка площадок ----------
 async function probe(url) {

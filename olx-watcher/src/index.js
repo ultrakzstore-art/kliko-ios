@@ -67,6 +67,8 @@ if (parent) {
   setTimeout(snapshot, 1500);
   parent.on('message', (e) => {
     if (e.data?.type === 'stop') { watcher.stop(); bot.stop().finally(() => process.exit(0)); }
+    // Приложение выдало или забрало доступ — сообщаем человеку от имени бота.
+    if (e.data?.type === 'tell') bot.api.sendMessage(e.data.userId, e.data.text).catch(() => {});
   });
 }
 

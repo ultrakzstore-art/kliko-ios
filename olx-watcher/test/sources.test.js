@@ -80,7 +80,7 @@ test('сборщик на Kolesa: первый проход молчит, нов
     db.touchUser(1, 'Платный');
     db.extend(1, 7, ['kolesa']);
     const sub = db.addSub(1, 'Camry', 'https://kolesa.kz/cars/toyota/camry/', 'kolesa');
-    const w = new Watcher({ db, config: { pollSec: 30, freePollSec: 600, turboSec: 5, turboWindow: 5, freshMs: 1800_000 },
+    const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
       notify: async (userId, ad, subs, via) => { if (via !== 'ready') sent.push({ id: ad.id, source: ad.source, title: ad.title }); },
       alert: async () => {}, log: () => {} });
     await w.searchTick();

@@ -2,7 +2,7 @@
 //
 // Новизна объявления для поиска — по «водяной отметке» (номера объявлений растут): новым
 // для поиска считается номер больше его отметки, которого ему ещё не отправляли. Так у
-// бесплатного поиска (раз в 10 минут) и платного (раз в 30 секунд) своя новизна.
+// каждого поиска своя новизна, даже если ссылка у двух людей одна.
 
 const fs = require('fs');
 const path = require('path');
@@ -16,6 +16,7 @@ class Db {
     this.db = new DatabaseSync(file);
     this.db.exec(`
       PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,               -- Telegram ID
         name TEXT NOT NULL DEFAULT '',
@@ -149,6 +150,12 @@ class Db {
     const max = this.db.prepare('SELECT MAX(until) AS m FROM access WHERE user_id = ?').get(userId).m || 0;
     this.db.prepare('UPDATE users SET paid_until = ? WHERE id = ?').run(max, userId);
     return last;
+  }
+
+  // Забрать доступ: платный по всем площадкам и тестовый — с этой минуты.
+  revoke(userId, now = Date.now()) {
+    this.db.prepare('UPDATE access SET until = ? WHERE user_id = ? AND until > ?').run(now, userId, now);
+    this.db.prepare('UPDATE users SET trial_until = MIN(trial_until, ?), paid_until = MIN(paid_until, ?) WHERE id = ?').run(now, now, userId);
   }
 
   setBlocked(userId, blocked) {

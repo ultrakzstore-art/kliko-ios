@@ -51,7 +51,7 @@ test('мастер: рубрика → подрубрика → город → �
   olx.fetchSearch = async (url) => { searched = url; return { source: 'state', ads: [{ id: 1, title: 'HP 250 G9', priceLabel: '250 000 ₸' }] }; };
 
   const none = { stars: null, kaspi: null };
-  const config = { pollSec: 30, freePollSec: 600, freeSubs: 3, paidSubs: 20, sellerUrl: '', kaspiDetails: 'Kaspi +7 700 000 00 00',
+  const config = { pollSec: 2, paidSubs: 3, sellerUrl: '', kaspiDetails: 'Kaspi +7 700 000 00 00',
     prices: { olx: { stars: [100, 180, 300], kaspi: [1500, 2500, 4500] }, kolesa: none, krisha: none, kaspi: none,
       all: { stars: [250, 450, 800], kaspi: [4000, 7000, 12000] } } };
   const { bot } = createBot({ token: '1:x', db, config, getWatcher: () => null, log: () => {} });
@@ -102,8 +102,8 @@ test('мастер: рубрика → подрубрика → город → �
     await say('https://www.olx.kz/d/elektronika/q-b/');
     await say('https://www.olx.kz/d/elektronika/q-c/');
     await say('https://www.olx.kz/d/elektronika/q-d/');
-    assert.strictEqual(db.subs(7).length, 3, 'тестовый доступ — до 3 поисков');
-    assert.match(lastText(), /до 3 поисков/);
+    assert.strictEqual(db.subs(7).length, 3, 'лимит поисков (в тесте PAID_SUBS = 3)');
+    assert.match(lastText(), /3 поисков/);
     assert.strictEqual(db.subs(42).length, 1, 'поиски не смешиваются');
 
     // Kaspi: гость жмёт «Я оплатил» → владельцу заявка → «Дать» → доступ на 14 дней.

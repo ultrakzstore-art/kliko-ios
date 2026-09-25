@@ -11,6 +11,7 @@
     <div class="brand"><img src="../icon.png" alt=""><span>OLX Watcher</span></div>
     <nav>
       <button data-tab="bot" class="active">Бот</button>
+      <button data-tab="users">Подписчики</button>
       <button data-tab="settings">Настройки</button>
       <button data-tab="probe">Проверка площадок</button>
       <button data-tab="log">Журнал</button>
@@ -76,6 +77,36 @@
       </div>
     </section>
 
+    <!-- Подписчики -->
+    <section id="tab-users" class="tab">
+      <div class="card">
+        <div class="row">
+          <input id="u-search" placeholder="Поиск: имя, @username или ID" spellcheck="false">
+          <select id="u-product" title="Что выдавать кнопками +7/+14/+30">
+            <option value="all">🔥 Все площадки</option>
+            <option value="olx">🟣 OLX</option>
+            <option value="kolesa">🚗 Kolesa</option>
+            <option value="krisha">🏠 Krisha</option>
+            <option value="kaspi">🔴 Kaspi</option>
+          </select>
+        </div>
+        <div class="chips" id="u-filters">
+          <button class="chip active" data-filter="all">Все <span id="uc-all"></span></button>
+          <button class="chip" data-filter="paid">💎 Платные <span id="uc-paid"></span></button>
+          <button class="chip" data-filter="trial">🧪 Тест <span id="uc-trial"></span></button>
+          <button class="chip" data-filter="none">⛔ Без доступа <span id="uc-none"></span></button>
+        </div>
+      </div>
+      <div class="card table-card">
+        <table class="users">
+          <thead><tr><th>Пользователь</th><th>Доступ</th><th>Поисков</th><th>Оплаты</th><th>С нами с</th><th></th></tr></thead>
+          <tbody id="u-rows"></tbody>
+        </table>
+        <p id="u-empty" class="muted hidden">Пока никого. Как только кто-то напишет боту /start — появится здесь.</p>
+        <p id="u-error" class="error hidden"></p>
+      </div>
+    </section>
+
     <!-- Настройки -->
     <section id="tab-settings" class="tab">
       <div class="card">
@@ -98,10 +129,8 @@
         <h2>Доступ</h2>
         <div class="form-grid">
           <label>Тестовый доступ, дней<input data-env="TRIAL_DAYS" inputmode="numeric"></label>
-          <label>Поисков на тесте<input data-env="FREE_SUBS" inputmode="numeric"></label>
-          <label>Проверка на тесте, сек<input data-env="FREE_POLL_SEC" inputmode="numeric"></label>
-          <label>Поисков у платных<input data-env="PAID_SUBS" inputmode="numeric"></label>
-          <label>Проверка у платных, сек<input data-env="POLL_SEC" inputmode="numeric"></label>
+          <label>Поисков у пользователя<input data-env="PAID_SUBS" inputmode="numeric"></label>
+          <label>Проверка поиска, сек<input data-env="POLL_SEC" inputmode="numeric"></label>
           <label>«Новое» — не старше, мин<input data-env="FRESH_MIN" inputmode="numeric"></label>
           <label>Турбо раз в, сек<input data-env="TURBO_SEC" inputmode="numeric"></label>
           <label>Турбо номеров за раз<input data-env="TURBO_WINDOW" inputmode="numeric"></label>

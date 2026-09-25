@@ -134,6 +134,28 @@ table.prices td:first-child { white-space: nowrap; width: 170px; }
   margin: 0;
 }
 .console.tall { max-height: calc(100vh - 120px); min-height: calc(100vh - 120px); }
+select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.chip.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.table-card { padding: 0; overflow: auto; }
+table.users { width: 100%; border-collapse: collapse; }
+table.users th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); }
+table.users td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+table.users tr:last-child td { border-bottom: 0; }
+.u-name { font-weight: 600; }
+.u-id { color: var(--muted); font-size: 12px; font-family: Consolas, monospace; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.badge.paid { background: rgba(0, 158, 148, 0.16); color: var(--accent); }
+.badge.trial { background: rgba(233, 177, 12, 0.18); color: #a77c00; }
+.badge.none { background: rgba(214, 69, 61, 0.14); color: var(--danger); }
+.u-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.u-actions button { padding: 4px 8px; font-size: 12px; }
 @media (max-width: 860px) {
   .grid, .form-grid { grid-template-columns: repeat(2, 1fr); }
 }

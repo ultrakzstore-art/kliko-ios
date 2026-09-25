@@ -1,7 +1,7 @@
 // Телеграм-часть: пользователи, доступ (бесплатный и платный), оплата, карточки объявлений.
 //
-// Тестовый доступ новичку (TRIAL_DAYS): проверка раз в 10 минут, без турбо, до FREE_SUBS поисков.
-// Платно (7/14/30 дней): раз в POLL_SEC, турбо, до PAID_SUBS поисков. Без доступа — не проверяем.
+// Тестовый доступ новичку (TRIAL_DAYS) и платный (7/14/30 дней) работают одинаково: раз в
+// POLL_SEC, турбо, до PAID_SUBS поисков — разница только в сроке. Без доступа — не проверяем.
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
 const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
@@ -44,20 +44,20 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   function planText(userId) {
     const u = db.user(userId);
-    const paidLine = `Платно: ⚡ мгновенные уведомления, до ${config.paidSubs} поисков.`;
+    const paidLine = 'После теста — продлить на 7, 14 или 30 дней: /access';
     const paid = db.accessList(userId);
     if (paid.length) {
       const lines = paid.map((a) => `${sources.get(a.source).emoji} ${esc(sources.get(a.source).title)} — до ${fmtDate(a.until)}`);
-      return `💎 <b>Платный доступ</b>\n${lines.join('\n')}\nПроверка раз в ${config.pollSec} сек, до ${config.paidSubs} поисков.`;
+      return `💎 <b>Платный доступ</b>\n${lines.join('\n')}\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.`;
     }
     if (db.isTrial(u)) {
-      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, до ${config.freeSubs} поисков.\n${paidLine}`;
+      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков — всё как в платном.\n${paidLine}`;
     }
     return `⛔ <b>Тестовый доступ закончился</b> — поиски на паузе, объявления не приходят.\n${paidLine}\nПодключить: /access`;
   }
 
   function limitFor(userId) {
-    return db.isPaid(userId, 'any') ? config.paidSubs : config.freeSubs;
+    return config.paidSubs;
   }
 
   // true — можно добавить поиск на площадке; иначе — текст, почему нельзя.
@@ -70,9 +70,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const n = db.subs(userId).length;
     const limit = limitFor(userId);
     if (n < limit) return true;
-    return db.isPaid(userId, 'any')
-      ? `Достигнут предел: ${limit} поисков. Удалите ненужный в /list.`
-      : `На тестовом доступе — до ${limit} поисков. Удалите ненужный в /list или подключите платный: /access`;
+    return `Достигнут предел: ${limit} поисков. Удалите ненужный в /list.`;
   }
 
   const menu = () => new InlineKeyboard()
