@@ -102,6 +102,26 @@ jobs:
           [ -n "$cat_" ] && show "Раздел: /api/listings.php?cat=$cat_&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&cat=$cat_"
           show "Поиск: /api/listings.php?q=iphone&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&q=iphone"
           show "Чат гостю: /dm.php?action=list" "$base/dm.php?action=list"
+          # Оформление сайта: переменные :root и шрифты из подключённых CSS — чтобы нативные экраны брали те же цвета.
+          curl -sS -A "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 KlikoApp/1.10" "$base/" -o home.html -L
+          echo "### CSS сайта" >> "$GITHUB_STEP_SUMMARY"
+          grep -oE 'href="[^"]+\.css[^"]*"' home.html | sed 's/href="//;s/"$//' | sort -u > css.txt || true
+          cat css.txt
+          : > all.css
+          while read -r u; do case "$u" in http*) url="$u";; //*) url="https:$u";; *) url="$base/${u#/}";; esac; curl -sS "$url" >> all.css; echo >> all.css; done < css.txt
+          grep -oE '<style[^>]*>' home.html | head -3
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import re
+          css = open("all.css", errors="ignore").read() + open("home.html", errors="ignore").read()
+          vars_ = {}
+          for m in re.finditer(r'(--[a-zA-Z0-9_-]+)\s*:\s*([^;{}]+);', css):
+              k, v = m.group(1), m.group(2).strip()
+              if k not in vars_ and len(v) < 80: vars_[k] = v
+          print("CSS-переменных:", len(vars_))
+          for k, v in list(vars_.items())[:400]: print(k, "=", v)
+          fonts = sorted(set(m.strip() for m in re.findall(r'font-family\s*:\s*([^;}]+)', css)))
+          print("\nШрифты:"); [print(" ", f) for f in fonts[:20]]
+          PY
 
   # СКРИНШОТЫ С СИМУЛЯТОРА (этап 23). Нативные экраны писались без Mac и без телефона под рукой; раннер может сам
   # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
@@ -171,6 +191,18 @@ jobs:
             if [ -n "$id" ]; then
               xcrun simctl openurl "$UDID" "kliko://open?u=https%3A%2F%2Fkliko.kz%2Fmarketplace%3Fitem%3D$id"
               sleep 12; snap "2-kartochka-$theme"
+            fi
+          done
+          # Сайт в Safari на том же симуляторе — эталон, на который равняются нативные экраны (владелец 25.09.2026:
+          # «приложение должно быть почти 100% похоже на то, что есть на сайте, но нативное»).
+          for theme in light dark; do
+            xcrun simctl ui "$UDID" appearance "$theme"
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            xcrun simctl openurl "$UDID" "https://kliko.kz/"
+            sleep 20; snap "3-sait-glavnaya-$theme"
+            if [ -n "$id" ]; then
+              xcrun simctl openurl "$UDID" "https://kliko.kz/marketplace?item=$id"
+              sleep 15; snap "4-sait-kartochka-$theme"
             fi
           done
           ls -la shots
