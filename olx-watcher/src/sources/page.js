@@ -59,9 +59,17 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     ...meta(html, 'og:image'),
   ];
   let price = Number(offer?.price ?? offer?.lowPrice);
-  if (!Number.isFinite(price) || price <= 0) {
+  // Нет в JSON-LD — метки цены, элемент с «price» в классе, и только потом заголовок/описание.
+  if (!Number.isFinite(price) || price <= 0) price = num(meta(html, 'product:price:amount')[0] ?? meta(html, 'og:price:amount')[0]);
+  if (!price) price = num((/itemprop=["']price["'][^>]*content=["']([\d\s.,\u00a0]+)["']/i.exec(html) || [])[1]);
+  if (!price) {
+    const el = /<[a-z]+\b[^>]*class=["'][^"']*price[^"']*["'][^>]*>([\s\S]{0,200}?)<\/[a-z]+>/i.exec(html);
+    const m = el && /(\d[\d\s\u00a0]{2,})\s*(?:₸|〒|тг|тенге|KZT)/i.exec(decode(el[1].replace(/<[^>]+>/g, ' ')));
+    price = m ? num(m[1]) : null;
+  }
+  if (!price) {
     const m = /(\d[\d\s\u00a0]{3,})\s*(?:₸|〒|тг|тенге|KZT)/i.exec(`${title} ${description}`);
-    price = m ? Number(m[1].replace(/[\s\u00a0]/g, '')) : null;
+    price = m ? num(m[1]) : null;
   }
   const city = decode(product?.address?.addressLocality || offer?.availableAtOrFrom?.address?.addressLocality || '')
     || (/ в ([А-ЯЁ][а-яё-]+(?:\s[А-ЯЁ][а-яё-]+)?)\s*$/.exec(title) || [])[1] || '';
@@ -76,7 +84,9 @@ function parseDetail(html, { id, url, currency = '₸' }) {
       : /Частное\s+лицо|Собственник|Хозяин/i.test(html) ? true : null)
     : /Хозяин\s+недвижимости/i.test(html) ? true
     : /(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)/i.test(html) ? false : null;
-  const posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom || '');
+  let posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom
+    || meta(html, 'article:published_time')[0] || (/itemprop=["']datePublished["'][^>]*content=["']([^"']+)/i.exec(html) || [])[1] || '');
+  if (!Number.isFinite(posted)) posted = postedFromText(html);
   return {
     id,
     url,
@@ -155,6 +165,37 @@ function findSeller(html, url, product, offer) {
   return '';
 }
 
+function num(v) {
+  const n = Number(String(v ?? '').replace(/[\s\u00a0]/g, '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Дата подачи из текста страницы: «Опубликовано 25.09.2026 в 14:02», «Размещено: сегодня, 14:02»,
+// «вчера в 09:15», «25 сентября 2026». Время — алматинское (UTC+5).
+const MONTHS = ['январ', 'феврал', 'март', 'апрел', 'ма', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
+function postedFromText(html) {
+  const text = decode(String(html).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+  const at = /(опубликован|размещен|добавлен|создан|подано|дата (?:публикации|размещения))[а-я]*:?\s*([^|]{0,40})/i.exec(text);
+  if (!at) return null;
+  const s = at[2].toLowerCase();
+  const almaty = (y, mo, d, h = 0, mi = 0) => Date.UTC(y, mo, d, h - 5, mi);
+  const hm = /(\d{1,2}):(\d{2})/.exec(s);
+  const [h, mi] = hm ? [Number(hm[1]), Number(hm[2])] : [0, 0];
+  const now = new Date(Date.now() + 5 * 3600_000);   // «сейчас» по Алматы
+  if (/сегодня|вчера/.test(s)) {
+    const t = almaty(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, mi);
+    return /вчера/.test(s) ? t - 24 * 3600_000 : t;
+  }
+  let m = /(\d{1,2})\.(\d{1,2})\.(\d{2,4})/.exec(s);
+  if (m) return almaty(Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]), Number(m[2]) - 1, Number(m[1]), h, mi);
+  m = /(\d{1,2})\s+([а-я]+)(?:\s+(\d{4}))?/.exec(s);
+  if (m) {
+    const mo = MONTHS.findIndex((x) => m[2].startsWith(x));
+    if (mo >= 0) return almaty(m[3] ? Number(m[3]) : now.getUTCFullYear(), mo, Number(m[1]), h, mi);
+  }
+  return null;
+}
+
 function decode(s) {
   return String(s)
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&')
@@ -162,4 +203,4 @@ function decode(s) {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
 
-module.exports = { getHtml, idsFromListing, parseDetail, meta, jsonLd, HEADERS };
+module.exports = { postedFromText, getHtml, idsFromListing, parseDetail, meta, jsonLd, HEADERS };

@@ -221,7 +221,7 @@ const KASPI = {
   async fetchSearch(url) {
     const { city } = kaspiSplit(this.normalize(url));
     if (!city) return this.fetchAllCities(url);
-    return this.fetchOne(url);
+    return (await this.fetchOne(url)).map((a) => ({ ...a, city: a.city || kaspiCityName(city) }));
   },
 
   // Ссылка без города: несколько городов за раз, по кругу.
@@ -252,7 +252,7 @@ const KASPI = {
       const seed = !r.seeded.has(c);
       r.seeded.add(c);
       // Номера у разных городов идут вперемешку — «ниже отметки» здесь не значит «старое».
-      for (const a of ads) out.push({ ...a, anyOrder: true, seedOnly: seed || undefined });
+      for (const a of ads) out.push({ ...a, city: a.city || kaspiCityName(c), anyOrder: true, seedOnly: seed || undefined });
     }
     return out;
   },
@@ -263,7 +263,7 @@ const KASPI = {
     const url = `${KASPI_BASE}/a/${id}/`;
     const html = await getHtml(url);
     if (html == null) return null;
-    const d = parseDetail(html, { id, url });
+    const d = kaspiFill(parseDetail(html, { id, url }));
     return d.title && (d.price || d.photos.length) ? { ...d, id, url, source: 'kaspi' } : null;
   },
 
@@ -292,7 +292,7 @@ const KASPI = {
   },
   async fetchDetail(ad) {
     const html = await getHtml(ad.url);
-    return html == null ? null : parseDetail(html, { id: ad.id, url: ad.url });
+    return html == null ? null : kaspiFill(parseDetail(html, { id: ad.id, url: ad.url }));
   },
   link: (ad) => ad.url,
   wizard: {
@@ -320,6 +320,28 @@ function byUrl(url) {
   let host;
   try { host = new URL(url).hostname; } catch { return null; }
   return ALL.find((s) => s.hostRe.test(host)) || null;
+}
+
+// Город Kaspi по адресу: имя из нашего списка, иначе — сам адрес с большой буквы.
+const KASPI_CITY_NAMES = {
+  ...Object.fromEntries(CITIES.map((c) => [c.slug, c.name])),
+  uralsk: 'Уральск', kyzylorda: 'Кызылорда', petropavlovsk: 'Петропавловск', taldykorgan: 'Талдыкорган',
+  turkestan: 'Туркестан', kokshetau: 'Кокшетау', ekibastuz: 'Экибастуз', temirtau: 'Темиртау',
+  zhezkazgan: 'Жезказган', rudnyy: 'Рудный', balkhash: 'Балхаш', satpaev: 'Сатпаев', kaskelen: 'Каскелен',
+  konaev: 'Конаев', zhanaozen: 'Жанаозен', aksay: 'Аксай', stepnogorsk: 'Степногорск', shchuchinsk: 'Щучинск',
+};
+function kaspiCityName(slug) {
+  return KASPI_CITY_NAMES[slug] || (slug ? slug[0].toUpperCase() + slug.slice(1).replace(/-/g, ' ') : '');
+}
+
+// Карточка Kaspi: города нет в разметке — берём из крошек (/astana/…).
+function kaspiFill(d) {
+  if (!d.city) {
+    const cities = new Set([...KASPI_CITY_SLUGS, ...[...kaspiRounds.values()].flatMap((r) => r.cities)]);
+    const c = (d.crumbs || []).map((p) => p.split('/')[0]).find((x) => cities.has(x));
+    if (c) d.city = kaspiCityName(c);
+  }
+  return d;
 }
 
 // Подходит ли объявление Kaspi, найденное по номеру, поиску Kaspi: рубрика (по крошкам карточки),

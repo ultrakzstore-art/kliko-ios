@@ -503,9 +503,12 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
     drop,
     // Заголовок — ссылка на объявление: нажал на название — открылось объявление.
     `${src.emoji} <a href="${esc(adLink(ad))}"><b>${esc(ad.title || 'Объявление')}</b></a>`,
+    ad.source && ad.source !== 'olx' ? `🏷 ${esc(src.title)}` : '',
     price && !drop ? (/^[🔁🎁]/u.test(price) ? `<b>${esc(price)}</b>` : `💰 <b>${esc(price)}</b>`) : '',
     place ? `📍 ${esc(place)}` : '',
-    ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}` : '',
+    ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}`
+      // Даты на странице нет, но поймано по номеру у самого края — вышло только что.
+      : via === 'turbo' ? `🕒 Только что вышло · ${fmtTime(Date.now())}` : '',
     flags.join(' · '),
     phone ? `📞 <b>${prettyPhone(phone)}</b>` : '',
   ];

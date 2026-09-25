@@ -246,3 +246,19 @@ test('Kaspi по номеру: крошки карточки → рубрика 
     k.fetchById = orig;
   }
 });
+
+test('карточка без JSON-LD: цена из блока цены, дата из «Опубликовано…», город Kaspi из крошек', () => {
+  const html = `<meta property="og:title" content="iPhone 15 Pro"><meta property="og:image" content="https://x/1.jpg">
+    <div class="menu">Kaspi Red 0 ₸</div>
+    <div class="item__price">450 000 ₸</div>
+    <div class="date">Опубликовано 25.09.2026 в 14:02</div>
+    <ol class="breadcrumbs"><li><a href="/shymkent/">Шымкент</a></li><li><a href="/shymkent/apple/iphones/">iPhone</a></li></ol>`;
+  const d = parseDetail(html, { id: 123509497, url: 'https://obyavleniya.kaspi.kz/a/123509497/' });
+  assert.strictEqual(d.price, 450000);
+  assert.strictEqual(new Date(d.createdAt).toISOString(), '2026-09-25T09:02:00.000Z', '14:02 по Алматы');
+  assert.deepStrictEqual(d.crumbs, ['shymkent', 'shymkent/apple/iphones']);
+  const { postedFromText } = require('../src/sources/page');
+  const today = postedFromText('<span>Размещено: сегодня, 09:15</span>');
+  assert.ok(Math.abs(today - Date.now()) < 26 * 3600_000);
+  assert.ok(postedFromText('<p>Добавлено 3 августа 2026</p>'));
+});
