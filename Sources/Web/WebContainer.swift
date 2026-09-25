@@ -707,6 +707,7 @@ struct WebContainer: UIViewRepresentable {
                 ListingsCache.стереть()          // и сохранённую нативную ленту — по той же причине
                 Task { @MainActor in FavoritesStore.shared.стереть() }   // и избранное ушедшего (этап 5)
                 Task { @MainActor in RecentStore.shared.стереть() }      // и что он смотрел и искал (этап 6)
+                ПоискТелефона.стереть()          // и его просмотры из поиска iPhone (этап 10)
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

@@ -25,15 +25,20 @@ struct NativeFeedView: View {
     /// Стек ленты снаружи — у вкладок (этап 8): ссылка из пуша кладёт в него объявление. nil — стек свой, как раньше.
     private let внешнийПуть: Binding<NavigationPath>?
     @State private var свойПуть = NavigationPath()
+    /// Поле поиска активно — снаружи его включает быстрое действие «Поиск» с иконки (этап 10). nil — своё, как раньше.
+    private let внешнийПоиск: Binding<Bool>?
+    @State private var свойПоиск = false
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
     private let колонки = [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: 12, alignment: .top)]
 
-    init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil) {
+    init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil,
+         поиск: Binding<Bool>? = nil) {
         self.открыть = открыть
         self.открытьСайт = открытьСайт
         внешнийПуть = путь
+        внешнийПоиск = поиск
     }
 
     var body: some View {
@@ -95,8 +100,8 @@ struct NativeFeedView: View {
                     }
                 }
             }
-            .searchable(text: $модель.поиск, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: FeedText.т("search"))
+            .searchable(text: $модель.поиск, isPresented: внешнийПоиск ?? $свойПоиск,
+                        placement: .navigationBarDrawer(displayMode: .always), prompt: FeedText.т("search"))
             .searchSuggestions { подсказкиПоиска }
             .onSubmit(of: .search) {
                 модель.искать()

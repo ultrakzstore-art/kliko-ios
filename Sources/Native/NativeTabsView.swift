@@ -24,8 +24,15 @@ struct NativeTabsView: View {
     @StateObject private var чаты = ChatListModel()
     @State private var вкладка: Вкладка = .лента
     /// Стеки ленты и сообщений — здесь, а не внутри вкладок, чтобы ссылка могла положить в них экран (этап 8).
+    /// Избранного — тоже: быстрое действие с иконки (этап 10) возвращает его к списку.
     @State private var путьЛенты = NavigationPath()
     @State private var путьСообщений = NavigationPath()
+    @State private var путьИзбранного = NavigationPath()
+    /// Поле поиска ленты активно — быстрое действие «Поиск» с иконки (этап 10) ставит true, «Отменить» в поле — false.
+    @State private var поискЛенты = false
+    /// «Поиск» с иконки пришёл, а поле трогать рано: на экране замок Face ID или страница сайта. Ждём их ухода.
+    @State private var поискЖдёт = false
+    @ObservedObject private var замок = AppLock.shared
     @Environment(\.scenePhase) private var фаза
 
     let открыть: (URL) -> Void
@@ -33,13 +40,13 @@ struct NativeTabsView: View {
 
     var body: some View {
         TabView(selection: $вкладка) {
-            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты)
+            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты, поиск: $поискЛенты)
                 .tabItem { Label(TabsText.т("feed"), systemImage: "square.grid.2x2") }
                 .tag(Вкладка.лента)
 
             /* Этап 5: избранное — своя вкладка со своим стеком; маршруты карточки и чата те же, что у ленты. */
             if Config.избранное {
-                NavigationStack {
+                NavigationStack(path: $путьИзбранного) {
                     FavoritesView(открыть: открыть, вЛенту: { вкладка = .лента })
                         .navigationDestination(for: Listing.self) { товар in
                             ListingDetailView(товар: товар, открыть: открыть)
@@ -102,7 +109,11 @@ struct NativeTabsView: View {
         .onChange(of: мост.лентаВидна) { _, видна in
             guard видна else { return }
             if маршрут.цель == nil { вкладка = .лента }
+            открытьПоиск()
             Task { await обновитьСчётчик() }
+        }
+        .onChange(of: замокНаЭкране) { _, наЭкране in
+            if !наЭкране { открытьПоиск() }
         }
         /* Ссылка снаружи (этап 8) — в следующем такте: вместе с целью мост мог вернуть слой на экран, а в каком порядке
            SwiftUI позовёт два onChange, он не обещает; обработчик выше иначе мог бы перебить вкладку лентой. */
@@ -127,6 +138,7 @@ struct NativeTabsView: View {
     private func принятьСсылку() {
         guard let куда = маршрут.цель else { return }
         маршрут.цель = nil
+        поискЖдёт = false             // «Поиск», ждавший замка, перебит новым входом — поле не трогаем
         switch куда {
         case .объявление(let номер):
             вкладка = .лента
@@ -136,6 +148,30 @@ struct NativeTabsView: View {
             путьСообщений = NavigationPath()
             вкладка = .сообщения
             Task { await чаты.загрузить() }
+        case .поиск:
+            /* Этап 10: к корню ленты — поле поиска там. Фокус — когда поле видно (открытьПоиск). */
+            путьЛенты = NavigationPath()
+            вкладка = .лента
+            поискЖдёт = true
+            открытьПоиск()
+        case .избранное:
+            guard Config.избранное else { return }
+            путьИзбранного = NavigationPath()
+            вкладка = .избранное
+        }
+    }
+
+    /// Замок Face ID закрывает экран: поле поиска под ним фокус не получает, иначе клавиатура встала бы над замком.
+    private var замокНаЭкране: Bool { замок.enabled && (замок.locked || замок.cover) }
+
+    /// «Поиск» с иконки — поле в фокус, когда его видно: слой на экране, замка нет. Пауза — чтобы SwiftUI успел
+    /// сменить вкладку и показать корень ленты: поле, которого ещё нет на экране, фокус не примет.
+    private func открытьПоиск() {
+        guard поискЖдёт, мост.лентаВидна, !замокНаЭкране else { return }
+        поискЖдёт = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            поискЛенты = true
         }
     }
 

@@ -60,6 +60,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Домен здесь уже проверила iOS — по файлу apple-app-site-association; Config.deepLink страхует.
         if let ссылка = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }),
            let адрес = ссылка.webpageURL, let наш = Config.deepLink(адрес) { мост.открытьСнаружи(наш) }
+
+        // Этап 10. Холодный старт по результату в поиске iPhone (Spotlight) — объявление, как по ссылке сайта.
+        if let адрес = connectionOptions.userActivities.lazy.compactMap({ ПоискТелефона.адрес(из: $0) }).first {
+            мост.открытьСнаружи(адрес)
+        }
+        // Меню иконки — заново при каждом запуске; холодный старт по его пункту приходит сюда, а не в performActionFor.
+        БыстрыеДействия.обновить()
+        if let пункт = connectionOptions.shortcutItem { БыстрыеДействия.выполнить(пункт) }
+        // Поиск iPhone выключен — то, что клали туда прежние запуски, убираем, а не ждём истечения срока.
+        if !Config.spotlight { ПоискТелефона.стереть() }
     }
 
     /// Плашка сделки или кнопка «Открыть в приложении», когда приложение уже запущено.
@@ -67,11 +77,22 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.открытьСнаружи(наш) }
     }
 
-    /// Ссылка сайта из поиска, письма или чужого приложения, когда наше уже запущено (Universal Links).
+    /// Ссылка сайта из поиска, письма или чужого приложения, когда наше уже запущено (Universal Links), и результат
+    /// в поиске iPhone (Spotlight, этап 10) — объявление, которое человек смотрел.
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        if let объявление = ПоискТелефона.адрес(из: userActivity) {
+            WebBridge.shared.открытьСнаружи(объявление)
+            return
+        }
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
               let адрес = userActivity.webpageURL, let наш = Config.deepLink(адрес) else { return }
         WebBridge.shared.открытьСнаружи(наш)
+    }
+
+    /// Быстрое действие с иконки, когда приложение уже запущено (этап 10).
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        completionHandler(БыстрыеДействия.выполнить(shortcutItem))
     }
 
     // Вход по Face ID (AppLock): закрыть содержимое при уходе, запереть после минуты в фоне, спросить при возврате.
