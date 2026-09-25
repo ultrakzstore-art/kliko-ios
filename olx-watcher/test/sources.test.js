@@ -262,3 +262,35 @@ test('карточка без JSON-LD: цена из блока цены, дат
   assert.ok(Math.abs(today - Date.now()) < 26 * 3600_000);
   assert.ok(postedFromText('<p>Добавлено 3 августа 2026</p>'));
 });
+
+test('витрина Kaspi: при запуске только запоминаем, новое с витрины — подходящим поискам; край для турбо', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-show-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const k = sources.get('kaspi');
+  const orig = { show: k.fetchShowcase, detail: k.fetchDetail };
+  let showcase = [{ id: 123600000, url: 'u0' }];
+  k.fetchShowcase = async (city) => (city ? [] : showcase);
+  const cards = {
+    123600001: { title: 'Ноутбук HP', crumbs: ['almaty', 'almaty/elektronika/computery/noutbuki'], price: 200000 },
+    123600002: { title: 'Диван', crumbs: ['almaty', 'almaty/dom-dacha/mebel-interer'], price: 50000 },
+  };
+  k.fetchDetail = async (a) => cards[a.id] || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a) => { if (a) sent.push(a.id); }, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    db.extend(1, 30, ['kaspi']);
+    const s = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
+    db.updateSub(s.id, { initialized: 1 });
+    await w.kaspiShowcaseTick();
+    assert.deepStrictEqual(sent, [], 'что было при запуске — не шлём');
+    assert.strictEqual(w.kaspiFrontier, 123600000, 'край для турбо — с витрины');
+    showcase = [{ id: 123600002, url: 'u2' }, { id: 123600001, url: 'u1' }, ...showcase];
+    await w.kaspiShowcaseTick();
+    assert.deepStrictEqual(sent, [123600001], 'ноутбук — да, диван — не та рубрика');
+    assert.strictEqual(w.kaspiFrontier, 123600002);
+  } finally {
+    Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
+  }
+});

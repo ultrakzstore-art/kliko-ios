@@ -83,6 +83,17 @@ async function kaspiProbe(id) {
     }
   }
   try {
+    const show = await sources.get('kaspi').fetchShowcase('');
+    if (show == null) console.log('\nВитрина (главная Kaspi): нет такой страницы');
+    else {
+      const top = show.reduce((m, a) => Math.max(m, a.id), 0);
+      console.log(`\nВитрина (главная Kaspi): ${show.length} объявлений, самый большой номер ${top}${top ? ` (на ${top - id > 0 ? '+' : ''}${top - id} от проверяемого)` : ''}`);
+      show.slice(0, 5).forEach((a) => console.log(`  ${a.id} · ${a.url}`));
+    }
+  } catch (e) {
+    console.log(`\nВитрина: ошибка ${e.message}`);
+  }
+  try {
     const d = await sources.get('kaspi').fetchById(id);
     console.log(d
       ? `\nКак бот видит объявление: ${d.title} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'}\nРубрика (крошки): ${d.crumbs.length ? d.crumbs.join('  |  ') : 'не нашлась — по номеру такие объявления не придут, только из выдачи'}`

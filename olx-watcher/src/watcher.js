@@ -115,6 +115,7 @@ class Watcher {
     }
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
     this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
+    this.timers.push(setInterval(() => this.kaspiShowcaseTick().catch((e) => this.log(`витрина Kaspi: ${e.message}`)), 3_000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
 
@@ -308,6 +309,71 @@ class Watcher {
     if (id > this.kaspiFrontier) {
       this.kaspiFrontier = id;
       this.db.set('kaspi_frontier', id);
+    }
+  }
+
+  // ---------- витрина Kaspi ----------
+  // Как лента всей доски у OLX: самые новые объявления Kaspi — с главной (без рубрики) и с
+  // главных страниц городов по кругу. Новое (которого раньше не было на витрине) — открываем
+  // карточку и сверяем со всеми поисками Kaspi. Заодно самый большой номер витрины — край для
+  // турбо: перебор номеров стартует сразу у самых свежих.
+  async kaspiShowcaseTick() {
+    if (this.kaspiShowBusy || this.blocked('kaspi')) return;
+    const subs = this.db.subs().filter((s) => s.source === 'kaspi' && !s.paused && s.initialized
+      && this.db.hasAccess(s.user_id, 'kaspi') && !this.db.user(s.user_id)?.blocked);
+    if (!subs.length) return;
+    this.kaspiShowBusy = true;
+    const k = sources.get('kaspi');
+    if (!this.kaspiShow) this.kaspiShow = { pages: ['', ...sources.KASPI_CITY_SLUGS], next: 0, seeded: new Set(), seen: new Set() };
+    const st = this.kaspiShow;
+    try {
+      // За проход — главная всего Kaspi и ещё один город по кругу.
+      const cities = st.pages.filter(Boolean);
+      const city = cities.length ? cities[st.next % cities.length] : null;
+      st.next += 1;
+      for (const page of [st.rootDead ? null : '', city].filter((p) => p != null)) {
+        let ads;
+        try {
+          ads = await k.fetchShowcase(page);
+          this.okRequest('kaspi');
+        } catch (e) {
+          if (this.handleError(e, 'kaspi')) break;
+          continue;
+        }
+        if (ads == null) {   // такой витрины нет — больше не спрашиваем
+          if (page === '') st.rootDead = true; else st.pages = st.pages.filter((p) => p !== page);
+          continue;
+        }
+        const top = ads.reduce((m, a) => Math.max(m, a.id), 0);
+        if (top > (this.kaspiFrontier || 0)) this.bumpKaspi(top);
+        const seed = !st.seeded.has(page);
+        st.seeded.add(page);
+        for (const a of ads) {
+          if (st.seen.has(a.id)) continue;
+          st.seen.add(a.id);
+          if (seed) continue;   // что уже было на витрине при запуске — не новое
+          let ad;
+          try {
+            const d = await k.fetchDetail(a);
+            ad = d && { ...a, ...stripEmpty(d), id: a.id, url: a.url, source: 'kaspi' };
+          } catch { ad = null; }
+          if (!ad) continue;
+          this.trace(a.id, `витрина Kaspi: увидели${page ? ` (${ad.city || page})` : ''}`);
+          for (const s of subs) {
+            if (this.db.wasSent(s.id, a.id)) continue;
+            const why = sources.kaspiMismatch(s, ad);
+            if (why) { this.trace(a.id, `витрина Kaspi → поиск #${s.id}: не подошло — ${why}`); continue; }
+            if (!this.allowed(s.user_id, ad) || !this.db.markSent(s.id, a.id)) continue;
+            this.trace(a.id, `витрина Kaspi → поиск #${s.id}: отправлено`);
+            this.db.updateSub(s.id, { sent: s.sent + 1 });
+            await this.notify(s.user_id, ad, [s], 'search');
+            this.stats.sent += 1;
+          }
+        }
+      }
+      if (st.seen.size > 20_000) st.seen = new Set([...st.seen].slice(-10_000));
+    } finally {
+      this.kaspiShowBusy = false;
     }
   }
 

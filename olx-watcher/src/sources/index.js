@@ -257,6 +257,18 @@ const KASPI = {
     return out;
   },
 
+  // Витрина: самые новые объявления всего Kaspi (главная без рубрики) или одного города — первая
+  // страница с сортировкой «сначала новые». Нет такой страницы — null.
+  async fetchShowcase(city = '') {
+    const url = `${KASPI_BASE}/${city ? `${city}/` : ''}`;
+    try {
+      return (await this.fetchOne(url, 1)).map((a) => ({ ...a, city: a.city || (city ? kaspiCityName(city) : '') }));
+    } catch (e) {
+      if (/404/.test(e.message)) return null;
+      throw e;
+    }
+  },
+
   // Объявление по одному номеру: /a/<номер>/ — сайт сам ведёт на полную ссылку. Нет такого (или
   // ещё на проверке) — null. Заглушка вместо карточки (ни цены, ни фото) — тоже null.
   async fetchById(id) {
@@ -376,4 +388,4 @@ function kaspiMismatch(sub, ad) {
   return null;
 }
 
-module.exports = { kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { KASPI_CITY_SLUGS, kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
