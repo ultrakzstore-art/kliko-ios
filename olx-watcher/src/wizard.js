@@ -208,7 +208,7 @@ function registerWizard(bot, { db, log, canAdd }) {
 
     if (data === 'w:save') {
       const uid = ctx.from.id;
-      const limit = canAdd(uid, st().w.source);
+      const limit = canAdd(uid, st().w.source, st().w.url);
       if (limit !== true) { await ctx.editMessageText(limit, { parse_mode: 'HTML' }).catch(() => {}); st().w = null; return; }
       const sub = db.addSub(uid, subName(), st().w.url, st().w.source);
       log(`новый поиск #${sub.id}: ${st().w.url}`);

@@ -168,17 +168,19 @@ function renderUsers() {
     const badge = u.status === 'paid' ? '<span class="badge paid">💎 платный</span>'
       : u.status === 'trial' ? `<span class="badge trial">🧪 тест до ${day(u.trialUntil)}</span>`
         : '<span class="badge none">⛔ нет доступа</span>';
-    const access = u.access.map((a) => `${EMOJI[a.source] || ''} до ${day(a.until)}`).join('<br>');
+    const access = u.access.map((a) => `<span style="white-space:nowrap">${EMOJI[a.source] || ""} до ${day(a.until)}</span>`).join("<br>");
     const pay = u.payments.n ? `${u.payments.n} · ${Number(u.payments.sum).toLocaleString('ru-RU')}` : '—';
     return `<tr>
       <td><div class="u-name">${escHtml(u.name || 'Без имени')}</div>
         <div class="u-id">${u.username ? `@${escHtml(u.username)} · ` : ''}${u.id}</div>
-        ${u.blocked ? '<div class="muted">остановил бота</div>' : ''}</td>
+        ${u.blocked ? '<div class="muted">остановил бота</div>' : ''}
+        ${u.vip.map((v) => `<div class="vip-line">👑 ${escHtml(v.label)} до ${day(v.until)}<button class="secondary" data-vipend="${v.id}">снять</button></div>`).join('')}</td>
       <td>${badge}<div class="muted">${access}</div></td>
       <td>${u.subs}</td>
       <td>${pay}</td>
       <td>${day(u.createdAt)}</td>
       <td><div class="u-actions">
+        <button class="secondary" data-vip="${u.id}">👑 VIP</button>
         <button class="secondary" data-grant="7" data-user="${u.id}">+7 дн</button>
         <button class="secondary" data-grant="14" data-user="${u.id}">+14</button>
         <button class="secondary" data-grant="30" data-user="${u.id}">+30</button>
@@ -191,6 +193,12 @@ function renderUsers() {
 $('u-rows').addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
+  if (b.dataset.vipend) {
+    if (!confirm('Снять VIP-рубрику? Объявления из неё снова будут получать все.')) return;
+    await window.app.vipEnd(Number(b.dataset.vipend));
+    return loadUsers();
+  }
+  if (b.dataset.vip) return openVip(users.find((x) => String(x.id) === b.dataset.vip));
   const u = users.find((x) => String(x.id) === (b.dataset.user || b.dataset.revoke));
   if (!u) return;
   if (b.dataset.grant) {
@@ -202,6 +210,32 @@ $('u-rows').addEventListener('click', async (e) => {
     if (!confirm(`Забрать весь доступ у ${u.name || u.id}? Поиски встанут на паузу.`)) return;
     await window.app.revoke(u.id);
   }
+  loadUsers();
+});
+let vipTarget = null;
+let vipLoaded = false;
+async function openVip(u) {
+  if (!u) return;
+  vipTarget = u;
+  if (!vipLoaded) {
+    const o = await window.app.vipOptions();
+    $('vip-rubric').innerHTML = o.rubrics.map((r) => `<option value="${escHtml(r.path)}">${escHtml(r.name)}</option>`).join('');
+    $('vip-city').innerHTML = o.cities.map((c) => `<option value="${escHtml(c.slug)}">${escHtml(c.name)}</option>`).join('');
+    vipLoaded = true;
+  }
+  $('vip-who').textContent = `Кому: ${u.name || 'без имени'}${u.username ? ` (@${u.username})` : ''} · ${u.id}`;
+  $('vip-error').classList.add('hidden');
+  $('vip-dialog').showModal();
+}
+$('vip-ok').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const r = await window.app.vipGrant(vipTarget.id, $('vip-rubric').value, $('vip-city').value, Number($('vip-days').value));
+  if (!r.ok) {
+    $('vip-error').textContent = r.error;
+    $('vip-error').classList.remove('hidden');
+    return;
+  }
+  $('vip-dialog').close();
   loadUsers();
 });
 $('u-search').addEventListener('input', renderUsers);

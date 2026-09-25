@@ -9,6 +9,7 @@
 const olx = require('./olx');
 const sources = require('./sources');
 const { learn, matches } = require('./match');
+const vip = require('./vip');
 
 const MISS_GIVE_UP = 12;
 
@@ -25,6 +26,20 @@ class Watcher {
     this.backoffMs = 0;
     this.stats = { searchOk: 0, searchErr: 0, turboFound: 0, turboProbes: 0, lastTurboHit: null, sent: 0 };
     this.timers = [];
+    this.lockSeen = new Map();   // VIP-рубрика → номера объявлений из выдачи её поиска
+    this.lockCache = { at: 0, list: [] };
+  }
+
+  // VIP-рубрики (раз в 2 секунды из базы — их мало, а спрашиваем на каждое объявление).
+  activeLocks() {
+    if (Date.now() - this.lockCache.at > 2000) this.lockCache = { at: Date.now(), list: this.db.locks() };
+    return this.lockCache.list;
+  }
+
+  // Жёсткое правило VIP: объявление из чужой закреплённой рубрики и города — не отправляем.
+  allowed(userId, ad) {
+    const owner = vip.lockOwner(this.activeLocks(), ad, this.lockSeen);
+    return owner == null || owner === userId;
   }
 
   start() {
@@ -83,7 +98,10 @@ class Watcher {
         if (!u || u.blocked || !this.db.hasAccess(u, s.source || 'olx')) return false;   // нет доступа к площадке — не проверяем
         return now - s.last_poll >= this.intervalFor(s);
       });
-      // Одна ссылка — один запрос, сколько бы людей на неё ни подписалось.
+      // Одна ссылка — один запрос, сколько бы людей на неё ни подписалось. Поиски VIP по их
+      // рубрикам — первыми: так эксклюзив узнаётся раньше, чем его увидит чужой поиск.
+      const vipSubs = new Set(this.activeLocks().map((l) => l.sub_id));
+      due.sort((a, b) => Number(vipSubs.has(b.id)) - Number(vipSubs.has(a.id)));
       const byUrl = new Map();
       for (const s of due) {
         const key = `${s.source || 'olx'}|${s.url}`;
@@ -114,6 +132,16 @@ class Watcher {
       return;
     }
     if (src.key === 'olx') for (const a of ads) this.bumpFrontier(a.id);
+    // Выдача поиска VIP по его рубрике: запоминаем объявления и учим номера рубрик.
+    for (const l of this.activeLocks()) {
+      if (!subs.some((s) => s.id === l.sub_id)) continue;
+      const set = this.lockSeen.get(l.id) || new Set();
+      for (const a of ads) set.add(a.id);
+      if (set.size > 5000) this.lockSeen.set(l.id, new Set([...set].slice(-2000)));
+      else this.lockSeen.set(l.id, set);
+      this.db.learnLock(l.id, ads.map((a) => a.categoryId));
+      this.lockCache.at = 0;
+    }
     const maxId = ads.reduce((m, a) => Math.max(m, a.id), 0);
     const enriched = new Map();   // карточка по номеру — одна на всех подписчиков ссылки
     const enrich = async (ad) => {
@@ -142,6 +170,7 @@ class Watcher {
         if (a.id <= sub.watermark || this.db.wasSent(sub.id, a.id)) continue;
         const full = await enrich(a);
         if (!this.isFresh(full)) continue;   // поднятое или продвинутое старьё
+        if (!this.allowed(sub.user_id, full)) continue;   // чужая VIP-рубрика
         if (!this.db.markSent(sub.id, a.id)) continue;
         await this.notify(sub.user_id, full, [sub], 'search');
         this.stats.sent += 1;
@@ -219,7 +248,7 @@ class Watcher {
         o.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
-          if (!matches(s, o) || !this.db.markSent(s.id, id)) continue;
+          if (!matches(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }

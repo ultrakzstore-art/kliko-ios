@@ -54,6 +54,17 @@ class Db {
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS vip_locks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,             -- VIP, за которым закреплена рубрика
+        source TEXT NOT NULL DEFAULT 'olx',
+        path TEXT NOT NULL,                   -- рубрика: elektronika/noutbuki-i-aksesuary
+        city TEXT NOT NULL,                   -- город: almaty
+        until INTEGER NOT NULL,
+        category_ids TEXT NOT NULL DEFAULT '[]', -- номера рубрик OLX, выученные по выдаче VIP
+        sub_id INTEGER NOT NULL DEFAULT 0,    -- поиск VIP по этой рубрике
+        created_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS access (
         user_id INTEGER NOT NULL,
         source TEXT NOT NULL,                 -- olx | kolesa | krisha | kaspi
@@ -154,12 +165,57 @@ class Db {
 
   // Забрать доступ: платный по всем площадкам и тестовый — с этой минуты.
   revoke(userId, now = Date.now()) {
+    this.db.prepare('UPDATE vip_locks SET until = ? WHERE user_id = ? AND until > ?').run(now, userId, now);
     this.db.prepare('UPDATE access SET until = ? WHERE user_id = ? AND until > ?').run(now, userId, now);
     this.db.prepare('UPDATE users SET trial_until = MIN(trial_until, ?), paid_until = MIN(paid_until, ?) WHERE id = ?').run(now, now, userId);
   }
 
   setBlocked(userId, blocked) {
     this.db.prepare('UPDATE users SET blocked = ? WHERE id = ?').run(blocked ? 1 : 0, userId);
+  }
+
+  // ---------- VIP-рубрики ----------
+  // Рубрика + город закрепляется за одним VIP на срок. Пока закреплена — объявления из неё
+  // получает только он (проверка по каждому объявлению в сборщике, см. Watcher.allowed).
+
+  locks(now = Date.now()) {
+    return this.db.prepare('SELECT * FROM vip_locks WHERE until > ? ORDER BY id').all(now)
+      .map((l) => ({ ...l, category_ids: JSON.parse(l.category_ids) }));
+  }
+
+  // Пересекается ли с чужой закреплённой: тот же город и одна рубрика внутри другой.
+  lockConflict(userId, source, path, city, now = Date.now()) {
+    return this.locks(now).find((l) => l.user_id !== userId && l.source === source && l.city === city
+      && (path === l.path || path.startsWith(`${l.path}/`) || l.path.startsWith(`${path}/`))) || null;
+  }
+
+  // Закрепить или продлить (у того же VIP — от конца текущего срока).
+  addLock(userId, source, path, city, days, subId = 0, now = Date.now()) {
+    const conflict = this.lockConflict(userId, source, path, city, now);
+    if (conflict) return { ok: false, conflict };
+    const mine = this.locks(now).find((l) => l.user_id === userId && l.source === source && l.path === path && l.city === city);
+    if (mine) {
+      const until = mine.until + days * DAY;
+      this.db.prepare('UPDATE vip_locks SET until = ?, sub_id = CASE WHEN ? > 0 THEN ? ELSE sub_id END WHERE id = ?').run(until, subId, subId, mine.id);
+      return { ok: true, id: mine.id, until };
+    }
+    const until = now + days * DAY;
+    const r = this.db.prepare('INSERT INTO vip_locks (user_id, source, path, city, until, sub_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(userId, source, path, city, until, subId, now);
+    return { ok: true, id: Number(r.lastInsertRowid), until };
+  }
+
+  endLock(id, now = Date.now()) {
+    this.db.prepare('UPDATE vip_locks SET until = ? WHERE id = ? AND until > ?').run(now, id, now);
+  }
+
+  learnLock(id, categoryIds) {
+    const row = this.db.prepare('SELECT category_ids FROM vip_locks WHERE id = ?').get(id);
+    if (!row) return;
+    const set = new Set(JSON.parse(row.category_ids));
+    const before = set.size;
+    for (const c of categoryIds) if (c) set.add(c);
+    if (set.size !== before) this.db.prepare('UPDATE vip_locks SET category_ids = ? WHERE id = ?').run(JSON.stringify([...set]), id);
   }
 
   // ---------- платежи ----------

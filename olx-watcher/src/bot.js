@@ -7,6 +7,7 @@
 const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
 const { collage, fetchImage } = require('./watermark');
 const olx = require('./olx');
+const vip = require('./vip');
 const sources = require('./sources');
 const { registerWizard } = require('./wizard');
 const { DAY } = require('./db');
@@ -61,7 +62,14 @@ function createBot({ token, db, config, getWatcher, log }) {
   }
 
   // true — можно добавить поиск на площадке; иначе — текст, почему нельзя.
-  function canAdd(userId, source = 'olx') {
+  function canAdd(userId, source = 'olx', url = '') {
+    // VIP-рубрика: поиск прямо в чужой закреплённой рубрике и городе не создать. Шире (другой
+    // город не указан, родительская рубрика) — можно, но объявления оттуда всё равно не придут.
+    if (url) {
+      const { path, city } = vip.parseSearchUrl(url);
+      const lock = path && city ? db.lockConflict(userId, source, path, city) : null;
+      if (lock) return `🔒 Рубрика «${vip.lockLabel(lock)}» закреплена за VIP-подписчиком до ${fmtDate(lock.until)}. Выберите другую рубрику или город.`;
+    }
     if (!db.hasAccess(userId, source)) {
       return db.isTrial(userId) || db.isPaid(userId, 'any')
         ? `Нет доступа к ${sources.get(source).title}. Подключить: /access`
@@ -225,6 +233,29 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.reply(`Выдано: ${userId} — ${p.title} до ${fmtDate(until)}.`);
   });
 
+  // VIP-рубрика: /vip <ID> <дней> <рубрика> <город>, например
+  // /vip 123456789 30 elektronika/noutbuki-i-aksesuary almaty
+  bot.command('vip', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const [uid, days, path, city] = String(ctx.match || '').trim().split(/\s+/);
+    const userId = Number(uid);
+    const d = Number(days);
+    if (!userId || !d || !path || !city || !db.user(userId)) {
+      return ctx.reply('Формат: /vip <ID> <дней> <рубрика> <город>\nНапример: /vip 123456789 30 elektronika/noutbuki-i-aksesuary almaty\nРубрика — путь из ссылки OLX, город — как в ссылке (almaty, astana…). Активные — /vips.');
+    }
+    const r = vip.grant(db, userId, path.replace(/^\/+|\/+$/g, ''), city, d);
+    if (!r.ok) return ctx.reply(`Занято: ${vip.lockLabel(r.conflict)} — у ${r.conflict.user_id} до ${fmtDate(r.conflict.until)}.`);
+    await send(userId, `👑 Вам закреплена VIP-рубрика «${r.label}» до ${fmtDate(r.until)}. Объявления из неё получаете только вы.`);
+    await ctx.reply(`Готово: ${r.label} → ${userId} до ${fmtDate(r.until)}.`);
+  });
+
+  bot.command('vips', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const locks = db.locks();
+    if (!locks.length) return ctx.reply('VIP-рубрик нет. Выдать: /vip <ID> <дней> <рубрика> <город>');
+    await ctx.reply(locks.map((l) => `👑 ${esc(vip.lockLabel(l))} — <code>${l.user_id}</code> до ${fmtDate(l.until)} · рубрик выучено ${l.category_ids.length}`).join('\n'), { parse_mode: 'HTML' });
+  });
+
   bot.command('users', async (ctx) => {
     if (!isAdmin(ctx)) return;
     const users = db.users();
@@ -270,7 +301,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const url = m[0];
     if (src.isAdUrl(url)) return ctx.reply('Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком объявлений.');
     try { src.normalize(url); } catch (e) { return ctx.reply(e.message); }
-    const limit = canAdd(ctx.from.id, src.key);
+    const limit = canAdd(ctx.from.id, src.key, url);
     if (limit !== true) return ctx.reply(limit);
     const before = text.slice(0, m.index).trim();
     const sub = db.addSub(ctx.from.id, (before || `${src.title}: ${nameFromUrl(url)}`).slice(0, 60), url, src.key);

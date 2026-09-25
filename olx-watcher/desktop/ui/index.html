@@ -107,6 +107,22 @@
       </div>
     </section>
 
+    <dialog id="vip-dialog">
+      <form method="dialog" id="vip-form">
+        <h2>👑 VIP-рубрика</h2>
+        <p class="muted" id="vip-who"></p>
+        <label>Рубрика<select id="vip-rubric"></select></label>
+        <label>Город<select id="vip-city"></select></label>
+        <label>Срок<select id="vip-days"><option value="7">7 дней</option><option value="14">14 дней</option><option value="30" selected>30 дней</option></select></label>
+        <p class="muted">Объявления из этой рубрики в этом городе будет получать только он — другие не получат их ни по рубрике, ни по словам, ни по ссылке. Доступ к OLX на тот же срок включится сам.</p>
+        <p id="vip-error" class="error hidden"></p>
+        <div class="actions">
+          <button value="cancel" class="secondary" formnovalidate>Отмена</button>
+          <button id="vip-ok" value="ok" class="primary">Закрепить</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- Настройки -->
     <section id="tab-settings" class="tab">
       <div class="card">

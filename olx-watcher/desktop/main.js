@@ -315,9 +315,14 @@ function listUsers() {
       access,
       subs: d.subs(u.id).length,
       blocked: !!u.blocked,
+      vip: d.locks(now).filter((l) => l.user_id === u.id).map((l) => ({ id: l.id, label: vipLib().lockLabel(l), until: l.until })),
       payments: d.db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS sum FROM payments WHERE user_id = ? AND status = 'paid' AND method != 'admin'").get(u.id),
     };
   });
+}
+
+function vipLib() {
+  return require('../src/vip');
 }
 
 function tellUser(userId, text) {
@@ -369,6 +374,22 @@ ipcMain.handle('revoke', (_e, { userId }) => {
   log(`Закрыт доступ ${userId}`);
   return { ok: true };
 });
+ipcMain.handle('vip-options', () => ({
+  rubrics: vipLib().rubricChoices(),
+  cities: require('../src/categories').CITIES,
+}));
+ipcMain.handle('vip-grant', (_e, { userId, path: rubric, city, days }) => {
+  const r = vipLib().grant(db(), userId, rubric, city, days);
+  if (!r.ok) {
+    const c = r.conflict;
+    return { ok: false, error: `Занято: ${vipLib().lockLabel(c)} — у ${c.user_id} до ${new Date(c.until).toLocaleDateString('ru-RU')}` };
+  }
+  const date = new Date(r.until).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  tellUser(userId, `👑 Вам закреплена VIP-рубрика «${r.label}» до ${date}. Объявления из неё получаете только вы.`);
+  log(`VIP ${userId}: ${r.label} +${days} дн`);
+  return { ok: true };
+});
+ipcMain.handle('vip-end', (_e, { lockId }) => { db().endLock(lockId); log(`VIP-рубрика #${lockId} снята`); return { ok: true }; });
 ipcMain.handle('start', () => startBot());
 ipcMain.handle('stop', () => stopBot());
 ipcMain.handle('restart', async () => { await stopBot(); startBot(); });
