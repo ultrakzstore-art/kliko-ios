@@ -23,7 +23,7 @@ module.exports = {
   discounts: !/^(0|off|no|false)$/i.test(process.env.DISCOUNTS || 'on'),
   minDropPct: int('MIN_DROP', 3, 1),              // лента всей доски раз в N сек
   turboWindow: int('TURBO_WINDOW', 10, 1),
-  kaspiTurbo: /^(1|on|yes|true)$/i.test(process.env.KASPI_TURBO || ''),   // Kaspi по номеру: номера не по порядку — выкл.
+  kaspiTurbo: !/^(0|off|no|false)$/i.test(process.env.KASPI_TURBO || 'on'),   // Kaspi по номеру (номера идут по порядку подачи)
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
   trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней
   paidSubs: int('PAID_SUBS', 20, 1),             // поисков у пользователя (тест и платный)

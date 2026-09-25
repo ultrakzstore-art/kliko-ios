@@ -372,3 +372,14 @@ test('Kaspi: город и заголовок с живой страницы —
   assert.strictEqual(nuxt.title, 'Ноутбук');
   assert.deepStrictEqual(nuxt.crumbs, ['almaty/elektronika']);
 });
+
+test('Kaspi: без даты подачи — по номеру (номера идут по порядку подачи)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-old-'));
+  const w = new Watcher({ db: new Db(path.join(dir, 'w.db')), config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async () => {}, alert: async () => {}, log: () => {} });
+  w.kaspiFrontier = 123561147;
+  assert.strictEqual(w.kaspiOld({ id: 113528655 }), true, 'IKEA-скатерть с витрины: номер на 10 млн позади');
+  assert.strictEqual(w.kaspiOld({ id: 123561000 }), false);
+  assert.strictEqual(w.kaspiOld({ id: 123387073, createdAt: Date.now() - 14 * 86400_000 }), true, 'платный iPhone: 14 дней');
+  assert.strictEqual(w.kaspiOld({ id: 123561100, createdAt: Date.now() - 18 * 60_000 }), false);
+});

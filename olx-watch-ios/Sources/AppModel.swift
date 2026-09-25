@@ -93,7 +93,7 @@ final class AppModel {
     private(set) var kaspiEdgeExact = false
     /// Последняя выкладка Kaspi — самое позднее время подачи среди увиденных новых.
     private(set) var kaspiLast: Date?
-    @ObservationIgnored private let kaspiByNumber = false
+    @ObservationIgnored private let kaspiByNumber = true
     private var busy = false
 
     private(set) var pushStatus = ""
@@ -167,7 +167,7 @@ final class AppModel {
             lastShowcase = Date()
             await kaspiShowcase()
         }
-        // Kaspi по номеру выключен: номера идут не по порядку — новое ловим витриной и поиском по дате.
+        // Kaspi по номеру: номера идут по порядку подачи — следующие за самым большим открываем сразу.
         if kaspiByNumber, state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
             lastKaspiTurbo = Date()
             await kaspiTurbo()
@@ -697,11 +697,14 @@ final class AppModel {
         save()
     }
 
-    /// Kaspi: номера идут не по порядку, поэтому новизна — только по дате подачи (dateCreate).
-    /// Старьё (платное, поднятое) — подано больше 3 ч назад или больше чем на час раньше последней
-    /// выкладки (час — запас на долгую модерацию). Даты нет — не отсекаем.
+    /// Kaspi: новизна — по дате подачи (dateCreate). Витрина и даже «Самые новые» полны платных и
+    /// поднятых — они поданы давно. Старьё — подано больше 3 ч назад или больше чем на час раньше
+    /// последней выкладки (час — запас на долгую модерацию). Даты нет (у старых её в коде нет) —
+    /// по номеру: номера идут по порядку подачи (~9 в минуту), отстающий больше чем на 5000 — старьё.
     private func kaspiOld(_ ad: Ad) -> Bool {
-        guard let created = ad.createdAt else { return false }
+        guard let created = ad.createdAt else {
+            return kaspiFrontier > 0 && ad.id - Site.kaspi.idOffset < kaspiFrontier - 5000
+        }
         if Date().timeIntervalSince(created) > 3 * 3600 { return true }
         if let last = kaspiLast, created < last.addingTimeInterval(-3600) { return true }
         return false

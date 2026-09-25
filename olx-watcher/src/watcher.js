@@ -115,7 +115,7 @@ class Watcher {
       this.timers.push(setInterval(() => this.recheckTick().catch((e) => this.log(`скидки: ${e.message}`)), 10_000));
     }
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
-    // Номера Kaspi идут не по порядку — ловля по номеру только по желанию (KASPI_TURBO=1).
+    // Kaspi по номеру: номера идут по порядку подачи (KASPI_TURBO=0 — выключить).
     if (this.cfg.kaspiTurbo) this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
     this.timers.push(setInterval(() => this.kaspiShowcaseTick().catch((e) => this.log(`витрина Kaspi: ${e.message}`)), 3_000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
@@ -172,16 +172,18 @@ class Watcher {
     return !ad.createdAt || Date.now() - ad.createdAt <= ms;
   }
 
-  // Kaspi: номера идут не по порядку, поэтому новизна — только по дате подачи (dateCreate).
-  // Платные и поднятые стоят сверху и при «Самых новых» — это старьё: подано больше 3 ч назад
-  // или сильно раньше последней выкладки, что мы видели (запас 60 мин — на долгую модерацию).
-  // Есть только день — старое, если раньше вчерашнего. Даты нет совсем — не отсекаем.
+  // Kaspi: новизна — по дате подачи (dateCreate). Витрина и даже «Самые новые» полны платных и
+  // поднятых: они поданы давно. Старьё — подано больше 3 ч назад или сильно раньше последней
+  // выкладки (запас 60 мин — на долгую модерацию). Только день — старое, если раньше вчерашнего.
+  // Даты нет совсем (у старых объявлений её в коде нет) — по номеру: номера идут по порядку подачи
+  // (~9 в минуту), и отстающий от самого нового больше чем на 5000 — подан много часов назад.
   kaspiOld(ad) {
     if (ad.createdAt) {
       return Date.now() - ad.createdAt > LATE_MS || (this.kaspiLast > 0 && ad.createdAt < this.kaspiLast - KASPI_SLACK_MS);
     }
     if (ad.postedDay) return Date.now() - ad.postedDay > 48 * 3600_000;
-    return false;
+    const edge = this.kaspiFrontier || 0;
+    return edge > 0 && ad.id < edge - 5000;
   }
 
   // Последняя выкладка Kaspi — самое позднее время подачи среди увиденных новых.
@@ -291,7 +293,7 @@ class Watcher {
         // Kaspi «весь Казахстан»: город впервые после запуска — только запоминаем, что уже есть.
         if (a.seedOnly) { this.db.markSent(sub.id, a.id); continue; }
         // Номера из разных городов идут вперемешку: для них «ниже отметки» ничего не значит.
-        // Kaspi: номера идут не по порядку — «ниже отметки» не значит «старое», решает дата.
+        // Kaspi: из разных городов и после модерации номера приходят вразнобой — решает дата.
         const late = !a.anyOrder && src.key !== 'kaspi' && a.id <= sub.watermark;
         // Ниже отметки: по дате из выдачи сразу отсекаем то, что было ещё до поиска.
         if (late && (src.key !== 'olx' || a.promoted || (a.createdAt && a.createdAt <= sub.created_at))) continue;
