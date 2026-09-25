@@ -365,7 +365,7 @@ class Watcher {
         if (a.promoted || !this.isFresh(a, Math.max(boardWindow, LATE_MS))) continue;
         const fresh = this.isFresh(a, boardWindow);
         a.source = 'olx';
-        if (!this.traceLog.has(a.id)) this.trace(a.id, `лента: увидели${a.status && a.status !== 'active' ? ' (на модерации)' : ''}`);
+        if (!this.traceLog.has(a.id)) this.trace(a.id, `лента: увидели${a.status && a.status !== 'active' ? ' (на модерации)' : ''}${posted(a)}`);
         const byUser = new Map();
         for (const s of subs) {
           if ((a.id <= s.watermark || !fresh) && !this.lateOk(s, a)) continue;
@@ -495,7 +495,7 @@ class Watcher {
         // Пропуск, который наконец прошёл модерацию, — новый, даже если подан час-два назад.
         if (!this.isFresh(o, Math.max(this.cfg.freshMs, wasGap ? GAP_LIFE_MS : 30 * 60_000))) { this.trace(id, 'по номеру: подано давно — пропуск'); continue; }
         o.source = 'olx';
-        this.trace(id, `по номеру: нашли${o.status && o.status !== 'active' ? ' — на модерации' : ''}`);
+        this.trace(id, `по номеру: нашли${o.status && o.status !== 'active' ? ' — на модерации' : ''}${posted(o)}`);
         const byUser = new Map();
         for (const s of subs) {
           if (o.createdAt && o.createdAt <= s.created_at) continue;   // подано ещё до поиска
@@ -526,6 +526,11 @@ function ownerOk(sub, ad) {
   if (source === 'krisha' && /das(%5B|\[)who(%5D|\])=1/i.test(sub.url)) return ad.owner === true;
   if (source === 'kolesa' && sub.seller === 'private') return ad.owner !== false;
   return true;
+}
+
+// «· подано 14:02» — чтобы в «почему не пришло?» было видно, сколько объявление шло до нас.
+function posted(ad) {
+  return ad.createdAt ? ` · подано ${new Date(ad.createdAt).toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' })}` : '';
 }
 
 function stripEmpty(o) {
