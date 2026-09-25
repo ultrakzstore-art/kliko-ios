@@ -73,7 +73,7 @@ final class AppModel {
     private var gaps: [Int: (added: Date, checked: Date)] = [:]
     private static let gapWindow = 200
     private static let gapsPerPass = 12
-    private static let gapLife: TimeInterval = 15 * 60
+    private static let gapLife: TimeInterval = 30 * 60
     private var seenSet = Set<Int>()
     private var busy = false
 
@@ -255,8 +255,10 @@ final class AppModel {
     /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
     /// старья он сильно меньше самых свежих номеров.
     private func isStale(_ ad: Ad, frontier: Int) -> Bool {
-        // На проверке — новое для всех ещё до 30 минут: его подали раньше, но в поиске его нет.
-        let minutes = ad.onReview ? max(freshnessMinutes, 30) : freshnessMinutes
+        // Без провалов: объявление, которое вышло с модерации позже соседей, подано давно, но для
+        // всех оно новое — поэтому для не продвигаемых окно не меньше 30 минут. Короткое окно из
+        // настроек строго действует только на продвигаемые (Топ) — это и есть «старьё сверху».
+        let minutes = ad.promoted ? freshnessMinutes : max(freshnessMinutes, 30)
         if let created = ad.createdAt { return Date().timeIntervalSince(created) > TimeInterval(minutes * 60) }
         return frontier > 0 && ad.id < frontier - 5_000
     }

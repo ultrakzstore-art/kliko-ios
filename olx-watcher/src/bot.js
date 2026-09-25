@@ -273,6 +273,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.reply([
       `Поиск: ${w.stats.searchOk} удачных, ${w.stats.searchErr} ошибок · турбо: проверено ${w.stats.turboProbes}, найдено ${w.stats.turboFound}`,
       `Отправлено объявлений: ${w.stats.sent} · последний номер ${w.frontier || '—'}`,
+      `На проверке у OLX (перепроверяю): ${w.gaps?.size ?? 0} номеров · круг ≈ ${Math.round(((w.gaps?.size ?? 0) / Math.max(1, config.turboWindow)) * config.turboSec)} с`,
       w.blocked() ? `⏸ OLX ограничил запросы — ещё ${Math.ceil((w.backoffUntil - Date.now()) / 60_000)} мин` : '',
       `Оплаты: ${money}`,
     ].filter(Boolean).join('\n'));

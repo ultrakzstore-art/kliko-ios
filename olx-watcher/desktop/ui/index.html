@@ -197,12 +197,13 @@
     <section id="tab-probe" class="tab">
       <div class="card">
         <h2>Что площадка отдаёт с этого компьютера</h2>
-        <p class="muted">Вставьте ссылку на поиск (OLX, Kolesa, Krisha, Kaspi) или на одно объявление OLX. Проверка покажет, сколько объявлений видно, разберётся ли карточка и работают ли номера для турбо. Телеграм не нужен.</p>
+        <p class="muted">Вставьте ссылку на поиск (OLX, Kolesa, Krisha, Kaspi), ссылку на объявление OLX или просто его номер. По номеру проверка пробует все известные способы открыть объявление — так видно, какой из них показывает объявления на модерации. Для поиска покажет, сколько объявлений видно, разберётся ли карточка и работают ли номера для турбо. Телеграм не нужен.</p>
         <div class="row">
-          <input id="probe-url" placeholder="https://kolesa.kz/cars/almaty/" spellcheck="false">
+          <input id="probe-url" placeholder="Ссылка на поиск или объявление — или просто номер: 401224244" spellcheck="false">
           <button id="btn-probe" class="primary">Проверить</button>
         </div>
         <div class="chips">
+          <button class="chip" data-probe="401224244">OLX · номер на модерации (401224244)</button>
           <button class="chip" data-probe="https://www.olx.kz/d/elektronika/">OLX · Электроника</button>
           <button class="chip" data-probe="https://kolesa.kz/cars/">Kolesa · Легковые</button>
           <button class="chip" data-probe="https://krisha.kz/prodazha/kvartiry/">Krisha · Квартиры</button>

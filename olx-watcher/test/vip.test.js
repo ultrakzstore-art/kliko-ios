@@ -22,7 +22,7 @@ test('VIP-рубрика: жёсткое правило по каждому об
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
   const NOTE = 1234;   // рубрика «ноутбуки»
-  const ad = (id, title, extra = {}) => ({ id, title, url: `https://www.olx.kz/d/obyavlenie/x-ID${olx.encodeId(id)}.html`, price: 200000, city: 'Алматы', categoryId: NOTE, createdAt: now, ...extra });
+  const ad = (id, title, extra = {}) => ({ id, title, url: `https://www.olx.kz/d/obyavlenie/x-ID${olx.encodeId(id)}.html`, price: 200000, city: 'Алматы', categoryId: NOTE, createdAt: Date.now() + 60_000, ...extra });
 
   const listings = new Map();   // ссылка → выдача
   const origSearch = olx.fetchSearch;

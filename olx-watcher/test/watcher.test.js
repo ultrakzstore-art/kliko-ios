@@ -14,7 +14,7 @@ test('тест и платный работают одинаково: поиск
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-'));
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
-  const ad = (id, title, extra = {}) => ({ id, title, url: `https://www.olx.kz/d/obyavlenie/x-ID${olx.encodeId(id)}.html`, price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const ad = (id, title, extra = {}) => ({ id, title, url: `https://www.olx.kz/d/obyavlenie/x-ID${olx.encodeId(id)}.html`, price: 200000, city: 'Алматы', categoryId: 1234, createdAt: Date.now() + 60_000, ...extra });
 
   let listing = [ad(100, 'HP 250 старое'), ad(99, 'HP 250 ещё старее')];
   const offers = new Map();
@@ -121,7 +121,7 @@ test('лента всей доски: подходящее новое прихо
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-board-'));
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
-  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: Date.now() + 60_000, ...extra });
   const origLatest = olx.fetchLatest;
   let latest = [];
   olx.fetchLatest = async () => latest;
@@ -132,7 +132,7 @@ test('лента всей доски: подходящее новое прихо
     db.touchUser(1, 'Я');
     const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
     db.updateSub(sub.id, { initialized: 1, watermark: 1000 });
-    latest = [ad(5000, 'HP 250 G9'), ad(4999, 'iPhone 13'), ad(900, 'HP старое, ниже отметки'), ad(4998, 'HP старьё', { createdAt: now - 5 * 3600_000 })];
+    latest = [ad(5000, 'HP 250 G9'), ad(4999, 'iPhone 13'), ad(900, 'HP старое, ниже отметки', { createdAt: now - 2 * 3600_000 }), ad(4998, 'HP старьё', { createdAt: now - 5 * 3600_000 })];
     await w.boardTick();
     assert.deepStrictEqual(sent, ['1:5000'], 'только подходящее, свежее и новее отметки');
     assert.strictEqual(w.frontier, 4995, 'турбо продолжит от края ленты');
@@ -147,7 +147,7 @@ test('скидки: цена знакомого объявления упала 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-disc-'));
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
-  const ad = (id, price, extra = {}) => ({ id, title: `HP ${id}`, url: 'u', price, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const ad = (id, price, extra = {}) => ({ id, title: `HP ${id}`, url: 'u', price, city: 'Алматы', categoryId: 1234, createdAt: Date.now() + 60_000, ...extra });
   const origSearch = olx.fetchSearch;
   const origOffer = olx.fetchOffer;
   let listing = [ad(100, 300000)];
@@ -198,7 +198,7 @@ test('на проверке: номер ниже края ленты (его н�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-gap-'));
   const db = new Db(path.join(dir, 'w.db'));
   const now = Date.now();
-  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: Date.now() + 60_000, ...extra });
   const origLatest = olx.fetchLatest;
   const origOffer = olx.fetchOffer;
   const offers = new Map();
@@ -211,6 +211,7 @@ test('на проверке: номер ниже края ленты (его н�
     db.touchUser(1, 'Я');
     const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
     db.updateSub(sub.id, { initialized: 1, watermark: 1000 });
+    db.db.prepare('UPDATE subs SET created_at = ?').run(now - 3600_000);   // поиск создан час назад
     offers.set(4995, ad(4995, 'HP 250 на проверке', { status: 'moderated', createdAt: now - 4 * 60_000 }));
     await w.boardTick();
     assert.ok(w.gaps.has(4995), 'пропуск запомнен');
@@ -218,6 +219,37 @@ test('на проверке: номер ниже края ленты (его н�
     assert.deepStrictEqual(sent, ['turbo:4995'], 'поймано, хотя ниже края ленты');
   } finally {
     olx.fetchLatest = origLatest;
+    olx.fetchOffer = origOffer;
+  }
+});
+
+test('без провалов: вышло с проверки позже соседей (номер ниже отметки) — всё равно приходит', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-late-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const t0 = Date.now();
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 1, city: 'Алматы', categoryId: 1, ...extra });
+  const orig = olx.fetchSearch;
+  const origOffer = olx.fetchOffer;
+  let listing = [ad(100, 'HP было до поиска', { createdAt: t0 - 3600_000 })];
+  olx.fetchSearch = async () => ({ source: 'state', ads: listing });
+  olx.fetchOffer = async () => null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (u, a, s, via) => { if (via !== 'ready') sent.push(a.id); }, alert: async () => {}, log: () => {} });
+  const tick = async () => { for (const s of db.subs()) db.updateSub(s.id, { last_poll: 0 }); await w.searchTick(); };
+  try {
+    db.touchUser(1, 'Я');
+    db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    await tick();
+    // 103 подано раньше 105, но прошло проверку позже: сначала в выдаче только 105.
+    listing = [ad(105, 'HP 105', { createdAt: Date.now() + 1000 }), ...listing];
+    await tick();
+    listing = [ad(105, 'HP 105', { createdAt: Date.now() + 1000 }), ad(103, 'HP 103 после проверки', { createdAt: Date.now() + 500 }), ...listing];
+    await tick();
+    await tick();
+    assert.deepStrictEqual(sent, [105, 103], '103 пришло, хотя ниже отметки; 100 (было до поиска) — нет; повторов нет');
+  } finally {
+    olx.fetchSearch = orig;
     olx.fetchOffer = origOffer;
   }
 });

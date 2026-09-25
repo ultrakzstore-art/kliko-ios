@@ -290,6 +290,13 @@ class Db {
     return this.db.prepare('INSERT OR IGNORE INTO sent (sub_id, ad_id, at) VALUES (?, ?, ?)').run(subId, adId, Date.now()).changes > 0;
   }
 
+  // Первый проход поиска: всё, что уже есть в выдаче, — «видели», присылать не будем.
+  markSentMany(subId, adIds) {
+    const st = this.db.prepare('INSERT OR IGNORE INTO sent (sub_id, ad_id, at) VALUES (?, ?, ?)');
+    const now = Date.now();
+    for (const id of adIds) st.run(subId, id, now);
+  }
+
   wasSent(subId, adId) {
     return !!this.db.prepare('SELECT 1 FROM sent WHERE sub_id = ? AND ad_id = ?').get(subId, adId);
   }

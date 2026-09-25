@@ -5,8 +5,53 @@ const olx = require('./olx');
 const cats = require('./categories');
 const sources = require('./sources');
 
+// Номер объявления (или ссылка на него) — пробуем все известные способы открыть его по номеру:
+// какой из них видит объявления, которые ещё на модерации. Ответ OLX показываем как есть.
+async function deepProbe(id) {
+  const code = olx.encodeId(id);
+  const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9' };
+  const tries = [
+    ['API v1', `${olx.BASE}/api/v1/offers/${id}/`, 'application/json'],
+    ['API v2', `${olx.BASE}/api/v2/offers/${id}/`, 'application/json'],
+    ['API v1 (без слэша)', `${olx.BASE}/api/v1/offers/${id}`, 'application/json'],
+    ['API телефоны', `${olx.BASE}/api/v1/offers/${id}/limited-phones/`, 'application/json'],
+    ['Страница', `${olx.BASE}/d/obyavlenie/-ID${code}.html`, 'text/html'],
+    ['Мобильная страница', `https://m.olx.kz/d/obyavlenie/-ID${code}.html`, 'text/html'],
+    ['Список по номеру', `${olx.BASE}/api/v1/offers/?offer_id=${id}`, 'application/json'],
+  ];
+  console.log(`Номер ${id} (код в ссылке ${code})\n`);
+  for (const [name, url, accept] of tries) {
+    try {
+      const res = await fetch(url, { headers: { ...H, Accept: accept }, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+      const text = await res.text();
+      let info = '';
+      if (/json/.test(res.headers.get('content-type') || '')) {
+        try {
+          const j = JSON.parse(text);
+          const d = j.data || j;
+          const one = Array.isArray(d) ? d.find((x) => Number(x.id) === id) || d[0] : d;
+          info = one && typeof one === 'object'
+            ? `статус «${one.status ?? '—'}» · ${one.title ?? ''}${Array.isArray(d) ? ` · в списке ${d.length}` : ''}`
+            : text.slice(0, 160);
+        } catch { info = text.slice(0, 160); }
+      } else {
+        const title = (/<title>([^<]*)<\/title>/i.exec(text) || [])[1] || '';
+        const mod = /модерац|на проверке|moderat/i.test(text) ? ' · есть слово «модерация»' : '';
+        const st = (/\\?"status\\?"\s*:\s*\\?"([a-z_]+)/i.exec(text) || [])[1];
+        info = `${title.trim().slice(0, 90)}${st ? ` · status=${st}` : ''}${mod}`;
+      }
+      const loc = res.headers.get('location');
+      console.log(`${name}: HTTP ${res.status}${loc ? ` → ${loc}` : ''}\n   ${info.replace(/\s+/g, ' ')}`);
+    } catch (e) {
+      console.log(`${name}: ошибка ${e.message}`);
+    }
+  }
+  console.log('\nЕсли объявление на модерации видит только один из способов — пришлите этот вывод.');
+}
+
 (async () => {
   const url = process.argv[2];
+  if (/^\d{6,}$/.test(String(url || '').trim())) return deepProbe(Number(url.trim()));
   // npm run probe -- categories [путь] — подрубрики, как их увидит мастер /new
   if (url === 'categories') {
     const p = process.argv[3];
@@ -43,6 +88,8 @@ const sources = require('./sources');
   const id = olx.idFromUrl(url);
   try {
     if (id) {
+      await deepProbe(id);
+      console.log('');
       console.log(`Номер объявления: ${id} (код ${olx.encodeId(id)})`);
       console.log('Карточка:', await olx.fetchOffer(id));
       for (let n = id + 1; n <= id + 5; n++) {

@@ -12,6 +12,11 @@ const { learn, matches } = require('./match');
 const vip = require('./vip');
 
 const MISS_GIVE_UP = 12;
+// Объявление с номером ниже отметки поиска (было на проверке у OLX и попало в выдачу позже
+// соседей) — всё равно новое, если подано после создания поиска и не старше этого срока.
+const LATE_MS = 3 * 3600_000;
+// Пропуск у края ленты (обычно — на проверке) перепроверяем столько.
+const GAP_LIFE_MS = 30 * 60_000;
 
 class Watcher {
   constructor({ db, config, notify, alert, log }) {
@@ -91,8 +96,15 @@ class Watcher {
     }
   }
 
-  isFresh(ad) {
-    return !ad.createdAt || Date.now() - ad.createdAt <= this.cfg.freshMs;
+  isFresh(ad, ms = this.cfg.freshMs) {
+    return !ad.createdAt || Date.now() - ad.createdAt <= ms;
+  }
+
+  // Номер ниже отметки поиска: новое, только если подано после создания поиска и недавно
+  // (OLX; у других площадок даты подачи надёжно нет — там ниже отметки ничего не шлём).
+  lateOk(sub, ad, source = sub.source || 'olx') {
+    if (source !== 'olx' || ad.promoted || !ad.createdAt) return false;
+    return ad.createdAt > sub.created_at && Date.now() - ad.createdAt <= LATE_MS;
   }
 
   // ---------- поиск ----------
@@ -178,19 +190,24 @@ class Watcher {
       };
       // Первый проход — только отметка: что уже есть, не присылаем.
       if (!sub.initialized) {
+        this.db.markSentMany(sub.id, ads.map((a) => a.id));
         this.db.updateSub(sub.id, { ...patch, initialized: 1, watermark: maxId });
         this.notifyReady(sub, ads.length);
         continue;
       }
       let sent = sub.sent;
       for (const a of ads) {
-        if (a.id <= sub.watermark || this.db.wasSent(sub.id, a.id)) continue;
+        if (this.db.wasSent(sub.id, a.id)) continue;
+        const late = a.id <= sub.watermark;
+        // Ниже отметки: по дате из выдачи сразу отсекаем то, что было ещё до поиска.
+        if (late && (src.key !== 'olx' || a.promoted || (a.createdAt && a.createdAt <= sub.created_at))) continue;
         const full = await enrich(a);
-        if (!this.isFresh(full)) continue;   // поднятое или продвинутое старьё
-        if (!this.allowed(sub.user_id, full)) continue;   // чужая VIP-рубрика
-        if (!this.sellerOk(sub, full)) continue;         // частные / бизнес
-        if (ownersOnly(sub) && full.owner !== true) continue;   // Krisha: только от хозяев
-        if (!this.db.markSent(sub.id, a.id)) continue;
+        // Решение принято — больше это объявление этому поиску не проверяем.
+        const pass = (late ? this.lateOk(sub, full, src.key) : this.isFresh(full))   // не старьё
+          && this.allowed(sub.user_id, full)                                         // чужая VIP-рубрика
+          && this.sellerOk(sub, full)                                                // частные / бизнес
+          && !(ownersOnly(sub) && full.owner !== true);                              // Krisha: от хозяев
+        if (!this.db.markSent(sub.id, a.id) || !pass) continue;
         await this.notify(sub.user_id, full, [sub], 'search');
         this.stats.sent += 1;
         sent += 1;
@@ -256,7 +273,7 @@ class Watcher {
       for (let id = Math.max(1, top - 300); id <= top; id++) {
         if (!onBoard.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
       }
-      for (const [id, g] of this.gaps) if (now - g.added > 15 * 60_000 || onBoard.has(id)) this.gaps.delete(id);
+      for (const [id, g] of this.gaps) if (now - g.added > GAP_LIFE_MS || onBoard.has(id)) this.gaps.delete(id);
       if (top > this.frontier + this.cfg.turboWindow * 3) {
         this.frontier = top - this.cfg.turboWindow;   // прыжок: турбо проверит последние номера сам
         this.db.set('frontier', this.frontier);
@@ -269,7 +286,8 @@ class Watcher {
         a.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
-          if (a.id <= s.watermark || !matches(s, a) || !this.sellerOk(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
+          if (a.id <= s.watermark && !this.lateOk(s, a)) continue;
+          if (!matches(s, a) || !this.sellerOk(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }
@@ -373,10 +391,11 @@ class Watcher {
         this.bumpFrontier(id);
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();
-        if (!this.isFresh(o)) continue;
+        if (!this.isFresh(o, Math.max(this.cfg.freshMs, GAP_LIFE_MS))) continue;
         o.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
+          if (o.createdAt && o.createdAt <= s.created_at) continue;   // подано ещё до поиска
           if (!matches(s, o) || !this.sellerOk(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
