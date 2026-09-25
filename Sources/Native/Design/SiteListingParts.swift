@@ -844,6 +844,8 @@ struct КарточкаПродавцаСайта: View {
     /// Этап 36: число подписчиков для строки «сделки · подписчики · с какого года» (mkSellerFolHtml сайта) — свежее из
     /// subs.php или seller_followers объявления. nil — строки о подписчиках нет, как до этапа 36.
     var подписчики: Int? = nil
+    /// Этап 37: карточка нажимается (отзывы о продавце) — справа зелёная стрелка, как .mk-msc-prof сайта.
+    var стрелка: Bool = false
 
     private var буква: String {
         String((товар.продавец ?? "?").trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
@@ -880,6 +882,12 @@ struct КарточкаПродавцаСайта: View {
                 }
             }
             Spacer(minLength: 0)
+            if стрелка {
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.зелёный2)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(14)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))

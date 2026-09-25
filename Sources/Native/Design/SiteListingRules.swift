@@ -156,6 +156,13 @@ extension Listing {
     /// «сегодня», «вчера», «3 дня назад», «24 сен» (и год, если не этот). created_at — «2026-09-24».
     var когдаДобавлено: String? {
         guard let строка = создано else { return nil }
+        return Listing.датаСайта(строка)
+    }
+
+    /// mkDate сайта для даты «2026-09-24»: «сегодня», «вчера», «3 дня назад», «24 сен» (и год, если не этот); не такая
+    /// строка — как пришла. Этап 37 (владелец 25.09.2026): тем же правилом сайт пишет дату отзыва о продавце
+    /// (_mkSellerRevPaint: mkDate(t.date)), поэтому правило вынесено из «Добавлено …» и общее для обоих.
+    static func датаСайта(_ строка: String) -> String {
         let части = строка.prefix(10).split(separator: "-").compactMap { Int($0) }
         guard части.count == 3 else { return строка }
         var календарь = Calendar(identifier: .gregorian)
