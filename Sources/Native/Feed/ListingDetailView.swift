@@ -1,0 +1,315 @@
+import SwiftUI
+
+/**
+ КАРТОЧКА ОБЪЯВЛЕНИЯ — ЭТАП 2 ПЕРЕХОДА НА SWIFTUI (владелец 25.09.2026: «давай следующий этап, карточку объявления»).
+
+ Открывается из ленты сразу, с тем, что уже известно по строке ленты (обложка, цена, название, город), и тут же
+ дотягивает полную карточку: GET /api/listings.php?id= (фото, описание, характеристики, продавец). Не дотянулась —
+ карточка остаётся на экране с тем, что есть, а не превращается в экран ошибки.
+
+ 🔴 ДЕЙСТВИЯ — ПОКА НА САЙТЕ. Чат с продавцом, безопасная сделка, оплата и доставка живут страницей объявления на
+ сайте: там гарант, проверка через eGov и платёжный шлюз, и второй их копии в приложении пока нет (этапы 3+).
+ Кнопка внизу открывает ту же страницу объявления в веб-обёртке, с сессией человека, — одно нажатие до чата или
+ сделки.
+ */
+struct ListingDetailView: View {
+    @State private var товар: Listing
+    @State private var догружаем = true
+    @State private var неДогрузилась = false
+    @State private var фотоНаВесьЭкран: Int?
+    @State private var страница = 0
+
+    /// Открыть страницу сайта в веб-обёртке.
+    let открыть: (URL) -> Void
+
+    init(товар: Listing, открыть: @escaping (URL) -> Void) {
+        _товар = State(initialValue: товар)
+        self.открыть = открыть
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                галерея
+                VStack(alignment: .leading, spacing: 14) {
+                    шапка
+                    if неДогрузилась {
+                        Label(FeedText.т("detail_partial"), systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !товар.характеристики.isEmpty { характеристики }
+                    if let описание = товар.описание { блокОписания(описание) }
+                    if товар.продавец != nil { строкаПродавца }
+                    if догружаем {
+                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .background(Color(.systemBackground))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let адрес = товар.адрес {
+                    ShareLink(item: адрес) { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel(FeedText.т("share"))
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) { нижняяПанель }
+        .task { await догрузить() }
+        .fullScreenCover(item: Binding(get: { фотоНаВесьЭкран.map(ФотоИндекс.init) },
+                                       set: { фотоНаВесьЭкран = $0?.id })) { выбранное in
+            ФотоНаВесьЭкран(адреса: товар.фотоАдреса, начало: выбранное.id)
+        }
+    }
+
+    // MARK: - Галерея
+
+    private var галерея: some View {
+        let адреса = товар.фотоАдреса
+        return ZStack(alignment: .bottomTrailing) {
+            if адреса.isEmpty {
+                Color(.tertiarySystemGroupedBackground)
+                    .overlay(Image(systemName: "photo").font(.largeTitle).foregroundStyle(.tertiary))
+            } else {
+                TabView(selection: $страница) {
+                    ForEach(Array(адреса.enumerated()), id: \.offset) { номер, адрес in
+                        AsyncImage(url: адрес) { фаза in
+                            switch фаза {
+                            case .success(let картинка):
+                                картинка.resizable().scaledToFill()
+                            case .empty:
+                                Color(.tertiarySystemGroupedBackground).overlay(ProgressView())
+                            default:
+                                Color(.tertiarySystemGroupedBackground)
+                                    .overlay(Image(systemName: "photo").foregroundStyle(.tertiary))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture { фотоНаВесьЭкран = номер }
+                        .tag(номер)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                if адреса.count > 1 {
+                    Text("\(страница + 1) / \(адреса.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(12)
+                }
+            }
+        }
+        .aspectRatio(4 / 3, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipped()
+    }
+
+    // MARK: - Текст
+
+    private var шапка: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(ListingCard.цена(товар))
+                    .font(.system(size: 26, weight: .heavy))
+                if let старая = товар.oldPrice, let цена = товар.price, старая > цена {
+                    Text(ListingCard.тенге(старая))
+                        .font(.system(size: 15))
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(товар.title)
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    чип(FeedText.т(товар.isNew ? "new" : "used"), значок: nil)
+                    if let дни = товар.гарантияДней {
+                        чип(String(format: FeedText.т("warranty"), дни), значок: "checkmark.shield")
+                    }
+                    if !товар.city.isEmpty { чип(товар.city, значок: "mappin.and.ellipse") }
+                }
+            }
+        }
+    }
+
+    private var характеристики: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(FeedText.т("specs")).font(.headline)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8, alignment: .top),
+                                GridItem(.flexible(), spacing: 8, alignment: .top)], spacing: 8) {
+                ForEach(товар.характеристики, id: \.self) { х in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(х.ключ).font(.caption).foregroundStyle(.secondary)
+                        Text(х.значение).font(.subheadline)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func блокОписания(_ текст: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(FeedText.т("description")).font(.headline)
+            Text(текст)
+                .font(.body)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var строкаПродавца: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Theme.mint)
+                .frame(width: 44, height: 44)
+                .overlay(Image(systemName: "person.fill").foregroundStyle(Theme.green))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(товар.продавец ?? FeedText.т("seller"))
+                        .font(.subheadline.weight(.semibold))
+                    if товар.продавецПроверен {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.caption)
+                            .foregroundStyle(Theme.green2)
+                            .accessibilityLabel(FeedText.т("verified"))
+                    }
+                }
+                if let п = товар.просмотры, п > 0 {
+                    Text(String(format: FeedText.т("views"), п))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func чип(_ текст: String, значок: String?) -> some View {
+        HStack(spacing: 4) {
+            if let значок { Image(systemName: значок).font(.caption2) }
+            Text(текст).font(.caption.weight(.medium)).lineLimit(1)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Theme.mint, in: Capsule())
+        .foregroundStyle(Theme.green)
+    }
+
+    // MARK: - Действия
+
+    private var нижняяПанель: some View {
+        VStack(spacing: 6) {
+            Button {
+                if let адрес = товар.адрес { открыть(адрес) }
+            } label: {
+                Label(FeedText.т("contact"), systemImage: "bubble.left.and.bubble.right.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .foregroundStyle(.white)
+                    .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            Text(FeedText.т("contact_sub"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(.regularMaterial)
+    }
+
+    // MARK: - Загрузка
+
+    private func догрузить() async {
+        guard !товар.полная else { догружаем = false; return }
+        догружаем = true
+        defer { догружаем = false }
+        do {
+            let полный = try await ListingsAPI.объявление(товар.id)
+            /* Номер в ответе обязан совпасть: иначе сайт отдал не то (например, ленту вместо товара). */
+            guard полный.id == товар.id else { неДогрузилась = true; return }
+            товар = полный
+            неДогрузилась = false
+        } catch {
+            if !Task.isCancelled { неДогрузилась = true }
+        }
+    }
+}
+
+/// Номер фото для fullScreenCover(item:) — ему нужен Identifiable.
+private struct ФотоИндекс: Identifiable {
+    let id: Int
+}
+
+/// Фото на весь экран: листать, увеличивать двумя пальцами, закрыть.
+private struct ФотоНаВесьЭкран: View {
+    let адреса: [URL]
+    @State var начало: Int
+    @Environment(\.dismiss) private var закрыть
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $начало) {
+                ForEach(Array(адреса.enumerated()), id: \.offset) { номер, адрес in
+                    УвеличиваемоеФото(адрес: адрес).tag(номер)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: адреса.count > 1 ? .always : .never))
+            .ignoresSafeArea()
+
+            Button { закрыть() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.18), in: Circle())
+            }
+            .accessibilityLabel(FeedText.т("close"))
+            .padding(16)
+        }
+        .statusBarHidden()
+    }
+}
+
+private struct УвеличиваемоеФото: View {
+    let адрес: URL
+    @State private var масштаб: CGFloat = 1
+    @State private var опорный: CGFloat = 1
+
+    var body: some View {
+        AsyncImage(url: адрес) { фаза in
+            if case .success(let картинка) = фаза {
+                картинка.resizable().scaledToFit()
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .scaleEffect(масштаб)
+        .gesture(
+            MagnifyGesture()
+                .onChanged { з in масштаб = max(1, min(4, опорный * з.magnification)) }
+                .onEnded { _ in опорный = масштаб }
+        )
+        .onTapGesture(count: 2) {
+            withAnimation(.easeInOut(duration: 0.2)) { масштаб = масштаб > 1 ? 1 : 2 }
+            опорный = масштаб
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

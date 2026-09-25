@@ -36,6 +36,9 @@ struct NativeFeedView: View {
             }
             .background(Color(.systemGroupedBackground))
             .refreshable { await модель.обновить() }
+            .navigationDestination(for: Listing.self) { товар in
+                ListingDetailView(товар: товар, открыть: открыть)
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -122,10 +125,13 @@ struct NativeFeedView: View {
             }
             LazyVGrid(columns: колонки, spacing: 12) {
                 ForEach(модель.items) { товар in
-                    Button {
-                        if let u = товар.адрес { открыть(u) }
-                    } label: {
-                        ListingCard(товар: товар)
+                    /* Этап 2: карточка нативная. Рубильник выключен — как на этапе 1, страница сайта. */
+                    Group {
+                        if Config.нативнаяКарточка {
+                            NavigationLink(value: товар) { ListingCard(товар: товар) }
+                        } else {
+                            Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }
+                        }
                     }
                     .buttonStyle(.plain)
                     .onAppear { модель.дальше(после: товар) }
@@ -266,12 +272,17 @@ struct ListingCard: View {
     /// «14 900 000 ₸», аренда «5 000 ₸/сут», без цены — «Договорная» или «Цена по запросу».
     static func цена(_ т: Listing) -> String {
         if т.forRent, let день = т.rentPriceDay, день > 0 {
-            return число(день) + "\u{00A0}₸" + FeedText.т("perday")
+            return тенге(день) + FeedText.т("perday")
         }
         guard let p = т.price, p > 0 else {
             return FeedText.т(т.negotiable ? "neg" : "noprice")
         }
-        return число(p) + "\u{00A0}₸"
+        return тенге(p)
+    }
+
+    /// «14 900 000 ₸».
+    static func тенге(_ n: Double) -> String {
+        (формат.string(from: NSNumber(value: n)) ?? String(Int(n))) + "\u{00A0}₸"
     }
 
     private static let формат: NumberFormatter = {
@@ -281,8 +292,4 @@ struct ListingCard: View {
         ф.maximumFractionDigits = 0
         return ф
     }()
-
-    private static func число(_ n: Double) -> String {
-        формат.string(from: NSNumber(value: n)) ?? String(Int(n))
-    }
 }

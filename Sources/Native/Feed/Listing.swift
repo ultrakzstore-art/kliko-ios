@@ -25,6 +25,31 @@ struct Listing: Identifiable, Hashable {
     var isTop: Bool
     var isNew: Bool
 
+    // ── Карточка (этап 2): приходят в ответе на ?id=, в ленте обычно пусты ──
+    var фото: [String] = []
+    var описание: String?
+    var продавец: String?
+    var продавецПроверен = false
+    var просмотры: Int?
+    var создано: String?
+    var гарантияДней: Int?
+    /// Характеристики «название → значение», только заполненные, в порядке показа.
+    var характеристики: [Характеристика] = []
+
+    struct Характеристика: Hashable {
+        let ключ: String
+        let значение: String
+    }
+
+    /// Все фото абсолютными адресами; нет списка — хотя бы обложка.
+    var фотоАдреса: [URL] {
+        let адреса = фото.compactMap { Config.url($0) }
+        return адреса.isEmpty ? [обложка].compactMap { $0 } : адреса
+    }
+
+    /// Пришла ли полная карточка, а не строка из ленты.
+    var полная: Bool { описание != nil || продавец != nil || фото.count > 1 }
+
     /// Обложка абсолютным адресом: thumb → img → первое из images.
     var обложка: URL? { thumb.flatMap { Config.url($0) } }
 
@@ -88,7 +113,36 @@ extension Listing: Decodable {
         city = непусто(строка("city")) ?? ""
         isTop = да("is_top")
         isNew = строка("condition") == "new"
+
+        фото = ((try? c.decode([String].self, forKey: Ключ("images"))) ?? [])
+            .compactMap { непусто($0) }
+        описание = непусто(строка("description"))
+        продавец = непусто(строка("seller"))
+        продавецПроверен = да("seller_verified")
+        просмотры = число("views").map { Int($0) }
+        создано = непусто(строка("created_at"))
+        гарантияДней = число("warranty_days").map { Int($0) }.flatMap { $0 > 0 ? $0 : nil }
+
+        /* Характеристики: у июльского API — плоские поля ноутбука (cpu, gpu…). Если сайт отдаёт общий словарь
+           (specs / attrs: {"Пробег": "120 000 км"}), берём его — Kliko продаёт не только ноутбуки. */
+        var х: [Характеристика] = []
+        for имя in ["specs", "attrs"] {
+            if let словарь = try? c.decode([String: String].self, forKey: Ключ(имя)) {
+                for (к, з) in словарь.sorted(by: { $0.key < $1.key }) {
+                    if let к = непусто(к), let з = непусто(з) { х.append(Характеристика(ключ: к, значение: з)) }
+                }
+            }
+        }
+        for (поле, подпись) in [("cpu", "cpu"), ("gpu", "gpu"), ("ram", "ram"), ("storage", "storage"), ("year", "year")] {
+            if let з = непусто(строка(поле)) { х.append(Характеристика(ключ: FeedText.т("spec_" + подпись), значение: з)) }
+        }
+        характеристики = х
     }
+}
+
+/// Ответ на один товар: {ok, item:{…}}.
+struct ListingEnvelope: Decodable {
+    let item: Listing
 }
 
 /// Ответ ленты: {ok, items:[…]}. Объявление, которое не разобралось, пропускаем, а не роняем всю страницу.
