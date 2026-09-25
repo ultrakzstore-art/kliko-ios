@@ -229,12 +229,19 @@ test('Kaspi по номеру: крошки карточки → рубрика 
     db.extend(1, 30, ['kaspi']);
     const s = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
     db.updateSub(s.id, { initialized: 1, watermark: 123509490 });
-    w.bumpKaspi(123509495);
-    await w.kaspiTurboTick();   // 496 ещё нет, 497 есть
-    assert.deepStrictEqual(sent, ['turbo:123509497']);
-    assert.strictEqual(w.kaspiFrontier, 123509497);
+    // Граница из выдачи отстаёт на тысячи номеров: сначала край ищется, старое не шлётся.
+    for (let n = 123501000; n <= 123509497; n += 3) if (!live.has(n)) live.set(n, { ...ad, id: n });
+    w.bumpKaspi(123501000);
+    for (let i = 0; i < 20 && !w.kaspiSynced; i++) await w.kaspiTurboTick();
+    assert.ok(w.kaspiSynced, 'край найден');
+    assert.ok(w.kaspiFrontier >= 123509490 && w.kaspiFrontier <= 123509497, `граница у края: ${w.kaspiFrontier}`);
+    assert.deepStrictEqual(sent, [], 'пока искали край — ничего не прислали');
+    // Новое за краем — сразу.
+    live.set(123509499, { ...ad, id: 123509499 });
     await w.kaspiTurboTick();
-    assert.deepStrictEqual(sent, ['turbo:123509497'], 'второй раз не шлём');
+    assert.deepStrictEqual(sent, ['turbo:123509499']);
+    await w.kaspiTurboTick();
+    assert.deepStrictEqual(sent, ['turbo:123509499'], 'второй раз не шлём');
   } finally {
     k.fetchById = orig;
   }

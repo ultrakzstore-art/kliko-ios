@@ -311,6 +311,51 @@ class Watcher {
     }
   }
 
+  // Есть ли объявление с номером n или сразу за ним (номера бывают сняты — дырки по 1–2).
+  async kaspiExists(n) {
+    const k = sources.get('kaspi');
+    for (const id of [n, n + 1, n + 2]) {
+      const ad = await k.fetchById(id);
+      this.okRequest('kaspi');
+      if (ad) return id;
+    }
+    return 0;
+  }
+
+  // Сначала — найти самый последний номер Kaspi. Граница из выдачи может сильно отставать, и
+  // тогда турбо слало бы подряд всё, что вышло между ней и сегодняшним днём. Пока ищем — ничего
+  // не шлём: шагаем вперёд удваивая шаг (16, 32, 64…), где объявлений уже нет — делим пополам.
+  async kaspiSync() {
+    let lo = this.kaspiFrontier;
+    let step = this.kaspiStep || 16;
+    for (let i = 0; i < 4; i++) {
+      if (!this.kaspiHi) {
+        const hit = await this.kaspiExists(lo + step);
+        if (hit) { lo = hit; step = Math.min(step * 2, 20_000); continue; }
+        // Пусто — может быть просто дырка (снятые подряд). Проверяем ещё и вчетверо дальше.
+        const far = await this.kaspiExists(lo + step * 4);
+        if (far) { lo = far; step = Math.min(step * 2, 20_000); continue; }
+        this.kaspiHi = lo + step;   // дальше объявлений нет — ищем край между lo и kaspiHi
+      }
+      if (this.kaspiHi - lo <= 3) {
+        // Край найден с точностью до пары номеров — добираем их, чтобы уже вышедшее не ушло как новое.
+        const k = sources.get('kaspi');
+        for (let id = lo + 1; id <= this.kaspiHi + 3; id++) if (await k.fetchById(id)) lo = id;
+        this.kaspiSynced = true;
+        this.kaspiHi = 0;
+        this.kaspiStep = 16;
+        this.log(`Kaspi: последний номер ${lo} — дальше ловлю только новые`);
+        break;
+      }
+      const mid = Math.floor((lo + this.kaspiHi) / 2);
+      const hit = await this.kaspiExists(mid);
+      if (hit) lo = hit; else this.kaspiHi = mid;
+    }
+    this.kaspiStep = step;
+    this.kaspiFrontier = lo;
+    this.db.set('kaspi_frontier', lo);
+  }
+
   async kaspiTurboTick() {
     if (this.kaspiBusy || this.blocked('kaspi')) return;
     if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_frontier', 0);
@@ -318,10 +363,17 @@ class Watcher {
     const subs = this.db.subs().filter((s) => s.source === 'kaspi' && !s.paused && s.initialized
       && this.db.hasAccess(s.user_id, 'kaspi') && !this.db.user(s.user_id)?.blocked);
     if (!subs.length) return;
+    // ПК спал или бот стоял дольше 5 минут — край снова ищем заново (пропущенное принесёт выдача).
+    if (Date.now() - (this.kaspiLastTick || 0) > 5 * 60_000) this.kaspiSynced = false;
+    this.kaspiLastTick = Date.now();
     this.kaspiBusy = true;
     const k = sources.get('kaspi');
     this.kaspiMisses = this.kaspiMisses || new Map();
     try {
+      if (!this.kaspiSynced) {
+        try { await this.kaspiSync(); } catch (e) { this.handleError(e, 'kaspi'); }
+        return;
+      }
       const ids = [];
       for (let id = this.kaspiFrontier + 1; ids.length < 3 && id <= this.kaspiFrontier + 10; id++) ids.push(id);
       // И один номер подальше (+5…+20 по кругу): если следующие три так и не откроются (сняты,
