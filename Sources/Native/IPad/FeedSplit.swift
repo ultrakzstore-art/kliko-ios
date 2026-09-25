@@ -41,8 +41,9 @@ extension View {
     func выбраннаяКарточка(_ выбрана: Bool) -> some View {
         overlay {
             if выбрана {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Theme.green2, lineWidth: 2.5)
+                /* Этап 26: карточка вида «как на сайте» скруглена на 14 (--r-md), рамка — по ней. */
+                RoundedRectangle(cornerRadius: Config.дизайнКакНаСайте ? Theme.Радиус.md : 16, style: .continuous)
+                    .strokeBorder(Config.дизайнКакНаСайте ? Theme.акцент : Theme.green2, lineWidth: 2.5)
                     .allowsHitTesting(false)
             }
         }

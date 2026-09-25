@@ -179,11 +179,20 @@ struct ListingEnvelope: Decodable {
     let item: Listing
 }
 
-/// Ответ ленты: {ok, items:[…]}. Объявление, которое не разобралось, пропускаем, а не роняем всю страницу.
+/// Ответ ленты: {ok, items:[…], total, has_more}. Объявление, которое не разобралось, пропускаем, а не роняем всю страницу.
 struct ListingsPage: Decodable {
     let items: [Listing]
+    /// Сколько всего объявлений по запросу — «26 предложений» на плитке и число в заголовке ряда главной (этап 26).
+    /// nil — поле не пришло или не разобралось: тогда числа просто нет, лента от этого не ломается.
+    let total: Int?
+    /// Есть ли следующая страница (has_more). nil — не пришло; лента по-прежнему судит по размеру страницы.
+    let hasMore: Bool?
 
-    private enum Ключи: String, CodingKey { case items }
+    private enum Ключи: String, CodingKey {
+        case items
+        case total
+        case hasMore = "has_more"
+    }
     private struct Любое: Decodable {
         let значение: Listing?
         init(from decoder: Decoder) throws { значение = try? Listing(from: decoder) }
@@ -192,5 +201,20 @@ struct ListingsPage: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Ключи.self)
         items = try c.decode([Любое].self, forKey: .items).compactMap(\.значение)
+        /* Терпимо, как и поля объявления: PHP отдаёт число то числом, то строкой. */
+        if let n = try? c.decode(Int.self, forKey: .total) {
+            total = n
+        } else if let строка = try? c.decode(String.self, forKey: .total) {
+            total = Int(строка.trimmingCharacters(in: .whitespaces))
+        } else {
+            total = nil
+        }
+        if let да = try? c.decode(Bool.self, forKey: .hasMore) {
+            hasMore = да
+        } else if let n = try? c.decode(Int.self, forKey: .hasMore) {
+            hasMore = n != 0
+        } else {
+            hasMore = nil
+        }
     }
 }

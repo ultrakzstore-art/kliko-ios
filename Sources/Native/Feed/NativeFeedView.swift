@@ -19,6 +19,8 @@ import SwiftUI
  */
 struct NativeFeedView: View {
     @StateObject private var модель = FeedModel()
+    /// Плитки и ряды «Рекомендуем» главной как на сайте (этап 26).
+    @StateObject private var подборки = ПодборкиГлавной()
     /// «Вы смотрели» и история поиска (этап 6) — на телефоне, общие для всей ленты.
     @ObservedObject private var недавние = RecentStore.shared
     /// Открыть страницу сайта (объявление, кабинет) в веб-обёртке.
@@ -267,24 +269,38 @@ struct NativeFeedView: View {
      появляется под ней. Системная панель спрятана только у корня: карточка и чат поверх ленты — со своей.
      */
     private var лентаСайта: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                if показатьИсторию { историяПоиска }
-                if показатьНедавние {
-                    ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
-                        withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
-                    }, выбрать: выборНедавнего)
+        ScrollViewReader { прокрутка in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(Self.верхЛенты)
+                    if показатьИсторию { историяПоиска }
+                    /* Этап 26: на главной — плитки разделов и ряды «Рекомендуем», под ними та же бесконечная лента.
+                       Поиск или раздел — полоса разделов и сетка, как раньше. */
+                    if наГлавной {
+                        главнаяСайта
+                    } else {
+                        if показатьНедавние { полосаНедавнихСайта }
+                        if !разделы.isEmpty || Config.уточнениеЛенты { полосаРазделов }
+                    }
+                    if показатьСохранитьПоиск { полосаСохранитьПоиск }
+                    содержимое
                 }
-                if !разделы.isEmpty || Config.уточнениеЛенты { полосаРазделов }
-                if показатьСохранитьПоиск { полосаСохранитьПоиск }
-                содержимое
+                .padding(.bottom, 24)
             }
-            .padding(.top, 4)
-            .padding(.bottom, 24)
+            /* Сменили раздел, поиск или вернулись на главную — к началу: иначе новая выдача открывалась бы с середины. */
+            .onChange(of: модель.действующее) { _, _ in
+                withAnimation(.easeInOut(duration: 0.25)) { прокрутка.scrollTo(Self.верхЛенты, anchor: .top) }
+            }
         }
         .scrollDismissesKeyboard(.immediately)
         .background(Theme.фонСтраницы)
-        .refreshable { await модель.обновить() }
+        .refreshable {
+            await модель.обновить()
+            if наГлавной { await подборки.загрузить() }
+        }
+        .task { await подборки.начать() }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) { шапкаСайта }
         .onChange(of: модель.поиск) { _, текст in
@@ -439,7 +455,114 @@ struct NativeFeedView: View {
         let было = вид.город
         guard было != подпись else { return }
         вид.город = подпись
-        if было != nil { await модель.обновить() }
+        if было != nil {
+            await модель.обновить()
+            await подборки.загрузить()
+        }
+    }
+
+    // MARK: - Главная как на сайте (этап 26)
+
+    private static let верхЛенты = "верх-ленты"
+
+    /// Главная — ни поиска, ни раздела в запросе ленты (набранное, но не отправленное, главную не прячет).
+    private var наГлавной: Bool { модель.действующее.пустое }
+
+    /// Плитки разделов, «Вы смотрели», «Рекомендуем» с рядами по разделам и заголовок бесконечной ленты под ними.
+    @ViewBuilder
+    private var главнаяСайта: some View {
+        ПлиткиГлавной(название: { раздел in названиеРаздела(раздел) }, счёт: подборки.счёт,
+                      выбрать: { раздел in модель.выбратьРаздел(раздел.ключ) }, открыть: открыть)
+            .padding(.top, 6)
+        if показатьНедавние { полосаНедавнихСайта }
+        if !подборки.ряды.isEmpty {
+            заголовокСайта(DesignText.т("reco"), крупный: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            ForEach(Array(подборки.ряды.enumerated()), id: \.element.id) { номер, ряд in
+                РядГлавной(раздел: ряд.раздел, название: названиеРаздела(ряд.раздел), товары: ряд.товары,
+                           всего: ряд.всего, чётный: номер % 2 == 1,
+                           всё: { модель.выбратьРаздел(ряд.раздел.ключ) }) { товар in
+                    карточкаСоСсылкой(товар)
+                }
+            }
+        } else if подборки.неудача {
+            неудачаПодборок
+        }
+        HStack(alignment: .center, spacing: 8) {
+            заголовокСайта(DesignText.т("feed"), крупный: false)
+            Spacer(minLength: 0)
+            /* Этап 18: «Уточнить» на главной — у заголовка ленты: полосы разделов здесь нет, её место заняли плитки. */
+            if Config.уточнениеЛенты {
+                ЧипУточнения(уточнено: модель.уточнено) { уточнятьПоказан = true }
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+
+    private var полосаНедавнихСайта: some View {
+        ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
+            withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
+        }, выбрать: выборНедавнего)
+    }
+
+    /// .mh-h2 — 21px, насыщенность 800; заголовок ленты под рядами — мельче.
+    private func заголовокСайта(_ текст: String, крупный: Bool) -> some View {
+        Text(текст)
+            .font(крупный ? Font.system(.title2, weight: .heavy) : Font.system(.headline, weight: .heavy))
+            .foregroundStyle(Theme.текст)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Название раздела — со снимка главной на языке сайта (FeedSnapshot), нет снимка — своё (DesignText).
+    private func названиеРаздела(_ раздел: РазделГлавной) -> String {
+        if let строка = разделы.first(where: { $0.k == раздел.ключ }), let t = строка.t, !t.isEmpty { return t }
+        return DesignText.т("v_" + раздел.ключ)
+    }
+
+    /// Карточка ряда — туда же, куда карточка сетки: в две колонки справа, иначе нативная карточка или страница сайта.
+    @ViewBuilder
+    private func карточкаСоСсылкой(_ товар: Listing) -> some View {
+        Group {
+            if двеКолонки {
+                Button { выбрать(товар) } label: { ListingCard(товар: товар) }
+                    .выбраннаяКарточка(выбор.wrappedValue?.id == товар.id)
+            } else if Config.нативнаяКарточка {
+                NavigationLink(value: товар) { ListingCard(товар: товар) }
+            } else {
+                Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }
+            }
+        }
+        .buttonStyle(.plain)
+        .сердечкоИзбранного(товар)
+    }
+
+    /// .mh-fail: подборки не пришли — строка с «Повторить»; лента под ней работает сама по себе.
+    private var неудачаПодборок: some View {
+        HStack(spacing: 10) {
+            Text(DesignText.т("fail"))
+                .font(.subheadline)
+                .foregroundStyle(Theme.текстВторой)
+            Spacer(minLength: 8)
+            Button {
+                Task { await подборки.загрузить() }
+            } label: {
+                Text(DesignText.т("retry"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .теньКарточкиСайта()
+        .padding(.horizontal, 16)
     }
 
     /// Корень ленты в стеке на экране — зелёная шапка под часами (ВидСайта.кореньЛенты).
@@ -828,6 +951,15 @@ struct ListingCard: View {
     }
 
     var body: some View {
+        /* Этап 26: вид карточки сайта (.mh-c / .vx-c). Выключен — прежняя карточка этапов 1–23. */
+        if Config.дизайнКакНаСайте {
+            карточкаСайта
+        } else {
+            карточкаПрежняя
+        }
+    }
+
+    private var карточкаПрежняя: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 Color(.tertiarySystemGroupedBackground)
@@ -886,6 +1018,115 @@ struct ListingCard: View {
     }
 
     private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
+
+    /**
+     Карточка сайта: фото 1:1 на подложке, золотая метка «★ ТОП» (linear-gradient(135deg, #d9b24c, #b88a1e), радиус 8,
+     высота 24, 10 pt заглавными), цена 16 pt жирнее всего, название 14–15 pt полужирным в две строки, город мелко и
+     приглушённо. Карточка скруглена на 14, на белой поверхности с мягкой тенью (в тёмной — рамка линии); в ТОПе —
+     золотая рамка 1,5 pt и золотистый верх подложки. Шрифты — стилями текста, как на этапе 11: растут с «Размером
+     текста» до accessibility3.
+     */
+    private var карточкаСайта: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Theme.поверхность2
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    AsyncImage(url: товар.обложка) { фаза in
+                        if case .success(let картинка) = фаза {
+                            картинка.resizable().scaledToFill()
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.system(size: 26))
+                                .foregroundStyle(Theme.текстВторой.opacity(0.5))
+                        }
+                    }
+                }
+                .clipped()
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 6) {
+                        if товар.isTop { меткаТоп }
+                        if товар.isNew { меткаСайта(FeedText.т("new")) }
+                    }
+                    .padding(8)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Self.цена(товар))
+                    .font(.system(.callout, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(товар.title)
+                    .font(.system(.subheadline, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: !крупныйТекст)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                if !товар.city.isEmpty {
+                    Text(товар.city)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.текстВторой)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+        }
+        .background(фонКарточкиСайта)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            if товар.isTop {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.топРамка, lineWidth: 1.5)
+                    .allowsHitTesting(false)
+            }
+        }
+        .теньКарточкиСайта()
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(товар.голос)
+    }
+
+    /// Подложка: в ТОПе — золотистый верх (.mh-c.is-top), иначе поверхность.
+    @ViewBuilder
+    private var фонКарточкиСайта: some View {
+        if товар.isTop {
+            LinearGradient(stops: [Gradient.Stop(color: Theme.топФон, location: 0),
+                                   Gradient.Stop(color: Theme.поверхность, location: 0.55)],
+                           startPoint: .top, endPoint: .bottom)
+        } else {
+            Theme.поверхность
+        }
+    }
+
+    /// «★ ТОП» — .mh-top сайта.
+    private var меткаТоп: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 9, weight: .bold))
+            Text(FeedText.т("top").uppercased())
+                .font(.system(size: 10, weight: .heavy))
+                .tracking(0.6)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(LinearGradient(colors: [Theme.топНачало, Theme.топКонец], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .shadow(color: Color(red: 176 / 255, green: 132 / 255, blue: 24 / 255).opacity(0.5), radius: 4, x: 0, y: 3)
+    }
+
+    /// «Новое» — той же формы, что «★ ТОП», в зелёном бренда.
+    private func меткаСайта(_ текст: String) -> some View {
+        Text(текст)
+            .font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(Theme.зелёный2, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+    }
 
     private func метка(_ текст: String, _ фон: Color) -> some View {
         Text(текст)

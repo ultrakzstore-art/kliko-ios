@@ -190,13 +190,26 @@ struct КнопкаИзбранного: View {
         Group {
             if место == .карточка {
                 Button { избранное.переключить(товар) } label: {
-                    сердце
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(сохранено ? Color.red : Color.primary)
-                        .frame(width: 32, height: 32)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .padding(6)                     // палец попадает в 44 pt, а кружок остаётся маленьким
-                        .contentShape(Rectangle())
+                    if Config.дизайнКакНаСайте {
+                        /* Этап 26: .mk-fav сайта — кружок 32 pt из поверхности 82 % с размытием, сердце серое, в
+                           избранном — залитое #e0245e; 8 pt от угла фото. */
+                        сердце
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(сохранено ? Theme.сердце : Theme.текстВторой)
+                            .frame(width: 32, height: 32)
+                            .background(Theme.поверхность.opacity(0.82), in: Circle())
+                            .background(.ultraThinMaterial, in: Circle())
+                            .padding(8)
+                            .contentShape(Rectangle())
+                    } else {
+                        сердце
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(сохранено ? Color.red : Color.primary)
+                            .frame(width: 32, height: 32)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .padding(6)                     // палец попадает в 44 pt, а кружок остаётся маленьким
+                            .contentShape(Rectangle())
+                    }
                 }
                 .buttonStyle(.plain)
             } else {
