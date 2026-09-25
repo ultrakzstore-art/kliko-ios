@@ -145,7 +145,9 @@ enum OLX {
         ad.promoted = bool(a["isPromoted"]) || bool(promo["top_ad"]) || bool(promo["highlighted"])
         ad.business = bool(a["isBusiness"]) || bool(a["business"])
         ad.userId = string((a["user"] as? [String: Any])?["id"] ?? a["userId"])
-        ad.photo = photoURL((a["photos"] as? [Any])?.first)
+        let photos = ((a["photos"] as? [Any]) ?? []).map { photoURL($0) }.filter { !$0.isEmpty }
+        ad.photo = photos.first ?? ""
+        ad.photos = photos.isEmpty ? nil : Array(photos.prefix(12))
         return ad
     }
 
@@ -154,7 +156,7 @@ enum OLX {
         var ad = Ad(id: id)
         ad.title = o["title"] as? String ?? ""
         ad.url = o["url"] as? String ?? ""
-        ad.description = String(stripHTML(o["description"] as? String ?? "").prefix(600))
+        ad.description = String(stripHTML(o["description"] as? String ?? "").prefix(2000))
         for p in (o["params"] as? [[String: Any]]) ?? [] {
             let value = p["value"] as? [String: Any] ?? [:]
             if (p["key"] as? String) == "price" || (p["type"] as? String) == "price" {
@@ -177,7 +179,9 @@ enum OLX {
         let user = o["user"] as? [String: Any] ?? [:]
         ad.userId = string(user["id"])
         ad.userName = user["name"] as? String ?? ""
-        ad.photo = photoURL((o["photos"] as? [Any])?.first)
+        let photos = ((o["photos"] as? [Any]) ?? []).map { photoURL($0) }.filter { !$0.isEmpty }
+        ad.photo = photos.first ?? ""
+        ad.photos = photos.isEmpty ? nil : Array(photos.prefix(12))
         return ad
     }
 
@@ -441,11 +445,16 @@ enum OLX {
         (v as? Bool) ?? ((v as? NSNumber)?.boolValue ?? false)
     }
 
+    // Форматтеры дорогие — создаём один раз, а не на каждое объявление.
+    private static let isoPlain = ISO8601DateFormatter()
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     private static func date(_ v: Any?) -> Date? {
         guard let s = v as? String else { return nil }
-        let f = ISO8601DateFormatter()
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.date(from: s)
+        return isoPlain.date(from: s) ?? isoFractional.date(from: s)
     }
 }

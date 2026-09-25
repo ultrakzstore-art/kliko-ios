@@ -65,9 +65,7 @@ struct FeedView: View {
             } else if scope == .all {
                 // Несортированные: всё новое подряд — название и ссылка.
                 ForEach(model.allAds) { ad in
-                    Button { if let url = ad.link { openURL(url) } } label: { LinkRow(ad: ad) }
-                        .buttonStyle(.plain)
-                        .contextMenu { AdMenu(ad: ad) }
+                    LinkRow(ad: ad).contextMenu { AdMenu(ad: ad) }
                 }
             } else if subFilter != nil {
                 ForEach(shown) { ad in adButton(ad) }
@@ -97,17 +95,8 @@ struct FeedView: View {
     }
 
     private func adButton(_ ad: Ad) -> some View {
-        Button { if let url = ad.link { openURL(url) } } label: {
-            AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId)
-        }
-        .buttonStyle(.plain)
-        .contextMenu { AdMenu(ad: ad) }
-        .swipeActions(edge: .trailing) {
-            if let url = ad.sellerURL {
-                Button { openURL(url) } label: { Label("Автор", systemImage: "person.crop.circle") }
-                    .tint(.indigo)
-            }
-        }
+        AdRow(ad: ad, highlighted: ad.id == model.highlightedAdId)
+            .contextMenu { AdMenu(ad: ad) }
     }
 
     private var emptyTitle: String {
@@ -122,89 +111,270 @@ struct FeedView: View {
     }
 }
 
+/// Карточка «По запросам»: фото листаются свайпом (тап — на весь экран с увеличением),
+/// ниже — цена, город, время и кнопки: позвонить (если номер есть в тексте), OLX, автор.
 struct AdRow: View {
     let ad: Ad
     var highlighted = false
-    var showQuery = false
-    var queryNames: [String] = []
+    @Environment(\.openURL) private var openURL
+    @State private var viewer: PhotoViewer.Start?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            AsyncImage(url: URL(string: ad.photo)) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    Color.secondary.opacity(0.15)
-                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-                }
-            }
-            .frame(width: 84, height: 84)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+        VStack(alignment: .leading, spacing: 6) {
+            PhotoCarousel(photos: ad.gallery, height: 200) { index in viewer = .init(index: index) }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
                     .font(.subheadline.weight(.semibold)).lineLimit(2)
-                if !ad.priceText.isEmpty {
-                    Text(verbatim: ad.priceText).font(.headline)
+                HStack(spacing: 6) {
+                    if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).font(.headline) }
+                    Spacer(minLength: 0)
+                    Text("\(ad.postedDate, style: .relative) назад").font(.caption).foregroundStyle(.secondary)
                 }
-                HStack(spacing: 4) {
-                    if !ad.city.isEmpty { Text(verbatim: ad.city); Text(verbatim: "·") }
-                    Text("\(ad.postedDate, style: .relative) назад")
+                HStack(spacing: 6) {
+                    if !ad.city.isEmpty { Text(verbatim: ad.city).font(.caption).foregroundStyle(.secondary) }
+                    if let lag = ad.lagText { Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary) }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
                 Badges(ad: ad)
-                if let lag = ad.lagText {
-                    Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
-                }
-                if showQuery && !queryNames.isEmpty {
-                    Label { Text(verbatim: queryNames.joined(separator: ", ")) } icon: { Image(systemName: "magnifyingglass") }
-                        .font(.caption2)
-                        .foregroundStyle(Color.watchAccent)
-                }
             }
-            Spacer(minLength: 0)
+            .contentShape(Rectangle())
+            .onTapGesture { if let url = ad.link { openURL(url) } }
+
+            ActionButtons(ad: ad)
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .padding(.vertical, 6)
         .listRowBackground(highlighted ? Color.watchAccent.opacity(0.12) : nil)
+        .fullScreenCover(item: $viewer) { start in PhotoViewer(photos: ad.gallery, start: start.index) }
     }
 }
 
-/// Строка «Все новые»: название, ссылка, цена, город и время — без фото, чтобы влезало больше.
-struct LinkRow: View {
+/// Кнопки действий: позвонить, открыть на OLX, все объявления автора.
+struct ActionButtons: View {
     let ad: Ad
+    var compact = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
+        let phones = ad.phones
+        HStack(spacing: 8) {
+            if let phone = phones.first, let tel = URL(string: "tel:\(phone)") {
+                Button { openURL(tel) } label: {
+                    Label(compact ? "Позвонить" : Phone.pretty(phone), systemImage: "phone.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            }
             if let url = ad.link {
-                Text(verbatim: url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
-                    .font(.caption)
-                    .foregroundStyle(Color.watchAccent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                Button { openURL(url) } label: {
+                    Label(phones.isEmpty ? "Открыть — позвонить на OLX" : "OLX", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: phones.isEmpty ? .infinity : nil)
+                }
+                .buttonStyle(.bordered)
             }
-            HStack(spacing: 4) {
-                if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
-                if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
-                Text("· \(ad.postedDate, style: .relative) назад")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            if !ad.subIds.isEmpty || ad.onReview {
-                Badges(ad: ad)
-            }
-            if let lag = ad.lagText {
-                Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
+            if !compact, let seller = ad.sellerURL {
+                Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+                    .buttonStyle(.bordered)
             }
         }
+        .font(.subheadline.weight(.semibold))
+        .labelStyle(.titleAndIcon)
+        .controlSize(compact ? .small : .regular)
+    }
+}
+
+/// Строка «Все новые»: название, ссылка, цена, город и время — компактно, с маленьким фото.
+struct LinkRow: View {
+    let ad: Ad
+    @Environment(\.openURL) private var openURL
+    @State private var viewer: PhotoViewer.Start?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 10) {
+                if let first = ad.gallery.first {
+                    CachedImage(url: PhotoSize.thumb(first))
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .onTapGesture { viewer = .init(index: 0) }
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                    if let url = ad.link {
+                        Text(verbatim: url.absoluteString.replacingOccurrences(of: "https://www.", with: ""))
+                            .font(.caption)
+                            .foregroundStyle(Color.watchAccent)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    HStack(spacing: 4) {
+                        if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
+                        if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
+                        Text("· \(ad.postedDate, style: .relative) назад")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    if let lag = ad.lagText {
+                        Text(verbatim: "⏱ \(lag)").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { if let url = ad.link { openURL(url) } }
+            }
+            if !ad.phones.isEmpty { ActionButtons(ad: ad, compact: true) }
+        }
         .padding(.vertical, 2)
-        .contentShape(Rectangle())
+        .fullScreenCover(item: $viewer) { start in PhotoViewer(photos: ad.gallery, start: start.index) }
+    }
+}
+
+/// Фото свайпом. Маленькие копии для ленты, тап — полноэкранный просмотр.
+struct PhotoCarousel: View {
+    let photos: [String]
+    var height: CGFloat = 200
+    var onTap: (Int) -> Void
+    @State private var page = 0
+
+    var body: some View {
+        if photos.isEmpty {
+            RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12))
+                .frame(height: 80)
+                .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+        } else {
+            TabView(selection: $page) {
+                ForEach(Array(photos.enumerated()), id: \.offset) { i, url in
+                    CachedImage(url: PhotoSize.thumb(url))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: height)
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture { onTap(i) }
+                        .tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: photos.count > 1 ? .automatic : .never))
+            .frame(height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(alignment: .topTrailing) {
+                if photos.count > 1 {
+                    Text(verbatim: "\(page + 1)/\(photos.count)")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.black.opacity(0.5), in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(8)
+                }
+            }
+        }
+    }
+}
+
+/// Картинка через общий кэш (URLCache): пролистанное не грузится заново.
+struct CachedImage: View {
+    let url: String
+
+    var body: some View {
+        AsyncImage(url: URL(string: url), transaction: Transaction(animation: .easeOut(duration: 0.15))) { phase in
+            if let image = phase.image {
+                image.resizable().scaledToFill()
+            } else if phase.error != nil {
+                Color.secondary.opacity(0.15).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+            } else {
+                Color.secondary.opacity(0.1).overlay(ProgressView())
+            }
+        }
+    }
+}
+
+/// Полноэкранный просмотр: листать свайпом, увеличивать щипком или двойным тапом.
+struct PhotoViewer: View {
+    struct Start: Identifiable {
+        var index: Int
+        var id: Int { index }
+    }
+
+    let photos: [String]
+    @State var start: Int
+    @Environment(\.dismiss) private var dismiss
+
+    init(photos: [String], start: Int) {
+        self.photos = photos
+        _start = State(initialValue: start)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $start) {
+                ForEach(Array(photos.enumerated()), id: \.offset) { i, url in
+                    ZoomableImage(url: url).tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .ignoresSafeArea()
+
+            HStack {
+                Text(verbatim: "\(start + 1) / \(photos.count)").foregroundStyle(.white).font(.subheadline.weight(.semibold))
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.title).symbolRenderingMode(.hierarchical).foregroundStyle(.white)
+                }
+            }
+            .padding()
+        }
+        .statusBarHidden()
+    }
+}
+
+struct ZoomableImage: View {
+    let url: String
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        AsyncImage(url: URL(string: url)) { phase in
+            if let image = phase.image {
+                image.resizable().scaledToFit()
+            } else if phase.error != nil {
+                Image(systemName: "photo").foregroundStyle(.white.opacity(0.6))
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .scaleEffect(scale)
+        .offset(offset)
+        .gesture(
+            MagnifyGesture()
+                .onChanged { value in scale = min(5, max(1, lastScale * value.magnification)) }
+                .onEnded { _ in
+                    lastScale = scale
+                    if scale <= 1 { reset() }
+                }
+        )
+        // Сдвиг увеличенного фото; при обычном масштабе свайп остаётся листанию.
+        .gesture(
+            DragGesture()
+                .onChanged { v in offset = CGSize(width: lastOffset.width + v.translation.width, height: lastOffset.height + v.translation.height) }
+                .onEnded { _ in lastOffset = offset },
+            including: scale > 1 ? .all : .subviews
+        )
+        .onTapGesture(count: 2) {
+            withAnimation(.spring(duration: 0.25)) {
+                if scale > 1 { reset() } else { scale = 2.5; lastScale = 2.5 }
+            }
+        }
+    }
+
+    private func reset() {
+        scale = 1
+        lastScale = 1
+        offset = .zero
+        lastOffset = .zero
     }
 }
 

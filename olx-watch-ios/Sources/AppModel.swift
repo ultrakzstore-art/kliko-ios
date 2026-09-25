@@ -63,6 +63,8 @@ final class AppModel {
     private(set) var pushStatus = ""
 
     init() {
+        // Кэш для фото: пролистанное не грузится заново.
+        URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 300 << 20)
         load()
     }
 
@@ -83,7 +85,7 @@ final class AppModel {
         loop?.cancel()
         loop = nil
         running = false
-        save()
+        saveNow()
         scheduleBackgroundRefresh()
     }
 
@@ -186,16 +188,26 @@ final class AppModel {
             if (misses[n] ?? 0) < Self.missGiveUp && !seenSet.contains(n) { ids.append(n) }
             n += 1
         }
-        for id in ids {
-            if let until = blockedUntil, until > Date() { break }
+        // Все номера прохода — одновременно: быстрее ловим и не ждём каждый ответ по очереди.
+        let results = await withTaskGroup(of: (Int, Result<Ad?, Error>).self) { group in
+            for id in ids {
+                group.addTask {
+                    do { return (id, .success(try await OLX.offer(id))) } catch { return (id, .failure(error)) }
+                }
+            }
+            var out: [(Int, Result<Ad?, Error>)] = []
+            for await r in group { out.append(r) }
+            return out.sorted { $0.0 < $1.0 }
+        }
+        for (id, result) in results {
             let offer: Ad?
-            do {
-                offer = try await OLX.offer(id)
+            switch result {
+            case .success(let o):
+                offer = o
                 ok()
                 state.stats.turboProbes += 1
-            } catch {
+            case .failure(let error):
                 fail(error)
-                if Self.isBlocked(error) { break }
                 continue
             }
             guard var ad = offer else { misses[id, default: 0] += 1; continue }
@@ -250,8 +262,8 @@ final class AppModel {
     private func remember(_ id: Int) {
         guard seenSet.insert(id).inserted else { return }
         state.seen.append(id)
-        if state.seen.count > 20_000 {
-            let drop = state.seen.prefix(state.seen.count - 20_000)
+        if state.seen.count > 5_000 {
+            let drop = state.seen.prefix(state.seen.count - 5_000)
             drop.forEach { seenSet.remove($0) }
             state.seen.removeFirst(drop.count)
         }
@@ -401,7 +413,7 @@ final class AppModel {
         let before = state.ads.count
         await pollAll()
         await turbo()
-        save()
+        saveNow()
         return state.ads.count > before
     }
 
@@ -426,7 +438,7 @@ final class AppModel {
         let work = Task { @MainActor in
             await self.pollAll()
             await self.turbo()
-            self.save()
+            self.saveNow()
             task.setTaskCompleted(success: true)
         }
         task.expirationHandler = {
@@ -450,7 +462,29 @@ final class AppModel {
         seenSet = Set(saved.seen)
     }
 
+    /// Сохранение — не чаще раза в 3 секунды и не в главном потоке: кодирование всей ленты
+    /// после каждой проверки подвешивало интерфейс.
+    private var saveTask: Task<Void, Never>?
+
     func save() {
+        guard saveTask == nil else { return }
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self else { return }
+            let snapshot = self.state
+            self.saveTask = nil
+            let url = Self.fileURL
+            await Task.detached(priority: .utility) {
+                guard let data = try? JSONEncoder().encode(snapshot) else { return }
+                try? data.write(to: url, options: .atomic)
+            }.value
+        }
+    }
+
+    /// Сразу и целиком — при уходе в фон и в конце фоновой задачи, когда ждать нельзя.
+    func saveNow() {
+        saveTask?.cancel()
+        saveTask = nil
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: Self.fileURL, options: .atomic)
     }
