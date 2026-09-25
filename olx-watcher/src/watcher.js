@@ -37,6 +37,7 @@ class Watcher {
     this.misses = new Map();
     this.backoffUntil = 0;
     this.backoffMs = 0;
+    this.otherBackoff = new Map();   // Kaspi / Kolesa / Krisha → { ms, until }
     this.stats = { searchOk: 0, searchErr: 0, turboFound: 0, turboProbes: 0, lastTurboHit: null, sent: 0 };
     this.timers = [];
     this.lockSeen = new Map();
@@ -120,22 +121,35 @@ class Watcher {
     this.timers.forEach(clearInterval);
   }
 
-  blocked() {
-    return Date.now() < this.backoffUntil;
+  // Пауза — своя у каждой площадки: OLX ограничил запросы — Kaspi, Kolesa, Krisha работают
+  // дальше, а их удачный ответ не сбрасывает паузу OLX (раньше сбрасывал — и бот снова бил
+  // в закрытую дверь OLX каждую минуту, продлевая ограничение).
+  blocked(source = 'olx') {
+    return Date.now() < (source === 'olx' ? this.backoffUntil : (this.otherBackoff.get(source)?.until || 0));
   }
 
-  handleError(e) {
+  handleError(e, source = 'olx') {
     if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) {
-      this.backoffMs = Math.min(15 * 60_000, this.backoffMs ? this.backoffMs * 2 : 60_000);
-      this.backoffUntil = Date.now() + this.backoffMs;
-      this.alert(`OLX ограничил запросы (${e.status}). Пауза ${Math.round(this.backoffMs / 60_000)} мин.`);
+      const b = source === 'olx' ? { ms: this.backoffMs } : (this.otherBackoff.get(source) || { ms: 0 });
+      b.ms = Math.min(15 * 60_000, b.ms ? b.ms * 2 : 2 * 60_000);
+      b.until = Date.now() + b.ms;
+      if (source === 'olx') {
+        this.backoffMs = b.ms;
+        this.backoffUntil = b.until;
+        olx.slowDown();   // после паузы — реже, скорость поднимется сама, пока OLX отвечает
+      } else {
+        this.otherBackoff.set(source, b);
+      }
+      const name = source === 'olx' ? 'OLX' : sources.get(source).title;
+      this.alert(`${name} ограничил запросы (${e.status}). Пауза ${Math.round(b.ms / 60_000)} мин, потом продолжу реже.`);
       return true;
     }
     return false;
   }
 
-  okRequest() {
-    this.backoffMs = 0;
+  okRequest(source = 'olx') {
+    if (source === 'olx') this.backoffMs = 0;
+    else this.otherBackoff.delete(source);
   }
 
   bumpFrontier(id) {
@@ -168,7 +182,7 @@ class Watcher {
   }
 
   async searchTick() {
-    if (this.searchBusy || this.blocked()) return;
+    if (this.searchBusy) return;
     this.searchBusy = true;
     try {
       const now = Date.now();
@@ -188,7 +202,7 @@ class Watcher {
         byUrl.set(key, [...(byUrl.get(key) || []), s]);
       }
       for (const [key, subs] of byUrl) {
-        if (this.blocked()) break;
+        if (this.blocked(key.slice(0, key.indexOf('|')))) continue;
         await this.pollUrl(key.slice(key.indexOf('|') + 1), subs);
         await sleep(150 + Math.random() * 250);
       }
@@ -202,13 +216,13 @@ class Watcher {
     let ads;
     try {
       ads = await src.fetchSearch(url);
-      this.okRequest();
+      this.okRequest(src.key);
       this.stats.searchOk += 1;
       ads = await this.morePages(src, url, subs, ads);
     } catch (e) {
       this.stats.searchErr += 1;
       for (const s of subs) this.db.updateSub(s.id, { last_poll: Date.now(), last_error: e.message });
-      if (!this.handleError(e)) this.log(`поиск ${url}: ${e.message}`);
+      if (!this.handleError(e, src.key)) this.log(`поиск ${url}: ${e.message}`);
       return;
     }
     if (src.key === 'olx') for (const a of ads) this.bumpFrontier(a.id);
@@ -436,25 +450,33 @@ class Watcher {
     try {
       // Сначала — пропущенные номера чуть ниже границы: номер мог ещё не открыться, когда
       // следующий уже появился и граница ушла вперёд. Дальше — новые номера за границей.
+      // Порядок = очередь к OLX (запросы по номеру идут не чаще olx.offerRate() в секунду):
+      // сначала новые номера за границей — самое свежее, потом недавние промахи и пропуски.
       const ids = [];
+      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
+        if ((this.misses.get(id) || 0) < MISS_GIVE_UP) ids.push(id);
+      }
       const retry = [...this.misses.entries()]
         .filter(([id, n]) => id < this.frontier && id > this.frontier - 300 && n < MISS_GIVE_UP)
         .map(([id]) => id)
         .sort((a, b) => b - a)
-        .slice(0, Math.ceil(this.cfg.turboWindow / 3));
+        .slice(0, Math.ceil(this.cfg.turboWindow / 3))
+        .filter((id) => !ids.includes(id));
       ids.push(...retry);
       // И пропуски ниже края ленты — давно не проверенные первыми.
       const tickAt = Date.now();
       const gapIds = [...this.gaps.entries()].filter(([, g]) => gapDue(g, tickAt))
         .sort((a, b) => a[1].checked - b[1].checked || b[0] - a[0])
-        .slice(0, this.cfg.turboWindow).map(([id]) => id).filter((id) => !ids.includes(id));
+        .filter(([id]) => !ids.includes(id))
+        .slice(0, Math.ceil(this.cfg.turboWindow / 2)).map(([id]) => id);
       for (const id of gapIds) this.gaps.get(id).checked = Date.now();
       ids.push(...gapIds);
-      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow + retry.length + gapIds.length && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
-        if ((this.misses.get(id) || 0) < MISS_GIVE_UP) ids.push(id);
-      }
-      // Все номера прохода — одновременно.
       const results = await Promise.all(ids.map((id) => olx.fetchOffer(id).then((o) => ({ id, o }), (e) => ({ id, e }))));
+      // 403 на всё подряд — это не скрытые объявления, а OLX закрыл доступ целиком: пауза.
+      if (results.length >= 5 && results.every((r) => r.e instanceof olx.HttpError && r.e.status === 403)) {
+        this.handleError(results[0].e);
+        return;
+      }
       for (const { id, o, e } of results) {
         if (e) {
           if (this.hiddenOffer(id, e)) continue;

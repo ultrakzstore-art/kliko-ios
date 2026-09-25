@@ -338,3 +338,17 @@ test('без провалов: модерация прошла через 40 м�
     olx.fetchOffer = orig.offer;
   }
 });
+
+test('пауза своя у площадки: OLX ограничил — Kaspi работает и не сбрасывает паузу OLX', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-block-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async () => {}, alert: async () => {}, log: () => {} });
+  assert.ok(w.handleError(new olx.HttpError(403, 'u'), 'olx'));
+  assert.ok(w.blocked('olx'));
+  assert.ok(!w.blocked('kaspi'), 'Kaspi не на паузе');
+  w.okRequest('kaspi');
+  assert.strictEqual(w.backoffMs, 2 * 60_000, 'ответ Kaspi не сбросил паузу OLX');
+  assert.ok(w.handleError(new olx.HttpError(429, 'u'), 'olx'));
+  assert.strictEqual(w.backoffMs, 4 * 60_000, 'второй отказ подряд — пауза дольше');
+});

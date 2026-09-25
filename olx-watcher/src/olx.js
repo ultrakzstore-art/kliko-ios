@@ -45,7 +45,18 @@ class HttpError extends Error {
   }
 }
 
+// Страницы и лента OLX — не чаще 2 в секунду на весь бот (отдельно от запросов по номеру,
+// чтобы лента не стояла в очереди за турбо).
+let nextPage = 0;
+async function pageSlot() {
+  const now = Date.now();
+  const at = Math.max(now, nextPage);
+  nextPage = at + 500;
+  if (at > now) await new Promise((r) => setTimeout(r, at - now));
+}
+
 async function get(url, accept) {
+  await pageSlot();
   const res = await fetch(url, { headers: { ...HEADERS, Accept: accept }, redirect: 'follow', signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new HttpError(res.status, url);
   return res;
@@ -123,9 +134,33 @@ function normalizeListingAd(a) {
 
 // ---------- карточка по номеру ----------
 
+// Запросы по номеру — не чаще offerRate в секунду на весь бот. Раньше турбо слал 20 запросов
+// разом каждую секунду, и через 10–15 минут OLX закрывал доступ с этого IP. После паузы скорость
+// снижается вдвое и потом сама растёт обратно, пока OLX отвечает нормально.
+const MAX_RATE = Math.max(0.5, Number(process.env.OLX_RPS) || 3);
+let offerRate = MAX_RATE;
+let nextSlot = 0;
+let lastSlowDown = 0;
+async function slot() {
+  const now = Date.now();
+  if (offerRate < MAX_RATE && now - lastSlowDown > 5 * 60_000) {
+    offerRate = Math.min(MAX_RATE, offerRate + 0.5);
+    lastSlowDown = now;
+  }
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + 1000 / offerRate;
+  if (at > now) await new Promise((r) => setTimeout(r, at - now));
+}
+function slowDown() {
+  offerRate = Math.max(0.5, offerRate / 2);
+  lastSlowDown = Date.now();
+  nextSlot = 0;
+}
+
 // Карточка объявления в том же JSON, которым пользуется сайт. 404/410 — такого номера на
 // OLX.kz нет (или ещё не создан, или удалён).
 async function fetchOffer(id) {
+  await slot();
   const res = await fetch(`${BASE}/api/v1/offers/${id}/`, { headers: { ...HEADERS, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
   if (res.status === 404 || res.status === 410) return null;
   if (!res.ok) throw new HttpError(res.status, res.url);
@@ -219,7 +254,7 @@ async function sellerLink(ad) {
 }
 
 module.exports = {
-  sellerLink, sellerLinkIn,
+  sellerLink, sellerLinkIn, slowDown, offerRate: () => offerRate,
   fetchLatest,
   BASE, decodeId, encodeId, idFromUrl, newestFirst, fetchSearch, parseSearchHtml, fetchOffer, normalizeOffer, HttpError,
 };
