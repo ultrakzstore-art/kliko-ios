@@ -31,7 +31,10 @@
     "files": [
       "src/**/*",
       "desktop/**/*",
-      "package.json"
+      "package.json",
+      "!**/node_modules/**/{test,tests,__tests__,docs,doc,example,examples,benchmark,benchmarks}/**",
+      "!**/node_modules/**/*.{md,markdown,map,ts,flow}",
+      "!**/node_modules/**/{CHANGELOG,HISTORY,AUTHORS,CONTRIBUTING}*"
     ],
     "win": {
       "target": "nsis",
@@ -41,7 +44,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "OLX-Watcher-Setup-${version}.${ext}"
+      "artifactName": "OLX-Watcher-Setup-${version}.${ext}",
+      "differentialPackage": true
     },
     "publish": [
       {
@@ -50,6 +54,11 @@
         "repo": "kliko-ios",
         "releaseType": "release"
       }
+    ],
+    "compression": "maximum",
+    "electronLanguages": [
+      "ru",
+      "en-US"
     ]
   }
 }
