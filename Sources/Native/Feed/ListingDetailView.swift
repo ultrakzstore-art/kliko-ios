@@ -297,6 +297,17 @@ struct ListingDetailView: View {
                 .fill(Theme.mint)
                 .frame(width: 44, height: 44)
                 .overlay(Image(systemName: "person.fill").foregroundStyle(Theme.green))
+                .overlay {
+                    if let адрес = товар.аватарПродавца.flatMap({ Config.url($0) }) {
+                        AsyncImage(url: адрес) { картинка in
+                            картинка.resizable().scaledToFill()
+                        } placeholder: {
+                            Color.clear
+                        }
+                        .clipShape(Circle())
+                    }
+                }
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     Text(товар.продавец ?? FeedText.т("seller"))
@@ -308,6 +319,11 @@ struct ListingDetailView: View {
                             .accessibilityLabel(FeedText.т("verified"))
                     }
                 }
+                if let строка = Self.доверие(товар) {
+                    Text(строка)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let п = товар.просмотры, п > 0 {
                     Text(String(format: FeedText.т("views"), п))
                         .font(.caption)
@@ -318,6 +334,17 @@ struct ListingDetailView: View {
         }
         .padding(12)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// «★ 5,0 · 2 отзыва · 7 сделок» — только то, что пришло. Ничего нет — строки нет.
+    private static func доверие(_ т: Listing) -> String? {
+        var части: [String] = []
+        if let р = т.рейтингПродавца {
+            части.append("★ " + String(format: "%.1f", р).replacingOccurrences(of: ".", with: ","))
+        }
+        if let о = т.отзывыПродавца { части.append(String(format: FeedText.т("reviews"), о)) }
+        if let с = т.сделкиПродавца { части.append(String(format: FeedText.т("deals"), с)) }
+        return части.isEmpty ? nil : части.joined(separator: " · ")
     }
 
     private func чип(_ текст: String, значок: String?) -> some View {

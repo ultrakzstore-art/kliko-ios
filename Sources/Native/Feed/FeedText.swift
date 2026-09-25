@@ -9,7 +9,7 @@ enum FeedText {
     }
 
     private static let тексты: [String: [String: String]] = [
-        "ru": ["used": "Б/у", "warranty": "Гарантия %d дн.", "description": "Описание", "specs": "Характеристики",
+        "ru": ["reviews": "Отзывов: %d", "deals": "Сделок: %d", "used": "Б/у", "warranty": "Гарантия %d дн.", "description": "Описание", "specs": "Характеристики",
                "seller": "Продавец", "verified": "Проверенный продавец", "views": "Просмотров: %d",
                "contact": "Написать или купить", "contact_sub": "Чат с продавцом и безопасная сделка — на странице объявления",
                "share": "Поделиться", "open_site": "Открыть на сайте", "detail_partial": "Не удалось загрузить всё объявление",
@@ -20,7 +20,7 @@ enum FeedText {
                "offline": "Нет соединения", "offline_sub": "Проверьте интернет и попробуйте снова.",
                "failed": "Лента не загрузилась", "failed_sub": "Можно открыть ленту сайта — там всё то же самое.",
                "retry": "Повторить", "site": "Открыть сайт", "stale": "Показываем сохранённую ленту"],
-        "kk": ["used": "Қолданылған", "warranty": "Кепілдік %d күн", "description": "Сипаттама", "specs": "Сипаттамалар",
+        "kk": ["reviews": "Пікірлер: %d", "deals": "Мәмілелер: %d", "used": "Қолданылған", "warranty": "Кепілдік %d күн", "description": "Сипаттама", "specs": "Сипаттамалар",
                "seller": "Сатушы", "verified": "Тексерілген сатушы", "views": "Қаралым: %d",
                "contact": "Жазу немесе сатып алу", "contact_sub": "Сатушымен чат және қауіпсіз мәміле — хабарландыру бетінде",
                "share": "Бөлісу", "open_site": "Сайтта ашу", "detail_partial": "Хабарландыру толық жүктелмеді",
@@ -31,7 +31,7 @@ enum FeedText {
                "offline": "Байланыс жоқ", "offline_sub": "Интернетті тексеріп, қайталап көріңіз.",
                "failed": "Лента жүктелмеді", "failed_sub": "Сайттың лентасын ашуға болады — онда бәрі бар.",
                "retry": "Қайталау", "site": "Сайтты ашу", "stale": "Сақталған лента көрсетілуде"],
-        "en": ["used": "Used", "warranty": "%d-day warranty", "description": "Description", "specs": "Specifications",
+        "en": ["reviews": "Reviews: %d", "deals": "Deals: %d", "used": "Used", "warranty": "%d-day warranty", "description": "Description", "specs": "Specifications",
                "seller": "Seller", "verified": "Verified seller", "views": "Views: %d",
                "contact": "Message or buy", "contact_sub": "Chat with the seller and safe deal are on the listing page",
                "share": "Share", "open_site": "Open on website", "detail_partial": "Couldn't load the full listing",
@@ -42,7 +42,7 @@ enum FeedText {
                "offline": "No connection", "offline_sub": "Check your internet and try again.",
                "failed": "The feed didn't load", "failed_sub": "You can open the website feed — it has the same listings.",
                "retry": "Try again", "site": "Open website", "stale": "Showing the saved feed"],
-        "ar": ["used": "مستعمل", "warranty": "ضمان %d يوم", "description": "الوصف", "specs": "المواصفات",
+        "ar": ["reviews": "التقييمات: %d", "deals": "الصفقات: %d", "used": "مستعمل", "warranty": "ضمان %d يوم", "description": "الوصف", "specs": "المواصفات",
                "seller": "البائع", "verified": "بائع موثّق", "views": "المشاهدات: %d",
                "contact": "راسل أو اشترِ", "contact_sub": "الدردشة مع البائع والصفقة الآمنة في صفحة الإعلان",
                "share": "مشاركة", "open_site": "فتح في الموقع", "detail_partial": "تعذّر تحميل الإعلان كاملًا",
