@@ -20,6 +20,8 @@ struct ListingDetailView: View {
     @State private var страница = 0
     /// Похожие из того же раздела (этап 7) — своё состояние: основная карточка их не ждёт.
     @State private var похожие: Похожие.Состояние = .нет
+    /// Этап 13: на экране копия с телефона, а не ответ сайта, — когда она легла. nil — карточка живая (или строка ленты).
+    @State private var сохранённаяКопия: Date?
 
     /// Открыть страницу сайта в веб-обёртке.
     let открыть: (URL) -> Void
@@ -39,6 +41,8 @@ struct ListingDetailView: View {
                     галерея
                     VStack(alignment: .leading, spacing: 14) {
                         шапка
+                        /* Этап 13: без связи — сохранённая копия с телефона; сказать, от когда она. */
+                        if let когда = сохранённаяКопия { заметкаКопии(когда) }
                         if неДогрузилась {
                             Label(FeedText.т("detail_partial"), systemImage: "exclamationmark.triangle")
                                 .font(.footnote)
@@ -87,14 +91,16 @@ struct ListingDetailView: View {
         .onDisappear { Передача.shared.убрать(товар) }
         /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5), и в «Вы смотрели» (этап 6).
            Открытое по ссылке (этап 8) ложится в «Вы смотрели», поиск iPhone и Handoff только теперь, когда стало что
-           показать. */
+           показать. Сохранённая копия (этап 13) — не свежие данные: цену в избранном, «Вы смотрели» и поиске iPhone
+           ею не переписываем. */
         .onChange(of: товар) { прежний, свежий in
-            if Config.избранное { FavoritesStore.shared.освежить(свежий) }
-            ПоискТелефона.запомнить(свежий)          // этап 10: свежая цена в поиске iPhone; заготовка — впервые
+            let изКопии = сохранённаяКопия != nil
+            if Config.избранное && !изКопии { FavoritesStore.shared.освежить(свежий) }
+            if !изКопии { ПоискТелефона.запомнить(свежий) }   // этап 10: свежая цена в поиске iPhone; заготовка — впервые
             Передача.shared.показать(свежий)
             if Config.недавние {
                 if !прежний.заготовка {
-                    RecentStore.shared.освежить(свежий)
+                    if !изКопии { RecentStore.shared.освежить(свежий) }
                 } else if !свежий.заготовка {
                     RecentStore.shared.запомнить(свежий)
                 }
@@ -134,6 +140,35 @@ struct ListingDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 80)
         }
+    }
+
+    // MARK: - Сохранённая копия (этап 13)
+
+    /// Карточка показана копией с телефона: от когда она, что могло измениться, и «Повторить» — снова в сеть.
+    private func заметкаКопии(_ когда: Date) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: OfflineText.т("copy"), OfflineText.когда(когда)))
+                    .font(.footnote.weight(.semibold))
+                Text(OfflineText.т("copy_sub"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            if !догружаем {
+                Button(FeedText.т("retry")) { Task { await догрузить() } }
+                    .font(.footnote.weight(.semibold))
+                    .tint(Theme.green)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Галерея
@@ -333,20 +368,43 @@ struct ListingDetailView: View {
     // MARK: - Загрузка
 
     private func догрузить() async {
-        guard !товар.полная else { догружаем = false; return }
+        /* Этап 13: копия с телефона полная, но не свежая — повтор (кнопка, возврат на экран) снова идёт в сеть. */
+        guard !товар.полная || сохранённаяКопия != nil else { догружаем = false; return }
         догружаем = true
         defer { догружаем = false }
+        let взятое = ListingDetailCache.поколение      // до запроса: ответ, опоздавший за выходом, на диск не ляжет
         do {
-            var полный = try await ListingsAPI.объявление(товар.id)
+            let ответ = try await ListingsAPI.объявлениеСОтветом(товар.id)
+            var полный = ответ.товар
             /* Номер в ответе обязан совпасть: иначе сайт отдал не то (например, ленту вместо товара). */
             guard полный.id == товар.id else { неДогрузилась = true; return }
             /* Раздел для похожих (этап 7): нет его в ответе на ?id=, а строка ленты знала — не теряем. */
             if полный.категория == nil { полный.категория = товар.категория }
+            сохранённаяКопия = nil          // раньше товара: onChange должен знать, что пришло свежее
             товар = полный
             неДогрузилась = false
+            /* Этап 13: свежий ответ — копией на телефон, если объявление в избранном или ляжет в «Вы смотрели». */
+            if Config.карточкиБезСети {
+                КарточкиБезСети.shared.запомнить(ответ.сырое, id: полный.id, поколение: взятое, открыта: true)
+            }
         } catch {
-            if !Task.isCancelled { неДогрузилась = true }
+            guard !Task.isCancelled else { return }
+            if await показатьКопию(после: error) { return }
+            неДогрузилась = true
         }
+    }
+
+    /// Этап 13: нет связи или сайт лёг — сохранённая копия с телефона вместо «не удалось». true — показали.
+    private func показатьКопию(после ошибка: Error) async -> Bool {
+        guard Config.карточкиБезСети, ListingDetailCache.подходитКопия(после: ошибка),
+              let копия = await ListingDetailCache.прочитать(товар.id),
+              !Task.isCancelled, копия.товар.id == товар.id else { return false }
+        var сДиска = копия.товар
+        if сДиска.категория == nil { сДиска.категория = товар.категория }
+        сохранённаяКопия = копия.когда   // раньше товара: onChange не перепишет копией цену в избранном и «Вы смотрели»
+        товар = сДиска
+        неДогрузилась = false
+        return true
     }
 
     /// Похожие (этап 7). Вернулись из похожего назад — .task запускается снова, но за тем же разделом второй раз не

@@ -69,6 +69,11 @@ enum ListingsAPI {
 
     /// Полная карточка: GET /api/listings.php?id=<номер> → {ok, item}. Тоже с куками: избранное и цена для вошедшего.
     static func объявление(_ id: String) async throws -> Listing {
+        try await объявлениеСОтветом(id).товар
+    }
+
+    /// То же и сырой ответ целиком (этап 13): его кладёт на диск ListingDetailCache — копия для карточки без сети.
+    static func объявлениеСОтветом(_ id: String) async throws -> (товар: Listing, сырое: Data) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
         ч.queryItems = [URLQueryItem(name: "id", value: id)]
@@ -82,7 +87,9 @@ enum ListingsAPI {
         if let http = ответ as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw Ошибка.статус(http.statusCode)
         }
-        do { return try JSONDecoder().decode(ListingEnvelope.self, from: данные).item } catch { throw Ошибка.разбор }
+        let товар: Listing
+        do { товар = try JSONDecoder().decode(ListingEnvelope.self, from: данные).item } catch { throw Ошибка.разбор }
+        return (товар: товар, сырое: данные)
     }
 
     static func разобрать(_ данные: Data) throws -> ListingsPage {
