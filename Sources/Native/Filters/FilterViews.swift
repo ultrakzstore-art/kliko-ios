@@ -41,13 +41,40 @@ struct ПолосаФильтров: View {
     let сортировка: СортировкаЛенты
     let открыть: () -> Void
     let выбрать: (СортировкаЛенты) -> Void
+    /// Этап 39: значок карты последним в строке — вход в карту объявлений с фильтрами этой ленты. nil — значка нет.
+    var карта: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
             КнопкаФильтров(число: число, действие: открыть)
             МенюСортировки(сортировка: сортировка, выбрать: выбрать)
+            if let открытьКарту = карта {
+                КнопкаКартыЛенты(действие: открытьКарту)
+            }
         }
         .padding(.horizontal, 16)
+    }
+}
+
+/// Этап 39: квадрат .mk-ctrl 40 pt со значком карты зелёным — как «Карта» сайта (.mk-map-badge: --mk-green2 значок).
+private struct КнопкаКартыЛенты: View {
+    let действие: () -> Void
+
+    var body: some View {
+        Button(action: действие) {
+            Image(systemName: "map")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Theme.акцент)
+                .frame(width: 40, height: 40)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1.5)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(MapText.т("map"))
     }
 }
 
