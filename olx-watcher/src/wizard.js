@@ -5,6 +5,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const { InlineKeyboard } = require('grammy');
 const cats = require('./categories');
 const olx = require('./olx');
+const sources = require('./sources');
 
 function registerWizard(bot, { db, log, canAdd }) {
   // У каждого пользователя — своё состояние мастера. Обработчики асинхронные и идут вперемешку,
@@ -20,7 +21,8 @@ function registerWizard(bot, { db, log, canAdd }) {
   });
   const st = () => als.getStore();
 
-  const fresh = () => ({ step: 'cat', stack: [], options: cats.TOP, city: null, words: '', priceFrom: null, priceTo: null, url: '' });
+  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, city: null, words: '', priceFrom: null, priceTo: null, url: '' });
+  const src = () => sources.get(st().w.source);
   const current = () => st().w.stack[st().w.stack.length - 1] || null;
 
   async function show(ctx, text, kb, edit = true) {
@@ -67,22 +69,26 @@ function registerWizard(bot, { db, log, canAdd }) {
   // Пробный запрос к OLX: показываем, что реально найдётся по этой ссылке, до сохранения.
   async function stepConfirm(ctx) {
     st().w.step = 'confirm';
-    st().w.url = cats.buildSearchUrl({ path: current()?.path, city: st().w.city?.slug, words: st().w.words, priceFrom: st().w.priceFrom, priceTo: st().w.priceTo });
+    const w = st().w;
+    w.url = w.source === 'olx'
+      ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
+      : src().wizard.build({ path: w.kcat.path, city: w.city?.slug, priceFrom: w.priceFrom, priceTo: w.priceTo });
     let preview;
     try {
-      const r = await olx.fetchSearch(st().w.url);
-      const ads = r.ads.filter((a) => !a.promoted).slice(0, 3);
-      preview = r.ads.length
-        ? `Сейчас по этому поиску ${r.ads.length}+ объявлений, например:\n${ads.map((a) => `• ${esc(a.title || '№' + a.id)}${a.priceLabel ? ` — ${esc(a.priceLabel)}` : ''}`).join('\n')}`
-        : 'Сейчас по этому поиску пусто — пришлю, как только появится.';
+      const found = await src().fetchSearch(w.url);
+      const ads = found.filter((a) => !a.promoted && a.title).slice(0, 3);
+      preview = !found.length ? 'Сейчас по этому поиску пусто — пришлю, как только появится.'
+        : ads.length ? `Сейчас по этому поиску ${found.length}+ объявлений, например:\n${ads.map((a) => `• ${esc(a.title)}${a.priceLabel ? ` — ${esc(a.priceLabel)}` : ''}`).join('\n')}`
+          : `Сейчас по этому поиску ${found.length}+ объявлений.`;
     } catch (e) {
-      preview = `⚠ OLX не открыл такой поиск (${esc(e.message)}). Попробуйте другой город или рубрику — или сохраните всё равно.`;
+      preview = `⚠ ${esc(src().title)} не открыл такой поиск (${esc(e.message)}). Попробуйте другой город или рубрику — или сохраните всё равно.`;
     }
-    const kb = new InlineKeyboard().text('✅ Сохранить', 'w:save').text('↩️ Заново', 'w:restart').row().url('Открыть на OLX', st().w.url);
+    const kb = new InlineKeyboard().text('✅ Сохранить', 'w:save').text('↩️ Заново', 'w:restart').row().url(`Открыть на ${src().title}`, w.url);
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\n${preview}`, kb);
   }
 
   function label() {
+    if (st().w.source !== 'olx') return `${src().title} › ${st().w.kcat?.name || ''}`;
     return st().w.stack.map((s) => s.name).join(' › ') || 'все рубрики';
   }
 
@@ -98,7 +104,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   }
 
   function subName() {
-    const parts = [st().w.words || current()?.name || 'Поиск'];
+    const parts = [st().w.words || (st().w.source !== 'olx' ? `${src().title}: ${st().w.kcat?.name}` : current()?.name) || 'Поиск'];
     if (st().w.city) parts.push(st().w.city.name);
     if (st().w.priceTo) parts.push(`до ${fmt(st().w.priceTo)}`);
     else if (st().w.priceFrom) parts.push(`от ${fmt(st().w.priceFrom)}`);
@@ -107,9 +113,27 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // ---------- вход ----------
 
+  // Шаг 0 — площадка.
+  async function stepSource(ctx, edit = true) {
+    st().w.step = 'source';
+    const kb = new InlineKeyboard();
+    sources.ALL.forEach((x, i) => { kb.text(`${x.emoji} ${x.title}`, `w:src:${x.key}`); if (i % 2 === 1) kb.row(); });
+    kb.row().text('✖️ Отмена', 'w:cancel');
+    await show(ctx, '<b>Новый поиск</b>\nГде искать?', kb, edit);
+  }
+
+  // Kolesa и Krisha: рубрика из короткого списка, дальше город и цена.
+  async function stepKCategory(ctx) {
+    st().w.step = 'kcat';
+    const kb = new InlineKeyboard();
+    src().wizard.categories.forEach((c, i) => { kb.text(c.name, `w:kc:${i}`); if (i % 2 === 1) kb.row(); });
+    kb.row().text('⬅️ Площадка', 'w:restart').text('✖️ Отмена', 'w:cancel');
+    await show(ctx, `<b>Новый поиск · ${esc(src().title)}</b>\nРубрика (марку, модель и другие фильтры можно задать на сайте и прислать ссылку):`, kb);
+  }
+
   async function start(ctx) {
     st().w = fresh();
-    await stepCategory(ctx, false);
+    await stepSource(ctx, false);
   }
 
   bot.command('new', start);
@@ -121,7 +145,22 @@ function registerWizard(bot, { db, log, canAdd }) {
     await ctx.answerCallbackQuery();
 
     if (data === 'w:cancel') { st().w = null; await ctx.editMessageText('Отменено.').catch(() => {}); return; }
-    if (data === 'w:restart') { st().w = fresh(); await stepCategory(ctx); return; }
+    if (data === 'w:restart') { st().w = fresh(); await stepSource(ctx); return; }
+
+    if (data.startsWith('w:src:')) {
+      const key = data.slice(6);
+      st().w.source = key;
+      if (key === 'olx') return stepCategory(ctx);
+      if (sources.get(key).wizard) return stepKCategory(ctx);
+      st().w = null;
+      await ctx.editMessageText(`${sources.get(key).emoji} <b>${esc(sources.get(key).title)}</b>: настройте поиск на сайте (рубрика, город, цена) и пришлите ссылку из адресной строки сюда.`, { parse_mode: 'HTML' }).catch(() => {});
+      return;
+    }
+    if (data.startsWith('w:kc:')) {
+      st().w.kcat = src().wizard.categories[Number(data.slice(5))] || null;
+      if (!st().w.kcat) return;
+      return stepCity(ctx);
+    }
 
     if (data.startsWith('w:c:')) {
       const pick = st().w.options[Number(data.slice(4))];
@@ -145,16 +184,16 @@ function registerWizard(bot, { db, log, canAdd }) {
     if (data.startsWith('w:city:')) {
       const i = data.slice(7);
       st().w.city = i === '-' ? null : cats.CITIES[Number(i)] || null;
-      return stepWords(ctx);
+      return st().w.source === 'olx' ? stepWords(ctx) : stepPrice(ctx);
     }
     if (data === 'w:skipwords') return stepPrice(ctx);
     if (data === 'w:skipprice') return stepConfirm(ctx);
 
     if (data === 'w:save') {
       const uid = ctx.from.id;
-      const limit = canAdd(uid);
+      const limit = canAdd(uid, st().w.source);
       if (limit !== true) { await ctx.editMessageText(limit, { parse_mode: 'HTML' }).catch(() => {}); st().w = null; return; }
-      const sub = db.addSub(uid, subName(), st().w.url);
+      const sub = db.addSub(uid, subName(), st().w.url, st().w.source);
       log(`новый поиск #${sub.id}: ${st().w.url}`);
       st().w = null;
       await ctx.editMessageText(`Сохранил поиск «${esc(sub.name)}» (#${sub.id}).\nПервый проход — запомню, что уже есть, дальше присылаю только новые.`, { parse_mode: 'HTML' }).catch(() => {});
@@ -166,7 +205,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   return async function onText(ctx, next) {
     if (!st().w || (st().w.step !== 'words' && st().w.step !== 'price')) return next();
     const text = ctx.message.text.trim();
-    if (/olx\.kz\//i.test(text)) { st().w = null; return next(); } // прислали ссылку — мастер не нужен
+    if (/https?:\/\//i.test(text) && sources.byUrl(text.match(/https?:\/\/\S+/)[0])) { st().w = null; return next(); } // прислали ссылку — мастер не нужен
     if (st().w.step === 'words') {
       st().w.words = text.slice(0, 60);
       return stepPrice(ctx);

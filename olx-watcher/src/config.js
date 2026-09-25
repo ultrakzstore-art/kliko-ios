@@ -24,8 +24,12 @@ module.exports = {
   trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней
   freeSubs: int('FREE_SUBS', 3, 1),              // поисков на тестовом доступе
   paidSubs: int('PAID_SUBS', 20, 1),
-  starsPrices: prices('STARS_PRICES'),           // Telegram Stars за 7/14/30 дней
-  kaspiPrices: prices('KASPI_PRICES'),           // тенге за 7/14/30 дней
+  // Цены за 7/14/30 дней по тарифам: отдельная площадка или «всё сразу» (комбо).
+  // STARS_PRICES / KASPI_PRICES без суффикса — старые настройки, считаются ценой за OLX.
+  prices: Object.fromEntries(['olx', 'kolesa', 'krisha', 'kaspi', 'all'].map((k) => [k, {
+    stars: prices(`STARS_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('STARS_PRICES') : null),
+    kaspi: prices(`KASPI_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('KASPI_PRICES') : null),
+  }])),
   kaspiDetails: (process.env.KASPI_DETAILS || '').trim(),
   sellerUrl: process.env.SELLER_URL || 'https://www.olx.kz/list/user/{id}/',
   dbFile: process.env.DB_FILE || path.join(__dirname, '..', 'data', 'watcher.db'),

@@ -50,8 +50,10 @@ test('мастер: рубрика → подрубрика → город → �
   let searched = '';
   olx.fetchSearch = async (url) => { searched = url; return { source: 'state', ads: [{ id: 1, title: 'HP 250 G9', priceLabel: '250 000 ₸' }] }; };
 
-  const config = { pollSec: 30, freePollSec: 600, freeSubs: 3, paidSubs: 20, sellerUrl: '',
-    starsPrices: [100, 180, 300], kaspiPrices: [1500, 2500, 4500], kaspiDetails: 'Kaspi +7 700 000 00 00' };
+  const none = { stars: null, kaspi: null };
+  const config = { pollSec: 30, freePollSec: 600, freeSubs: 3, paidSubs: 20, sellerUrl: '', kaspiDetails: 'Kaspi +7 700 000 00 00',
+    prices: { olx: { stars: [100, 180, 300], kaspi: [1500, 2500, 4500] }, kolesa: none, krisha: none, kaspi: none,
+      all: { stars: [250, 450, 800], kaspi: [4000, 7000, 12000] } } };
   const { bot } = createBot({ token: '1:x', db, config, getWatcher: () => null, log: () => {} });
   bot.botInfo = { id: 1, is_bot: true, first_name: 'bot', username: 'bot', can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false };
   const sent = [];
@@ -70,6 +72,9 @@ test('мастер: рубрика → подрубрика → город → �
 
   try {
     await text('/new');
+    assert.match(lastText(), /Где искать/);
+    assert.ok(buttons().some((b) => /Kolesa/.test(b.text)) && buttons().some((b) => /Krisha/.test(b.text)), 'выбор площадки');
+    await press('w:src:olx');
     assert.match(lastText(), /Выберите рубрику/);
     const elektro = buttons().find((b) => b.text === 'Электроника');
     await press(elektro.callback_data);
@@ -103,21 +108,24 @@ test('мастер: рубрика → подрубрика → город → �
 
     // Kaspi: гость жмёт «Я оплатил» → владельцу заявка → «Дать» → доступ на 14 дней.
     const pressAs = (from, data) => bot.handleUpdate({ update_id: ++uid, callback_query: { id: String(uid), from, chat_instance: 'x', data, message: { message_id: 1, date: 0, chat: { id: from.id, type: 'private' }, from, text: 'заявка' } } });
-    await pressAs(other, 'kaspi:14');
-    assert.match(lastText(), /2\s?500 ₸/);
-    await pressAs(other, 'kpaid:14');
+    await pressAs(other, 'buy:all');
+    assert.ok(buttons().some((b) => b.callback_data === 'kaspi:all:14'), 'комбо: кнопки Kaspi по срокам');
+    await pressAs(other, 'kaspi:all:14');
+    assert.match(lastText(), /7\s?000 ₸/);
+    await pressAs(other, 'kpaid:all:14');
     const toAdmin = [...sent].reverse().find((x) => x.method === 'sendMessage' && x.payload.chat_id === 42);
     assert.match(toAdmin.payload.text, /Kaspi/);
     const approve = toAdmin.payload.reply_markup.inline_keyboard.flat().find((b) => b.callback_data.startsWith('approve:'));
     await pressAs(other, approve.callback_data);                 // не владелец — не может
     assert.ok(!db.isPaid(7));
     await pressAs(from, approve.callback_data);                  // владелец — выдаёт
-    assert.ok(db.isPaid(7), 'после подтверждения — платный доступ');
+    assert.ok(db.isPaid(7, 'olx') && db.isPaid(7, 'kolesa') && db.isPaid(7, 'krisha') && db.isPaid(7, 'kaspi'), 'комбо — все площадки');
 
     // Stars: успешная оплата продлевает автоматически.
     await bot.handleUpdate({ update_id: ++uid, message: { message_id: uid, date: 0, chat: otherChat, from: other,
-      successful_payment: { currency: 'XTR', total_amount: 100, invoice_payload: 'stars:7:7', telegram_payment_charge_id: 'c1', provider_payment_charge_id: '' } } });
-    assert.ok(db.user(7).paid_until - Date.now() > 20 * 86400_000, '14 + 7 дней');
+      successful_payment: { currency: 'XTR', total_amount: 100, invoice_payload: 'stars:olx:7:7', telegram_payment_charge_id: 'c1', provider_payment_charge_id: '' } } });
+    assert.ok(db.paidUntil(7, 'olx') - Date.now() > 20 * 86400_000, 'OLX: 14 + 7 дней');
+    assert.ok(db.paidUntil(7, 'kolesa') - Date.now() < 15 * 86400_000, 'Kolesa: только 14 из комбо');
   } finally {
     olx.fetchSearch = origSearch;
   }

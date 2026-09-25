@@ -53,11 +53,23 @@ class Db {
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS access (
+        user_id INTEGER NOT NULL,
+        source TEXT NOT NULL,                 -- olx | kolesa | krisha | kaspi
+        until INTEGER NOT NULL,
+        PRIMARY KEY (user_id, source)
+      );
     `);
     // Миграции с личной версии: у поиска появляется хозяин и водяная отметка.
     const cols = this.db.prepare('PRAGMA table_info(subs)').all().map((c) => c.name);
     if (!cols.includes('user_id')) this.db.exec('ALTER TABLE subs ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
     if (!cols.includes('watermark')) this.db.exec('ALTER TABLE subs ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0');
+    if (!cols.includes('source')) this.db.exec("ALTER TABLE subs ADD COLUMN source TEXT NOT NULL DEFAULT 'olx'");
+    const pcols = this.db.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+    if (!pcols.includes('product')) this.db.exec("ALTER TABLE payments ADD COLUMN product TEXT NOT NULL DEFAULT 'olx'");
+    // Платный доступ до площадок был только к OLX — переносим его в таблицу доступа.
+    this.db.exec(`INSERT OR IGNORE INTO access (user_id, source, until)
+      SELECT id, 'olx', paid_until FROM users WHERE paid_until > 0`);
     this.db.exec('DROP TABLE IF EXISTS seen');
     const ucols = this.db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
     if (!ucols.includes('trial_until')) {
@@ -95,28 +107,48 @@ class Db {
     return this.db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
   }
 
-  isPaid(userOrId, now = Date.now()) {
-    const u = typeof userOrId === 'object' ? userOrId : this.user(userOrId);
-    return !!u && u.paid_until > now;
+  // Платный доступ к площадке (source) или к любой (source = 'any').
+  isPaid(userOrId, source = 'any', now = Date.now()) {
+    const id = typeof userOrId === 'object' ? userOrId?.id : userOrId;
+    if (id == null) return false;
+    const row = source === 'any'
+      ? this.db.prepare('SELECT MAX(until) AS until FROM access WHERE user_id = ?').get(id)
+      : this.db.prepare('SELECT until FROM access WHERE user_id = ? AND source = ?').get(id, source);
+    return !!row && (row.until || 0) > now;
   }
 
-  // Тестовый доступ: ещё не оплачено, но срок теста не вышел.
+  paidUntil(userId, source) {
+    const row = this.db.prepare('SELECT until FROM access WHERE user_id = ? AND source = ?').get(userId, source);
+    return row ? row.until : 0;
+  }
+
+  accessList(userId) {
+    return this.db.prepare('SELECT source, until FROM access WHERE user_id = ? AND until > ? ORDER BY source').all(userId, Date.now());
+  }
+
+  // Тестовый доступ: ни к одной площадке не оплачено, но срок теста не вышел. Даёт все площадки.
   isTrial(userOrId, now = Date.now()) {
     const u = typeof userOrId === 'object' ? userOrId : this.user(userOrId);
-    return !!u && !this.isPaid(u, now) && u.trial_until > now;
+    return !!u && !this.isPaid(u, 'any', now) && u.trial_until > now;
   }
 
-  hasAccess(userOrId, now = Date.now()) {
-    return this.isPaid(userOrId, now) || this.isTrial(userOrId, now);
+  hasAccess(userOrId, source = 'any', now = Date.now()) {
+    return this.isPaid(userOrId, source, now) || this.isTrial(userOrId, now);
   }
 
-  // Продление считается от конца текущего срока, если он ещё идёт, — оплаченное не сгорает.
-  extend(userId, days) {
-    const u = this.user(userId);
-    const from = Math.max(Date.now(), u ? u.paid_until : 0);
-    const until = from + days * DAY;
-    this.db.prepare('UPDATE users SET paid_until = ? WHERE id = ?').run(until, userId);
-    return until;
+  // Продление считается от конца текущего срока каждой площадки — оплаченное не сгорает.
+  extend(userId, days, sources = ['olx']) {
+    let last = 0;
+    for (const src of sources) {
+      const from = Math.max(Date.now(), this.paidUntil(userId, src));
+      const until = from + days * DAY;
+      this.db.prepare(`INSERT INTO access (user_id, source, until) VALUES (?, ?, ?)
+        ON CONFLICT(user_id, source) DO UPDATE SET until = excluded.until`).run(userId, src, until);
+      last = Math.max(last, until);
+    }
+    const max = this.db.prepare('SELECT MAX(until) AS m FROM access WHERE user_id = ?').get(userId).m || 0;
+    this.db.prepare('UPDATE users SET paid_until = ? WHERE id = ?').run(max, userId);
+    return last;
   }
 
   setBlocked(userId, blocked) {
@@ -126,8 +158,8 @@ class Db {
   // ---------- платежи ----------
 
   addPayment(p) {
-    const r = this.db.prepare(`INSERT INTO payments (user_id, method, days, amount, status, charge_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(p.userId, p.method, p.days, p.amount || 0, p.status, p.chargeId || '', Date.now());
+    const r = this.db.prepare(`INSERT INTO payments (user_id, method, days, amount, status, charge_id, created_at, product)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(p.userId, p.method, p.days, p.amount || 0, p.status, p.chargeId || '', Date.now(), p.product || 'olx');
     return this.payment(Number(r.lastInsertRowid));
   }
 
@@ -140,13 +172,13 @@ class Db {
   }
 
   paidTotals() {
-    return this.db.prepare(`SELECT method, COUNT(*) AS n, SUM(amount) AS sum FROM payments WHERE status = 'paid' GROUP BY method`).all();
+    return this.db.prepare(`SELECT method, product, COUNT(*) AS n, SUM(amount) AS sum FROM payments WHERE status = 'paid' GROUP BY method, product`).all();
   }
 
   // ---------- поиски ----------
 
-  addSub(userId, name, url) {
-    const r = this.db.prepare('INSERT INTO subs (user_id, name, url, created_at) VALUES (?, ?, ?, ?)').run(userId, name, url, Date.now());
+  addSub(userId, name, url, source = 'olx') {
+    const r = this.db.prepare('INSERT INTO subs (user_id, name, url, source, created_at) VALUES (?, ?, ?, ?, ?)').run(userId, name, url, source, Date.now());
     return this.sub(Number(r.lastInsertRowid));
   }
 

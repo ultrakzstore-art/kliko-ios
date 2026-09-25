@@ -6,6 +6,7 @@
 // Новизна у каждого поиска своя (водяная отметка по номеру + таблица «отправлено»).
 
 const olx = require('./olx');
+const sources = require('./sources');
 const { learn, matches } = require('./match');
 
 const MISS_GIVE_UP = 12;
@@ -67,7 +68,7 @@ class Watcher {
   // ---------- поиск ----------
 
   intervalFor(sub) {
-    return (this.db.isPaid(sub.user_id) ? this.cfg.pollSec : this.cfg.freePollSec) * 1000;
+    return (this.db.isPaid(sub.user_id, sub.source || 'olx') ? this.cfg.pollSec : this.cfg.freePollSec) * 1000;
   }
 
   async searchTick() {
@@ -78,15 +79,18 @@ class Watcher {
       const due = this.db.subs().filter((s) => {
         if (s.paused) return false;
         const u = this.db.user(s.user_id);
-        if (!u || u.blocked || !this.db.hasAccess(u)) return false;   // тест кончился и не оплачено — не проверяем
+        if (!u || u.blocked || !this.db.hasAccess(u, s.source || 'olx')) return false;   // нет доступа к площадке — не проверяем
         return now - s.last_poll >= this.intervalFor(s);
       });
       // Одна ссылка — один запрос, сколько бы людей на неё ни подписалось.
       const byUrl = new Map();
-      for (const s of due) byUrl.set(s.url, [...(byUrl.get(s.url) || []), s]);
-      for (const [url, subs] of byUrl) {
+      for (const s of due) {
+        const key = `${s.source || 'olx'}|${s.url}`;
+        byUrl.set(key, [...(byUrl.get(key) || []), s]);
+      }
+      for (const [key, subs] of byUrl) {
         if (this.blocked()) break;
-        await this.pollUrl(url, subs);
+        await this.pollUrl(key.slice(key.indexOf('|') + 1), subs);
         await sleep(1000 + Math.random() * 1000);
       }
     } finally {
@@ -95,9 +99,10 @@ class Watcher {
   }
 
   async pollUrl(url, subs) {
+    const src = sources.get(subs[0].source || 'olx');
     let ads;
     try {
-      ads = (await olx.fetchSearch(url)).ads;
+      ads = await src.fetchSearch(url);
       this.okRequest();
       this.stats.searchOk += 1;
     } catch (e) {
@@ -106,11 +111,15 @@ class Watcher {
       if (!this.handleError(e)) this.log(`поиск ${url}: ${e.message}`);
       return;
     }
-    for (const a of ads) this.bumpFrontier(a.id);
+    if (src.key === 'olx') for (const a of ads) this.bumpFrontier(a.id);
     const maxId = ads.reduce((m, a) => Math.max(m, a.id), 0);
     const enriched = new Map();   // карточка по номеру — одна на всех подписчиков ссылки
     const enrich = async (ad) => {
-      if (!enriched.has(ad.id)) enriched.set(ad.id, olx.fetchOffer(ad.id).then((f) => (f ? { ...ad, ...stripEmpty(f) } : ad)).catch(() => ad));
+      if (!enriched.has(ad.id)) {
+        enriched.set(ad.id, Promise.resolve(src.fetchDetail(ad))
+          .then((f) => ({ ...ad, ...(f ? stripEmpty(f) : {}), source: src.key }))
+          .catch(() => ({ ...ad, source: src.key })));
+      }
       return enriched.get(ad.id);
     };
 
@@ -148,7 +157,9 @@ class Watcher {
 
   async turboTick() {
     if (!this.db.get('turbo', true) || this.turboBusy || this.blocked() || !this.frontier) return;
-    const subs = this.db.subs().filter((s) => !s.paused && s.initialized && this.db.isPaid(s.user_id) && !this.db.user(s.user_id)?.blocked);
+    // Турбо — только OLX (у остальных площадок пока не проверено) и только платным за OLX.
+    const subs = this.db.subs().filter((s) => (s.source || 'olx') === 'olx' && !s.paused && s.initialized
+      && this.db.isPaid(s.user_id, 'olx') && !this.db.user(s.user_id)?.blocked);
     if (!subs.length) return;
     this.turboBusy = true;
     try {
@@ -168,6 +179,7 @@ class Watcher {
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();
         if (!this.isFresh(o)) continue;
+        o.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
           if (!matches(s, o) || !this.db.markSent(s.id, id)) continue;

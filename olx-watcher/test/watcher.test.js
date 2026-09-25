@@ -75,7 +75,7 @@ test('бесплатный и платный доступ, поиск и тур�
     assert.deepStrictEqual(sent.slice(3), [{ user: 2, id: 108, via: 'search' }]);
 
     // Платный срок кончился — турбо ему больше не работает.
-    db.db.prepare('UPDATE users SET paid_until = ? WHERE id = 1').run(Date.now() - DAY);
+    db.db.prepare('UPDATE access SET until = ? WHERE user_id = 1').run(Date.now() - DAY);
     offers.set(110, ad(110, 'HP 250 G10'));
     const before = sent.length;
     await w.turboTick();

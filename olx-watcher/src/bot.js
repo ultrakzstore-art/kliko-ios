@@ -5,11 +5,18 @@
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
 const { Bot, InlineKeyboard, GrammyError } = require('grammy');
-const { idFromUrl, newestFirst, BASE, encodeId } = require('./olx');
+const sources = require('./sources');
 const { registerWizard } = require('./wizard');
 const { DAY } = require('./db');
 
 const PLANS = [7, 14, 30];
+
+// Тарифы: отдельная площадка или «всё сразу». Комбо открывает все площадки на срок.
+const PRODUCTS = [
+  ...sources.ALL.map((x) => ({ key: x.key, title: `${x.emoji} ${x.title}`, sources: [x.key] })),
+  { key: 'all', title: '🔥 Всё сразу', sources: sources.ALL.map((x) => x.key) },
+];
+const PRODUCT = Object.fromEntries(PRODUCTS.map((p) => [p.key, p]));
 
 function createBot({ token, db, config, getWatcher, log }) {
   const bot = new Bot(token);
@@ -27,7 +34,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     }
     db.touchUser(from.id, [from.first_name, from.last_name].filter(Boolean).join(' '), from.username || '');
     // Владельцу — доступ без срока: его собственные поиски не должны останавливаться.
-    if (from.id === admin && !db.isPaid(from.id)) db.extend(from.id, 3650);
+    if (from.id === admin && !db.isPaid(from.id, 'any')) db.extend(from.id, 3650, sources.ALL.map((x) => x.key));
     return next();
   });
 
@@ -35,28 +42,33 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   function planText(userId) {
     const u = db.user(userId);
-    if (db.isPaid(u)) {
-      return `💎 <b>Платный доступ</b> до ${fmtDate(u.paid_until)}\n` +
-        `Проверка раз в ${config.pollSec} сек, ⚡ турбо — раньше поиска, до ${config.paidSubs} поисков.`;
+    const paidLine = `Платно: раз в ${config.pollSec} сек + ⚡ турбо на OLX (ловит объявления раньше поиска), до ${config.paidSubs} поисков.`;
+    const paid = db.accessList(userId);
+    if (paid.length) {
+      const lines = paid.map((a) => `${sources.get(a.source).emoji} ${esc(sources.get(a.source).title)} — до ${fmtDate(a.until)}`);
+      return `💎 <b>Платный доступ</b>\n${lines.join('\n')}\nПроверка раз в ${config.pollSec} сек, до ${config.paidSubs} поисков.`;
     }
-    const paidLine = `Платно: раз в ${config.pollSec} сек + ⚡ турбо (ловит объявления раньше, чем они появятся в поиске), до ${config.paidSubs} поисков.`;
     if (db.isTrial(u)) {
-      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)}\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, без турбо, до ${config.freeSubs} поисков.\n${paidLine}`;
+      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, без турбо, до ${config.freeSubs} поисков.\n${paidLine}`;
     }
     return `⛔ <b>Тестовый доступ закончился</b> — поиски на паузе, объявления не приходят.\n${paidLine}\nПодключить: /access`;
   }
 
   function limitFor(userId) {
-    return db.isPaid(userId) ? config.paidSubs : config.freeSubs;
+    return db.isPaid(userId, 'any') ? config.paidSubs : config.freeSubs;
   }
 
-  // true — можно добавить поиск; иначе — текст, почему нельзя.
-  function canAdd(userId) {
-    if (!db.hasAccess(userId)) return 'Тестовый доступ закончился. Подключите платный, чтобы добавлять поиски: /access';
+  // true — можно добавить поиск на площадке; иначе — текст, почему нельзя.
+  function canAdd(userId, source = 'olx') {
+    if (!db.hasAccess(userId, source)) {
+      return db.isTrial(userId) || db.isPaid(userId, 'any')
+        ? `Нет доступа к ${sources.get(source).title}. Подключить: /access`
+        : 'Тестовый доступ закончился. Подключите платный, чтобы добавлять поиски: /access';
+    }
     const n = db.subs(userId).length;
     const limit = limitFor(userId);
     if (n < limit) return true;
-    return db.isPaid(userId)
+    return db.isPaid(userId, 'any')
       ? `Достигнут предел: ${limit} поисков. Удалите ненужный в /list.`
       : `На тестовом доступе — до ${limit} поисков. Удалите ненужный в /list или подключите платный: /access`;
   }
@@ -65,27 +77,39 @@ function createBot({ token, db, config, getWatcher, log }) {
     .text('➕ Новый поиск', 'w:new').text('📋 Мои поиски', 'list').row()
     .text('💎 Доступ', 'access');
 
-  function accessKeyboard() {
-    const kb = new InlineKeyboard();
-    if (config.starsPrices) {
-      PLANS.forEach((d, i) => kb.text(`⭐ ${d} дн — ${config.starsPrices[i]} Stars`, `stars:${d}`).row());
-    }
-    if (config.kaspiPrices && config.kaspiDetails) {
-      PLANS.forEach((d, i) => kb.text(`💳 Kaspi ${d} дн — ${fmt(config.kaspiPrices[i])} ₸`, `kaspi:${d}`).row());
-    }
-    return kb;
-  }
+  const priceOf = (product, method, days) => config.prices[product]?.[method]?.[PLANS.indexOf(days)] ?? null;
+  const sellable = () => PRODUCTS.filter((p) => config.prices[p.key]?.stars || (config.prices[p.key]?.kaspi && config.kaspiDetails));
 
   async function showAccess(ctx) {
-    const hasPay = config.starsPrices || (config.kaspiPrices && config.kaspiDetails);
-    await ctx.reply(`${planText(ctx.from.id)}\n\n${hasPay ? 'Продлить или подключить:' : 'Оплата пока не настроена — напишите владельцу бота.'}`,
-      { parse_mode: 'HTML', reply_markup: accessKeyboard() });
+    const list = sellable();
+    const kb = new InlineKeyboard();
+    list.forEach((p, i) => { kb.text(p.title, `buy:${p.key}`); if (i % 2 === 1) kb.row(); });
+    await ctx.reply(`${planText(ctx.from.id)}\n\n${list.length ? 'Выберите тариф:' : 'Оплата пока не настроена — напишите владельцу бота.'}`,
+      { parse_mode: 'HTML', reply_markup: kb });
   }
+
+  bot.callbackQuery(/^buy:(\w+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const p = PRODUCT[ctx.match[1]];
+    if (!p) return;
+    const kb = new InlineKeyboard();
+    for (const d of PLANS) {
+      const stars = priceOf(p.key, 'stars', d);
+      const kaspi = config.kaspiDetails ? priceOf(p.key, 'kaspi', d) : null;
+      if (stars) kb.text(`⭐ ${d} дн — ${stars}`, `stars:${p.key}:${d}`);
+      if (kaspi) kb.text(`💳 ${d} дн — ${fmt(kaspi)} ₸`, `kaspi:${p.key}:${d}`);
+      kb.row();
+    }
+    const what = p.key === 'all' ? 'все площадки: ' + sources.ALL.map((x) => x.title).join(', ') : sources.get(p.key).title;
+    await ctx.reply(`<b>${esc(p.title)}</b> — ${esc(what)}.\nПроверка раз в ${config.pollSec} сек${p.sources.includes('olx') ? ', ⚡ турбо на OLX' : ''}, до ${config.paidSubs} поисков.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
+      { parse_mode: 'HTML', reply_markup: kb });
+  });
 
   const HELP = `Присылаю новые объявления OLX.kz по вашим поискам — через секунды после подачи.
 
-➕ /new — новый поиск кнопками: рубрика → подрубрика → город → слова → цена.
-Или пришлите ссылку на поиск с olx.kz.
+Площадки: OLX, Kolesa, Krisha, Kaspi Объявления.
+➕ /new — новый поиск кнопками: площадка → рубрика → город → цена.
+Или пришлите ссылку на поиск с сайта.
 
 /list — мои поиски · /access — доступ и оплата · /help — справка`;
 
@@ -100,76 +124,85 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   // ---------- оплата: Telegram Stars ----------
 
-  bot.callbackQuery(/^stars:(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^stars:(\w+):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const days = Number(ctx.match[1]);
-    const i = PLANS.indexOf(days);
-    if (i < 0 || !config.starsPrices) return;
+    const p = PRODUCT[ctx.match[1]];
+    const days = Number(ctx.match[2]);
+    const amount = p && priceOf(p.key, 'stars', days);
+    if (!amount) return;
     await ctx.replyWithInvoice(
-      `Доступ на ${days} дней`,
-      `Проверка раз в ${config.pollSec} сек, ⚡ турбо, до ${config.paidSubs} поисков.`,
-      `stars:${days}:${ctx.from.id}`,
+      `${p.title.replace(/^\S+\s/, '')} на ${days} дней`,
+      `Проверка раз в ${config.pollSec} сек${p.sources.includes('olx') ? ', турбо на OLX' : ''}, до ${config.paidSubs} поисков.`,
+      `stars:${p.key}:${days}:${ctx.from.id}`,
       'XTR',
-      [{ label: `${days} дней`, amount: config.starsPrices[i] }],
+      [{ label: `${days} дней`, amount }],
     );
   });
 
+  const PAYLOAD_RE = /^stars:(olx|kolesa|krisha|kaspi|all):(7|14|30):\d+$/;
+
   bot.on('pre_checkout_query', async (ctx) => {
-    const ok = /^stars:(7|14|30):\d+$/.test(ctx.preCheckoutQuery.invoice_payload);
+    const ok = PAYLOAD_RE.test(ctx.preCheckoutQuery.invoice_payload);
     await ctx.answerPreCheckoutQuery(ok, ok ? undefined : { error_message: 'Счёт устарел — откройте /access заново.' });
   });
 
   bot.on('message:successful_payment', async (ctx) => {
     const pay = ctx.message.successful_payment;
-    const days = Number(pay.invoice_payload.split(':')[1]);
-    const until = db.extend(ctx.from.id, days);
-    db.addPayment({ userId: ctx.from.id, method: 'stars', days, amount: pay.total_amount, status: 'paid', chargeId: pay.telegram_payment_charge_id });
-    log(`оплата Stars: ${ctx.from.id} +${days} дн`);
-    await ctx.reply(`Спасибо! 💎 Платный доступ до ${fmtDate(until)}. Турбо включено для всех ваших поисков.`);
-    await tellAdmin(`⭐ Оплата Stars: ${who(ctx.from)} — ${days} дн, ${pay.total_amount} Stars.`);
+    const m = PAYLOAD_RE.exec(pay.invoice_payload);
+    if (!m) return;
+    const p = PRODUCT[m[1]];
+    const days = Number(m[2]);
+    const until = db.extend(ctx.from.id, days, p.sources);
+    db.addPayment({ userId: ctx.from.id, method: 'stars', product: p.key, days, amount: pay.total_amount, status: 'paid', chargeId: pay.telegram_payment_charge_id });
+    log(`оплата Stars: ${ctx.from.id} ${p.key} +${days} дн`);
+    await ctx.reply(`Спасибо! 💎 ${p.title} — до ${fmtDate(until)}.`);
+    await tellAdmin(`⭐ Оплата Stars: ${who(ctx.from)} — ${p.title}, ${days} дн, ${pay.total_amount} Stars.`);
   });
 
   // ---------- оплата: Kaspi (перевод + подтверждение) ----------
 
-  bot.callbackQuery(/^kaspi:(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^kaspi:(\w+):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const days = Number(ctx.match[1]);
-    const i = PLANS.indexOf(days);
-    if (i < 0 || !config.kaspiPrices) return;
+    const p = PRODUCT[ctx.match[1]];
+    const days = Number(ctx.match[2]);
+    const amount = p && priceOf(p.key, 'kaspi', days);
+    if (!amount || !config.kaspiDetails) return;
     await ctx.reply(
-      `💳 <b>Kaspi — ${days} дней, ${fmt(config.kaspiPrices[i])} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
+      `💳 <b>Kaspi — ${esc(p.title)}, ${days} дней, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
       `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — доступ включится после проверки.`,
-      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `kpaid:${days}`) },
+      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `kpaid:${p.key}:${days}`) },
     );
   });
 
-  bot.callbackQuery(/^kpaid:(\d+)$/, async (ctx) => {
-    const days = Number(ctx.match[1]);
-    const i = PLANS.indexOf(days);
-    if (i < 0 || !config.kaspiPrices) return ctx.answerCallbackQuery();
-    const p = db.addPayment({ userId: ctx.from.id, method: 'kaspi', days, amount: config.kaspiPrices[i], status: 'pending' });
+  bot.callbackQuery(/^kpaid:(\w+):(\d+)$/, async (ctx) => {
+    const p = PRODUCT[ctx.match[1]];
+    const days = Number(ctx.match[2]);
+    const amount = p && priceOf(p.key, 'kaspi', days);
+    if (!amount) return ctx.answerCallbackQuery();
+    const pay = db.addPayment({ userId: ctx.from.id, method: 'kaspi', product: p.key, days, amount, status: 'pending' });
     await ctx.answerCallbackQuery('Заявка отправлена');
     await ctx.editMessageReplyMarkup().catch(() => {});
     await ctx.reply('Заявка принята. Как только владелец увидит перевод, доступ включится — пришлю сообщение.');
-    await tellAdmin(`💳 Kaspi: ${who(ctx.from)} — ${days} дн, ${fmt(p.amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
-      new InlineKeyboard().text(`✅ Дать ${days} дн`, `approve:${p.id}`).text('✖️ Нет перевода', `reject:${p.id}`));
+    await tellAdmin(`💳 Kaspi: ${who(ctx.from)} — ${p.title}, ${days} дн, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
+      new InlineKeyboard().text(`✅ Дать ${days} дн`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
   });
 
   bot.callbackQuery(/^(approve|reject):(\d+)$/, async (ctx) => {
     if (!isAdmin(ctx)) return ctx.answerCallbackQuery('Только для владельца');
     const [, action, idStr] = ctx.match;
-    const p = db.payment(Number(idStr));
-    if (!p || p.status !== 'pending') return ctx.answerCallbackQuery('Заявка уже обработана');
+    const pay = db.payment(Number(idStr));
+    if (!pay || pay.status !== 'pending') return ctx.answerCallbackQuery('Заявка уже обработана');
     const text = ctx.callbackQuery.message?.text || '';
+    const p = PRODUCT[pay.product] || PRODUCT.olx;
     if (action === 'approve') {
-      db.setPaymentStatus(p.id, 'paid');
-      const until = db.extend(p.user_id, p.days);
-      await send(p.user_id, `Оплата получена ✅ 💎 Платный доступ до ${fmtDate(until)}.`);
+      db.setPaymentStatus(pay.id, 'paid');
+      const until = db.extend(pay.user_id, pay.days, p.sources);
+      await send(pay.user_id, `Оплата получена ✅ 💎 ${p.title} — до ${fmtDate(until)}.`);
       await ctx.answerCallbackQuery('Доступ выдан');
       await ctx.editMessageText(`${text}\n\n✅ Выдано до ${fmtDate(until)}`).catch(() => {});
     } else {
-      db.setPaymentStatus(p.id, 'rejected');
-      await send(p.user_id, 'Перевод не найден. Если вы оплатили — напишите владельцу бота, указав время и сумму.');
+      db.setPaymentStatus(pay.id, 'rejected');
+      await send(pay.user_id, 'Перевод не найден. Если вы оплатили — напишите владельцу бота, указав время и сумму.');
       await ctx.answerCallbackQuery('Отклонено');
       await ctx.editMessageText(`${text}\n\n✖️ Отклонено`).catch(() => {});
     }
@@ -179,30 +212,33 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   bot.command('grant', async (ctx) => {
     if (!isAdmin(ctx)) return;
-    const [uid, days] = String(ctx.match || '').trim().split(/\s+/);
+    const [uid, days, productKey = 'all'] = String(ctx.match || '').trim().split(/\s+/);
     const userId = Number(uid);
     const d = Number(days);
-    if (!userId || !d || !db.user(userId)) return ctx.reply('Формат: /grant <ID пользователя> <дней>. ID — в /users.');
-    const until = db.extend(userId, d);
-    db.addPayment({ userId, method: 'admin', days: d, status: 'paid' });
-    await send(userId, `🎁 Вам открыт платный доступ до ${fmtDate(until)}.`);
-    await ctx.reply(`Выдано: ${userId} до ${fmtDate(until)}.`);
+    const p = PRODUCT[productKey];
+    if (!userId || !d || !p || !db.user(userId)) {
+      return ctx.reply(`Формат: /grant <ID> <дней> [${PRODUCTS.map((x) => x.key).join('|')}]. По умолчанию — all. ID — в /users.`);
+    }
+    const until = db.extend(userId, d, p.sources);
+    db.addPayment({ userId, method: 'admin', product: p.key, days: d, status: 'paid' });
+    await send(userId, `🎁 Вам открыт доступ: ${p.title} — до ${fmtDate(until)}.`);
+    await ctx.reply(`Выдано: ${userId} — ${p.title} до ${fmtDate(until)}.`);
   });
 
   bot.command('users', async (ctx) => {
     if (!isAdmin(ctx)) return;
     const users = db.users();
-    const paid = users.filter((u) => db.isPaid(u));
+    const paid = users.filter((u) => db.isPaid(u, 'any'));
     const lines = users.slice(0, 30).map((u) =>
-      `${db.isPaid(u) ? '💎' : '🆓'} <code>${u.id}</code> ${esc(u.name || '')}${u.username ? ` @${esc(u.username)}` : ''}` +
-      `${db.isPaid(u) ? ` — до ${fmtDate(u.paid_until)}` : ''} · поисков ${db.subs(u.id).length}${u.blocked ? ' · остановил бота' : ''}`);
+      `${db.isPaid(u, 'any') ? '💎' : db.isTrial(u) ? '🧪' : '⛔'} <code>${u.id}</code> ${esc(u.name || '')}${u.username ? ` @${esc(u.username)}` : ''}` +
+      `${db.accessList(u.id).map((a) => ` ${sources.get(a.source).emoji}до ${fmtDate(a.until)}`).join('')} · поисков ${db.subs(u.id).length}${u.blocked ? ' · остановил бота' : ''}`);
     await ctx.reply(`Пользователей: ${users.length}, платных: ${paid.length}\n\n${lines.join('\n')}`, { parse_mode: 'HTML' });
   });
 
   bot.command('stats', async (ctx) => {
     if (!isAdmin(ctx)) return;
     const w = getWatcher();
-    const money = db.paidTotals().map((r) => `${r.method}: ${r.n} шт${r.sum ? `, ${fmt(r.sum)}` : ''}`).join(' · ') || 'оплат пока нет';
+    const money = db.paidTotals().map((r) => `${r.method}/${r.product}: ${r.n} шт${r.sum ? `, ${fmt(r.sum)}` : ''}`).join(' · ') || 'оплат пока нет';
     await ctx.reply([
       `Поиск: ${w.stats.searchOk} удачных, ${w.stats.searchErr} ошибок · турбо: проверено ${w.stats.turboProbes}, найдено ${w.stats.turboFound}`,
       `Отправлено объявлений: ${w.stats.sent} · последний номер ${w.frontier || '—'}`,
@@ -226,16 +262,19 @@ function createBot({ token, db, config, getWatcher, log }) {
   // Сообщение со ссылкой на поиск OLX — новая подписка.
   bot.on('message:text', async (ctx) => {
     const text = ctx.message.text.trim();
-    const m = /https?:\/\/(?:www\.|m\.)?olx\.kz\/\S+/i.exec(text);
-    if (!m) return ctx.reply('Нажмите «Новый поиск» — выберем рубрику кнопками. Или пришлите ссылку на поиск с olx.kz.', { reply_markup: menu() });
+    const m = /https?:\/\/\S+/i.exec(text);
+    const src = m && sources.byUrl(m[0]);
+    if (!src) {
+      return ctx.reply('Нажмите «Новый поиск» — выберем площадку и рубрику кнопками. Или пришлите ссылку на поиск с olx.kz, kolesa.kz, krisha.kz или Kaspi Объявлений.', { reply_markup: menu() });
+    }
     const url = m[0];
-    if (idFromUrl(url)) return ctx.reply('Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком объявлений.');
-    try { newestFirst(url); } catch (e) { return ctx.reply(e.message); }
-    const limit = canAdd(ctx.from.id);
+    if (src.isAdUrl(url)) return ctx.reply('Это ссылка на одно объявление. Нужна ссылка на поиск — страница со списком объявлений.');
+    try { src.normalize(url); } catch (e) { return ctx.reply(e.message); }
+    const limit = canAdd(ctx.from.id, src.key);
     if (limit !== true) return ctx.reply(limit);
     const before = text.slice(0, m.index).trim();
-    const sub = db.addSub(ctx.from.id, (before || nameFromUrl(url)).slice(0, 60), url);
-    await ctx.reply(`Добавил поиск «${sub.name}». Первый проход — запомню, что уже есть, дальше присылаю только новые.`);
+    const sub = db.addSub(ctx.from.id, (before || `${src.title}: ${nameFromUrl(url)}`).slice(0, 60), url, src.key);
+    await ctx.reply(`${src.emoji} Добавил поиск «${sub.name}». Первый проход — запомню, что уже есть, дальше присылаю только новые.`);
   });
 
   bot.callbackQuery(/^(pause|resume|del):(\d+)$/, async (ctx) => {
@@ -252,7 +291,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const subs = db.subs(ctx.from.id);
     const head = `${planText(ctx.from.id)}\n\nПоиски (${subs.length}/${limitFor(ctx.from.id)}):`;
     const body = subs.length
-      ? subs.map((s, i) => `${i + 1}. ${s.paused ? '⏸' : '▶️'} ${esc(s.name)} — прислано ${s.sent}${s.last_error ? ` ⚠ ${esc(s.last_error)}` : ''}`).join('\n')
+      ? subs.map((s, i) => `${i + 1}. ${s.paused ? '⏸' : sources.get(s.source).emoji} ${esc(s.name)} — прислано ${s.sent}${!db.hasAccess(ctx.from.id, s.source) ? ' · нет доступа' : ''}${s.last_error ? ` ⚠ ${esc(s.last_error)}` : ''}`).join('\n')
       : 'пока нет.';
     const kb = new InlineKeyboard().text('➕ Новый поиск', 'w:new').text('💎 Доступ', 'access').row();
     subs.forEach((s, i) => {
@@ -286,8 +325,8 @@ function createBot({ token, db, config, getWatcher, log }) {
       return send(userId, `«${subs[0].name}»: слежу. Сейчас в выдаче ${count} объявлений — присылать буду только новые.`);
     }
     const caption = card(ad, subs, via);
-    const kb = new InlineKeyboard().url('Открыть объявление', adLink(ad));
-    if (ad.userId) kb.row().url('Все объявления автора', config.sellerUrl.replace('{id}', encodeURIComponent(ad.userId)));
+    const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
+    if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', config.sellerUrl.replace('{id}', encodeURIComponent(ad.userId)));
     try {
       if (!ad.photo) throw new Error('без фото');
       await bot.api.sendPhoto(userId, ad.photo, { caption, parse_mode: 'HTML', reply_markup: kb });
@@ -304,7 +343,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     for (const u of db.users()) {
       if (u.blocked) continue;
       // Тест: за сутки до конца и когда кончился (если не оплатил).
-      if (!db.isPaid(u, now) && u.trial_until) {
+      if (!db.isPaid(u, 'any', now) && u.trial_until) {
         const tl = u.trial_until - now;
         const tkey = `trial:${u.id}:${u.trial_until}`;
         if (tl > 0 && tl < DAY && !db.get(`${tkey}:soon`)) {
@@ -342,8 +381,9 @@ function card(ad, subs, via) {
   // Номер, который продавец написал в тексте, — Телеграм сам делает его нажимаемым (звонок).
   // Номер, который OLX прячет за входом, не достаём.
   const phone = phonesIn(`${ad.title || ''}\n${ad.description || ''}`)[0];
+  const src = sources.get(ad.source);
   const lines = [
-    `<b>${esc(ad.title || 'Объявление ' + ad.id)}</b>`,
+    `${src.emoji} <b>${esc(ad.title || 'Объявление ' + ad.id)}</b>`,
     [ad.priceLabel || (ad.price != null ? `${fmt(ad.price)} ₸` : ''), [ad.city, ad.region].filter(Boolean).join(', ')].filter(Boolean).map(esc).join(' · '),
     ad.createdAt ? `🕒 подано ${ago(ad.createdAt)} назад` : '',
     phone ? `📞 ${prettyPhone(phone)}` : '',
@@ -358,8 +398,7 @@ function card(ad, subs, via) {
 
 // Ссылка с номером в конце — сайт часть после # игнорирует, а номер под рукой.
 function adLink(ad) {
-  const base = ad.url && /^https?:/.test(ad.url) ? ad.url.split('#')[0] : `${BASE}/d/obyavlenie/-ID${encodeId(ad.id)}.html`;
-  return `${base}#${ad.id}`;
+  return sources.get(ad.source).link(ad);
 }
 
 // Казахстанские мобильные в тексте объявления: +7 777 123 45 67, 8(701)1234567 и т.п.
@@ -413,4 +452,4 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-module.exports = { createBot, card, adLink, nameFromUrl, phonesIn, PLANS };
+module.exports = { createBot, card, adLink, nameFromUrl, phonesIn, PLANS, PRODUCTS };
