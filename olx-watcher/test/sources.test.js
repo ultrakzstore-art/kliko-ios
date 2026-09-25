@@ -299,3 +299,34 @@ test('витрина Kaspi: при запуске только запомина�
     Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
   }
 });
+
+test('витрина Kaspi: поднятое старое (маленький номер или старая дата) — не новинка', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-bump-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const k = sources.get('kaspi');
+  const orig = { show: k.fetchShowcase, detail: k.fetchDetail };
+  let showcase = [{ id: 123600000, url: 'u0' }];
+  k.fetchShowcase = async (city) => (city ? [] : showcase);
+  const crumbs = ['almaty', 'almaty/elektronika/computery/noutbuki'];
+  const cards = {
+    120000000: { title: 'Ноутбук старый, поднят', crumbs, price: 1 },
+    123599990: { title: 'Ноутбук вчерашний', crumbs, price: 1, createdAt: Date.now() - 20 * 3600_000 },
+    123600005: { title: 'Ноутбук новый', crumbs, price: 1 },
+  };
+  k.fetchDetail = async (a) => cards[a.id] || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a) => { if (a) sent.push(a.id); }, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    db.extend(1, 30, ['kaspi']);
+    const s = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
+    db.updateSub(s.id, { initialized: 1 });
+    await w.kaspiShowcaseTick();
+    showcase = [{ id: 123600005, url: 'u5' }, { id: 120000000, url: 'u1' }, { id: 123599990, url: 'u2' }, ...showcase];
+    await w.kaspiShowcaseTick();
+    assert.deepStrictEqual(sent, [123600005]);
+  } finally {
+    Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
+  }
+});

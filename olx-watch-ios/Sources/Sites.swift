@@ -165,7 +165,8 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     /// Kaspi: сортировка «сначала новые». Как она зовётся в ссылке, заранее неизвестно — ищем
     /// на первой странице выдачи (ссылка или пункт списка «Сначала новые» / «Новые» / «По дате»).
     /// nil — ещё не искали; ("", "") — искали, не нашлось.
-    static var kaspiSort: (name: String, value: String)?
+    /// Kaspi и так «сначала новые» по умолчанию — поиск сортировки выключен (("", "") — «не нужна»).
+    static var kaspiSort: (name: String, value: String)? = ("", "")
     private static let sortWords = #"(сначала\s+нов|нов(ые|ее|инки)|по\s+дат|свеж|недавн|newest|date)"#
 
     static func findSort(_ html: String) -> (name: String, value: String)? {

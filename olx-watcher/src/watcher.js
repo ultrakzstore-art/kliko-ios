@@ -348,6 +348,7 @@ class Watcher {
         if (top > (this.kaspiFrontier || 0)) this.bumpKaspi(top);
         const seed = !st.seeded.has(page);
         st.seeded.add(page);
+        if (!st.startEdge) st.startEdge = top;
         for (const a of ads) {
           if (st.seen.has(a.id)) continue;
           st.seen.add(a.id);
@@ -358,6 +359,11 @@ class Watcher {
             ad = d && { ...a, ...stripEmpty(d), id: a.id, url: a.url, source: 'kaspi' };
           } catch { ad = null; }
           if (!ad) continue;
+          // Поднятое старое тоже всплывает наверх витрины. Новинка — если дата подачи свежая
+          // (до 3 ч), а без даты — если номер не сильно меньше края на момент запуска (запас —
+          // на вышедшие с модерации позже соседей).
+          const old = ad.createdAt ? Date.now() - ad.createdAt > LATE_MS : a.id < st.startEdge - 500;
+          if (old) { this.trace(a.id, 'витрина Kaspi: поднятое старое — пропуск'); continue; }
           this.trace(a.id, `витрина Kaspi: увидели${page ? ` (${ad.city || page})` : ''}`);
           for (const s of subs) {
             if (this.db.wasSent(s.id, a.id)) continue;
