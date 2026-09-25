@@ -72,6 +72,9 @@ struct Listing: Identifiable, Hashable {
     /// Поле не пришло — false: кнопки, которой сайт бы не показал, нет и здесь.
     var звонок = false
     var whatsApp = false
+    /// Подписчиков у продавца (seller_followers) — «12 подписчиков» в карточке продавца рядом с «Подписаться на продавца»
+    /// (этап 36, mkSellerFolHtml сайта). Ноль или не пришло — nil: сайт ноль не показывает.
+    var подписчикиПродавца: Int? = nil
 
     struct Характеристика: Hashable {
         let ключ: String
@@ -239,6 +242,7 @@ extension Listing: Decodable {
         доставкаДней = непусто(строка("ship_days")).flatMap { $0 == "0" ? nil : $0 }
         периодАренды = непусто(строка("rent_period"))
         продавецС = непусто(строка("seller_since"))
+        подписчикиПродавца = число("seller_followers").map { Int($0) }.flatMap { $0 > 0 ? $0 : nil }
         let телефон = да("has_phone")
         let связь = try? c.decode(Связь.self, forKey: Ключ("contact"))
         звонок = телефон && (связь?.call?.ok?.да ?? false)

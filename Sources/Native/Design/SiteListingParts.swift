@@ -841,6 +841,9 @@ struct МеткаСайта: LabelStyle {
 
 struct КарточкаПродавцаСайта: View {
     let товар: Listing
+    /// Этап 36: число подписчиков для строки «сделки · подписчики · с какого года» (mkSellerFolHtml сайта) — свежее из
+    /// subs.php или seller_followers объявления. nil — строки о подписчиках нет, как до этапа 36.
+    var подписчики: Int? = nil
 
     private var буква: String {
         String((товар.продавец ?? "?").trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
@@ -943,10 +946,11 @@ struct КарточкаПродавцаСайта: View {
         }
     }
 
-    /// «7 сделок · с 2026 г.».
+    /// «7 сделок · 12 подписчиков · с 2026 г.» — порядок сайта; подписчиков ноль — не пишем, как сайт.
     private var статистика: String? {
         var части: [String] = []
         if let с = товар.сделкиПродавца { части.append(ListingPageText.число(с, "deals")) }
+        if let число = подписчики, число > 0 { части.append(SubsText.подписчики(число)) }
         if let год = товар.продавецС { части.append(String(format: ListingPageText.т("since"), год)) }
         return части.isEmpty ? nil : части.joined(separator: " · ")
     }

@@ -18,6 +18,9 @@ import WebKit
  {"id":"u<12 hex>"}). Прежняя проверка считала вошедшим и гостя. Теперь вошёл — непустой KlikoUser.id, или
  _MK_AUTH = 1 витрины, или window.__ULX_GUEST = false кабинета; гость — пустой id, _MK_AUTH = 0 или __ULX_GUEST =
  true; ни одного признака на странице — не знаем (nil).
+
+ Этап 36: там же — номер вошедшего (Состояние.пользователь): подписки на продавцов (СинхронПодписок) не предлагают
+ подписаться на самого себя, как сайт (getMkMe() === seller_id).
  */
 enum SiteSession {
 
@@ -36,6 +39,10 @@ enum SiteSession {
         /// nil — страница ещё не загрузилась, и мы не знаем.
         let вошёл: Bool?
         let csrf: String?
+        /// Этап 36 (владелец 25.09.2026): номер вошедшего — window.KlikoUser.id («u<12 hex>», как seller_id объявлений),
+        /// запасной — localStorage ulx_me_id (getMkMe сайта). Нужен, чтобы, как сайт, не предлагать подписаться на самого
+        /// себя. nil — гость или страница не сказала.
+        var пользователь: String? = nil
     }
 
     /// Выражение JS для CSRF-токена страницы: window._MKP_CSRF витрины, запасной — window.KlikoCsrf моста. typeof —
@@ -61,7 +68,9 @@ enum SiteSession {
             + "var a=(typeof _MK_AUTH!=='undefined')?((_MK_AUTH&&_MK_AUTH!=='0')?1:0):-1;"
             + "var g=(typeof window.__ULX_GUEST==='boolean')?(window.__ULX_GUEST?1:0):-1;"
             + "var v=(id||a===1||g===0)?1:((u||a===0||g===1)?0:-1);"
-            + "return JSON.stringify({v:v,c:" + jsТокена + "});}catch(e){return '{}';}})()"
+            /* Этап 36: номер вошедшего — id моста, запасной — ulx_me_id витрины (getMkMe); у гостя не спрашиваем. */
+            + "var m=id;if(!m&&v===1){try{m=localStorage.getItem('ulx_me_id')||'';}catch(e){}}"
+            + "return JSON.stringify({v:v,c:" + jsТокена + ",m:String(m||'')});}catch(e){return '{}';}})()"
         guard let строка = try? await web.evaluateJavaScript(js) as? String,
               let данные = строка.data(using: .utf8),
               let словарь = try? JSONSerialization.jsonObject(with: данные) as? [String: Any] else {
@@ -75,6 +84,7 @@ enum SiteSession {
         case 0: вошёл = false
         default: вошёл = nil
         }
-        return Состояние(вошёл: вошёл, csrf: c)
+        let номер = (словарь["m"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Состояние(вошёл: вошёл, csrf: c, пользователь: вошёл == true && !номер.isEmpty ? номер : nil)
     }
 }
