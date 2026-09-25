@@ -32,8 +32,11 @@ function matches(sub, ad) {
   const title = `${ad.title} ${ad.description || ''}`.toLowerCase();
   // Слова — по основе: «ноутбуки» найдёт «ноутбук», «ноутбука»; поиск OLX тоже так ищет.
   if (f.words.length && !f.words.every((w) => title.includes(stem(w)))) return false;
-  if (f.priceFrom && ad.price != null && ad.price < f.priceFrom) return false;
-  if (f.priceTo && ad.price != null && ad.price > f.priceTo) return false;
+  // Обмен, «Отдам даром» и объявления без цены проходят любой фильтр цены.
+  if (!noPrice(ad)) {
+    if (f.priceFrom && ad.price < f.priceFrom) return false;
+    if (f.priceTo && ad.price > f.priceTo) return false;
+  }
   // Рубрика: пока поиск не показал ни одной — не судим; потом только знакомые рубрики.
   if ((L.categoryIds || []).length && ad.categoryId && !L.categoryIds.includes(ad.categoryId)) return false;
   // Город: если за 20+ объявлений поиск показывал ровно один город — значит, в ссылке фильтр по городу.
@@ -43,9 +46,14 @@ function matches(sub, ad) {
   return true;
 }
 
+// Без цены: обмен, бесплатно (цена 0) или цена не указана.
+function noPrice(ad) {
+  return !(ad.price > 0) || /обмен|бесплат|даром/i.test(ad.priceLabel || '');
+}
+
 // Грубая основа слова: у длинных слов отбрасываем окончание (до 2 букв).
 function stem(w) {
   return w.length > 5 ? w.slice(0, w.length - 2) : w;
 }
 
-module.exports = { filtersFromUrl, learn, matches, stem };
+module.exports = { filtersFromUrl, learn, matches, stem, noPrice };

@@ -241,8 +241,11 @@ enum OLX {
         let f = filters(from: sub.url)
         let text = (ad.title + " " + ad.description).lowercased()
         if !f.words.allSatisfy({ text.contains($0) }) { return false }
-        if let from = f.priceFrom, let p = ad.price, p < from { return false }
-        if let to = f.priceTo, let p = ad.price, p > to { return false }
+        // Обмен, «Отдам даром» и без цены проходят любой фильтр цены.
+        if !ad.noPrice, let p = ad.price {
+            if let from = f.priceFrom, p < from { return false }
+            if let to = f.priceTo, p > to { return false }
+        }
         if !sub.learnedCategories.isEmpty, let cat = ad.categoryId, !sub.learnedCategories.contains(cat) { return false }
         if sub.learnedTotal >= 20, sub.learnedCities.count == 1, !ad.city.isEmpty, ad.city != sub.learnedCities[0] { return false }
         // Без слов и без выученных рубрик турбо не шлёт — иначе полетит весь OLX.

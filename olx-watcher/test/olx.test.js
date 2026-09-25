@@ -74,3 +74,14 @@ test('ссылка в уведомлении — чистая, без номер
   const c = card({ title: 'HP <250>', price: 250000, city: 'Алматы', status: 'moderated' }, [{ name: 'Ноуты' }], 'turbo');
   assert.ok(c.includes('HP &lt;250&gt;') && c.includes('⚡ эксклюзив') && c.includes('на проверке'));
 });
+
+test('обмен и «отдам даром» проходят любой фильтр цены', () => {
+  const sub = { url: 'https://www.olx.kz/d/elektronika/q-hp/?search%5Bfilter_float_price%3Afrom%5D=100000&search%5Bfilter_float_price%3Ato%5D=300000', learned: {} };
+  const base = { title: 'HP 250', city: 'Алматы', categoryId: 1 };
+  assert.ok(matches(sub, { ...base, price: null, priceLabel: 'Обмен' }), 'обмен');
+  assert.ok(matches(sub, { ...base, price: 0, priceLabel: 'Бесплатно' }), 'даром');
+  assert.ok(matches(sub, { ...base, price: 200000 }), 'в диапазоне');
+  assert.ok(!matches(sub, { ...base, price: 50000 }), 'дешевле «от»');
+  const c = card({ title: 'HP', price: null, priceLabel: 'Обмен' }, [{ name: 'x' }], 'search');
+  assert.ok(c.includes('🔁 Обмен'));
+});

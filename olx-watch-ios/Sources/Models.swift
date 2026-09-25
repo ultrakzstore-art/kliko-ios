@@ -34,7 +34,14 @@ struct Ad: Codable, Identifiable, Hashable {
     /// OLX ещё не одобрил: статус не active.
     var onReview: Bool { !status.isEmpty && status != "active" }
 
+    /// Без цены: обмен, бесплатно (цена 0) или цена не указана.
+    var noPrice: Bool {
+        (price ?? 0) <= 0 || priceLabel.range(of: "обмен|бесплат|даром", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     var priceText: String {
+        if priceLabel.range(of: "обмен", options: .caseInsensitive) != nil { return "🔁 Обмен" }
+        if priceLabel.range(of: "бесплат|даром", options: [.regularExpression, .caseInsensitive]) != nil || price == 0 { return "🎁 Бесплатно" }
         if !priceLabel.isEmpty { return priceLabel }
         guard let price else { return "" }
         return price.formatted(.number.grouping(.automatic).precision(.fractionLength(0))) + " ₸"

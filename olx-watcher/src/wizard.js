@@ -56,8 +56,8 @@ function registerWizard(bot, { db, log, canAdd }) {
   async function stepWords(ctx) {
     st().w.step = 'words';
     const kb = new InlineKeyboard();
-    if (current()) kb.text('Пропустить', 'w:skipwords');
-    await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nКлючевые слова? Напишите, например: <i>iphone 13</i>, <i>hp 250</i>, <i>зимние шины r16</i>.${current() ? '\nИли «Пропустить» — все объявления рубрики.' : ''}`, kb);
+    if (current() || st().w.kcat) kb.text('Пропустить', 'w:skipwords');
+    await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nКлючевые слова? Напишите, например: <i>iphone 13</i>, <i>hp 250</i>, <i>зимние шины r16</i>.${current() || st().w.kcat ? '\nИли «Пропустить» — все объявления рубрики.' : ''}`, kb);
   }
 
   async function stepPrice(ctx) {
@@ -81,7 +81,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     const w = st().w;
     w.url = w.source === 'olx'
       ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
-      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: w.ksub?.params, city: w.city?.slug, priceFrom: w.priceFrom, priceTo: w.priceTo });
+      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: w.ksub?.params, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo });
     let preview;
     try {
       const found = await src().fetchSearch(w.url);
@@ -211,9 +211,9 @@ function registerWizard(bot, { db, log, canAdd }) {
     if (data.startsWith('w:city:')) {
       const i = data.slice(7);
       st().w.city = i === '-' ? null : cats.CITIES[Number(i)] || null;
-      return st().w.source === 'olx' ? stepWords(ctx) : stepPrice(ctx);
+      return st().w.source === 'olx' || src().wizard?.words ? stepWords(ctx) : stepPrice(ctx);
     }
-    if (data === 'w:skipwords') return stepPrice(ctx);
+    if (data === 'w:skipwords') return src().wizard?.noPrice ? stepConfirm(ctx) : stepPrice(ctx);
     if (data === 'w:skipprice') return stepSeller(ctx);
     if (data.startsWith('w:seller:')) {
       const v = data.slice(9);
@@ -240,7 +240,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     if (/https?:\/\//i.test(text) && sources.byUrl(text.match(/https?:\/\/\S+/)[0])) { st().w = null; return next(); } // прислали ссылку — мастер не нужен
     if (st().w.step === 'words') {
       st().w.words = text.slice(0, 60);
-      return stepPrice(ctx);
+      return src().wizard?.noPrice ? stepConfirm(ctx) : stepPrice(ctx);
     }
     const p = cats.parsePrice(text);
     if (!p) return ctx.reply('Не понял цену. Например: до 300000, от 100000 до 250000, 300к — или «Любая цена».');

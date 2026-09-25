@@ -112,32 +112,67 @@ const KRISHA = kolesaGroup({
   ],
 });
 
-// ---------- Kaspi Объявления (экспериментально) ----------
-// Устройство ссылок Kaspi Объявлений не проверено: номер берём как последнее длинное число в
-// ссылке на объявление. Выбора кнопками нет — поиск задаётся ссылкой с сайта.
+// ---------- Kaspi Объявления ----------
+// Ссылки: obyavleniya.kaspi.kz/[город/]рубрика/подрубрика/[k--слова/] — без города это весь
+// Казахстан. Номер объявления — последнее длинное число в ссылке на него (устройство страницы
+// объявления не проверено — `npm run probe` покажет).
+
+const KASPI_BASE = 'https://obyavleniya.kaspi.kz';
+const KASPI_CATEGORIES = [
+  { name: 'Электроника', path: 'elektronika', subs: [
+    { name: 'Телефоны', path: 'elektronika/telefony' },
+    { name: 'Мобильные телефоны', path: 'elektronika/telefony/mobilnye-telefony' },
+    { name: 'Компьютеры', path: 'elektronika/computery' },
+    { name: 'Ноутбуки', path: 'elektronika/computery/noutbuki' },
+    { name: 'Техника для дома', path: 'elektronika/tehnika-dlya-doma' },
+  ] },
+  { name: 'Дом и дача', path: 'dom-dacha', subs: [
+    { name: 'Мебель и интерьер', path: 'dom-dacha/mebel-interer' },
+  ] },
+  { name: 'Животные', path: 'zhivotnye' },
+  { name: 'Услуги', path: 'uslugi' },
+  { name: 'Бизнес и оборудование', path: 'biznes' },
+];
+
+function kaspiIds(html) {
+  const out = new Map();
+  for (const m of html.matchAll(/href=["']([^"'#]+)["']/gi)) {
+    const href = m[1].replace(/&amp;/g, '&');
+    let u;
+    try { u = new URL(href, KASPI_BASE); } catch { continue; }
+    if (!/(^|\.)kaspi\.kz$/i.test(u.hostname) || /\/k--/.test(u.pathname)) continue;
+    const nums = u.pathname.match(/\d{6,}/g);
+    if (!nums) continue;
+    const id = Number(nums[nums.length - 1]);
+    if (!out.has(id)) out.set(id, { id, title: '', url: `${u.origin}${u.pathname}` });
+  }
+  return [...out.values()];
+}
 
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
-  isAdUrl: () => false,
+  isAdUrl: (url) => { try { return /\d{6,}/.test(new URL(url).pathname) && !/\/k--/.test(url); } catch { return false; } },
   async fetchSearch(url) {
     const html = await getHtml(this.normalize(url));
     if (html == null) throw new Error('Kaspi ответил 404 — проверьте ссылку');
-    const out = new Map();
-    for (const m of html.matchAll(/href=["']([^"']*(?:obyavleni|\/ads?\/|advert|classified)[^"']*)["']/gi)) {
-      const nums = m[1].match(/\d{6,}/g);
-      if (!nums) continue;
-      const id = Number(nums[nums.length - 1]);
-      if (!out.has(id)) out.set(id, { id, title: '', url: new URL(m[1], 'https://kaspi.kz').toString() });
-    }
-    return [...out.values()];
+    return kaspiIds(html);
   },
   async fetchDetail(ad) {
     const html = await getHtml(ad.url);
     return html == null ? null : parseDetail(html, { id: ad.id, url: ad.url });
   },
   link: (ad) => ad.url,
-  wizard: null,
+  wizard: {
+    categories: KASPI_CATEGORIES,
+    cities: CITIES,
+    words: true,     // слова — частью ссылки: k--слово
+    noPrice: true,   // фильтр цены у Kaspi в ссылке не проверен — не спрашиваем
+    build: ({ path, city, words }) => {
+      const q = String(words || '').trim().toLowerCase().replace(/\s+/g, '-');
+      return `${KASPI_BASE}/${city ? `${city}/` : ''}${path}/${q ? `k--${encodeURIComponent(q)}/` : ''}`;
+    },
+  },
 };
 
 const ALL = [OLX, KOLESA, KRISHA, KASPI];
@@ -149,4 +184,4 @@ function byUrl(url) {
   return ALL.find((s) => s.hostRe.test(host)) || null;
 }
 
-module.exports = { ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { kaspiIds, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };

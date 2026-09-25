@@ -29,7 +29,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     }
 
     var host: String { "\(rawValue).kz" }
-    var base: String { "https://\(host)" }
+    var base: String { self == .kaspi ? "https://obyavleniya.kaspi.kz" : "https://\(host)" }
 
     /// Сдвиг номера в ленте: номера разных площадок могут совпасть, а лента общая.
     var idOffset: Int {
@@ -61,7 +61,17 @@ enum Site: String, CaseIterable, Identifiable, Codable {
             let list: [(String, String)] = [("Продажа квартир", "prodazha/kvartiry"), ("Аренда квартир", "arenda/kvartiry"),
                                             ("Продажа домов", "prodazha/doma"), ("Аренда домов", "arenda/doma"), ("Участки", "prodazha/uchastkov")]
             return list.map { OLX.Category(name: $0.0, path: $0.1) }
-        case .kaspi: return []
+        case .kaspi:
+            // Ссылки Kaspi: obyavleniya.kaspi.kz/[город/]рубрика/…; без города — весь Казахстан.
+            let list: [(String, String)] = [
+                ("Электроника", "elektronika"), ("Электроника › Телефоны", "elektronika/telefony"),
+                ("Электроника › Мобильные телефоны", "elektronika/telefony/mobilnye-telefony"),
+                ("Электроника › Компьютеры", "elektronika/computery"), ("Электроника › Ноутбуки", "elektronika/computery/noutbuki"),
+                ("Электроника › Техника для дома", "elektronika/tehnika-dlya-doma"),
+                ("Дом и дача", "dom-dacha"), ("Дом и дача › Мебель и интерьер", "dom-dacha/mebel-interer"),
+                ("Животные", "zhivotnye"), ("Услуги", "uslugi"), ("Бизнес и оборудование", "biznes"),
+            ]
+            return list.map { OLX.Category(name: $0.0, path: $0.1) }
         }
     }
 
@@ -76,6 +86,14 @@ enum Site: String, CaseIterable, Identifiable, Codable {
 
     func buildSearchURL(path: String?, city: String?, words: String, priceFrom: Int?, priceTo: Int?) -> String {
         if self == .olx { return OLX.buildSearchURL(path: path, city: city, words: words, priceFrom: priceFrom, priceTo: priceTo) }
+        if self == .kaspi {
+            var url = base + "/"
+            if let city, !city.isEmpty { url += "\(city)/" }
+            url += "\(path ?? "elektronika")/"
+            let q = words.trimmingCharacters(in: .whitespaces).lowercased().split(whereSeparator: \.isWhitespace).joined(separator: "-")
+            if !q.isEmpty { url += "k--\(q.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? q)/" }
+            return url
+        }
         var url = "\(base)/\(path ?? categories.first?.path ?? "")/"
         if let city, !city.isEmpty { url += "\(city)/" }
         let keys = self == .kolesa ? ("price[from]", "price[to]") : ("das[price][from]", "das[price][to]")
@@ -108,7 +126,9 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .olx: return OLX.adId(fromURL: url) != nil
         case .kolesa, .krisha: return url.range(of: #"/a/show/\d+"#, options: .regularExpression) != nil
-        case .kaspi: return false
+        case .kaspi:
+            guard let path = URLComponents(string: url)?.path else { return false }
+            return path.range(of: #"\d{6,}"#, options: .regularExpression) != nil && !path.contains("/k--")
         }
     }
 
@@ -149,11 +169,12 @@ enum Site: String, CaseIterable, Identifiable, Codable {
                 if let n = Int(m) { add(n, "\(base)/a/show/\(n)") }
             }
         case .kaspi:
-            for href in Site.matches(#"href=["']([^"']*(?:obyavleni|/ads?/|advert|classified)[^"']*)["']"#, in: page) {
-                let nums = Site.matches(#"(\d{6,})"#, in: href)
-                guard let last = nums.last, let n = Int(last) else { continue }
-                let full = URL(string: Site.decode(href), relativeTo: URL(string: base))?.absoluteString ?? href
-                add(n, full)
+            // Объявление — ссылка на kaspi.kz, в пути которой длинное число (не рубрика, не k--слова).
+            for href in Site.matches(#"href=["']([^"'#]+)["']"#, in: page) {
+                guard let u = URL(string: Site.decode(href), relativeTo: URL(string: base))?.absoluteURL,
+                      let host = u.host, host.hasSuffix("kaspi.kz"), !u.path.contains("/k--") else { continue }
+                guard let last = Site.matches(#"(\d{6,})"#, in: u.path).last, let n = Int(last) else { continue }
+                add(n, "\(u.scheme ?? "https")://\(host)\(u.path)")
             }
         case .olx: break
         }

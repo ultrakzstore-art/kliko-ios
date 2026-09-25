@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let link = (info["url"] as? String).flatMap(URL.init(string:))
         Task { @MainActor in
             AppModel.shared.highlightedAdId = adId
-            if let link { _ = await UIApplication.shared.open(link, options: [:]) }
+            if let link { AppLink.open(link) }
             completionHandler()
         }
     }

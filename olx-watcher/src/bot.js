@@ -482,7 +482,10 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   if (ad.promoted) flags.push('📣 продвигается');
   // Номер, который продавец написал в тексте, — Телеграм сам делает его нажимаемым (звонок).
   const phone = phonesIn(`${ad.title || ''}\n${ad.description || ''}`)[0];
-  const price = ad.priceLabel || (ad.price != null ? `${fmt(ad.price)} ₸` : '');
+  const label = String(ad.priceLabel || '');
+  const price = /обмен/i.test(label) ? '🔁 Обмен'
+    : /бесплат|даром/i.test(label) || ad.price === 0 ? '🎁 Бесплатно'
+      : label || (ad.price != null ? `${fmt(ad.price)} ₸` : '');
   const place = [...new Set([ad.city, ad.region].filter(Boolean))].join(', ');
 
   const drop = via === 'discount' && ad.oldPrice && ad.price
@@ -491,7 +494,7 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   const head = [
     drop,
     `${src.emoji} <b>${esc(ad.title || 'Объявление')}</b>`,
-    price && !drop ? `💰 <b>${esc(price)}</b>` : '',
+    price && !drop ? (/^[🔁🎁]/u.test(price) ? `<b>${esc(price)}</b>` : `💰 <b>${esc(price)}</b>`) : '',
     place ? `📍 ${esc(place)}` : '',
     ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}` : '',
     flags.join(' · '),

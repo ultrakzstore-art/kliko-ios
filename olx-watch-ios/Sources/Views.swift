@@ -193,7 +193,7 @@ struct AdRow: View {
                 Badges(ad: ad)
             }
             .contentShape(Rectangle())
-            .onTapGesture { if let url = ad.link { openURL(url) } }
+            .onTapGesture { if let url = ad.link { AppLink.open(url) } }
 
             AdDetails(ad: ad)
             ActionButtons(ad: ad)
@@ -222,27 +222,27 @@ struct ActionButtons: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
                 if let seller = ad.sellerURL {
-                    Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+                    Button { AppLink.open(seller) } label: { Image(systemName: "person.crop.circle") }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Все объявления автора")
                 }
             } else if let url = ad.link {
                 // Номера в тексте нет — главное всё равно номер: открываем объявление,
                 // там «Показать телефон» (в приложении OLX или в Safari, где вы вошли).
-                Button { openURL(url) } label: {
+                Button { AppLink.open(url) } label: {
                     Label("Номер — на \(ad.site == .kaspi ? "Kaspi" : ad.site.title)", systemImage: "phone.arrow.up.right")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
                 if let seller = ad.sellerURL {
-                    Button { openURL(seller) } label: { Image(systemName: "person.crop.circle") }
+                    Button { AppLink.open(seller) } label: { Image(systemName: "person.crop.circle") }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Все объявления автора")
                 }
             }
             if !phones.isEmpty, let url = ad.link {
-                Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
+                Button { AppLink.open(url) } label: { Image(systemName: "arrow.up.right.square") }
                     .buttonStyle(.bordered)
                     .accessibilityLabel("Открыть на \(ad.site.title)")
             }
@@ -332,7 +332,7 @@ struct LinkRow: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { if let url = ad.link { openURL(url) } }
+            .onTapGesture { if let url = ad.link { AppLink.open(url) } }
             AdDetails(ad: ad)
             ActionButtons(ad: ad, compact: true)
         }
@@ -520,18 +520,28 @@ struct AdMenu: View {
 
     var body: some View {
         if let url = ad.link {
-            Button { openURL(url) } label: { Label("Открыть на \(ad.site.title)", systemImage: "safari") }
+            Button { AppLink.open(url) } label: { Label("Открыть на \(ad.site.title)", systemImage: "safari") }
             ShareLink(item: url) { Label("Поделиться", systemImage: "square.and.arrow.up") }
             Button { UIPasteboard.general.url = url } label: { Label("Скопировать ссылку", systemImage: "doc.on.doc") }
         }
         if let url = ad.sellerURL {
-            Button { openURL(url) } label: { Label("Все объявления автора", systemImage: "person.crop.circle") }
+            Button { AppLink.open(url) } label: { Label("Все объявления автора", systemImage: "person.crop.circle") }
         }
         if !ad.params.isEmpty || !ad.description.isEmpty {
             Section {
                 ForEach(ad.params, id: \.self) { Text(verbatim: $0) }
                 if !ad.description.isEmpty { Text(verbatim: String(ad.description.prefix(200)) + "…") }
             }
+        }
+    }
+}
+
+/// Ссылка на объявление или продавца — сначала в приложении площадки (OLX, Kaspi, Kolesa,
+/// Krisha: там виден номер), если оно установлено; иначе — в браузере.
+enum AppLink {
+    @MainActor static func open(_ url: URL) {
+        UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
+            if !opened { UIApplication.shared.open(url) }
         }
     }
 }
@@ -610,7 +620,7 @@ struct AddSubSheet: View {
     @State private var priceTo = ""
 
     private var builtURL: String {
-        site.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: site == .olx ? words : "",
+        site.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: site == .olx || site == .kaspi ? words : "",
                            priceFrom: Int(priceFrom.filter(\.isNumber)), priceTo: Int(priceTo.filter(\.isNumber)))
     }
 
@@ -622,7 +632,7 @@ struct AddSubSheet: View {
             switch site {
             case .olx: return top != nil || !words.trimmingCharacters(in: .whitespaces).isEmpty
             case .kolesa, .krisha: return top != nil
-            case .kaspi: return false
+            case .kaspi: return top != nil
             }
         }
     }
@@ -674,7 +684,6 @@ struct AddSubSheet: View {
                 sub = nil
                 citySlug = ""
                 words = ""
-                if newSite == .kaspi { mode = .link }
             }
             .onChange(of: top) { _, newTop in
                 sub = nil
@@ -698,15 +707,7 @@ struct AddSubSheet: View {
                 ForEach(Site.allCases) { s in Text(verbatim: "\(s.emoji) \(s.title)").tag(s) }
             }
         }
-        if site == .kaspi {
-            Section {
-                Text("У Kaspi Объявлений выбора кнопками нет: откройте поиск на kaspi.kz, скопируйте ссылку и вставьте во вкладке «Ссылка».")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button("Перейти к ссылке") { mode = .link }
-            }
-        } else {
-            sitePickForm
-        }
+        sitePickForm
     }
 
     @ViewBuilder private var sitePickForm: some View {
@@ -738,19 +739,21 @@ struct AddSubSheet: View {
             }
         }
         Section {
-            if site == .olx {
+            if site == .olx || site == .kaspi {
                 TextField(text: $words, prompt: Text(verbatim: "необязательно: iphone 13, hp 250")) { Text(verbatim: "Слова") }
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
-            HStack {
+            if site != .kaspi {
+                HStack {
                 TextField(text: $priceFrom, prompt: Text(verbatim: "Цена от")) { Text(verbatim: "От") }
                     .keyboardType(.numberPad)
                 TextField(text: $priceTo, prompt: Text(verbatim: "до, ₸")) { Text(verbatim: "До") }
                     .keyboardType(.numberPad)
             }
+            }
         } header: {
-            Text(verbatim: site == .olx ? "Слова и цена — необязательно" : "Цена — необязательно")
+            Text(verbatim: site == .olx ? "Слова и цена — необязательно" : site == .kaspi ? "Слова — необязательно" : "Цена — необязательно")
         } footer: {
             Text(verbatim: site == .olx
                  ? "Можно выбрать только рубрику — без слов придут все новые объявления в ней. Слова нужны, только если рубрика «Все». Первый проход запоминает, что уже есть, — дальше приходят только новые."

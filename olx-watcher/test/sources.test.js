@@ -98,3 +98,15 @@ test('сборщик на Kolesa: первый проход молчит, нов
     global.fetch = origFetch;
   }
 });
+
+test('Kaspi Объявления: весь Казахстан, город, слова; номера из ссылок выдачи', () => {
+  const k = sources.get('kaspi');
+  assert.strictEqual(k.wizard.build({ path: 'elektronika/computery/noutbuki' }), 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/');
+  assert.strictEqual(k.wizard.build({ path: 'elektronika/computery/noutbuki', city: 'astana' }), 'https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/');
+  assert.strictEqual(k.wizard.build({ path: 'elektronika/telefony', words: 'iphone 13' }), 'https://obyavleniya.kaspi.kz/elektronika/telefony/k--iphone-13/');
+  assert.ok(sources.byUrl('https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/').key === 'kaspi');
+  assert.ok(!k.isAdUrl('https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/'));
+  const html = '<a href="/astana/elektronika/computery/noutbuki/">рубрика</a><a href="/elektronika/computery/noutbuki/asus--143/">бренд</a>'
+    + '<a href="/ad/123456789/">Ноутбук</a><a href="https://obyavleniya.kaspi.kz/offer/987654321?x=1">Ещё</a><a href="/ad/123456789/">дубль</a>';
+  assert.deepStrictEqual(sources.kaspiIds(html).map((a) => a.id), [123456789, 987654321]);
+});
