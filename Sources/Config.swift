@@ -5,6 +5,18 @@ enum Config {
     /// Базовый URL продакшена. Все запросы идут сюда (URLSession сам держит cookie-сессию).
     static let apiBase = URL(string: "https://kliko.kz")!
 
+    /// Нативная лента вместо главной сайта (этап 1 перехода на SwiftUI, 25.09.2026). false — приложение снова
+    /// целиком веб-обёртка с превью ленты на запуске, как в 1.7: рубильник на случай, если лента API подведёт.
+    static let нативнаяЛента = true
+
+    /// Главная сайта: корень или «/<регион>/<язык>/» (kliko.kz/kz/ru/) без параметров. Её место занимает нативная лента.
+    static func главная(_ u: URL) -> Bool {
+        guard свой(u) != nil else { return false }
+        let ч = URLComponents(url: u, resolvingAgainstBaseURL: true)
+        guard (ч?.query ?? "").isEmpty else { return false }      // ?bye=1 после выхода и прочее — не трогаем
+        return u.path.isEmpty || u.path.range(of: "^/([a-z]{2}/[a-z]{2}/?)?$", options: .regularExpression) != nil
+    }
+
     /// Абсолютный URL для картинок/относительных путей из API.
     static func url(_ path: String) -> URL? {
         let p = path.trimmingCharacters(in: .whitespaces)

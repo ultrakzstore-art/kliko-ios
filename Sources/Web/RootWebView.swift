@@ -34,12 +34,26 @@ struct RootWebView: View {
                    Игнорируем только «рамку» устройства (.container), клавиатуру — НЕТ: иначе окно
                    перестало бы сжиматься под клавиатуру, и поле ввода чата ушло бы под неё. */
                 .ignoresSafeArea(.container)
+                .accessibilityHidden(bridge.лентаВидна)
 
-            if bridge.loadFailed {
+            /* НАТИВНАЯ ЛЕНТА ВМЕСТО ВЕБ-ГЛАВНОЙ (этап 1 SwiftUI, 25.09.2026). Не убираем её из дерева, а прячем: вернулись
+               с объявления — та же прокрутка и тот же поиск, без повторного запроса. Сплэш и «нет связи» ей не нужны:
+               у неё своя лента с диска и свои экраны ошибок. */
+            if Config.нативнаяЛента {
+                NativeFeedView(открыть: { адрес in bridge.pendingURL = адрес },
+                               открытьСайт: { bridge.открытьСайтВместоЛенты() })
+                    .opacity(bridge.лентаВидна ? 1 : 0)
+                    .allowsHitTesting(bridge.лентаВидна)
+                    .accessibilityHidden(!bridge.лентаВидна)
+            }
+
+            if bridge.лентаВидна {
+                // Ни сплэша, ни «нет связи» поверх ленты.
+            } else if bridge.loadFailed {
                 OfflineView { bridge.retry() }
                     .transition(.opacity)
             } else if showSplash {
-                if let снимок {
+                if let снимок, !Config.нативнаяЛента {      // с нативной лентой превью не нужно: она и есть лента
                     /* Нажали карточку — говорим странице, куда идти, а превью держим до её готовности: убрать
                        его сразу значит показать белый экран вместо объявления. */
                     FeedPreview(снимок: снимок) { адрес in bridge.pendingURL = адрес }
@@ -61,6 +75,7 @@ struct RootWebView: View {
         .animation(.easeInOut(duration: 0.2), value: lock.locked)
         .animation(.easeInOut(duration: 0.15), value: lock.cover)
         .animation(.easeInOut(duration: 0.4), value: showSplash)
+        .animation(.easeInOut(duration: 0.2), value: bridge.лентаВидна)
         // Сплэш ушёл — строка состояния начинает следовать странице (SceneDelegate, KlikoHostingController).
         .onAppear { bridge.splashDone = !showSplash }
         .onChange(of: showSplash) { _, виден in bridge.splashDone = !виден }

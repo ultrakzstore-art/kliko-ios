@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ПРОВЕРКА СБОРКИ НА КАЖДЫЙ ПУШ В ВЕТКУ — без подписи и без TestFlight.
+#
+# Swift здесь пишется без Xcode под рукой (README, «Локально на Windows»), и до сих пор
+# первым компилятором правки был полный прогон «iOS · TestFlight» — с секретами, подписью
+# и номером сборки. Этот прогон только собирает приложение и виджет под симулятор: ошибка
+# компиляции видна через несколько минут после пуша, а не при выкладке.
+# Секреты не нужны, в App Store Connect ничего не уходит.
+# ─────────────────────────────────────────────────────────────────────────────
+name: iOS · проверка сборки
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26          # тот же образ, что у сборки в TestFlight (ios.yml)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Выбрать самый новый Xcode
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
+            [ -n "$v" ] || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          xcodebuild -version
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Сгенерировать проект
+        run: xcodegen generate
+
+      - name: Собрать под симулятор
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Kliko.xcodeproj \
+            -scheme Kliko \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning: .*Sendable|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log

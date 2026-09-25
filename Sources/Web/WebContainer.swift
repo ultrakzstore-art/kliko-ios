@@ -141,6 +141,22 @@ struct WebContainer: UIViewRepresentable {
             let p = w.estimatedProgress
             Task { @MainActor in WebBridge.shared.progress = p }
         }
+        /* ГЛАВНАЯ СЕЙЧАС — НАТИВНАЯ ЛЕНТА. Страница ушла на главную (логотип, «Главная» в нижней панели, свайп назад
+           с объявления, переход внутри страницы через history.pushState) — показываем ленту вместо веб-главной.
+           Следим за адресом, а не за загрузками: сайт открывает и закрывает объявление внутри главной, без загрузки,
+           и didFinish этого не увидел бы. Реагируем только на ПЕРЕХОД на главную, а не на сам факт главной: иначе
+           лента возвращалась бы поверх страницы на каждую её дозагрузку. */
+        if Config.нативнаяЛента {
+            context.coordinator.urlObs = web.observe(\.url, options: [.new]) { [weak coordinator = context.coordinator] w, _ in
+                let наГлавной = w.url.map { Config.главная($0) } ?? false
+                Task { @MainActor in
+                    guard let coordinator else { return }
+                    defer { coordinator.былаГлавная = наГлавной }
+                    guard наГлавной, !coordinator.былаГлавная, !WebBridge.shared.сайтВместоЛенты else { return }
+                    WebBridge.shared.лентаВидна = true
+                }
+            }
+        }
         context.coordinator.webView = web
         context.coordinator.geo.webView = web
         context.coordinator.contacts.webView = web
@@ -154,7 +170,13 @@ struct WebContainer: UIViewRepresentable {
         // Deep-link из пуша: перейти и сбросить.
         if let url = bridge.pendingURL {
             web.load(URLRequest(url: url))
-            DispatchQueue.main.async { bridge.pendingURL = nil }
+            /* Любой переход, кроме главной, — это страница сайта: карточка из ленты, пуш, ссылка. Лента уступает ей
+               экран; главную же она заменяет, и её показывать незачем. */
+            let наГлавную = Config.главная(url)
+            DispatchQueue.main.async {
+                bridge.pendingURL = nil
+                if Config.нативнаяЛента && !bridge.сайтВместоЛенты { bridge.лентаВидна = наГлавную }
+            }
         }
         // Токен пришёл после загрузки страницы → регистрируем в веб-сессии.
         if let t = bridge.apnsToken, context.coordinator.lastToken != t, bridge.isLoaded {
@@ -172,6 +194,10 @@ struct WebContainer: UIViewRepresentable {
         var lastToken: String?
         var lastLive: LiveToken?
         var progressObs: NSKeyValueObservation?
+        /// Адрес страницы: ушла на главную — вернуть нативную ленту (см. makeUIView).
+        var urlObs: NSKeyValueObservation?
+        /// Прошлый адрес был главной — чтобы отличить переход на неё от её же дозагрузки.
+        var былаГлавная = false
         /// Выход запрошен страницей — стереть данные WebView, как только сервер ответит выходом (bye=1).
         var wipeAfterLogout = false
         /// Геопозиция для страницы через CoreLocation (мост klikoGeo).
@@ -677,6 +703,7 @@ struct WebContainer: UIViewRepresentable {
                 /* И снимок ленты: он был подобран под город и историю ушедшего человека, следующему его не
                    показываем. */
                 FeedStore.стереть()
+                ListingsCache.стереть()          // и сохранённую нативную ленту — по той же причине
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

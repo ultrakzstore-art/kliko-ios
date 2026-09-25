@@ -40,10 +40,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         /* Пока виден сплэш, экран «нет связи» или замок входа — системный стиль: под ними подложка systemBackground, а не
            страница. Потом — то, что сказала страница: светлые часы на тёмном верху, тёмные на светлом. */
         let замокВиден = замок.$locked.combineLatest(замок.$cover, замок.$enabled).map { заперт, закрыт, вкл in вкл && (заперт || закрыт) }
-        подписка = Publishers.CombineLatest4(мост.$statusBarLight, мост.$splashDone, мост.$loadFailed, замокВиден)
+        /* Нативная лента на экране — тоже системный стиль: у неё системный фон, а не верх страницы (nil — системный). */
+        let стильСтраницы = мост.$statusBarLight.combineLatest(мост.$лентаВидна)
+            .map { светлые, лента -> UIStatusBarStyle? in лента ? nil : (светлые ? .lightContent : .darkContent) }
+        подписка = Publishers.CombineLatest4(стильСтраницы, мост.$splashDone, мост.$loadFailed, замокВиден)
             .receive(on: DispatchQueue.main)
-            .sink { [weak корень] светлые, сплэшУшёл, нетСвязи, подЗамком in
-                корень?.стильСтроки = (!сплэшУшёл || нетСвязи || подЗамком) ? .default : (светлые ? .lightContent : .darkContent)
+            .sink { [weak корень] стиль, сплэшУшёл, нетСвязи, подЗамком in
+                guard let стиль, сплэшУшёл, !нетСвязи, !подЗамком else { корень?.стильСтроки = .default; return }
+                корень?.стильСтроки = стиль
             }
 
         // Холодный старт по нажатию на плашку сделки (widgetURL) или по кнопке «Открыть в приложении»
