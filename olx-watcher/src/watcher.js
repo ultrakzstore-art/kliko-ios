@@ -329,10 +329,10 @@ class Watcher {
 
   bumpKaspi(id) {
     if (!id) return;
-    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_frontier', 0);
+    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_edge', 0);
     if (id > this.kaspiFrontier) {
       this.kaspiFrontier = id;
-      this.db.set('kaspi_frontier', id);
+      this.db.set('kaspi_edge', id);
     }
   }
 
@@ -450,12 +450,12 @@ class Watcher {
     }
     this.kaspiStep = step;
     this.kaspiFrontier = lo;
-    this.db.set('kaspi_frontier', lo);
+    this.db.set('kaspi_edge', lo);
   }
 
   async kaspiTurboTick() {
     if (this.kaspiBusy || this.blocked('kaspi')) return;
-    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_frontier', 0);
+    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_edge', 0);
     if (!this.kaspiFrontier) return;
     const subs = this.db.subs().filter((s) => s.source === 'kaspi' && !s.paused && s.initialized
       && this.db.hasAccess(s.user_id, 'kaspi') && !this.db.user(s.user_id)?.blocked);

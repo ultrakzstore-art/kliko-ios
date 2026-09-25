@@ -217,6 +217,15 @@ function kaspiCityLinks(html, path) {
   return [...out];
 }
 
+// Настоящее ли объявление Kaspi открылось по номеру. На номер, под которым объявления нет (ещё
+// на проверке, снято или не существует), Kaspi отдаёт заглушку: заголовок «Kaspi Объявления»,
+// картинка — логотип, ни цены, ни даты. Логотип за фото не считаем: нужны заголовок не сайта и
+// время подачи, цена или крошки рубрики.
+function kaspiReal(d) {
+  if (!d || !d.title || /^kaspi(\.kz)?\s*(объявления)?$/i.test(d.title.trim())) return false;
+  return Boolean(d.createdAt || d.price || (d.crumbs && d.crumbs.length));
+}
+
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
@@ -280,7 +289,7 @@ const KASPI = {
     const html = await getHtml(url);
     if (html == null) return null;
     const d = kaspiFill(parseDetail(html, { id, url }));
-    return d.title && (d.price || d.photos.length) ? { ...d, id, url, source: 'kaspi' } : null;
+    return kaspiReal(d) ? { ...d, id, url, source: 'kaspi' } : null;
   },
 
   async fetchOne(url, pages = 3) {
@@ -392,4 +401,4 @@ function kaspiMismatch(sub, ad) {
   return null;
 }
 
-module.exports = { KASPI_CITY_SLUGS, kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { kaspiReal, KASPI_CITY_SLUGS, kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };

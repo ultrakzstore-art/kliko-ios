@@ -104,16 +104,21 @@ async function kaspiWatch(ms) {
         }
       }
       // По номеру: следующие за самым большим — раньше витрины и поиска.
-      for (let n = edge + 1; n <= edge + 4; n++) {
-        if (byNum.has(n) || (misses.get(n) || 0) > 20) continue;
+      // Пустые номера (заглушка) — на проверке или сняты: позади края перепроверяем до 30 раз.
+      const behind = [...misses.keys()].filter((n) => n < edge && misses.get(n) <= 30).slice(0, 3);
+      for (const n of [...behind, ...Array.from({ length: 6 }, (_, i) => edge + 1 + i)]) {
+        if (byNum.has(n)) continue;
         const d = await k.fetchById(n).catch(() => null);
         if (!d) { misses.set(n, (misses.get(n) || 0) + 1); continue; }
         byNum.set(n, Date.now());
+        const was = misses.get(n);
+        misses.delete(n);
         const when = d.createdAt ? `подано ${clock(d.createdAt)}, открылось через ${Math.round((Date.now() - d.createdAt) / 1000)} с` : 'время подачи не найдено';
-        console.log(`${clock()} ⚡ по номеру ${n} · ${String(d.title).slice(0, 45)} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'} · ${when}`);
+        console.log(`${clock()} ⚡ по номеру ${n} · ${String(d.title).slice(0, 45)} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'} · ${when}${was ? ` · до этого ${was} раз была заглушка (проверка?)` : ''}`);
         if (d.createdAt > last) last = d.createdAt;
         edge = Math.max(edge, n);
       }
+      for (const n of misses.keys()) if (n < edge - 200) misses.delete(n);
     } catch (e) {
       console.log(`${clock()} ошибка: ${e.message}`);
     }
@@ -128,6 +133,7 @@ async function kaspiWatch(ms) {
     const up = fresh.slice(1).filter((f, i) => f.id > fresh[i].id).length;
     console.log(`  номер больше предыдущего нового: ${up} из ${fresh.length - 1} — ${up === fresh.length - 1 ? 'номера растут по порядку' : 'номера не по порядку, ловим по дате'}`);
   }
+  console.log(`  пустых номеров (заглушка) сейчас: ${[...misses.keys()].length}`);
   console.log(`  поймано по номеру: ${byNum.size}${byNum.size ? `, из них позже на витрине: ${[...byNum.keys()].filter((id) => onShow.get(id)).length}` : ''} · самый большой номер: ${edge}`);
   if (last) console.log(`  последняя выкладка: ${new Date(last).toLocaleString('ru-RU', tz)}`);
   console.log('\nПришлите весь этот вывод — по нему видно, как Kaspi выдаёт новые объявления.');

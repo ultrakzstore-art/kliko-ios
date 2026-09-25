@@ -89,7 +89,7 @@ final class AppModel {
     /// Монитор Kaspi: что вышло, откуда пришло, почему пропущено — свежее сверху, последние 200.
     private(set) var kaspiLive: [String] = []
     /// Последний известный номер Kaspi (край) и найден ли он точно — для монитора.
-    private(set) var kaspiEdgeShown = UserDefaults.standard.integer(forKey: "kaspi_frontier")
+    private(set) var kaspiEdgeShown = UserDefaults.standard.integer(forKey: "kaspi_edge")
     private(set) var kaspiEdgeExact = false
     /// Последняя выкладка Kaspi — самое позднее время подачи среди увиденных новых.
     private(set) var kaspiLast: Date?
@@ -620,7 +620,7 @@ final class AppModel {
     /// Пауза Kolesa / Krisha / Kaspi — своя: OLX ограничил — остальные работают, и их удачный
     /// ответ не сбрасывает паузу OLX (и наоборот).
     // Турбо Kaspi: номера объявлений сквозные; граница — самый большой номер из выдачи Kaspi.
-    @ObservationIgnored private var kaspiFrontier = UserDefaults.standard.integer(forKey: "kaspi_frontier")
+    @ObservationIgnored private var kaspiFrontier = UserDefaults.standard.integer(forKey: "kaspi_edge")
     @ObservationIgnored private var kaspiMisses: [Int: Int] = [:]
     @ObservationIgnored private var kaspiJump = 0
     @ObservationIgnored private var lastKaspiTurbo = Date.distantPast
@@ -629,7 +629,7 @@ final class AppModel {
         guard n > kaspiFrontier else { return }
         kaspiFrontier = n
         kaspiEdgeShown = n
-        UserDefaults.standard.set(n, forKey: "kaspi_frontier")
+        UserDefaults.standard.set(n, forKey: "kaspi_edge")
     }
 
     /// Следующие 3 номера за границей и один подальше (+5…+20 по кругу — чтобы снятые номера не
@@ -758,7 +758,7 @@ final class AppModel {
         }
         kaspiFrontier = lo
         kaspiEdgeShown = lo
-        UserDefaults.standard.set(lo, forKey: "kaspi_frontier")
+        UserDefaults.standard.set(lo, forKey: "kaspi_edge")
     }
 
     private func kaspiTurbo() async {

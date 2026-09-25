@@ -383,3 +383,11 @@ test('Kaspi: без даты подачи — по номеру (номера и
   assert.strictEqual(w.kaspiOld({ id: 123387073, createdAt: Date.now() - 14 * 86400_000 }), true, 'платный iPhone: 14 дней');
   assert.strictEqual(w.kaspiOld({ id: 123561100, createdAt: Date.now() - 18 * 60_000 }), false);
 });
+
+test('Kaspi по номеру: заглушка «Kaspi Объявления» с логотипом — не объявление', () => {
+  const { kaspiReal } = sources;
+  const stub = parseDetail('<title>Kaspi Объявления</title><meta property="og:title" content="Kaspi Объявления"><meta property="og:image" content="https://obyavleniya.kaspi.kz/logo.png">', { id: 123561300, url: 'https://obyavleniya.kaspi.kz/a/123561300/' });
+  assert.strictEqual(kaspiReal(stub), false);
+  const job = parseDetail('<h1 class="desktop-template__title">Механик</h1><script>{dateCreate:"2026-09-25T18:42:52+05:00"}</script>', { id: 123561285, url: 'https://obyavleniya.kaspi.kz/a/123561285/' });
+  assert.strictEqual(kaspiReal(job), true, 'вакансия без цены, но с временем подачи');
+});

@@ -453,7 +453,11 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         let link = "https://obyavleniya.kaspi.kz/a/\(n)/"
         guard let url = URL(string: link), let page = try await html(url) else { return nil }
         let ad = parseDetail(page, id: Site.kaspi.idOffset + n, url: link, source: .kaspi)
-        guard !ad.title.isEmpty, ad.price != nil || !(ad.photos ?? []).isEmpty || !ad.photo.isEmpty else { return nil }
+        // На номер без объявления (на проверке, снято, ещё нет) Kaspi отдаёт заглушку: заголовок
+        // «Kaspi Объявления», картинка — логотип, ни цены, ни даты. Логотип за фото не считаем.
+        let title = ad.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.range(of: #"^kaspi(\.kz)?\s*(объявления)?$"#, options: [.regularExpression, .caseInsensitive]) == nil,
+              ad.createdAt != nil || ad.price != nil || !(ad.crumbs ?? []).isEmpty else { return nil }
         return ad
     }
 
