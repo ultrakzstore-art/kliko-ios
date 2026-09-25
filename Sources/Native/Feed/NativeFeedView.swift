@@ -310,7 +310,7 @@ struct NativeFeedView: View {
                     /* Этап 26: на главной — плитки разделов и ряды «Рекомендуем», под ними та же бесконечная лента.
                        Поиск или раздел — полоса разделов и сетка, как раньше. */
                     if наГлавной {
-                        главнаяСайта
+                        главнаяСайта(прокрутка)
                     } else {
                         if показатьНедавние { полосаНедавнихСайта }
                         if !разделы.isEmpty || FeedModel.уточнениеНаТелефоне { полосаРазделов }
@@ -524,31 +524,53 @@ struct NativeFeedView: View {
     // MARK: - Главная как на сайте (этап 26)
 
     private static let верхЛенты = "верх-ленты"
+    /// Заголовок бесконечной ленты под главной — к нему листает «Показать все объявления» (этап 34).
+    private static let началоЛенты = "начало-ленты"
 
     /// Главная — ни поиска, ни раздела в запросе ленты (набранное, но не отправленное, главную не прячет). Этап 33: и ни
     /// одного фильтра — отобранная лента показывается выдачей с чипами, а не под плитками (FeedModel.наГлавной).
     private var наГлавной: Bool { модель.наГлавной }
 
     /// Плитки разделов, «Вы смотрели», «Рекомендуем» с рядами по разделам и заголовок бесконечной ленты под ними.
+    /// Этап 34: над рядами — «Показано, как было в последний раз», среди них — «VIP-объявления», под ними — «Показать все
+    /// объявления» с total (.mh-end сайта): у приложения вся лента прямо под главной, и кнопка листает к ней.
     @ViewBuilder
-    private var главнаяСайта: some View {
+    private func главнаяСайта(_ прокрутка: ScrollViewProxy) -> some View {
         ПлиткиГлавной(название: { раздел in названиеРаздела(раздел) }, счёт: подборки.счёт,
                       выбрать: { раздел in модель.выбратьРаздел(раздел.ключ) }, открыть: открыть)
             .padding(.top, 6)
         if показатьНедавние { полосаНедавнихСайта }
+        if подборки.устарело {
+            СтрокаУстаревшейГлавной { Task { await подборки.загрузить() } }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+        }
         if !подборки.ряды.isEmpty {
             заголовокСайта(DesignText.т("reco"), крупный: true)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
+                .opacity(притушитьПодборки)
             ForEach(Array(подборки.ряды.enumerated()), id: \.element.id) { номер, ряд in
                 РядГлавной(раздел: ряд.раздел, название: названиеРаздела(ряд.раздел), товары: ряд.товары,
                            всего: ряд.всего, чётный: номер % 2 == 1,
                            всё: { модель.выбратьРаздел(ряд.раздел.ключ) }) { товар in
                     карточкаСоСсылкой(товар)
                 }
+                .opacity(притушитьПодборки)
+                /* Этап 34: VIP — после случайного ряда, как у mkHomeRender (ПодборкиГлавной.местоВИП). */
+                if номер + 1 == подборки.местоВИП { блокВИП }
             }
+        } else if !подборки.вип.isEmpty {
+            блокВИП
         } else if подборки.неудача {
             неудачаПодборок
+        }
+        if Config.главнаяОдинЗапрос && (!подборки.ряды.isEmpty || !подборки.вип.isEmpty) {
+            КнопкаВсехОбъявлений(всего: подборки.всегоОбъявлений) {
+                withAnimation(.easeInOut(duration: 0.3)) { прокрутка.scrollTo(Self.началоЛенты, anchor: .top) }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
         }
         HStack(alignment: .center, spacing: 8) {
             заголовокСайта(DesignText.т("feed"), крупный: false)
@@ -561,8 +583,27 @@ struct NativeFeedView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
+        .id(Self.началоЛенты)
         /* Этап 33: «Фильтры» и «Сначала показывать» — под заголовком ленты, как .mk-rbar под .mk-feed-head у сайта. */
         if Config.фильтрыНаСервере { блокФильтров }
+    }
+
+    /// «VIP-объявления» (этап 34) — сеткой той же ширины, что лента; карточки ведут туда же, что карточки рядов.
+    @ViewBuilder
+    private var блокВИП: some View {
+        if !подборки.вип.isEmpty {
+            БлокВИП(товары: подборки.вип, колонки: ListingCard.сетка(размерТекста)) { товар in
+                карточкаСоСсылкой(товар, вип: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .opacity(притушитьПодборки)
+        }
+    }
+
+    /// .mh-busy сайта (этап 34): пока главная обновляется поверх уже показанной, ряды и VIP притушены до 55 %.
+    private var притушитьПодборки: Double {
+        Config.главнаяОдинЗапрос && подборки.обновляем ? 0.55 : 1
     }
 
     private var полосаНедавнихСайта: some View {
@@ -586,16 +627,17 @@ struct NativeFeedView: View {
     }
 
     /// Карточка ряда — туда же, куда карточка сетки: в две колонки справа, иначе нативная карточка или страница сайта.
+    /// Этап 34: `вип` — карточка блока «VIP-объявления», в золотой рамке.
     @ViewBuilder
-    private func карточкаСоСсылкой(_ товар: Listing) -> some View {
+    private func карточкаСоСсылкой(_ товар: Listing, вип: Bool = false) -> some View {
         Group {
             if двеКолонки {
-                Button { выбрать(товар) } label: { ListingCard(товар: товар) }
+                Button { выбрать(товар) } label: { ListingCard(товар: товар, вип: вип) }
                     .выбраннаяКарточка(выбор.wrappedValue?.id == товар.id)
             } else if Config.нативнаяКарточка {
-                NavigationLink(value: товар) { ListingCard(товар: товар) }
+                NavigationLink(value: товар) { ListingCard(товар: товар, вип: вип) }
             } else {
-                Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }
+                Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар, вип: вип) }
             }
         }
         .buttonStyle(.plain)
@@ -1018,11 +1060,18 @@ struct NativeFeedView: View {
 /// VoiceOver читает карточку одной фразой (Listing.голос), фото — украшение.
 struct ListingCard: View {
     let товар: Listing
+    /// Карточка блока «VIP-объявления» главной (этап 34): .mh-vipg .mh-c сайта — золотая рамка и золотистый верх у каждой,
+    /// как у ТОПа, даже без is_top; метка «★ ТОП» — по-прежнему только у ТОПа.
+    let вип: Bool
     @Environment(\.dynamicTypeSize) private var размерТекста
 
-    init(товар: Listing) {
+    init(товар: Listing, вип: Bool = false) {
         self.товар = товар
+        self.вип = вип
     }
+
+    /// Золотая рамка и подложка: ТОП (.mh-c.is-top) или VIP-блок (.mh-vipg .mh-c).
+    private var золотая: Bool { товар.isTop || вип }
 
     /// Колонки сетки карточек. Обычно — по ширине экрана, от 158 pt. При крупном тексте для доступности — от 300 pt: на
     /// iPhone это одна карточка во всю ширину, иначе цене и названию в узкой карточке не хватит места.
@@ -1154,7 +1203,7 @@ struct ListingCard: View {
         .background(фонКарточкиСайта)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
-            if товар.isTop {
+            if золотая {
                 RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
                     .strokeBorder(Theme.топРамка, lineWidth: 1.5)
                     .allowsHitTesting(false)
@@ -1167,10 +1216,10 @@ struct ListingCard: View {
         .accessibilityLabel(товар.голос)
     }
 
-    /// Подложка: в ТОПе — золотистый верх (.mh-c.is-top), иначе поверхность.
+    /// Подложка: в ТОПе и в VIP-блоке — золотистый верх (.mh-c.is-top, .mh-vipg .mh-c), иначе поверхность.
     @ViewBuilder
     private var фонКарточкиСайта: some View {
-        if товар.isTop {
+        if золотая {
             LinearGradient(stops: [Gradient.Stop(color: Theme.топФон, location: 0),
                                    Gradient.Stop(color: Theme.поверхность, location: 0.55)],
                            startPoint: .top, endPoint: .bottom)
