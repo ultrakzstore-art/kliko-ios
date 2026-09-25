@@ -72,6 +72,7 @@ async function kaspiWatch(ms) {
   const misses = new Map();   // номер → сколько раз «нет такого»
   let lastShow = 0;
   let jump = 0;
+  let startEdge = 0;
   console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин (витрина «Самые новые»). Строки ниже — по мере появления.\n`);
   while (Date.now() - t0 < ms) {
     try {
@@ -105,15 +106,17 @@ async function kaspiWatch(ms) {
           if ((hit = await exists(mid))) edge = hit; else hi = mid;
         }
         for (let n = edge + 1; n <= hi + 5; n++) if (await k.fetchById(n).catch(() => null)) edge = n;
+        startEdge = edge;
         console.log(`${clock()} последний номер: ${edge} (витрина отставала на ${edge - from} номеров) — дальше ловлю каждый следующий\n`);
         lastShow = Date.now();
         first = false;
       } else {
+        let paid = 0;
         for (const [i, a] of show.entries()) {
           if (onShow.has(a.id)) continue;
           onShow.set(a.id, Date.now());
           // Номера идут по порядку подачи: далеко позади края — платное / поднятое, карточку не открываем.
-          if (a.id < edge - 5000) { console.log(`${clock()} ⏭ платное / поднятое ${a.id} (место ${i + 1}) — номер на ${edge - a.id} позади`); continue; }
+          if (a.id < edge - 5000) { paid += 1; continue; }
           const d = await k.fetchDetail(a).catch(() => null);
           const posted = d?.createdAt || 0;
           const old = posted && (Date.now() - posted > 3 * 3600_000 || (last && posted < last - 3600_000));
@@ -125,6 +128,7 @@ async function kaspiWatch(ms) {
             if (a.id > edge) edge = a.id;
           }
         }
+        if (paid) console.log(`${clock()} ⏭ витрина: ${paid} платных / поднятых (номера далеко позади) — пропущено`);
       }
       // По номеру. Номер выдаётся при подаче, но пока объявление на проверке у Kaspi — заглушка.
       // Край — последний опубликованный; те, что на проверке, почти все впереди него. Смотрим
@@ -164,6 +168,13 @@ async function kaspiWatch(ms) {
   }
   const mins = (Date.now() - t0) / 60_000;
   console.log('\nИтог:');
+  if (startEdge) {
+    const issued = edge - startEdge;
+    const got = [...byNum.keys()].filter((n) => n > startEdge).length;
+    const wait = [...misses.keys()].filter((n) => n > startEdge && n <= edge).length;
+    console.log(`  номера после старта: ${issued} (${startEdge + 1}…${edge}) — поймано ${got}, ещё на проверке у Kaspi ${wait}, остальные ${Math.max(0, issued - got - wait)} — сняты / отклонены`);
+    if (got) console.log(`  ловим по номеру ~${(got / ((Date.now() - t0) / 60_000)).toFixed(1)} в минуту`);
+  }
   console.log(`  новых: ${fresh.length} за ${mins.toFixed(1)} мин (${(fresh.length / mins).toFixed(1)} в минуту)`);
   const lag = fresh.filter((f) => f.posted).map((f) => (f.seen - f.posted) / 1000);
   if (lag.length) console.log(`  от подачи до витрины: мин ${Math.min(...lag).toFixed(0)} с, макс ${Math.max(...lag).toFixed(0)} с, в среднем ${(lag.reduce((x, y) => x + y, 0) / lag.length).toFixed(0)} с`);
