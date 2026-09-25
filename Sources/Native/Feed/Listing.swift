@@ -259,11 +259,15 @@ struct ListingsPage: Decodable {
     let total: Int?
     /// Есть ли следующая страница (has_more). nil — не пришло; лента по-прежнему судит по размеру страницы.
     let hasMore: Bool?
+    /// «Снимок» первой страницы (gs, этап 33): сайт шлёт его обратно со второй страницы (window._mkGoldSnap). nil — не
+    /// пришло или не разобралось; тогда и не шлём.
+    let gs: Int?
 
     private enum Ключи: String, CodingKey {
         case items
         case total
         case hasMore = "has_more"
+        case gs
     }
     private struct Любое: Decodable {
         let значение: Listing?
@@ -287,6 +291,16 @@ struct ListingsPage: Decodable {
             hasMore = n != 0
         } else {
             hasMore = nil
+        }
+        /* gs — число (сайт: +n.gs||0), но PHP может прислать и строкой или дробью. */
+        if let n = try? c.decode(Int.self, forKey: .gs) {
+            gs = n
+        } else if let строка = try? c.decode(String.self, forKey: .gs) {
+            gs = Int(строка.trimmingCharacters(in: .whitespaces))
+        } else if let d = try? c.decode(Double.self, forKey: .gs), d.isFinite, abs(d) < 1e15 {
+            gs = Int(d)
+        } else {
+            gs = nil
         }
     }
 }

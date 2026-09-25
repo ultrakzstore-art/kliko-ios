@@ -133,31 +133,61 @@ final class SavedSearchStore: ObservableObject {
 
 /// Что искать в ленте: отправленный текст (q=) и раздел (cat=, ключ вроде «transport»). Пустое — вся лента.
 /// Одно и то же у ленты (FeedModel.действующее), у сохранённого поиска и у роутера ссылок (NativeRouter.Цель.найти).
+///
+/// Этап 33 (владелец 25.09.2026): и цена с состоянием — pmin, pmax (целые ₸) и cond ("new", "used" или пусто), ровно то,
+/// что сайт кладёт в сохранённый поиск (subs.php?action=add в mkSaveSearch). Прочие фильтры ленты (сортировка,
+/// «Проверенные», фото, год, комнаты) сайт в поиск не сохраняет — и мы тоже. В файле прежней версии этих полей нет —
+/// тогда их просто нет и в поиске.
 struct ИскомоеЛенты: Codable, Hashable, Sendable {
     var текст: String
     var раздел: String
+    /// pmin; nil — без нижней границы.
+    var ценаОт: Int?
+    /// pmax; nil — без верхней границы.
+    var ценаДо: Int?
+    /// cond: "new", "used" или пусто — любое.
+    var состояние: String
 
     enum CodingKeys: String, CodingKey {
         case текст = "q"
         case раздел = "cat"
+        case ценаОт = "pmin"
+        case ценаДо = "pmax"
+        case состояние = "cond"
     }
 
-    init(текст: String, раздел: String) {
+    init(текст: String, раздел: String, ценаОт: Int? = nil, ценаДо: Int? = nil, состояние: String = "") {
         self.текст = текст.trimmingCharacters(in: .whitespacesAndNewlines)
         self.раздел = раздел.trimmingCharacters(in: .whitespacesAndNewlines)
+        /* Как mkSaveSearch сайта: ноль — «границы нет», состояние — только new или used. */
+        self.ценаОт = ценаОт.flatMap { $0 > 0 ? $0 : nil }
+        self.ценаДо = ценаДо.flatMap { $0 > 0 ? $0 : nil }
+        self.состояние = состояние == "new" || состояние == "used" ? состояние : ""
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(текст: (try? c.decode(String.self, forKey: .текст)) ?? "",
-                  раздел: (try? c.decode(String.self, forKey: .раздел)) ?? "")
+                  раздел: (try? c.decode(String.self, forKey: .раздел)) ?? "",
+                  ценаОт: ИскомоеЛенты.число(c, .ценаОт),
+                  ценаДо: ИскомоеЛенты.число(c, .ценаДо),
+                  состояние: (try? c.decodeIfPresent(String.self, forKey: .состояние)) ?? "")
     }
 
-    var пустое: Bool { текст.isEmpty && раздел.isEmpty }
+    /// Граница цены из файла: число, а если его когда-то записали строкой, — строка с числом. Не разобралась — nil.
+    private static func число(_ c: KeyedDecodingContainer<CodingKeys>, _ ключ: CodingKeys) -> Int? {
+        if let n = try? c.decode(Int.self, forKey: ключ) { return n }
+        if let строка = try? c.decode(String.self, forKey: ключ) { return Int(строка) }
+        return nil
+    }
 
-    /// Тот же поиск: текст без учёта регистра, раздел — точно. «iPhone» и «iphone» — один поиск, а не два уведомления.
+    var пустое: Bool { текст.isEmpty && раздел.isEmpty && ценаОт == nil && ценаДо == nil && состояние.isEmpty }
+
+    /// Тот же поиск: текст без учёта регистра, раздел, цена и состояние — точно. «iPhone» и «iphone» — один поиск, а не
+    /// два уведомления.
     func тоЖе(_ другое: ИскомоеЛенты) -> Bool {
         раздел == другое.раздел && текст.caseInsensitiveCompare(другое.текст) == .orderedSame
+            && ценаОт == другое.ценаОт && ценаДо == другое.ценаДо && состояние == другое.состояние
     }
 }
 
@@ -208,13 +238,16 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
         проверен = try? c.decodeIfPresent(Date.self, forKey: .проверен)
     }
 
-    /// Как поиск называется в кабинете и в уведомлении: «iPhone 15», «Транспорт» или «iPhone 15 · Электроника».
+    /// Как поиск называется в кабинете и в уведомлении: «iPhone 15», «Транспорт» или «iPhone 15 · Электроника»; с этапа
+    /// 33 — и цена с состоянием: «iPhone 15 · Электроника · от 300 000 ₸ · Б/У».
     var название: String {
         var имяРаздела = искомое.раздел
         if let имя = названиеРаздела, !имя.isEmpty { имяРаздела = имя }
-        if искомое.текст.isEmpty { return имяРаздела }
-        if имяРаздела.isEmpty { return искомое.текст }
-        return искомое.текст + " · " + имяРаздела
+        var части: [String] = []
+        if !искомое.текст.isEmpty { части.append(искомое.текст) }
+        if !имяРаздела.isEmpty { части.append(имяРаздела) }
+        части.append(contentsOf: искомое.подписиФильтров)
+        return части.joined(separator: " · ")
     }
 }
 

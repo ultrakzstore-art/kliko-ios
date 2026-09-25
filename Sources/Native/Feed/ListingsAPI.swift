@@ -17,6 +17,11 @@ import WebKit
  запрос ленты параметрами (_mkApiQS в js/marketplace-feed.min.js): city=<название>, без города — region=<ключ>, и
  district=<ключ>. Поэтому выбор города приложения (ВыборГорода) каждый запрос несёт так же — Запрос.где; по умолчанию
  это сохранённый выбор, а без рубильника Config.выборГорода — вся страна, как раньше.
+
+ Этап 33 (владелец 25.09.2026): фильтры и сортировка — тоже параметрами _mkApiQS (Запрос.фильтры: sort, cond, verified,
+ photo, pmin, pmax, ymin, ymax, rooms), а лента берёт страницы по 48, как сайт (mkApiNext: per=48), и со второй страницы
+ несёт gs — «снимок» первой страницы из её ответа (window._mkGoldSnap сайта), чтобы выдача не перетасовывалась между
+ страницами. По умолчанию фильтров нет и sort=reco — запрос прежний.
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -32,9 +37,13 @@ enum ListingsAPI {
         var q = ""
         /// Где искать (этап 32): город, регион или район — выбор, сохранённый на телефоне в момент создания запроса.
         var где = ГдеИскать.сохранённое()
+        /// Фильтры и сортировка (этап 33); по умолчанию — ничего и sort=reco, как раньше.
+        var фильтры = ФильтрыЛенты()
+        /// gs из ответа первой страницы (этап 33) — уходит со второй страницы, как у сайта; nil или 0 — не шлём.
+        var gs: Int?
 
-        /// Ленту по умолчанию кладём на диск; поиск и разделы — нет, они быстро устаревают и нужны реже.
-        var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty }
+        /// Ленту по умолчанию кладём на диск; поиск, разделы и фильтры — нет, они быстро устаревают и нужны реже.
+        var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty && фильтры == ФильтрыЛенты() }
     }
 
     private static let сессия: URLSession = {
@@ -52,12 +61,14 @@ enum ListingsAPI {
     static func загрузить(_ з: Запрос, куки заданные: [String: String]? = nil) async throws -> (страница: ListingsPage, сырое: Data) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
-        var поля = [URLQueryItem(name: "sort", value: "reco"),
+        var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.rawValue),     // этап 33; по умолчанию reco
                     URLQueryItem(name: "page", value: String(з.page)),
                     URLQueryItem(name: "per", value: String(з.per))]
         if !з.cat.isEmpty { поля.append(URLQueryItem(name: "cat", value: з.cat)) }
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
+        поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, ymin, ymax, rooms
+        if з.page > 1, let gs = з.gs, gs > 0 { поля.append(URLQueryItem(name: "gs", value: String(gs))) }
         ч.queryItems = поля
 
         var запрос = URLRequest(url: ч.url!)
