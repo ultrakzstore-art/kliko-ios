@@ -56,6 +56,57 @@ struct ChatListView: View {
     let открыть: (URL) -> Void
 
     var body: some View {
+        if Config.дизайнКакНаСайте {
+            видСайта
+        } else {
+            видПрежний
+        }
+    }
+
+    // MARK: - Как на сайте (этап 30)
+
+    /// Диалоги — карточками сайта на фоне страницы; пусто, вход и ошибка — экраном ПустоСайта.
+    private var видСайта: some View {
+        Group {
+            if !модель.загружено {
+                ProgressView()
+                    .tint(Theme.акцент)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if модель.ошибка == .нуженВход {
+                ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),
+                           подпись: ChatText.т("login_sub"), кнопка: ChatText.т("login_btn"),
+                           действие: { if let u = Config.url("/cabinet.php") { открыть(u) } })
+            } else if модель.ошибка != nil && модель.диалоги.isEmpty {
+                ПустоСайта(значок: "exclamationmark.bubble", заголовок: ChatText.т("failed"),
+                           кнопка: ChatText.т("retry"), действие: { Task { await модель.загрузить() } },
+                           вторая: ChatText.т("open_site"),
+                           второеДействие: { if let u = ChatThreadModel.адресПереписки { открыть(u) } })
+            } else if модель.диалоги.isEmpty {
+                ПустоСайта(значок: "bubble.left.and.bubble.right", заголовок: ChatText.т("empty"),
+                           подпись: ChatText.т("empty_sub"))
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(модель.диалоги) { д in
+                            NavigationLink(value: ЧатЦель.диалог(д)) { СтрокаДиалогаСайта(диалог: д) }
+                                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.фонСтраницы)
+        .шапкаЭкранаСайта(ChatText.т("title"))
+        .refreshable { await модель.загрузить() }
+        .task { await модель.загрузить() }
+    }
+
+    // MARK: - Прежний вид (этапы 3–29)
+
+    private var видПрежний: some View {
         Group {
             if !модель.загружено {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)

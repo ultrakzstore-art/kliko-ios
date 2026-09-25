@@ -139,6 +139,16 @@ enum Theme {
     /// Кнопка WhatsApp (.mk-sb-wa) — #25d366.
     static let whatsApp = Color(uiColor: hex(0x25D366))
 
+    // MARK: - Чат (этап 30, .kc-* в css/chat.min.css)
+
+    /// Своё сообщение (.kc-msg.me): --kc-acc = --mk-bright #16a34a; в тёмной — --acc-on #5cd39a под 44 % чёрного
+    /// (linear-gradient(rgba(0,0,0,.44)…) — #337656: белый текст на нём читается.
+    static let пузырьМой = цвет(0x16A34A, 0x337656)
+    /// Чужое сообщение (.kc-msg.peer): --kc-peer = --mk-surf2.
+    static let пузырьЧужой = цвет(0xF4F8F6, 0x1C1C26)
+    /// Счётчик непрочитанных в списке диалогов: --kc-unread #ef4444.
+    static let непрочитано = Color(uiColor: hex(0xEF4444))
+
     // MARK: - Скругления (--r-*)
 
     enum Радиус {

@@ -31,7 +31,11 @@ struct FavoritesView: View {
 
     var body: some View {
         Group {
-            if избранное.товары.isEmpty {
+            if избранное.товары.isEmpty && Config.дизайнКакНаСайте {
+                /* Этап 30: пустое избранное — экраном в краске сайта. */
+                ПустоСайта(значок: "heart", заголовок: FavoritesText.т("empty"), подпись: FavoritesText.т("empty_sub"),
+                           кнопка: вЛенту == nil ? nil : FavoritesText.т("to_feed"), действие: вЛенту)
+            } else if избранное.товары.isEmpty {
                 ContentUnavailableView {
                     Label(FavoritesText.т("empty"), systemImage: "heart")
                 } description: {
@@ -46,6 +50,8 @@ struct FavoritesView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
+                        /* Этап 30: заголовок ряда, как «• Раздел N» главной сайта: точка-сердце и число. */
+                        if Config.дизайнКакНаСайте { заголовокСайта }
                         LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
                             ForEach(избранное.товары) { товар in
                                 карточка(товар)
@@ -54,7 +60,7 @@ struct FavoritesView: View {
                         .padding(.horizontal, 12)
                         Text(FavoritesText.т("local"))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Config.дизайнКакНаСайте ? Theme.текстВторой : Color.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
                     }
@@ -65,9 +71,23 @@ struct FavoritesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(Config.дизайнКакНаСайте ? Theme.фонСтраницы : Color(.systemGroupedBackground))
         .navigationTitle(FavoritesText.т("title"))
         .navigationBarTitleDisplayMode(.inline)
+        /* Этап 30: панель в краске сайта — поверхность и жирный заголовок. */
+        .toolbar {
+            if Config.дизайнКакНаСайте {
+                ToolbarItem(placement: .principal) {
+                    Text(FavoritesText.т("title"))
+                        .font(.system(size: 17, weight: .heavy))
+                        .foregroundStyle(Theme.текст)
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
+        }
+        .toolbarBackground(Config.дизайнКакНаСайте ? Visibility.visible : Visibility.automatic, for: .navigationBar)
+        .toolbarBackground(Config.дизайнКакНаСайте ? AnyShapeStyle(Theme.поверхность) : AnyShapeStyle(Material.bar),
+                           for: .navigationBar)
         /* Этап 20: «Сравнить» — когда есть что сравнивать. */
         .toolbar {
             if Config.сравнение && (сравниваем || избранное.товары.count >= Self.сравнитьОт) {
@@ -87,6 +107,26 @@ struct FavoritesView: View {
             отмеченные.removeAll { !номера.contains($0) }
             if номера.count < Self.сравнитьОт && сравниваем { переключитьСравнение() }
         }
+    }
+
+    /// Этап 30: «♥ Избранное 3» — как заголовок ряда «Рекомендуем» главной сайта (точка краской, жирное название, число).
+    private var заголовокСайта: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.сердце)
+                .accessibilityHidden(true)
+            Text(FavoritesText.т("title"))
+                .font(.system(.title3, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .accessibilityAddTraits(.isHeader)
+            Text(DesignText.число(избранное.товары.count))
+                .font(.system(.caption, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

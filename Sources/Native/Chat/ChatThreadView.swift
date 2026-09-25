@@ -197,9 +197,21 @@ struct ChatThreadView: View {
             }
             if модель.загружено && модель.ошибка != .нуженВход { низ }
         }
-        .background(Color(.systemBackground))
+        .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.systemBackground))
         .navigationTitle(заголовок.isEmpty ? ChatText.т("peer") : заголовок)
         .navigationBarTitleDisplayMode(.inline)
+        /* Этап 30: панель как .kc-head сайта — кружок с буквой и имя, поверхность вместо стекла. */
+        .toolbar {
+            if Config.дизайнКакНаСайте {
+                ToolbarItem(placement: .principal) {
+                    ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+                }
+            }
+        }
+        .toolbarBackground(Config.дизайнКакНаСайте ? Visibility.visible : Visibility.automatic, for: .navigationBar)
+        .toolbarBackground(Config.дизайнКакНаСайте ? AnyShapeStyle(Theme.поверхность) : AnyShapeStyle(Material.bar),
+                           for: .navigationBar)
+        .tint(Config.дизайнКакНаСайте ? Theme.акцент : Theme.green)
         .task {
             await модель.начать()
             await модель.опрос()
@@ -218,10 +230,22 @@ struct ChatThreadView: View {
             ScrollView {
                 LazyVStack(spacing: 6) {
                     if модель.сообщения.isEmpty {
-                        Text(ChatText.т("first"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 40)
+                        if Config.дизайнКакНаСайте {
+                            /* Этап 30: системная строка .kc-sys — по центру, серым на --kc-soft. */
+                            Text(ChatText.т("first"))
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.текстВторой)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .padding(.top, 40)
+                        } else {
+                            Text(ChatText.т("first"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 40)
+                        }
                     }
                     ForEach(модель.сообщения) { с in пузырь(с).id(с.id) }
                     Color.clear.frame(height: 1).id("низ")
@@ -332,7 +356,8 @@ struct ChatThreadView: View {
                     облако(с).textSelection(.enabled)
                 }
                 let время = ЧатВремя.время(с.когда)
-                if !время.isEmpty {
+                /* Этап 30: у сайта время — внутри облака (.kc-time); под облаком — только у фото. */
+                if !время.isEmpty && (!Config.дизайнКакНаСайте || с.фото != nil) {
                     Text(время)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -347,8 +372,17 @@ struct ChatThreadView: View {
         .modifier(КопироватьДляГолоса(текст: Config.удобныйЧат && с.копируемое ? с.текст : nil))   // этап 17
     }
 
-    /// Текст сообщения в облачке.
+    /// Текст сообщения в облачке. Этап 30: облако сайта (.kc-msg) — со временем внутри и краской чата сайта.
+    @ViewBuilder
     private func облако(_ с: ЧатСообщение) -> some View {
+        if Config.дизайнКакНаСайте {
+            ОблакоСайта(текст: с.подпись, время: ЧатВремя.время(с.когда), моё: с.моё)
+        } else {
+            облакоПрежнее(с)
+        }
+    }
+
+    private func облакоПрежнее(_ с: ЧатСообщение) -> some View {
         Text(с.подпись)
             .font(.body)
             .foregroundStyle(с.моё ? Color.white : Color.primary)
@@ -359,13 +393,38 @@ struct ChatThreadView: View {
 
     @ViewBuilder
     private var низ: some View {
-        if модель.заблокирован {
+        if модель.заблокирован && Config.дизайнКакНаСайте {
+            /* Этап 30: .kc-blocked — серый текст на --kc-soft с линией сверху. */
+            Text(ChatText.т("blocked"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .frame(maxWidth: .infinity)
+                .padding(12)
+                .background(Theme.поверхность2)
+                .overlay(alignment: .top) { Theme.линия.frame(height: 1) }
+        } else if модель.заблокирован {
             Text(ChatText.т("blocked"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(12)
                 .background(.regularMaterial)
+        } else if Config.нативныйЧатОтправка && Config.дизайнКакНаСайте {
+            /* Этап 30: строка ввода .kc-bar сайта. */
+            VStack(spacing: 0) {
+                if модель.неОтправлено {
+                    Text(ChatText.т("not_sent") + (модель.причина.isEmpty ? "" : " (\(модель.причина))"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.малиновый)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Theme.поверхность)
+                }
+                ПолеПерепискиСайта(текст: $модель.черновик, можно: можноОтправить,
+                                   отправить: { Task { await модель.отправить() } }, фокус: $полеВФокусе)
+            }
         } else if Config.нативныйЧатОтправка {
             VStack(spacing: 4) {
                 if модель.неОтправлено {
