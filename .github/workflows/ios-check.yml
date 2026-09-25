@@ -102,3 +102,86 @@ jobs:
           [ -n "$cat_" ] && show "Раздел: /api/listings.php?cat=$cat_&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&cat=$cat_"
           show "Поиск: /api/listings.php?q=iphone&per=2" "$base/api/listings.php?sort=reco&page=1&per=2&q=iphone"
           show "Чат гостю: /dm.php?action=list" "$base/dm.php?action=list"
+
+  # СКРИНШОТЫ С СИМУЛЯТОРА (этап 23). Нативные экраны писались без Mac и без телефона под рукой; раннер может сам
+  # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
+  # экраны в светлой и тёмной теме. Снимки уходят в ветку ci/screenshots — её можно открыть на GitHub или забрать git.
+  # Не роняет прогон.
+  screens:
+    runs-on: macos-26
+    timeout-minutes: 40
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Xcode и XcodeGen
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Симулятор
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone") and "Pro" in x["name"] and "Max" not in x["name"]:
+                      print(x["udid"]); raise SystemExit
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"]); raise SystemExit
+          ')
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+
+      - name: Собрать под этот симулятор
+        run: |
+          set -o pipefail
+          xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO | tail -5
+          app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
+          echo "APP=$app" >> "$GITHUB_ENV"
+
+      - name: Снять экраны
+        run: |
+          mkdir -p shots
+          id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
+          echo "объявление для карточки: $id"
+          snap() { xcrun simctl io "$UDID" screenshot "shots/$1.png"; }
+          for тема in light dark; do
+            xcrun simctl ui "$UDID" appearance "$тема"
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl launch "$UDID" kz.kliko.app
+            sleep 25; snap "1-lenta-$тема"
+            if [ -n "$id" ]; then
+              xcrun simctl openurl "$UDID" "kliko://open?u=https%3A%2F%2Fkliko.kz%2Fmarketplace%3Fitem%3D$id"
+              sleep 12; snap "2-kartochka-$тема"
+            fi
+          done
+          ls -la shots
+
+      - name: Выложить в ветку ci/screenshots
+        run: |
+          cd shots
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "Снимки с симулятора: коммит %s, ветка %s\n" "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git add -A
+          git commit -qm "Скриншоты $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/screenshots
