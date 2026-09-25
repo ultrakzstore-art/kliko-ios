@@ -499,7 +499,7 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
 
   const more = (ad.photos?.length || 0) - 4;
   const tail = ['', more > 0 ? `📷 Ещё ${more} фото — по кнопке «Открыть»` : '', `🔎 Поиск: ${subs.map((s) => esc(s.name)).join(', ')}`];
-  return [...head, ...specs, ...description, ...sellerBlock, ...tail].filter((l) => l !== null && l !== undefined && l !== false)
+  return [...head.filter(Boolean), ...specs, ...description, ...sellerBlock, ...tail].filter((l) => l !== null && l !== undefined && l !== false)
     .filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== ''))
     .join('\n')
     .slice(0, 4000);
