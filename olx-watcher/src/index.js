@@ -22,6 +22,7 @@ bot.api.setMyCommands([
   { command: 'new', description: 'Новый поиск: рубрика, город, цена' },
   { command: 'list', description: 'Мои поиски' },
   { command: 'access', description: 'Доступ и оплата' },
+  { command: 'buyvip', description: 'VIP-рубрика — объявления только вам' },
   { command: 'help', description: 'Справка' },
 ]).catch(() => {});
 

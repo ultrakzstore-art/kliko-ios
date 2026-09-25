@@ -8,6 +8,13 @@ function int(name, def, min) {
 }
 
 // «100,180,350» → [100, 180, 350] (цены на 7/14/30 дней); пусто или не три числа — способ выключен.
+// VIP-рубрика (эксклюзив OLX): цены не заданы — в 50 раз дороже тарифа OLX.
+function vipPrices(all) {
+  const x50 = (list) => (list ? list.map((v) => v * 50) : null);
+  all.vip = { stars: all.vip.stars || x50(all.olx.stars), kaspi: all.vip.kaspi || x50(all.olx.kaspi) };
+  return all;
+}
+
 function prices(name) {
   const list = String(process.env[name] || '').split(',').map((s) => parseInt(s.replace(/\s/g, ''), 10)).filter((n) => n > 0);
   return list.length === 3 ? list : null;
@@ -29,10 +36,10 @@ module.exports = {
   paidSubs: int('PAID_SUBS', 20, 1),             // поисков у пользователя (тест и платный)
   // Цены за 7/14/30 дней по тарифам: отдельная площадка или «всё сразу» (комбо).
   // STARS_PRICES / KASPI_PRICES без суффикса — старые настройки, считаются ценой за OLX.
-  prices: Object.fromEntries(['olx', 'kolesa', 'krisha', 'kaspi', 'all'].map((k) => [k, {
+  prices: vipPrices(Object.fromEntries(['olx', 'kolesa', 'krisha', 'kaspi', 'all', 'vip'].map((k) => [k, {
     stars: prices(`STARS_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('STARS_PRICES') : null),
     kaspi: prices(`KASPI_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('KASPI_PRICES') : null),
-  }])),
+  }]))),
   // Разделы карточки объявления: характеристики, описание, продавец (через запятую).
   cardSections: new Set(String(process.env.CARD_SECTIONS ?? 'specs,description,seller').split(',').map((s) => s.trim()).filter(Boolean)),
   // Водяной знак на фото: auto — @имя_бота, off — без знака, любой другой текст — он.

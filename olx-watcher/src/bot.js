@@ -8,6 +8,7 @@ const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
 const { collage, fetchImage } = require('./watermark');
 const olx = require('./olx');
 const vip = require('./vip');
+const cats = require('./categories');
 const sources = require('./sources');
 const { registerWizard } = require('./wizard');
 const { DAY } = require('./db');
@@ -47,9 +48,11 @@ function createBot({ token, db, config, getWatcher, log }) {
     const u = db.user(userId);
     const paidLine = 'После теста — продлить на 7, 14 или 30 дней: /access';
     const paid = db.accessList(userId);
+    const mine = db.locks().filter((l) => l.user_id === userId);
+    const vipLines = mine.length ? `\n${mine.map((l) => `👑 VIP «${esc(vip.lockLabel(l))}» — до ${fmtDate(l.until)}`).join('\n')}` : '';
     if (paid.length) {
       const lines = paid.map((a) => `${sources.get(a.source).emoji} ${esc(sources.get(a.source).title)} — до ${fmtDate(a.until)}`);
-      return `💎 <b>Платный доступ</b>\n${lines.join('\n')}\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.`;
+      return `💎 <b>Платный доступ</b>\n${lines.join('\n')}${vipLines}\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.`;
     }
     if (db.isTrial(u)) {
       return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков — всё как в платном.\n${paidLine}`;
@@ -92,6 +95,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const list = sellable();
     const kb = new InlineKeyboard();
     list.forEach((p, i) => { kb.text(p.title, `buy:${p.key}`); if (i % 2 === 1) kb.row(); });
+    if (vipSellable()) kb.row().text('👑 VIP-рубрика — эксклюзив OLX', 'vip:start');
     await ctx.reply(`${planText(ctx.from.id)}\n\n${list.length ? 'Выберите тариф:' : 'Оплата пока не настроена — напишите владельцу бота.'}`,
       { parse_mode: 'HTML', reply_markup: kb });
   }
@@ -119,7 +123,7 @@ function createBot({ token, db, config, getWatcher, log }) {
 ➕ /new — новый поиск кнопками: площадка → рубрика → город → цена.
 Или пришлите ссылку на поиск с сайта.
 
-/list — мои поиски · /access — доступ и оплата · /help — справка`;
+/list — мои поиски · /access — доступ и оплата · /buyvip — VIP-рубрика только для вас · /help — справка`;
 
   bot.command(['start', 'help'], async (ctx) => {
     await ctx.reply(`${HELP}\n\n${planText(ctx.from.id)}`, { parse_mode: 'HTML', reply_markup: menu(), link_preview_options: { is_disabled: true } });
@@ -129,6 +133,140 @@ function createBot({ token, db, config, getWatcher, log }) {
   bot.callbackQuery('access', async (ctx) => { await ctx.answerCallbackQuery(); await showAccess(ctx); });
   bot.command('list', (ctx) => sendList(ctx));
   bot.callbackQuery('list', async (ctx) => { await ctx.answerCallbackQuery(); await sendList(ctx); });
+
+  // ---------- VIP-рубрика: покупка ----------
+  // Рубрика OLX + город — только ваши: объявления оттуда получаете только вы, как бы ни были
+  // настроены чужие поиски. Выбор: рубрика → подрубрика (или вся) → город → срок → оплата.
+  // Номера рубрик — индексы в vip.rubricChoices() (список встроенный, не меняется на ходу).
+  const RUBRICS = vip.rubricChoices();
+  const vipSellable = () => Boolean(config.prices.vip?.stars || (config.prices.vip?.kaspi && config.kaspiDetails));
+  const rubricAt = (i) => RUBRICS[Number(i)] || null;
+  const cityAt = (i) => cats.CITIES[Number(i)] || null;
+  const vipLabel = (r, c) => `${r.name} · ${c.name}`;
+
+  async function vipStart(ctx) {
+    if (!vipSellable()) return ctx.reply('VIP-рубрики пока не продаются — напишите владельцу бота.');
+    const kb = new InlineKeyboard();
+    let n = 0;
+    RUBRICS.forEach((r, i) => {
+      if (r.path.includes('/')) return;
+      kb.text(r.name, `vr:${i}`);
+      if (++n % 2 === 0) kb.row();
+    });
+    await ctx.reply('👑 <b>VIP-рубрика</b> — объявления из выбранной рубрики OLX в вашем городе получаете <b>только вы</b>: другим подписчикам бота они не придут.\n\nВыберите рубрику:',
+      { parse_mode: 'HTML', reply_markup: kb });
+  }
+  bot.command('buyvip', vipStart);
+  bot.callbackQuery('vip:start', async (ctx) => { await ctx.answerCallbackQuery(); await vipStart(ctx); });
+
+  // Рубрика: вся или подрубрика (подрубрики — следующий уровень).
+  bot.callbackQuery(/^vr:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const top = rubricAt(ctx.match[1]);
+    if (!top) return;
+    const kb = new InlineKeyboard().text(`Вся «${top.name.split(' › ').pop()}»`, `vc:${ctx.match[1]}`).row();
+    const depth = top.path.split('/').length;
+    let n = 0;
+    RUBRICS.forEach((r, i) => {
+      if (!r.path.startsWith(`${top.path}/`) || r.path.split('/').length !== depth + 1) return;
+      kb.text(r.name.split(' › ').pop(), RUBRICS.some((x) => x.path.startsWith(`${r.path}/`)) ? `vr:${i}` : `vc:${i}`);
+      if (++n % 2 === 0) kb.row();
+    });
+    await ctx.editMessageText(`👑 <b>${esc(top.name)}</b>\nВся рубрика или подрубрика:`, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
+  });
+
+  // Город.
+  bot.callbackQuery(/^vc:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const r = rubricAt(ctx.match[1]);
+    if (!r) return;
+    const kb = new InlineKeyboard();
+    cats.CITIES.forEach((c, i) => { kb.text(c.name, `vd:${ctx.match[1]}:${i}`); if (i % 3 === 2) kb.row(); });
+    await ctx.editMessageText(`👑 <b>${esc(r.name)}</b>\nГород:`, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
+  });
+
+  // Свободна ли — и сроки с ценами.
+  bot.callbackQuery(/^vd:(\d+):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const r = rubricAt(ctx.match[1]);
+    const c = cityAt(ctx.match[2]);
+    if (!r || !c) return;
+    const busy = db.lockConflict(ctx.from.id, 'olx', r.path, c.slug);
+    if (busy) {
+      return ctx.editMessageText(`🔒 «${esc(vip.lockLabel(busy))}» уже закреплена за другим VIP до ${fmtDate(busy.until)}.\nВыберите другую рубрику или город: /buyvip`,
+        { parse_mode: 'HTML' }).catch(() => {});
+    }
+    const kb = new InlineKeyboard();
+    for (const d of PLANS) {
+      const stars = priceOf('vip', 'stars', d);
+      const kaspi = config.kaspiDetails ? priceOf('vip', 'kaspi', d) : null;
+      if (stars) kb.text(`⭐ ${d} дн — ${fmt(stars)}`, `vs:${ctx.match[1]}:${ctx.match[2]}:${d}`);
+      if (kaspi) kb.text(`💳 ${d} дн — ${fmt(kaspi)} ₸`, `vk:${ctx.match[1]}:${ctx.match[2]}:${d}`);
+      kb.row();
+    }
+    await ctx.editMessageText(
+      `👑 <b>${esc(vipLabel(r, c))}</b> — свободна.\n\nОбъявления из этой рубрики в городе ${esc(c.name)} будете получать только вы. ` +
+      `Поиск по ней создам сам, доступ к OLX — на тот же срок.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
+      { parse_mode: 'HTML', reply_markup: kb },
+    ).catch(() => {});
+  });
+
+  // Выдать купленную VIP-рубрику. Заняли, пока платили, — { ok: false, conflict }.
+  async function giveVip(userId, r, c, days) {
+    const g = vip.grant(db, userId, r.path, c.slug, days);
+    if (g.ok) {
+      await send(userId, `👑 Готово! VIP-рубрика «${g.label}» — ваша до ${fmtDate(g.until)}. Объявления из неё получаете только вы; поиск по ней уже в /list.`);
+      await tellAdmin(`👑 VIP куплен: ${userId} — ${g.label}, ${days} дн, до ${fmtDate(g.until)}.`);
+    }
+    return g;
+  }
+
+  bot.callbackQuery(/^vs:(\d+):(\d+):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const [, ri, ci, ds] = ctx.match;
+    const r = rubricAt(ri);
+    const c = cityAt(ci);
+    const days = Number(ds);
+    const amount = priceOf('vip', 'stars', days);
+    if (!r || !c || !amount) return;
+    try {
+      await ctx.replyWithInvoice(`VIP: ${vipLabel(r, c)}`.slice(0, 32), `Объявления из рубрики «${r.name}» в городе ${c.name} — только вам, ${days} дней.`,
+        `vip:${ri}:${ci}:${days}:${ctx.from.id}`, 'XTR', [{ label: `${days} дней`, amount }]);
+    } catch (e) {
+      log(`счёт VIP Stars: ${e.message}`);
+      await ctx.reply(`Telegram не принял счёт на ${fmt(amount)} Stars${config.kaspiDetails && priceOf('vip', 'kaspi', days) ? ' — оплатите через Kaspi (💳)' : ''}. Или напишите владельцу бота.`);
+    }
+  });
+
+  bot.callbackQuery(/^vk:(\d+):(\d+):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const [, ri, ci, ds] = ctx.match;
+    const r = rubricAt(ri);
+    const c = cityAt(ci);
+    const days = Number(ds);
+    const amount = priceOf('vip', 'kaspi', days);
+    if (!r || !c || !amount || !config.kaspiDetails) return;
+    await ctx.reply(
+      `💳 <b>Kaspi — VIP «${esc(vipLabel(r, c))}», ${days} дней, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
+      `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — рубрика закрепится после проверки.`,
+      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `vkp:${ri}:${ci}:${days}`) },
+    );
+  });
+
+  bot.callbackQuery(/^vkp:(\d+):(\d+):(\d+)$/, async (ctx) => {
+    const [, ri, ci, ds] = ctx.match;
+    const r = rubricAt(ri);
+    const c = cityAt(ci);
+    const days = Number(ds);
+    const amount = priceOf('vip', 'kaspi', days);
+    if (!r || !c || !amount) return ctx.answerCallbackQuery();
+    const pay = db.addPayment({ userId: ctx.from.id, method: 'kaspi', product: `vip:${ri}:${ci}`, days, amount, status: 'pending' });
+    await ctx.answerCallbackQuery('Заявка отправлена');
+    await ctx.editMessageReplyMarkup().catch(() => {});
+    await ctx.reply('Заявка принята. Как только владелец увидит перевод, рубрика закрепится — пришлю сообщение.');
+    await tellAdmin(`💳 Kaspi VIP: ${who(ctx.from)} — «${vipLabel(r, c)}», ${days} дн, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
+      new InlineKeyboard().text(`✅ Закрепить на ${days} дн`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
+  });
 
   // ---------- оплата: Telegram Stars ----------
 
@@ -148,14 +286,41 @@ function createBot({ token, db, config, getWatcher, log }) {
   });
 
   const PAYLOAD_RE = /^stars:(olx|kolesa|krisha|kaspi|all):(7|14|30):\d+$/;
+  const VIP_RE = /^vip:(\d+):(\d+):(7|14|30):\d+$/;
 
   bot.on('pre_checkout_query', async (ctx) => {
-    const ok = PAYLOAD_RE.test(ctx.preCheckoutQuery.invoice_payload);
+    const payload = ctx.preCheckoutQuery.invoice_payload;
+    const v = VIP_RE.exec(payload);
+    if (v) {
+      const r = rubricAt(v[1]);
+      const c = cityAt(v[2]);
+      const busy = r && c && db.lockConflict(ctx.from.id, 'olx', r.path, c.slug);
+      const ok = Boolean(r && c && !busy);
+      return ctx.answerPreCheckoutQuery(ok, ok ? undefined : { error_message: busy ? 'Эту рубрику только что занял другой VIP — выберите другую: /buyvip' : 'Счёт устарел — /buyvip заново.' });
+    }
+    const ok = PAYLOAD_RE.test(payload);
     await ctx.answerPreCheckoutQuery(ok, ok ? undefined : { error_message: 'Счёт устарел — откройте /access заново.' });
   });
 
   bot.on('message:successful_payment', async (ctx) => {
     const pay = ctx.message.successful_payment;
+    const v = VIP_RE.exec(pay.invoice_payload);
+    if (v) {
+      const r = rubricAt(v[1]);
+      const c = cityAt(v[2]);
+      const days = Number(v[3]);
+      db.addPayment({ userId: ctx.from.id, method: 'stars', product: `vip:${v[1]}:${v[2]}`, days, amount: pay.total_amount, status: 'paid', chargeId: pay.telegram_payment_charge_id });
+      log(`оплата VIP Stars: ${ctx.from.id} ${r?.path} ${c?.slug} +${days} дн`);
+      const g = r && c ? await giveVip(ctx.from.id, r, c, days) : { ok: false };
+      if (!g.ok) {
+        // Заняли в те секунды, пока шла оплата, — Stars возвращаем сразу.
+        const back = await ctx.api.refundStarPayment(ctx.from.id, pay.telegram_payment_charge_id).then(() => true, () => false);
+        await ctx.reply(back ? 'Эту рубрику только что занял другой VIP — Stars вернул. Выберите другую: /buyvip'
+          : 'Эту рубрику только что занял другой VIP. Напишите владельцу бота — вернёт оплату или закрепит другую.');
+        await tellAdmin(`⚠️ VIP Stars: ${who(ctx.from)} оплатил занятую рубрику ${r?.path} ${c?.slug}, ${pay.total_amount} Stars — ${back ? 'возвращено' : 'ВЕРНУТЬ ВРУЧНУЮ'}.`);
+      }
+      return;
+    }
     const m = PAYLOAD_RE.exec(pay.invoice_payload);
     if (!m) return;
     const p = PRODUCT[m[1]];
@@ -201,6 +366,25 @@ function createBot({ token, db, config, getWatcher, log }) {
     const pay = db.payment(Number(idStr));
     if (!pay || pay.status !== 'pending') return ctx.answerCallbackQuery('Заявка уже обработана');
     const text = ctx.callbackQuery.message?.text || '';
+    const vm = /^vip:(\d+):(\d+)$/.exec(pay.product);
+    if (vm) {
+      const r = rubricAt(vm[1]);
+      const c = cityAt(vm[2]);
+      if (action === 'approve') {
+        const g = r && c ? await giveVip(pay.user_id, r, c, pay.days) : { ok: false };
+        if (!g.ok) {
+          await ctx.answerCallbackQuery('Рубрика уже занята');
+          return ctx.editMessageText(`${text}\n\n⚠️ Рубрика занята${g.conflict ? ` (${g.conflict.user_id} до ${fmtDate(g.conflict.until)})` : ''} — верните перевод или выдайте другую: /vip`).catch(() => {});
+        }
+        db.setPaymentStatus(pay.id, 'paid');
+        await ctx.answerCallbackQuery('VIP закреплён');
+        return ctx.editMessageText(`${text}\n\n✅ Закреплено до ${fmtDate(g.until)}`).catch(() => {});
+      }
+      db.setPaymentStatus(pay.id, 'rejected');
+      await send(pay.user_id, 'Перевод не найден. Если вы оплатили — напишите владельцу бота, указав время и сумму.');
+      await ctx.answerCallbackQuery('Отклонено');
+      return ctx.editMessageText(`${text}\n\n✖️ Отклонено`).catch(() => {});
+    }
     const p = PRODUCT[pay.product] || PRODUCT.olx;
     if (action === 'approve') {
       db.setPaymentStatus(pay.id, 'paid');
