@@ -86,39 +86,21 @@ jobs:
               st, u, t = get(gop, BASE + p); guest_pages[p] = t
               save("guest", p, t); report.append(f"гость {p} -> {st} {u}")
 
-          # 2) Вход — через форму со страницы кабинета (ищем форму с полем пароля).
+          # 2) Вход — как doLogin() на странице кабинета: POST cabinet.php?action=login, JSON {csrf, phone, password},
+          #    csrf — из `CSRF = "…"` той же страницы. Ответ: ok, uid | need_egov | deleted | error.
           logged = False
           uop, jar = opener()
           if phone and pw:
               st, u, page = get(uop, BASE + "/kz/ru/cabinet.php")
-              forms = re.findall(r"<form\b[^>]*>.*?</form>", page, re.S | re.I)
-              report.append(f"форм на странице входа: {len(forms)}")
-              for f in forms:
-                  if not re.search(r'type=["\']?password', f, re.I):
-                      continue
-                  action = (re.search(r'action=["\']([^"\']*)', f, re.I) or [None, ""])[1] or "/kz/ru/cabinet.php"
-                  method = ((re.search(r'method=["\']?(\w+)', f, re.I) or [None, "post"])[1]).lower()
-                  fields = {}
-                  for inp in re.findall(r"<input\b[^>]*>", f, re.I):
-                      name = re.search(r'name=["\']([^"\']+)', inp)
-                      if not name: continue
-                      name = name.group(1)
-                      typ = (re.search(r'type=["\']?([\w-]+)', inp) or [None, "text"])[1].lower()
-                      val = html.unescape((re.search(r'value=["\']([^"\']*)', inp) or [None, ""])[1])
-                      if typ == "password": val = pw
-                      elif typ in ("tel",) or re.search(r"phone|tel|login", name, re.I): val = phone
-                      elif typ in ("checkbox",): continue
-                      fields[name] = val
-                  url = urllib.parse.urljoin(u, html.unescape(action))
-                  report.append(f"форма входа: {method.upper()} {url} поля={sorted(fields)}")
-                  if method == "post":
-                      st2, u2, t2 = post(uop, url, fields)
-                  else:
-                      st2, u2, t2 = get(uop, url + ("&" if "?" in url else "?") + urllib.parse.urlencode(fields))
-                  save("user", "login-response", t2[:20000])
-                  report.append(f"ответ входа: {st2} {u2}")
-                  break
-              # Проверка: признак входа на странице (window.KlikoUser с id или _MK_AUTH = 1).
+              m = re.search(r'CSRF\s*=\s*"([0-9a-f]+)"', page)
+              csrf = m.group(1) if m else ""
+              report.append(f"CSRF на странице входа: {'есть' if csrf else 'нет'}")
+              st2, u2, t2 = post(uop, BASE + "/kz/ru/cabinet.php?action=login", {"csrf": csrf, "phone": phone, "password": pw}, as_json=True)
+              try:
+                  j = json.loads(t2)
+                  report.append("ответ входа: " + json.dumps({k: j.get(k) for k in ("ok", "need_egov", "deleted", "error") if k in j}, ensure_ascii=False) + (", uid есть" if j.get("uid") else ""))
+              except Exception:
+                  report.append(f"ответ входа не JSON: {st2} {t2[:200]!r}")
               st, u, check = get(uop, BASE + "/kz/ru/cabinet.php")
               m = re.search(r'window\.KlikoUser=\{"id":"([^"]*)"', check)
               logged = bool(m and m.group(1)) or bool(re.search(r"_MK_AUTH\s*=\s*1", check))
