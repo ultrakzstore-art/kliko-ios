@@ -55,7 +55,8 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .olx: return OLX.topCategories
         case .kolesa:
-            let list: [(String, String)] = [("Легковые авто", "cars"), ("Мото", "moto"), ("Спецтехника", "spectehnika"), ("Запчасти", "zapchasti")]
+            let list: [(String, String)] = [("Легковые авто", "cars")] + Site.carBrands.map { ("Легковые › \($0.0)", "cars/\($0.1)") }
+                + [("Мото", "moto"), ("Спецтехника", "spectehnika"), ("Запчасти", "zapchasti")]
             return list.map { OLX.Category(name: $0.0, path: $0.1) }
         case .krisha:
             let list: [(String, String)] = [("Продажа квартир", "prodazha/kvartiry"), ("Аренда квартир", "arenda/kvartiry"),
@@ -75,6 +76,15 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Марки Kolesa: адрес вида /cars/toyota/. Модель — ссылкой с сайта.
+    static let carBrands: [(String, String)] = [
+        ("Toyota", "toyota"), ("Lexus", "lexus"), ("Hyundai", "hyundai"), ("Kia", "kia"), ("Chevrolet", "chevrolet"),
+        ("Volkswagen", "volkswagen"), ("Mercedes-Benz", "mercedes-benz"), ("BMW", "bmw"), ("Audi", "audi"), ("Nissan", "nissan"),
+        ("Mitsubishi", "mitsubishi"), ("Honda", "honda"), ("ВАЗ (Lada)", "vaz"), ("Subaru", "subaru"), ("Mazda", "mazda"),
+        ("Skoda", "skoda"), ("Ford", "ford"), ("Renault", "renault"), ("Daewoo", "daewoo"), ("Geely", "geely"),
+        ("Chery", "chery"), ("Haval", "haval"), ("Changan", "changan"), ("Land Rover", "land-rover"),
+    ]
+
     private static let kolesaCityList: [(String, String)] = [
         ("Алматы", "almaty"), ("Астана", "astana"), ("Шымкент", "shymkent"), ("Караганда", "karaganda"),
         ("Актобе", "aktobe"), ("Тараз", "taraz"), ("Павлодар", "pavlodar"), ("Усть-Каменогорск", "ust-kamenogorsk"),
@@ -84,7 +94,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
 
     var cities: [OLX.City] { self == .olx ? OLX.cities : Site.kolesaCities }
 
-    func buildSearchURL(path: String?, city: String?, words: String, priceFrom: Int?, priceTo: Int?) -> String {
+    func buildSearchURL(path: String?, city: String?, words: String, priceFrom: Int?, priceTo: Int?, extra: [String: String] = [:]) -> String {
         if self == .olx { return OLX.buildSearchURL(path: path, city: city, words: words, priceFrom: priceFrom, priceTo: priceTo) }
         if self == .kaspi {
             var url = base + "/"
@@ -97,7 +107,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         var url = "\(base)/\(path ?? categories.first?.path ?? "")/"
         if let city, !city.isEmpty { url += "\(city)/" }
         let keys = self == .kolesa ? ("price[from]", "price[to]") : ("das[price][from]", "das[price][to]")
-        var items: [URLQueryItem] = []
+        var items: [URLQueryItem] = extra.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         if let priceFrom { items.append(URLQueryItem(name: keys.0, value: String(priceFrom))) }
         if let priceTo { items.append(URLQueryItem(name: keys.1, value: String(priceTo))) }
         guard !items.isEmpty, var c = URLComponents(string: url) else { return url }

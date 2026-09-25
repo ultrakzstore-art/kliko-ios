@@ -618,10 +618,21 @@ struct AddSubSheet: View {
     @State private var words = ""
     @State private var priceFrom = ""
     @State private var priceTo = ""
+    @State private var rooms = 0              // Krisha: 0 — любое, 5 — 5 и больше
+    @State private var ownersOnly = false     // Krisha: только от хозяев
 
     private var builtURL: String {
         site.buildSearchURL(path: sub?.path ?? top?.path, city: citySlug.isEmpty ? nil : citySlug, words: site == .olx || site == .kaspi ? words : "",
-                           priceFrom: Int(priceFrom.filter(\.isNumber)), priceTo: Int(priceTo.filter(\.isNumber)))
+                           priceFrom: Int(priceFrom.filter(\.isNumber)), priceTo: Int(priceTo.filter(\.isNumber)), extra: krishaExtra)
+    }
+
+    /// Krisha: комнаты и «только от хозяев» — фильтрами в ссылке.
+    private var krishaExtra: [String: String] {
+        guard site == .krisha else { return [:] }
+        var out: [String: String] = [:]
+        if rooms > 0, top?.path.hasSuffix("kvartiry") == true { out["das[live.rooms]"] = String(rooms) }
+        if ownersOnly { out["das[who]"] = "1" }
+        return out
     }
 
     private var canSave: Bool {
@@ -642,6 +653,8 @@ struct AddSubSheet: View {
         var parts = [site == .olx && !words.isEmpty ? words : (sub?.name ?? top?.name ?? "Поиск")]
         if site != .olx { parts.insert(site.title, at: 0) }
         if let city = site.cities.first(where: { $0.slug == citySlug }) { parts.append(city.name) }
+        if site == .krisha, rooms > 0, top?.path.hasSuffix("kvartiry") == true { parts.append(rooms == 5 ? "5+ комн" : "\(rooms)-комн") }
+        if site == .krisha, ownersOnly { parts.append("от хозяев") }
         if !priceTo.isEmpty { parts.append("до \(priceTo)") }
         return parts.joined(separator: " · ")
     }
@@ -730,6 +743,18 @@ struct AddSubSheet: View {
                 if !subsNote.isEmpty {
                     Text(verbatim: subsNote).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+        }
+        if site == .krisha {
+            Section("Квартира и продавец") {
+                if top?.path.hasSuffix("kvartiry") == true {
+                    Picker("Комнат", selection: $rooms) {
+                        Text("Любое").tag(0)
+                        ForEach(1...4, id: \.self) { n in Text(verbatim: "\(n)").tag(n) }
+                        Text("5+").tag(5)
+                    }
+                }
+                Toggle("Только от хозяев", isOn: $ownersOnly)
             }
         }
         Section("Город") {

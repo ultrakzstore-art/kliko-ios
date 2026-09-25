@@ -68,6 +68,12 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // Продавец (только OLX): все, частные или бизнес. По умолчанию — все.
   async function stepSeller(ctx) {
+    if (st().w.source === 'krisha') {
+      // Krisha: только от хозяев (фильтр das[who]=1 в ссылке).
+      st().w.step = 'seller';
+      const kb = new InlineKeyboard().text('👥 Все', 'w:owner:all').text('🏠 Только от хозяев', 'w:owner:1');
+      return show(ctx, `<b>Новый поиск · Krisha</b>\n${summary()}\n\nОт кого?`, kb);
+    }
     if (st().w.source !== 'olx') return stepConfirm(ctx);
     st().w.step = 'seller';
     const kb = new InlineKeyboard().text('👥 Все', 'w:seller:all').row()
@@ -81,7 +87,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     const w = st().w;
     w.url = w.source === 'olx'
       ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
-      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: w.ksub?.params, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo });
+      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: { ...(w.ksub?.params || {}), ...(w.owners ? { 'das[who]': 1 } : {}) }, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo });
     let preview;
     try {
       const found = await src().fetchSearch(w.url);
@@ -110,12 +116,14 @@ function registerWizard(bot, { db, log, canAdd }) {
       st().w.words ? `Слова: ${esc(st().w.words)}` : '',
       price ? `Цена: ${price}` : '',
       st().w.seller !== 'all' ? `Продавец: ${SELLER[st().w.seller]}` : '',
+      st().w.owners ? 'Только от хозяев' : '',
     ].filter(Boolean).join('\n');
   }
 
   function subName() {
     const parts = [st().w.words || (st().w.source !== 'olx' ? `${src().title}: ${st().w.ksub?.name || st().w.kcat?.name}` : current()?.name) || 'Поиск'];
     if (st().w.city) parts.push(st().w.city.name);
+    if (st().w.owners) parts.push('от хозяев');
     if (st().w.priceTo) parts.push(`до ${fmt(st().w.priceTo)}`);
     else if (st().w.priceFrom) parts.push(`от ${fmt(st().w.priceFrom)}`);
     return parts.join(' · ').slice(0, 60);
@@ -215,6 +223,10 @@ function registerWizard(bot, { db, log, canAdd }) {
     }
     if (data === 'w:skipwords') return src().wizard?.noPrice ? stepConfirm(ctx) : stepPrice(ctx);
     if (data === 'w:skipprice') return stepSeller(ctx);
+    if (data.startsWith('w:owner:')) {
+      st().w.owners = data === 'w:owner:1';
+      return stepConfirm(ctx);
+    }
     if (data.startsWith('w:seller:')) {
       const v = data.slice(9);
       st().w.seller = SELLER[v] ? v : 'all';
