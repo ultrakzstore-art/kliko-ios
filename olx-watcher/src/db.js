@@ -60,7 +60,11 @@ class Db {
     if (!cols.includes('watermark')) this.db.exec('ALTER TABLE subs ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0');
     this.db.exec('DROP TABLE IF EXISTS seen');
     const ucols = this.db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
-    if (!ucols.includes('trial_until')) this.db.exec('ALTER TABLE users ADD COLUMN trial_until INTEGER NOT NULL DEFAULT 0');
+    if (!ucols.includes('trial_until')) {
+      this.db.exec('ALTER TABLE users ADD COLUMN trial_until INTEGER NOT NULL DEFAULT 0');
+      // Кто был до появления теста — получает тест от момента обновления, а не нулевой.
+      this.db.prepare('UPDATE users SET trial_until = ?').run(Date.now() + 7 * DAY);
+    }
     this.trialMs = 7 * DAY;
   }
 
