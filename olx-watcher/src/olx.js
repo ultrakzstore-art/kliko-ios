@@ -139,7 +139,7 @@ function normalizeOffer(o) {
     id: Number(o.id),
     title: o.title || '',
     url: o.url || `${BASE}/d/obyavlenie/-ID${encodeId(Number(o.id))}.html`,
-    description: stripHtml(o.description || '').slice(0, 400),
+    description: stripHtml(o.description || '').slice(0, 2000),
     price: num(pv.value ?? o.price?.value),
     priceLabel: pv.label || (pv.value ? `${pv.value} ${pv.currency || '₸'}` : ''),
     city: o.location?.city?.name || o.location?.cityName || '',
@@ -151,6 +151,12 @@ function normalizeOffer(o) {
     business: !!o.business,
     userId: o.user?.id ?? null,
     userName: o.user?.name || '',
+    // Продавец: с какого времени на OLX, когда был в сети, частное лицо или бизнес.
+    sellerSince: time(o.user?.created),
+    sellerLastSeen: time(o.user?.last_seen),
+    sellerOnline: !!o.user?.is_online,
+    sellerCompany: o.user?.company_name || '',
+    sellerAbout: stripHtml(o.user?.about || '').slice(0, 200),
     params: params.filter((p) => p !== priceParam).map((p) => `${p.name}: ${p.value?.label ?? p.value?.value ?? ''}`).slice(0, 6),
     photo: photoUrl(o.photos?.[0]),
   };

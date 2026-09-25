@@ -64,6 +64,8 @@ function renderSettings() {
   if (!state || settingsDirty) return;
   const s = state.settings;
   document.querySelectorAll('[data-env]').forEach((el) => { el.value = s.env[el.dataset.env] ?? ''; });
+  const sections = new Set(String(s.env.CARD_SECTIONS ?? '').split(',').map((x) => x.trim()));
+  document.querySelectorAll('[data-section]').forEach((el) => { el.checked = sections.has(el.dataset.section); });
   $('autoStart').checked = !!s.autoStart;
   $('openAtLogin').checked = !!s.openAtLogin;
   $('token-hint').textContent = state.hasToken ? `Сохранён: ${state.tokenHint}` : 'Токен ещё не задан';
@@ -100,6 +102,7 @@ document.querySelectorAll('#tab-settings input').forEach((el) => el.addEventList
 }));
 
 $('btn-save').addEventListener('click', async () => {
+  $('card-sections').value = [...document.querySelectorAll('[data-section]')].filter((el) => el.checked).map((el) => el.dataset.section).join(',');
   const env = {};
   document.querySelectorAll('[data-env]').forEach((el) => { env[el.dataset.env] = el.value; });
   const bad = [...document.querySelectorAll('[data-env^="STARS_PRICES"],[data-env^="KASPI_PRICES"]')]

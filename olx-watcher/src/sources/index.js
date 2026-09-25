@@ -70,17 +70,30 @@ function kolesaGroup({ key, title, emoji, host, categories, priceFrom, priceTo }
     wizard: {
       categories,
       cities: CITIES,
-      build: ({ path, city, priceFrom: pf, priceTo: pt }) =>
-        withParams(`${base}/${path}/${city ? `${city}/` : ''}`, { [priceFrom]: pf, [priceTo]: pt }),
+      build: ({ path, city, params, priceFrom: pf, priceTo: pt }) =>
+        withParams(`${base}/${path}/${city ? `${city}/` : ''}`, { ...(params || {}), [priceFrom]: pf, [priceTo]: pt }),
     },
   };
 }
+
+// Подрубрики Kolesa: марки (адрес вида /cars/toyota/). Модель — ссылкой с сайта.
+const CAR_BRANDS = [
+  ['Toyota', 'toyota'], ['Lexus', 'lexus'], ['Hyundai', 'hyundai'], ['Kia', 'kia'], ['Chevrolet', 'chevrolet'],
+  ['Volkswagen', 'volkswagen'], ['Mercedes-Benz', 'mercedes-benz'], ['BMW', 'bmw'], ['Audi', 'audi'], ['Nissan', 'nissan'],
+  ['Mitsubishi', 'mitsubishi'], ['Honda', 'honda'], ['ВАЗ (Lada)', 'vaz'], ['Subaru', 'subaru'], ['Mazda', 'mazda'],
+  ['Skoda', 'skoda'], ['Ford', 'ford'], ['Renault', 'renault'], ['Daewoo', 'daewoo'], ['Geely', 'geely'],
+  ['Chery', 'chery'], ['Haval', 'haval'], ['Changan', 'changan'], ['Land Rover', 'land-rover'],
+].map(([name, slug]) => ({ name, path: `cars/${slug}` }));
+
+// Подрубрики Krisha: число комнат (фильтр das[live.rooms]).
+const ROOMS = (path) => [['1-комнатные', 1], ['2-комнатные', 2], ['3-комнатные', 3], ['4-комнатные', 4], ['5+ комнат', 5]]
+  .map(([name, n]) => ({ name, path, params: { 'das[live.rooms]': n } }));
 
 const KOLESA = kolesaGroup({
   key: 'kolesa', title: 'Kolesa', emoji: '🚗', host: 'kolesa.kz',
   priceFrom: 'price[from]', priceTo: 'price[to]',
   categories: [
-    { name: 'Легковые авто', path: 'cars' },
+    { name: 'Легковые авто', path: 'cars', subs: CAR_BRANDS },
     { name: 'Мото', path: 'moto' },
     { name: 'Спецтехника', path: 'spectehnika' },
     { name: 'Запчасти', path: 'zapchasti' },
@@ -91,8 +104,8 @@ const KRISHA = kolesaGroup({
   key: 'krisha', title: 'Krisha', emoji: '🏠', host: 'krisha.kz',
   priceFrom: 'das[price][from]', priceTo: 'das[price][to]',
   categories: [
-    { name: 'Продажа квартир', path: 'prodazha/kvartiry' },
-    { name: 'Аренда квартир', path: 'arenda/kvartiry' },
+    { name: 'Продажа квартир', path: 'prodazha/kvartiry', subs: ROOMS('prodazha/kvartiry') },
+    { name: 'Аренда квартир', path: 'arenda/kvartiry', subs: ROOMS('arenda/kvartiry') },
     { name: 'Продажа домов', path: 'prodazha/doma' },
     { name: 'Аренда домов', path: 'arenda/doma' },
     { name: 'Участки', path: 'prodazha/uchastkov' },

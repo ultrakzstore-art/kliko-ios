@@ -30,6 +30,8 @@ module.exports = {
     stars: prices(`STARS_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('STARS_PRICES') : null),
     kaspi: prices(`KASPI_PRICES_${k.toUpperCase()}`) || (k === 'olx' ? prices('KASPI_PRICES') : null),
   }])),
+  // Разделы карточки объявления: характеристики, описание, продавец (через запятую).
+  cardSections: new Set(String(process.env.CARD_SECTIONS ?? 'specs,description,seller').split(',').map((s) => s.trim()).filter(Boolean)),
   kaspiDetails: (process.env.KASPI_DETAILS || '').trim(),
   sellerUrl: process.env.SELLER_URL || 'https://www.olx.kz/list/user/{code}/',
   dbFile: process.env.DB_FILE || path.join(__dirname, '..', 'data', 'watcher.db'),

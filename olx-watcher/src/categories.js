@@ -29,6 +29,98 @@ const CITIES = [
   ['Уральск', 'uralsk'], ['Кызылорда', 'kyzylorda'], ['Петропавловск', 'petropavlovsk'], ['Талдыкорган', 'taldykorgan'],
 ].map(([name, slug]) => ({ name, slug }));
 
+// Запасной список подрубрик — если страница рубрики OLX не открылась или не разобралась
+// (например, OLX ответил 403). Тот же, что в приложении.
+const FALLBACK = {
+  'elektronika': [
+    ['Телефоны и аксессуары', 'telefony-i-aksesuary'],
+    ['Компьютеры и комплектующие', 'kompyutery-i-komplektuyuschie'],
+    ['Ноутбуки и аксессуары', 'noutbuki-i-aksesuary'],
+    ['Планшеты, эл. книги', 'planshety-el-knigi-i-aksessuary'],
+    ['ТВ и видеотехника', 'tv-videotehnika'],
+    ['Аудиотехника', 'audiotehnika'],
+    ['Игры и приставки', 'igry-i-igrovye-pristavki'],
+    ['Фото и видео', 'foto-video'],
+    ['Техника для дома', 'tehnika-dlya-doma'],
+    ['Техника для кухни', 'tehnika-dlya-kuhni'],
+    ['Климатическое оборудование', 'klimaticheskoe-oborudovanie'],
+    ['Индивидуальный уход', 'individualnyy-uhod'],
+    ['Прочая электроника', 'prochaja-electronika'],
+  ],
+  'transport': [
+    ['Легковые автомобили', 'legkovye-avtomobili'],
+    ['Грузовые автомобили', 'gruzovye-avtomobili'],
+    ['Мото', 'moto'],
+    ['Спецтехника', 'spetstehnika'],
+    ['Сельхозтехника', 'selhoztehnika'],
+    ['Автобусы', 'avtobusy'],
+    ['Водный транспорт', 'vodnyy-transport'],
+    ['Прицепы', 'pritsepy-doma-na-kolesah'],
+    ['Другой транспорт', 'drugoy-transport'],
+  ],
+  'zapchasti-dlya-transporta': [
+    ['Автозапчасти', 'avtozapchasti'],
+    ['Шины, диски и колёса', 'shiny-diski-i-kolesa'],
+    ['Аксессуары для авто', 'aksessuary-dlya-avto'],
+    ['Мотозапчасти', 'motozapchasti'],
+    ['Запчасти для спецтехники', 'zapchasti-dlya-spetstehniki'],
+  ],
+  'nedvizhimost': [
+    ['Квартиры', 'kvartiry'],
+    ['Дома', 'doma'],
+    ['Земля', 'zemlya'],
+    ['Коммерческая', 'kommercheskaya-nedvizhimost'],
+    ['Посуточно', 'posutochno-pochasovo'],
+    ['Гаражи и парковки', 'garazhy-parkovki'],
+  ],
+  'dom-i-sad': [
+    ['Мебель', 'mebel'],
+    ['Предметы интерьера', 'predmety-interera'],
+    ['Строительство и ремонт', 'stroitelstvo-remont'],
+    ['Инструменты', 'instrumenty'],
+    ['Сад и огород', 'sad-ogorod'],
+    ['Посуда', 'posuda-kuhonnaya-utvar'],
+    ['Хозинвентарь', 'hozyaystvennyy-inventar'],
+    ['Прочее для дома', 'prochie-tovary-dlya-doma'],
+  ],
+  'moda-i-stil': [
+    ['Женская одежда', 'zhenskaya-odezhda'],
+    ['Мужская одежда', 'muzhskaya-odezhda'],
+    ['Женская обувь', 'zhenskaya-obuv'],
+    ['Мужская обувь', 'muzhskaya-obuv'],
+    ['Аксессуары', 'aksessuary'],
+    ['Наручные часы', 'naruchnye-chasy'],
+    ['Красота и здоровье', 'krasota-zdorove'],
+  ],
+  'detskiy-mir': [
+    ['Детская одежда', 'detskaya-odezhda'],
+    ['Детская обувь', 'detskaya-obuv'],
+    ['Игрушки', 'igrushki'],
+    ['Коляски', 'detskie-kolyaski'],
+    ['Детская мебель', 'detskaya-mebel'],
+    ['Автокресла', 'detskie-avtokresla'],
+  ],
+  'hobbi-otdyh-i-sport': [
+    ['Спорт и отдых', 'sport-otdyh'],
+    ['Велосипеды', 'velo'],
+    ['Музыкальные инструменты', 'muzykalnye-instrumenty'],
+    ['Книги и журналы', 'knigi-zhurnaly'],
+    ['Антиквариат и коллекции', 'antikvariat-kollektsii'],
+    ['Туризм', 'turizm'],
+    ['Рыбалка и охота', 'ohota-rybalka'],
+  ],
+  'zhivotnye': [
+    ['Собаки', 'sobaki'],
+    ['Кошки', 'koshki'],
+    ['Птицы', 'ptitsy'],
+    ['Аквариумистика', 'akvariumnye-rybki'],
+    ['Сельхоз животные', 'selskohozyaystvennye-zhivotnye'],
+    ['Зоотовары', 'zootovary'],
+  ],
+};
+const FALLBACK_CHILDREN = Object.fromEntries(Object.entries(FALLBACK).map(([parent, list]) =>
+  [parent, list.map(([name, slug]) => ({ name, path: `${parent}/${slug}` }))]));
+
 const CITY_SLUGS = new Set(CITIES.map((c) => c.slug));
 // Служебные разделы, которые тоже выглядят как /d/<что-то>/.
 const NOT_CATEGORY = new Set(['obyavlenie', 'kk', 'list', 'myaccount', 'account', 'post-new-ad', 'rus', 'ru']);
@@ -57,6 +149,11 @@ async function children(path) {
     list = parseChildren(await fetchHtml(`${BASE}/d/${path}/`), path);
   } catch {
     list = [];
+  }
+  if (!list.length && FALLBACK_CHILDREN[path]) {
+    // С OLX не вышло — встроенный список; живой попробуем снова через час, а не через сутки.
+    cache.set(path, { at: Date.now() - 23 * 3600_000, list: FALLBACK_CHILDREN[path] });
+    return FALLBACK_CHILDREN[path];
   }
   cache.set(path, { at: Date.now(), list });
   return list;
@@ -113,6 +210,6 @@ function parsePrice(text) {
 }
 
 module.exports = {
-  TOP, CITIES, children, parseChildren, buildSearchUrl, parsePrice,
+  TOP, CITIES, FALLBACK_CHILDREN, children, parseChildren, buildSearchUrl, parsePrice,
   _setFetch: (fn) => { fetchHtml = fn; cache.clear(); },
 };

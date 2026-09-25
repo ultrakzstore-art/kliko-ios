@@ -109,6 +109,15 @@
       </div>
 
       <div class="card">
+        <h2>Карточка объявления в боте</h2>
+        <input type="hidden" data-env="CARD_SECTIONS" id="card-sections">
+        <label class="check"><input type="checkbox" data-section="specs"> Характеристики (состояние, марка, пробег…)</label>
+        <label class="check"><input type="checkbox" data-section="description"> Описание (сворачивается, нажмите — раскроется)</label>
+        <label class="check"><input type="checkbox" data-section="seller"> Продавец: имя, частник или бизнес, с какого года на OLX, когда был в сети</label>
+        <p class="muted">Всегда: фото, название, цена, город, когда подано, номер из текста, поиск.</p>
+      </div>
+
+      <div class="card">
         <h2>Цены за 7 / 14 / 30 дней</h2>
         <p class="muted">Три числа через запятую. Пусто — тариф этим способом не продаётся.</p>
         <table class="prices">

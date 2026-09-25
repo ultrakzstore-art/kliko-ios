@@ -332,13 +332,17 @@ function createBot({ token, db, config, getWatcher, log }) {
     if (via === 'ready') {
       return send(userId, `«${subs[0].name}»: слежу. Сейчас в выдаче ${count} объявлений — присылать буду только новые.`);
     }
-    const caption = card(ad, subs, via);
+    const caption = card(ad, subs, via, config.cardSections);
     const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
     if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', sellerLink(ad.userId));
     else if (ad.sellerUrl) kb.row().url('Все объявления автора', ad.sellerUrl);
+    // Текстом, а фото — большим превью над ним: так влезает вся карточка (у подписи к фото
+    // лимит 1024 знака, у сообщения — 4096).
+    const preview = ad.photo
+      ? { url: ad.photo, prefer_large_media: true, show_above_text: true }
+      : { is_disabled: true };
     try {
-      if (!ad.photo) throw new Error('без фото');
-      await bot.api.sendPhoto(userId, ad.photo, { caption, parse_mode: 'HTML', reply_markup: kb });
+      await bot.api.sendMessage(userId, caption, { parse_mode: 'HTML', reply_markup: kb, link_preview_options: preview });
     } catch (e) {
       if (e instanceof GrammyError && e.error_code === 403) { db.setBlocked(userId, true); return; }
       if (e instanceof GrammyError && e.error_code === 429) await sleep((e.parameters?.retry_after || 3) * 1000);
@@ -382,27 +386,75 @@ function createBot({ token, db, config, getWatcher, log }) {
 }
 
 // Карточка: заголовок, цена, город, свежесть, телефон из текста, пометки, параметры, описание.
-function card(ad, subs, via) {
+// Карточка объявления по разделам: главное, характеристики, описание, продавец, поиск.
+// Шлётся текстом (до 4096 знаков), фото — превью над текстом.
+function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller'])) {
+  const src = sources.get(ad.source);
   const flags = [];
   if (via === 'turbo') flags.push('⚡ раньше поиска');
-  if (ad.status && ad.status !== 'active') flags.push(`статус: ${esc(ad.status)} (возможно, на проверке)`);
-  if (ad.business) flags.push('🏪 бизнес-аккаунт');
+  if (ad.status && ad.status !== 'active') flags.push('⏳ на проверке');
+  if (ad.promoted) flags.push('📣 продвигается');
   // Номер, который продавец написал в тексте, — Телеграм сам делает его нажимаемым (звонок).
-  // Номер, который OLX прячет за входом, не достаём.
   const phone = phonesIn(`${ad.title || ''}\n${ad.description || ''}`)[0];
-  const src = sources.get(ad.source);
-  const lines = [
+  const price = ad.priceLabel || (ad.price != null ? `${fmt(ad.price)} ₸` : '');
+  const place = [...new Set([ad.city, ad.region].filter(Boolean))].join(', ');
+
+  const head = [
     `${src.emoji} <b>${esc(ad.title || 'Объявление ' + ad.id)}</b>`,
-    [ad.priceLabel || (ad.price != null ? `${fmt(ad.price)} ₸` : ''), [ad.city, ad.region].filter(Boolean).join(', ')].filter(Boolean).map(esc).join(' · '),
-    ad.createdAt ? `🕒 подано ${ago(ad.createdAt)} назад` : '',
-    phone ? `📞 ${prettyPhone(phone)}` : '',
+    price ? `💰 <b>${esc(price)}</b>` : '',
+    place ? `📍 ${esc(place)}` : '',
+    ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}` : '',
     flags.join(' · '),
-    (ad.params || []).length ? esc(ad.params.join(' · ')) : '',
-    ad.description ? `\n${esc(ad.description.slice(0, 350))}${ad.description.length > 350 ? '…' : ''}` : '',
-    ad.userName ? `👤 ${esc(ad.userName)}` : '',
-    `🔎 ${subs.map((s) => esc(s.name)).join(', ')}`,
+    phone ? `📞 <b>${prettyPhone(phone)}</b>` : '',
   ];
-  return lines.filter(Boolean).join('\n').slice(0, 1024);
+
+  const params = (ad.params || []).filter(Boolean);
+  const specs = params.length && sections.has('specs') ? ['', '<b>Характеристики</b>', ...params.map((p) => `• ${esc(p)}`)] : [];
+
+  const desc = String(ad.description || '').trim();
+  const description = desc && sections.has('description')
+    ? ['', '<b>Описание</b>', `<blockquote expandable>${esc(desc.slice(0, 1500))}${desc.length > 1500 ? '…' : ''}</blockquote>`]
+    : [];
+
+  const seller = [];
+  if (ad.userName || ad.sellerCompany) seller.push(`👤 ${esc(ad.sellerCompany || ad.userName)} · ${ad.business ? 'бизнес' : 'частное лицо'}`);
+  if (ad.sellerSince) seller.push(`📅 На ${esc(src.title)} с ${fmtMonth(ad.sellerSince)} (${since(ad.sellerSince)})`);
+  if (ad.sellerOnline) seller.push('🟢 Сейчас в сети');
+  else if (ad.sellerLastSeen) seller.push(`⚪ Был(а) в сети ${ago(ad.sellerLastSeen)} назад`);
+  if (ad.sellerAbout) seller.push(`ℹ️ ${esc(ad.sellerAbout)}`);
+  const sellerBlock = seller.length && sections.has('seller') ? ['', '<b>Продавец</b>', ...seller] : [];
+
+  const tail = ['', `🔎 Поиск: ${subs.map((s) => esc(s.name)).join(', ')}`, `🆔 ${ad.id}`];
+  return [...head, ...specs, ...description, ...sellerBlock, ...tail].filter((l) => l !== null && l !== undefined && l !== false)
+    .filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== ''))
+    .join('\n')
+    .slice(0, 4000);
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' });
+}
+
+function fmtMonth(ts) {
+  return new Date(ts).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'Asia/Almaty' })
+    .replace(/\s*г\.?$/, '')
+    .replace(/^(\S+)ь /, '$1я ').replace(/^(\S+)й /, '$1я ').replace(/^(март|август) /, '$1а ');
+}
+
+// «3 года», «8 месяцев», «12 дней» — сколько продавец на площадке.
+function since(ts) {
+  const days = Math.floor((Date.now() - ts) / 86400_000);
+  if (days < 31) return plural(Math.max(days, 0), 'день', 'дня', 'дней');
+  const months = Math.floor(days / 30.44);
+  if (months < 12) return plural(months, 'месяц', 'месяца', 'месяцев');
+  return plural(Math.floor(months / 12), 'год', 'года', 'лет');
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const w = m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+  return `${n} ${w}`;
 }
 
 // Ссылка с номером в конце — сайт часть после # игнорирует, а номер под рукой.

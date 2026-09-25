@@ -21,7 +21,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   });
   const st = () => als.getStore();
 
-  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, city: null, words: '', priceFrom: null, priceTo: null, url: '' });
+  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, ksub: null, city: null, words: '', priceFrom: null, priceTo: null, url: '' });
   const src = () => sources.get(st().w.source);
   const current = () => st().w.stack[st().w.stack.length - 1] || null;
 
@@ -72,7 +72,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     const w = st().w;
     w.url = w.source === 'olx'
       ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
-      : src().wizard.build({ path: w.kcat.path, city: w.city?.slug, priceFrom: w.priceFrom, priceTo: w.priceTo });
+      : src().wizard.build({ path: (w.ksub || w.kcat).path, params: w.ksub?.params, city: w.city?.slug, priceFrom: w.priceFrom, priceTo: w.priceTo });
     let preview;
     try {
       const found = await src().fetchSearch(w.url);
@@ -88,7 +88,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   }
 
   function label() {
-    if (st().w.source !== 'olx') return `${src().title} › ${st().w.kcat?.name || ''}`;
+    if (st().w.source !== 'olx') return [src().title, st().w.kcat?.name, st().w.ksub?.name].filter(Boolean).join(' › ');
     return st().w.stack.map((s) => s.name).join(' › ') || 'все рубрики';
   }
 
@@ -104,7 +104,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   }
 
   function subName() {
-    const parts = [st().w.words || (st().w.source !== 'olx' ? `${src().title}: ${st().w.kcat?.name}` : current()?.name) || 'Поиск'];
+    const parts = [st().w.words || (st().w.source !== 'olx' ? `${src().title}: ${st().w.ksub?.name || st().w.kcat?.name}` : current()?.name) || 'Поиск'];
     if (st().w.city) parts.push(st().w.city.name);
     if (st().w.priceTo) parts.push(`до ${fmt(st().w.priceTo)}`);
     else if (st().w.priceFrom) parts.push(`от ${fmt(st().w.priceFrom)}`);
@@ -129,6 +129,16 @@ function registerWizard(bot, { db, log, canAdd }) {
     src().wizard.categories.forEach((c, i) => { kb.text(c.name, `w:kc:${i}`); if (i % 2 === 1) kb.row(); });
     kb.row().text('⬅️ Площадка', 'w:restart').text('✖️ Отмена', 'w:cancel');
     await show(ctx, `<b>Новый поиск · ${esc(src().title)}</b>\nРубрика (марку, модель и другие фильтры можно задать на сайте и прислать ссылку):`, kb);
+  }
+
+  // Kolesa и Krisha: подрубрика (марка, число комнат) или вся рубрика.
+  async function stepKSub(ctx) {
+    st().w.step = 'ksub';
+    const kcat = st().w.kcat;
+    const kb = new InlineKeyboard().text(`✅ Вся «${kcat.name}»`, 'w:ks:all').row();
+    kcat.subs.forEach((c, i) => { kb.text(c.name, `w:ks:${i}`); if (i % 3 === 2) kb.row(); });
+    kb.row().text('⬅️ Назад', 'w:kback').text('✖️ Отмена', 'w:cancel');
+    await show(ctx, `<b>Новый поиск · ${esc(src().title)}</b>\nРубрика: ${esc(kcat.name)}\nПодрубрика:`, kb);
   }
 
   async function start(ctx) {
@@ -158,9 +168,16 @@ function registerWizard(bot, { db, log, canAdd }) {
     }
     if (data.startsWith('w:kc:')) {
       st().w.kcat = src().wizard.categories[Number(data.slice(5))] || null;
+      st().w.ksub = null;
       if (!st().w.kcat) return;
+      return st().w.kcat.subs?.length ? stepKSub(ctx) : stepCity(ctx);
+    }
+    if (data.startsWith('w:ks:')) {
+      const i = data.slice(5);
+      st().w.ksub = i === 'all' ? null : st().w.kcat?.subs?.[Number(i)] || null;
       return stepCity(ctx);
     }
+    if (data === 'w:kback') { st().w.kcat = null; st().w.ksub = null; return stepKCategory(ctx); }
 
     if (data.startsWith('w:c:')) {
       const pick = st().w.options[Number(data.slice(4))];
