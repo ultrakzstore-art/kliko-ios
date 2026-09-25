@@ -70,6 +70,10 @@ async function deepProbe(id) {
     try {
       const ads = await src.fetchSearch(url);
       console.log(`${src.title}: в выдаче ${ads.length} объявлений`);
+      if (src.key === 'kaspi') {
+        const s = sources.kaspiSortInUse();
+        console.log(s ? `Сортировка «сначала новые»: нашлась — ${s[0]}=${s[1]}` : 'Сортировка «сначала новые» на странице не нашлась — пришлите ссылку, выбрав её на сайте');
+      }
       ads.slice(0, 8).forEach((a) => console.log(`  ${a.id} · ${a.url}`));
       const top = [...ads].sort((a, b) => b.id - a.id)[0];
       if (top) console.log('\nКарточка самого свежего:', await src.fetchDetail(top));

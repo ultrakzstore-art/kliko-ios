@@ -152,15 +152,51 @@ function kaspiIds(html) {
   return [...out.values()];
 }
 
+// Сортировка «сначала новые». Как её зовут в ссылке Kaspi, заранее неизвестно — ищем на самой
+// странице выдачи: ссылку или пункт списка со словами «новые» / «по дате» / «свежие» и берём
+// его параметр (sort=…, order=…). Нашли — дальше все поиски Kaspi идут с ней.
+const SORT_WORDS = /(сначала\s+нов|нов(ые|ее|инки)|по\s+дат|свеж|недавн|newest|date)/i;
+function kaspiSort(html) {
+  const text = String(html).replace(/&amp;/g, '&');
+  // <a href="…?sort=date_desc">Сначала новые</a>
+  for (const m of text.matchAll(/<a\b[^>]*href=["']([^"']*[?&](?:sort|order|sortBy|sort_by|orderBy)[^"']*)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi)) {
+    if (!SORT_WORDS.test(m[2].replace(/<[^>]+>/g, ' '))) continue;
+    try {
+      const u = new URL(m[1], KASPI_BASE);
+      for (const [k, v] of u.searchParams) if (/^(sort|order|sortBy|sort_by|orderBy)$/i.test(k)) return [k, v];
+    } catch { /* дальше */ }
+  }
+  // <option value="date_desc">Сначала новые</option> внутри <select name="sort">
+  const sel = /<select\b[^>]*name=["'](sort|order|sortBy|sort_by|orderBy)["'][^>]*>([\s\S]*?)<\/select>/i.exec(text);
+  if (sel) {
+    for (const o of sel[2].matchAll(/<option\b[^>]*value=["']([^"']+)["'][^>]*>([^<]*)</gi)) if (SORT_WORDS.test(o[2])) return [sel[1], o[1]];
+  }
+  // JSON в странице: {"value":"date_desc","title":"Сначала новые"} рядом со словом sort
+  for (const m of text.matchAll(/"(?:value|code|key|id)"\s*:\s*"([\w-]+)"\s*,\s*"(?:title|name|label|text)"\s*:\s*"([^"]{1,40})"/g)) {
+    if (SORT_WORDS.test(m[2]) && /sort|order/i.test(text.slice(Math.max(0, m.index - 300), m.index))) return ['sort', m[1]];
+  }
+  return null;
+}
+let kaspiSortParam;   // undefined — ещё не искали, null — на странице не нашлось
+
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
   isAdUrl: (url) => { try { return /^\/a\/.+-\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
   // Сортировку «сначала новые» ссылкой Kaspi не включить (не нашёл как) — смотрим 3 страницы.
   async fetchSearch(url) {
-    const base = this.normalize(url);
-    const html = await getHtml(base);
+    let base = this.normalize(url);
+    const hasSort = (u) => /[?&](sort|order|sortBy|sort_by|orderBy)=/i.test(u);
+    if (!hasSort(base) && kaspiSortParam) base = withParam(base, kaspiSortParam);
+    let html = await getHtml(base);
     if (html == null) throw new Error('Kaspi ответил 404 — проверьте ссылку');
+    if (kaspiSortParam === undefined) {
+      kaspiSortParam = kaspiSort(html);
+      if (kaspiSortParam && !hasSort(base)) {
+        base = withParam(base, kaspiSortParam);
+        html = (await getHtml(base)) ?? html;
+      }
+    }
     const all = new Map(kaspiIds(html).map((a) => [a.id, a]));
     for (let page = 2; page <= 3 && all.size; page++) {
       const u = new URL(base);
@@ -188,6 +224,12 @@ const KASPI = {
   },
 };
 
+function withParam(url, [k, v]) {
+  const u = new URL(url);
+  u.searchParams.set(k, v);
+  return u.toString();
+}
+
 const ALL = [OLX, KOLESA, KRISHA, KASPI];
 const BY_KEY = Object.fromEntries(ALL.map((s) => [s.key, s]));
 
@@ -197,4 +239,4 @@ function byUrl(url) {
   return ALL.find((s) => s.hostRe.test(host)) || null;
 }
 
-module.exports = { kaspiIds, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { kaspiIds, kaspiSort, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };

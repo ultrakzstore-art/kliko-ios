@@ -159,3 +159,11 @@ test('Kolesa: автосалон / дилер — не хозяин; «в авт
   assert.strictEqual(priv.owner, null, 'не угадали — не отсеиваем');
   assert.strictEqual(named.owner, true);
 });
+
+test('Kaspi: сортировка «сначала новые» находится на странице выдачи', () => {
+  const { kaspiSort } = sources;
+  assert.deepStrictEqual(kaspiSort('<a href="/elektronika/?sort=popular">Популярные</a><a href="/elektronika/?page=1&amp;sort=date_desc"><span>Сначала новые</span></a>'), ['sort', 'date_desc']);
+  assert.deepStrictEqual(kaspiSort('<select name="order"><option value="rel">По релевантности</option><option value="new">Новые</option></select>'), ['order', 'new']);
+  assert.deepStrictEqual(kaspiSort('{"sortOptions":[{"value":"cheap","title":"Дешевле"},{"value":"created_desc","title":"Сначала новые"}]}'), ['sort', 'created_desc']);
+  assert.strictEqual(kaspiSort('<a href="/a/iphone-15-112633239/">iPhone 15 новый</a>'), null, 'ссылки на объявления — не сортировка');
+});
