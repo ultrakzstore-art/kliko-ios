@@ -128,8 +128,14 @@ jobs:
                           queue.append(href)
           open("out/pages-user.txt", "w").write("\n".join(pages))
 
-          # 4) JS/CSS, которые подключают эти страницы.
+          # 4) JS/CSS, которые подключают эти страницы, и модули кабинета, которые он грузит по требованию
+          #    (window.ULX_MODULES / "compose":"/js/cabinet-compose.min.js…": подача, сделки, кошелёк, AI-импорт…).
           assets = set()
+          for folder in ("guest", "user"):
+              for fn in os.listdir(f"out/{folder}"):
+                  t = open(f"out/{folder}/{fn}").read()
+                  for a in re.findall(r'"(/js/[A-Za-z0-9_.-]+\.js(?:\?[^"]*)?)"', t):
+                      assets.add(BASE + a)
           for folder in ("guest", "user"):
               for fn in os.listdir(f"out/{folder}"):
                   t = open(f"out/{folder}/{fn}").read()
