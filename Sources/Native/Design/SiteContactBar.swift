@@ -15,6 +15,9 @@ import UIKit
      гаранта (no_escrow); иначе A пуста — «Связаться» / «Чат, звонок или WhatsApp».
  «Предложить цену» и «Связаться» открывают нативный чат с продавцом (ЧатЦель.продавец) — ответ на торг сайт тоже шлёт в
  чат; без нативной отправки — страницу объявления сайта. Гарант живёт только на сайте — его кнопка открывает страницу.
+ Этап 38 (Config.чатОбъявления): как у сайта — чат объявления chat.php (ЧатЦель.объявление): «Предложить цену» —
+ mkOfferOpen, то есть чат и сразу окно предложения цены; «Связаться» и круглая кнопка чата — mkChatOpen. Выключен —
+ прежний диалог dm.php.
 
  ЗВОНОК И WHATSAPP — ТЕМ ЖЕ ЗАПРОСОМ, ЧТО САЙТ. mkContactGo → mkRevealCall / mkRevealWa → mkGetContact:
  fetch(_MKB+"marketplace.php?contact="+id, {method:"POST", body: JSON.stringify({csrf:_MKP_CSRF})}), _MKB = "/" (_ULX_BASE
@@ -96,13 +99,24 @@ struct ПанельСвязиСайта: View {
         return ЧатЦель.продавец(id: продавец, имя: товар.продавец ?? "", объявление: товар.id)
     }
 
+    /// Этап 38: куда ведёт кнопка чата — чат объявления сайта (chat.php) или, без него, диалог dm.php. предложить — это
+    /// «Предложить цену»: чат откроется с окном предложения, как mkOfferOpen.
+    private func цельЧата(предложить: Bool) -> ЧатЦель? {
+        if Config.нативныйЧат && Config.чатОбъявления {
+            return ЧатЦель.объявление(товар, предложить: предложить)
+        }
+        return чат
+    }
+
     @ViewBuilder
     private var главнаяЧасть: some View {
         switch главная {
         case .предложитьЦену:
-            кЧату(значок: "tag", заголовок: ListingPageText.т("offer"), подпись: ListingPageText.т("offer_sub"))
+            кЧату(значок: "tag", заголовок: ListingPageText.т("offer"), подпись: ListingPageText.т("offer_sub"),
+                  предложить: true)
         case .связаться:
-            кЧату(значок: "message", заголовок: ListingPageText.т("contact"), подпись: ListingPageText.т("contact_sub"))
+            кЧату(значок: "message", заголовок: ListingPageText.т("contact"), подпись: ListingPageText.т("contact_sub"),
+                  предложить: false)
         case .гарант(let ключ):
             Button {
                 if let адрес = товар.адрес { открыть(адрес) }
@@ -116,8 +130,8 @@ struct ПанельСвязиСайта: View {
 
     /// «Предложить цену» / «Связаться»: нативный чат, без него — страница объявления на сайте.
     @ViewBuilder
-    private func кЧату(значок: String, заголовок: String, подпись: String) -> some View {
-        if let цель = чат {
+    private func кЧату(значок: String, заголовок: String, подпись: String, предложить: Bool) -> some View {
+        if let цель = цельЧата(предложить: предложить) {
             NavigationLink(value: цель) {
                 ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
             }
@@ -197,7 +211,7 @@ struct ПанельСвязиСайта: View {
             .frame(width: 44, height: 44)
             .background(Color.white.opacity(0.16), in: Circle())
             .contentShape(Circle())
-        if let цель = чат {
+        if let цель = цельЧата(предложить: false) {
             NavigationLink(value: цель) { значок }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
                 .accessibilityLabel(ListingPageText.т("chat"))

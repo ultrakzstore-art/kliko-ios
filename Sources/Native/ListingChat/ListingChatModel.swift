@@ -1,0 +1,512 @@
+import SwiftUI
+import UIKit
+
+/**
+ ЧАТ ПО ОБЪЯВЛЕНИЮ — СОСТОЯНИЕ ЭКРАНА (этап 38, владелец 25.09.2026: «почти 100% похоже на сайт»).
+
+ Как виджет чата страницы объявления сайта (#mk-chat-scrim, js/marketplace.min.js):
+   · открыть — GET widget_data (mkChatOpen): продавец, товар для шапки, переписка, статус, номер чата, блокировка,
+     согласованная цена; переписки нет — приветствие ассистента, как у сайта;
+   · написать — своё облако сразу и «…», пока ассистент отвечает (mkChatSendNow); ok — ответ ассистента облаком, статус
+     seller_active / hot_lead / escalated («Зову продавца — он скоро подключится»); blocked — строка ввода уходит, внизу
+     слова сайта; need auth / verify / paid — окно .mk-chat-gate со словами сайта; иной отказ или нет связи — текст
+     возвращается в поле, под ним «Сообщение не отправлено… (код)», как у переписки этапа 3;
+   · новое — опросом раз в три секунды, пока экран открыт (владелец: «как dm»): GET poll с since = count прошлого ответа
+     (первый раз -1 — сервер отдаёт всё); error «access» или статус closed — опрос кончается, как у сайта;
+   · «Предложить цену» — mkOfferSend: текст сайта с суммой и offer {price, method: "cash", term, pickup, ship_by_buyer},
+     force_escalate; ok — чат перечитывается (mkChatOpen(pid, "")), нет — текст остаётся в поле (mkChatOpen(pid, текст));
+   · «Позвать продавца» — mkChatCallSeller: «Хочу пообщаться с продавцом» с force_escalate.
+ Подкрепить деньгами, отозвать предложение, принять или отклонить встречную цену и оформить сделку здесь нельзя: это
+ деньги — на сайте (кнопка открывает объявление там). На сайт пишется только по нажатию, один запрос за раз, без повторов.
+ Гостю, как и чату этапа 3, запрос не шлём: сразу окно входа. Всё — в памяти экрана: ушёл с экрана — ничего не осталось.
+ */
+@MainActor
+final class МодельЧатаОбъявления: ObservableObject {
+    /// Окно .mk-chat-gate в конце переписки: текст сайта и куда ведёт кнопка.
+    enum Барьер: Equatable {
+        case вход(String)
+        case верификация(String)
+        /// Лимит ассистента — только текст, без кнопки (подписку внутри приложения не предлагаем).
+        case лимит(String)
+    }
+
+    let товар: Listing
+    /// Открыт кнопкой «Предложить цену» — после загрузки сразу окно предложения, как mkOfferOpen сайта.
+    let предложить: Bool
+
+    @Published private(set) var загружено = false
+    /// Чат не открылся: «Не удалось загрузить чат» или «Нет соединения» (mkChatOpen сайта).
+    @Published private(set) var сбой: String?
+    @Published private(set) var сообщения: [СообщениеЧатаОбъявления] = []
+    /// status: ai (по умолчанию), hot_lead, seller_active, closed.
+    @Published private(set) var статус = ""
+    @Published private(set) var продавецИмя = ""
+    @Published private(set) var продавецID = ""
+    @Published private(set) var товарЧата: ЧатОбъявленияAPI.Товар?
+    @Published private(set) var заблокирован = false
+    /// blocked_by_me — заблокировал я (иначе продавец ограничил общение).
+    @Published private(set) var заблокировалЯ = false
+    /// agreed_price — цена, о которой договорились; 0 — нет.
+    @Published private(set) var согласовано = 0
+    @Published private(set) var сделкаИдёт = false
+    @Published private(set) var сделка = ""
+    @Published private(set) var безГаранта = false
+    /// seller_presence — «был 5 минут назад» и т.п., как пришло.
+    @Published private(set) var присутствие = ""
+    @Published private(set) var прочитаноПродавцом = ""
+    @Published private(set) var продавецНаСвязи = false
+    /// typing опроса — у продавца три точки.
+    @Published private(set) var печатает = false
+    /// «…» после своего сообщения, пока ассистент отвечает (#mk-ctyping сайта).
+    @Published private(set) var ждёмОтвет = false
+    @Published private(set) var отправляем = false
+    @Published private(set) var неОтправлено = false
+    /// Код причины под полем, как у этапа 3: network, HTTP 500, format или error сайта.
+    @Published private(set) var причина = ""
+    @Published private(set) var барьер: Барьер?
+    /// Опрос не дошёл — в шапке «Нет соединения — переподключение…» (mkChatOffline).
+    @Published private(set) var нетСвязи = false
+    /// «Позвать продавца» в пути — кнопка спрятана, как у сайта до ответа.
+    @Published private(set) var зовём = false
+    /// «Запросить разблокировку» уже ушло в этот раз — второй раз не шлём.
+    @Published private(set) var просьбаУшла = false
+    @Published private(set) var просимРазблокировать = false
+    /// Плашка внизу (.mk-toast): блокировка, «Запрос на разблокировку отправлен продавцу», «Нет соединения».
+    @Published private(set) var плашка: СинхронИзбранного.Сообщение?
+    @Published var черновик = ""
+
+    /// chat_id — пока его нет (ни одного сообщения), опрашивать нечего.
+    private(set) var чат: String?
+    /// count прошлого ответа опроса — since следующего; -1 — всё сначала.
+    private var счёт = -1
+    private var опросОкончен = false
+    /// Растёт при каждой смене чата и свежей загрузке: ответ опроса, ушедшего раньше, её не перебивает.
+    private var поколение = 0
+    /// Окно предложения уже предлагали открыть — повторно само не открывается.
+    private var предложениеПоказано = false
+
+    init(товар: Listing, предложить: Bool) {
+        self.товар = товар
+        self.предложить = предложить
+    }
+
+    /// Текст для строки ввода и сообщения сайту — на языке сайта: mkOfferSend и mkChatCallSeller пишут по-русски, какой
+    /// бы язык ни был у страницы, — продавец видит то же, что увидел бы с сайта.
+    private static let текстПозвать = "Хочу пообщаться с продавцом"
+
+    // MARK: - Загрузка и опрос
+
+    /// Открыть чат: GET widget_data.
+    func начать() async {
+        let итог = await ЧатОбъявленияAPI.загрузить(товар.id)
+        switch итог {
+        case .готово(let снимок):
+            сбой = nil
+            применить(снимок, начало: true)
+            установитьЧат(снимок.чат, статус: снимок.статус ?? "")
+        case .нуженВход:
+            сбой = nil
+            if сообщения.isEmpty { сообщения = [приветствие] }
+            барьер = .вход(ListingChatText.т("gate_ai"))
+        case .отказ:
+            сбой = ListingChatText.т("load_failed")
+        case .сеть:
+            сбой = ListingChatText.т("no_conn")
+        }
+        загружено = true
+    }
+
+    /// «Повторить» после сбоя загрузки.
+    func повторить() async {
+        сбой = nil
+        загружено = false
+        await начать()
+    }
+
+    /// Перечитать чат (mkChatReload): после предложения цены и снятия блокировки.
+    func перезагрузить() async {
+        let взятое = поколение
+        guard case .готово(let снимок) = await ЧатОбъявленияAPI.загрузить(товар.id), взятое == поколение else { return }
+        применить(снимок, начало: false)
+        установитьЧат(снимок.чат, статус: снимок.статус ?? "")
+    }
+
+    /// «Потяни — обновится»: по номеру чата — history (mkChatRefetch), без номера — widget_data.
+    func обновить() async {
+        guard let номер = чат else {
+            await перезагрузить()
+            return
+        }
+        let взятое = поколение
+        guard case .готово(let снимок) = await ЧатОбъявленияAPI.история(номер), взятое == поколение else { return }
+        применить(снимок, начало: false)
+        if let новый = снимок.статус, !новый.isEmpty { статус = новый }
+    }
+
+    /// Опрос, пока экран открыт (задача .task отменяется при уходе): раз в три секунды, после обрыва — через четыре-пять.
+    func опрос() async {
+        while !Task.isCancelled {
+            guard let номер = чат, !опросОкончен else {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                continue
+            }
+            let взятое = поколение
+            let итог = await ЧатОбъявленияAPI.опрос(номер, после: счёт)
+            if Task.isCancelled { return }
+            var пауза: UInt64 = 3_000_000_000
+            if взятое == поколение {
+                switch итог {
+                case .готово(let снимок):
+                    нетСвязи = false
+                    if let новый = снимок.счёт { счёт = новый }
+                    применить(снимок, начало: false)
+                    if let новый = снимок.статус, !новый.isEmpty { статус = новый }
+                    печатает = снимок.печатает
+                    if снимок.статус == "closed" { опросОкончен = true }
+                case .закрыт:
+                    опросОкончен = true
+                case .отказ:
+                    пауза = 5_000_000_000
+                case .сеть:
+                    нетСвязи = true
+                    пауза = 4_000_000_000
+                }
+            }
+            try? await Task.sleep(nanoseconds: пауза)
+        }
+    }
+
+    /// Открыть окно предложения сразу после загрузки («Предложить цену»)? Один раз; не у снятого, не при блокировке.
+    /// Гостю окна нет — сразу окно входа со словами сайта.
+    func открытьПредложениеСразу() async -> Bool {
+        guard предложить, !предложениеПоказано, Config.чатОбъявления else { return false }
+        предложениеПоказано = true
+        guard сбой == nil, барьер == nil, !заблокирован, !(товарЧата?.снято ?? false) else { return false }
+        if await гость(ListingChatText.т("gate_ai")) { return false }
+        return true
+    }
+
+    // MARK: - Запись (только по нажатию)
+
+    /// «Отправить» (mkChatSendNow).
+    func отправить() async {
+        let текст = черновик.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Config.чатОбъявления, !текст.isEmpty, !отправляем, !заблокирован else { return }
+        отправляем = true
+        неОтправлено = false
+        барьер = nil
+        let было = черновик
+        черновик = ""
+        defer { отправляем = false }
+        if await гость(ListingChatText.т("gate_ai")) {
+            черновик = было
+            return
+        }
+        let своё = СообщениеЧатаОбъявления.доОтвета(роль: "buyer", текст: текст)
+        сообщения.append(своё)
+        ждёмОтвет = статус != "seller_active" && статус != "hot_lead"
+        let итог = await ЧатОбъявленияAPI.написать(объявление: товар.id, текст: текст, предложение: nil, позвать: false)
+        ждёмОтвет = false
+        if case .готово(let ответ) = итог {
+            принять(ответ)
+        } else {
+            убрать(своё)
+            черновик = было
+            отказ(итог, запасной: ListingChatText.т("gate_ai"))
+        }
+    }
+
+    /// «Отправить предложение» в окне предложения (mkOfferSend). Окно уже закрыто — как mkOfferClose() до запроса.
+    func предложитьЦену(_ цена: Int, процент: Int, забрать: Bool) async {
+        guard Config.чатОбъявления, цена > 0, !отправляем, !заблокирован else { return }
+        let текст = Self.текстПредложения(товар: товар, цена: цена, процент: процент, забрать: забрать)
+        отправляем = true
+        неОтправлено = false
+        барьер = nil
+        defer { отправляем = false }
+        if await гость(ListingChatText.т("gate_ai")) {
+            черновик = текст
+            return
+        }
+        let своё = СообщениеЧатаОбъявления.доОтвета(роль: "buyer", текст: текст)
+        сообщения.append(своё)
+        let предложение = ЧатОбъявленияAPI.Предложение(цена: цена, забрать: забрать,
+                                                       доставкаСам: забрать && товар.доставкаБесплатно)
+        let итог = await ЧатОбъявленияAPI.написать(объявление: товар.id, текст: текст, предложение: предложение,
+                                                  позвать: true)
+        if case .готово(let ответ) = итог {
+            принять(ответ)
+            /* mkChatOpen(pid, ""): сайт перечитывает чат — карточка «Ваше предложение» приходит от него. */
+            await перезагрузить()
+        } else {
+            убрать(своё)
+            черновик = текст
+            отказ(итог, запасной: ListingChatText.т("gate_ai"))
+        }
+    }
+
+    /// «Позвать продавца» (mkChatCallSeller).
+    func позватьПродавца() async {
+        guard Config.чатОбъявления, !зовём, !отправляем, !заблокирован else { return }
+        зовём = true
+        барьер = nil
+        defer { зовём = false }
+        if await гость(ListingChatText.т("gate_seller")) { return }
+        let итог = await ЧатОбъявленияAPI.написать(объявление: товар.id, текст: Self.текстПозвать, предложение: nil,
+                                                  позвать: true)
+        switch итог {
+        case .готово(let ответ):
+            сообщения.append(.доОтвета(роль: "system", текст: ListingChatText.т("called")))
+            if let ии = ответ.ответИИ, !ии.isEmpty { сообщения.append(.доОтвета(роль: "ai", текст: ии)) }
+            let новый = ответ.статус ?? ""
+            установитьЧат(ответ.чат, статус: новый.isEmpty ? "hot_lead" : новый)
+        case .нуженВход:
+            барьер = .вход(ListingChatText.т("gate_seller"))
+        case .нужнаВерификация:
+            барьер = .верификация(ListingChatText.т("gate_verify_free"))
+        case .заблокирован(let слова):
+            заблокирован = true
+            показать(слова ?? ListingChatText.т("blocked_toast"))
+        case .лимит(let слова):
+            барьер = .лимит(слова ?? ListingChatText.т("gate_paid"))
+        case .отказ:
+            сообщения.append(.доОтвета(роль: "system", текст: ListingChatText.т("call_failed")))
+        case .сеть:
+            показать(ListingChatText.т("no_conn"))
+        }
+    }
+
+    /// «Запросить разблокировку» (продавец ограничил общение) — POST request_unblock, один раз.
+    func попроситьРазблокировать() async {
+        guard Config.чатОбъявления, !продавецID.isEmpty, !просьбаУшла, !просимРазблокировать else { return }
+        просимРазблокировать = true
+        defer { просимРазблокировать = false }
+        switch await ЧатОбъявленияAPI.попроситьРазблокировать(продавецID) {
+        case .готово:
+            просьбаУшла = true
+            показать(ListingChatText.т("unblock_req_sent"))
+        case .отказ(let слова):
+            показать(слова ?? ListingChatText.т("failed"))
+        case .сеть:
+            показать(ListingChatText.т("no_conn"))
+        }
+    }
+
+    /// «Разблокировать» (заблокировал я) — тем же запросом этапа 37 (subs.php?action=unblock): его плашка и очередь.
+    /// Экран сам перечитает чат, когда блокировка снимется (ЭкранЧатаОбъявления следит за ДействияСПродавцом).
+    func разблокировать() {
+        guard Config.жалобы, !продавецID.isEmpty else { return }
+        let действия = ДействияСПродавцом.shared
+        /* Этап 37 знает о блокировке из subs.php?action=status; здесь её сказал сам чат (blocked_by_me) — передаём, чтобы
+           его переключатель снимал, а не ставил блокировку. */
+        действия.статусСайта(продавецID, заблокирован: true)
+        действия.переключитьБлокировку(продавецID, имя: продавецИмя)
+    }
+
+    // MARK: - Что показать
+
+    /// Номер последнего своего сообщения — под ним «✓ Отправлено» / «✓✓ Прочитано» (mkChatRender).
+    var последнееМоё: String? {
+        сообщения.last(where: { $0.моё && !$0.местное })?.id
+    }
+
+    /// Прочитано ли продавцом: seller_read_at не раньше at сообщения (Date.parse у сайта).
+    func прочитано(_ с: СообщениеЧатаОбъявления) -> Bool {
+        guard let когдаПрочитал = ВремяЧатаОбъявления.дата(прочитаноПродавцом),
+              let когдаНаписал = ВремяЧатаОбъявления.дата(с.когда) else { return false }
+        return когдаПрочитал >= когдаНаписал
+    }
+
+    /// Предложения и встречные цены до последнего своего предложения — «Заменено новым предложением» (_replaced сайта).
+    var заменённые: Set<String> {
+        guard let последнее = сообщения.lastIndex(where: { $0.вид == "offer" && $0.моё }) else { return [] }
+        var итог: Set<String> = []
+        for (место, с) in сообщения.enumerated() where место < последнее {
+            if (с.вид == "offer" && с.моё) || с.вид == "counter" { итог.insert(с.id) }
+        }
+        return итог
+    }
+
+    /// Подпись под именем в шапке (#mk-chat-sub).
+    var подписьШапки: String {
+        if нетСвязи { return ListingChatText.т("reconnecting") }
+        switch статус {
+        case "seller_active":
+            return String(format: ListingChatText.т("sub_seller"),
+                          присутствие.isEmpty ? ListingChatText.т("online_now") : присутствие)
+        case "hot_lead":
+            return ListingChatText.т("sub_soon") + (присутствие.isEmpty ? "" : " · " + присутствие)
+        default:
+            let имя = продавецИмя.isEmpty ? ListingChatText.т("seller_lc") : продавецИмя
+            return String(format: ListingChatText.т("sub_ai"), имя)
+        }
+    }
+
+    /// «Позвать продавца» видна, пока продавец не позван и не в чате (#mk-chat-callbar).
+    var можноПозвать: Bool {
+        загружено && сбой == nil && !заблокирован && !зовём && статус != "hot_lead" && статус != "seller_active"
+            && статус != "closed" && !(товарЧата?.снято ?? false)
+    }
+
+    /// Нажали «Войти» в плашке или окне — страница входа сайта в той же обёртке.
+    static var адресВхода: URL? { Config.страницаСайта("cabinet.php") }
+
+    // MARK: - Внутреннее
+
+    /// Сообщение сайта, когда переписки ещё нет (mkChatOpen: role ai).
+    private var приветствие: СообщениеЧатаОбъявления {
+        СообщениеЧатаОбъявления(id: "greeting", роль: "ai", текст: ListingChatText.т("greeting"), вид: "", тип: "",
+                                когда: "", изTelegram: false, широта: nil, долгота: nil, фото: nil,
+                                предложение: nil, встречная: nil)
+    }
+
+    /// Снимок сайта → экран (mkChatMeta и mkChatRender). Переписку заменяем целиком, как innerHTML у сайта; пустую —
+    /// только при открытии (тогда — приветствие), а пустой ответ опроса прежнюю не стирает.
+    private func применить(_ снимок: ЧатОбъявленияAPI.Снимок, начало: Bool) {
+        if let v = снимок.заблокирован {
+            заблокирован = v
+            заблокировалЯ = снимок.заблокировалЯ ?? false
+        }
+        if let v = снимок.сделкаИдёт { сделкаИдёт = v }
+        if let v = снимок.сделка { сделка = v }
+        if let v = снимок.согласовано { согласовано = v }
+        if let v = снимок.безГаранта { безГаранта = v }
+        if let v = снимок.присутствие { присутствие = v }
+        if let v = снимок.прочитано, !v.isEmpty { прочитаноПродавцом = v }
+        if let v = снимок.онлайн { продавецНаСвязи = v }
+        if let п = снимок.продавец {
+            if !п.имя.isEmpty { продавецИмя = п.имя }
+            if !п.id.isEmpty { продавецID = п.id }
+        }
+        if let т = снимок.товар {
+            товарЧата = т
+            if продавецID.isEmpty && !т.продавец.isEmpty { продавецID = т.продавец }
+        }
+        if продавецID.isEmpty, let свой = товар.продавецID { продавецID = свой }
+        if продавецИмя.isEmpty, let имя = товар.продавец { продавецИмя = имя }
+        let пришли = снимок.сообщения ?? []
+        if !пришли.isEmpty {
+            if пришли != сообщения { сообщения = пришли }
+        } else if начало {
+            сообщения = [приветствие]
+        }
+    }
+
+    /// Номер чата и статус из ответа (mkChatPoll): новый номер — опрос с начала (since -1).
+    private func установитьЧат(_ номер: String?, статус новый: String) {
+        if !новый.isEmpty { статус = новый }
+        if let номер, !номер.isEmpty, номер != чат {
+            чат = номер
+            счёт = -1
+            поколение += 1
+            опросОкончен = false
+        }
+        if статус == "closed" { опросОкончен = true }
+    }
+
+    /// ok ответа send: ответ ассистента облаком; позвал продавца — строка «Зову продавца…» (mkChatSendNow).
+    private func принять(_ ответ: ЧатОбъявленияAPI.ОтветОтправки) {
+        if let ии = ответ.ответИИ, !ии.isEmpty { сообщения.append(.доОтвета(роль: "ai", текст: ии)) }
+        let новый = ответ.статус ?? ""
+        if новый != "seller_active" && ответ.позвали {
+            сообщения.append(.доОтвета(роль: "system", текст: ListingChatText.т("escalated")))
+            установитьЧат(ответ.чат, статус: "hot_lead")
+        } else {
+            установитьЧат(ответ.чат, статус: новый)
+        }
+    }
+
+    /// Отказ send словами сайта (mkChatSendNow): blocked — поле уходит и плашка; need — окно; прочее — код под полем.
+    private func отказ(_ итог: ЧатОбъявленияAPI.ИтогОтправки, запасной: String) {
+        switch итог {
+        case .готово:
+            break
+        case .заблокирован(let слова):
+            заблокирован = true
+            показать(слова ?? ListingChatText.т("blocked_toast"))
+        case .нуженВход(let слова):
+            барьер = .вход(слова ?? запасной)
+        case .нужнаВерификация(let слова):
+            барьер = .верификация(слова ?? ListingChatText.т("gate_verify"))
+        case .лимит(let слова):
+            барьер = .лимит(слова ?? ListingChatText.т("gate_paid"))
+        case .отказ(let код):
+            неОтправлено = true
+            причина = код
+        case .сеть:
+            неОтправлено = true
+            причина = "network"
+        }
+    }
+
+    /// Гость (страница сказала: не вошёл) — окно входа без запроса. Страница не загружена — решит сайт.
+    private func гость(_ текст: String) async -> Bool {
+        let страница = await SiteSession.состояние()
+        guard страница.вошёл == false else { return false }
+        барьер = .вход(текст)
+        return true
+    }
+
+    private func убрать(_ с: СообщениеЧатаОбъявления) {
+        сообщения.removeAll { $0.id == с.id }
+    }
+
+    /// Плашка на 2,6 с, как toast сайта.
+    private func показать(_ текст: String) {
+        let новое = СинхронИзбранного.Сообщение(текст: текст, войти: false)
+        плашка = новое
+        UIAccessibility.post(notification: .announcement, argument: текст)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            if self.плашка?.id == новое.id { self.плашка = nil }
+        }
+    }
+
+    /**
+     Текст предложения — ровно mkOfferSend: «Здравствуйте! Интересует «…» (цена … ₸). Готов купить за … ₸ (-N%). Договоримся?»;
+     «(-N%)» — только если цену выбрали ползунком, а не своей суммой; «Заберу сам.» или «Заберу или оплачу доставку сам.» —
+     если отмечено. По-русски, как у сайта при любом языке страницы.
+     */
+    static func текстПредложения(товар: Listing, цена: Int, процент: Int, забрать: Bool) -> String {
+        let база = Int((товар.price ?? 0).rounded())
+        let скидка = процент > 0 ? " (-\(процент)%)" : ""
+        var текст = "Здравствуйте! Интересует «" + товар.title + "» (цена " + Self.число(база) + " ₸). Готов купить за "
+            + Self.число(цена) + " ₸" + скидка + ". Договоримся?"
+        if забрать {
+            текст += товар.доставкаБесплатно ? " Заберу или оплачу доставку сам." : " Заберу сам."
+        }
+        return текст
+    }
+
+    /// Число с разрядами, как fmt() сайта (toLocaleString("ru-KZ")): «12 500».
+    static func число(_ n: Int) -> String {
+        формат.string(from: NSNumber(value: n)) ?? String(n)
+    }
+
+    private static let формат: NumberFormatter = {
+        let ф = NumberFormatter()
+        ф.numberStyle = .decimal
+        ф.groupingSeparator = "\u{00A0}"
+        ф.maximumFractionDigits = 0
+        return ф
+    }()
+}
+
+/// Время сообщений чата объявления: ISO («2026-09-25T14:05:12+05:00») или «2026-09-25 14:05:12», как понимает Date.parse.
+enum ВремяЧатаОбъявления {
+    static func дата(_ строка: String) -> Date? {
+        let s = строка.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: s) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: s) { return d }
+        /* Без пояса — оба времени (сообщения и «прочитано») читаются одинаково, и сравнение верно при любом поясе. */
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "en_US_POSIX")
+        ф.timeZone = TimeZone(identifier: "UTC")
+        ф.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return ф.date(from: String(s.replacingOccurrences(of: "T", with: " ").prefix(19)))
+    }
+}

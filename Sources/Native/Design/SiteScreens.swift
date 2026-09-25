@@ -190,10 +190,12 @@ struct ПолеПерепискиСайта: View {
     let можно: Bool
     let отправить: () -> Void
     var фокус: FocusState<Bool>.Binding
+    /// Этап 38: у чата объявления своя подсказка сайта — «Напишите сообщение…» (#mk-chat-inp). nil — «Сообщение…» этапа 3.
+    var подсказка: String? = nil
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField(ChatText.т("placeholder"), text: $текст, axis: .vertical)
+            TextField(подсказка ?? ChatText.т("placeholder"), text: $текст, axis: .vertical)
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(1...5)
