@@ -4,7 +4,7 @@
 const olx = require('./olx');
 const cats = require('./categories');
 const sources = require('./sources');
-const { getHtml, parseDetail } = require('./sources/page');
+const { getHtml, parseDetail, postedFromCode } = require('./sources/page');
 
 // Номер объявления (или ссылка на него) — пробуем все известные способы открыть его по номеру:
 // какой из них видит объявления, которые ещё на модерации. Ответ OLX показываем как есть.
@@ -153,6 +153,23 @@ async function kaspiProbe(id) {
   } catch (e) {
     console.log(`\nВитрина: ошибка ${e.message}`);
   }
+  // Даты в коде страницы: какие поля есть и что в них — по ним видно точное время подачи.
+  try {
+    const html = await getHtml(`https://obyavleniya.kaspi.kz/a/${id}/`);
+    if (html) {
+      const text = html.replace(/\\"/g, '"');
+      const found = [...text.matchAll(/"([A-Za-z_]{2,40})"\s*:\s*"?(\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|1[5-9]\d{8}(?:\d{3})?)"?/g)]
+        .map((m) => `${m[1]} = ${m[2]}`);
+      const onPage = (/(\d{2}\.\d{2}\.20\d{2})(?:[^\d]{1,5}(\d{1,2}:\d{2}))?/.exec(html.replace(/<[^>]+>/g, ' ')) || []).slice(1).filter(Boolean).join(' ');
+      const at = postedFromCode(html);
+      console.log(`\nДата на экране: ${onPage || 'не видна'}`);
+      console.log(`Даты в коде страницы: ${found.length ? '' : 'нет'}`);
+      [...new Set(found)].slice(0, 10).forEach((f) => console.log(`  ${f}`));
+      console.log(`Точное время подачи: ${at ? new Date(at).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' }) + ' (по Алматы)' : 'в коде не нашлось'}`);
+    }
+  } catch (e) {
+    console.log(`\nДаты: ошибка ${e.message}`);
+  }
   try {
     const d = await sources.get('kaspi').fetchById(id);
     console.log(d
@@ -212,7 +229,7 @@ async function kaspiProbe(id) {
       console.log(`${src.title}: в выдаче ${ads.length} объявлений`);
       if (src.key === 'kaspi') {
         const s = sources.kaspiSortInUse();
-        console.log(s ? `Сортировка: ${s[0]}=${s[1]}` : 'Сортировка: по умолчанию у Kaspi — сначала новые');
+        console.log(s ? `Сортировка «Самые новые»: нашлась — ${s[0]}=${s[1]}` : 'Сортировка «Самые новые» на странице не нашлась — выберите её на сайте и пришлите ссылку из адресной строки');
       }
       ads.slice(0, 8).forEach((a) => console.log(`  ${a.id} · ${a.url}`));
       const top = [...ads].sort((a, b) => b.id - a.id)[0];

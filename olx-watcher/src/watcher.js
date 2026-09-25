@@ -362,7 +362,10 @@ class Watcher {
           // Поднятое старое тоже всплывает наверх витрины. Новинка — если дата подачи свежая
           // (до 3 ч), а без даты — если номер не сильно меньше края на момент запуска (запас —
           // на вышедшие с модерации позже соседей).
-          const old = ad.createdAt ? Date.now() - ad.createdAt > LATE_MS : a.id < st.startEdge - 500;
+          // Только день (без времени) — старое, если раньше вчерашнего.
+          const old = ad.createdAt ? Date.now() - ad.createdAt > LATE_MS
+            : ad.postedDay ? Date.now() - ad.postedDay > 48 * 3600_000
+              : a.id < st.startEdge - 500;
           if (old) { this.trace(a.id, 'витрина Kaspi: поднятое старое — пропуск'); continue; }
           this.trace(a.id, `витрина Kaspi: увидели${page ? ` (${ad.city || page})` : ''}`);
           for (const s of subs) {

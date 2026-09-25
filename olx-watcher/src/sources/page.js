@@ -86,7 +86,9 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     : /(^|[>\s])(Агент|Специалист|Агентство недвижимости|Риэлтор|Риелтор)([<\s,.]|$)/i.test(html) ? false : null;
   let posted = Date.parse(product?.datePosted || product?.datePublished || offer?.validFrom
     || meta(html, 'article:published_time')[0] || (/itemprop=["']datePublished["'][^>]*content=["']([^"']+)/i.exec(html) || [])[1] || '');
-  if (!Number.isFinite(posted)) posted = postedFromText(html);
+  if (!Number.isFinite(posted)) posted = postedFromCode(html) ?? postedFromText(html);
+  // Только дата без времени (у Kaspi — «25.09.2026»): время подачи не выдумываем, храним день.
+  const postedDay = Number.isFinite(posted) && posted ? null : dayFromText(html);
   return {
     id,
     url,
@@ -98,6 +100,7 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     region: '',
     categoryId: null,
     createdAt: Number.isFinite(posted) ? posted : null,
+    postedDay,
     status: '',
     promoted: false,
     business: false,
@@ -180,7 +183,8 @@ function postedFromText(html) {
   const s = at[2].toLowerCase();
   const almaty = (y, mo, d, h = 0, mi = 0) => Date.UTC(y, mo, d, h - 5, mi);
   const hm = /(\d{1,2}):(\d{2})/.exec(s);
-  const [h, mi] = hm ? [Number(hm[1]), Number(hm[2])] : [0, 0];
+  if (!hm) return null;   // без времени — это только день, см. dayFromText
+  const [h, mi] = [Number(hm[1]), Number(hm[2])];
   const now = new Date(Date.now() + 5 * 3600_000);   // «сейчас» по Алматы
   if (/сегодня|вчера/.test(s)) {
     const t = almaty(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, mi);
@@ -196,6 +200,35 @@ function postedFromText(html) {
   return null;
 }
 
+// Точное время подачи из кода страницы: на экране может быть только «25.09.2026», а в данных
+// страницы (JSON в <script>) — «createdAt»: "2026-09-25T14:02:11+05:00" или число секунд.
+// Берём поля создания/публикации, не изменения и не поднятия.
+const CODE_DATE_KEYS = 'created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded';
+function postedFromCode(html) {
+  const text = String(html).replace(/\\"/g, '"');
+  const re = new RegExp(`"(${CODE_DATE_KEYS})"\\s*:\\s*"?(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?|\\d{10}(?:\\d{3})?)"?`, 'i');
+  const m = re.exec(text);
+  if (!m) return null;
+  let t;
+  if (/^\d+$/.test(m[2])) t = Number(m[2]) * (m[2].length === 10 ? 1000 : 1);
+  else {
+    const iso = m[2].replace(' ', 'T');
+    // Без пояса — время алматинское.
+    t = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(iso) ? iso : `${iso}+05:00`);
+  }
+  return Number.isFinite(t) && Math.abs(Date.now() - t) < 400 * 86400_000 ? t : null;
+}
+
+// День публикации без времени: первая дата вида 25.09.2026 на странице (не в описании — его
+// обычно нет в тексте до даты). Полночь по Алматы.
+function dayFromText(html) {
+  const text = String(html).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  const m = /(?:^|[^\d.])(\d{2})\.(\d{2})\.(20\d{2})(?![\d.])/.exec(text);
+  if (!m) return null;
+  const t = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), -5, 0);
+  return Math.abs(Date.now() - t) < 400 * 86400_000 ? t : null;
+}
+
 function decode(s) {
   return String(s)
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&')
@@ -203,4 +236,4 @@ function decode(s) {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
 
-module.exports = { postedFromText, getHtml, idsFromListing, parseDetail, meta, jsonLd, HEADERS };
+module.exports = { postedFromCode, dayFromText, postedFromText, getHtml, idsFromListing, parseDetail, meta, jsonLd, HEADERS };

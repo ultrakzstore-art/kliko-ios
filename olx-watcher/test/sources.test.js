@@ -265,7 +265,12 @@ test('карточка без JSON-LD: цена из блока цены, дат
   const { postedFromText } = require('../src/sources/page');
   const today = postedFromText('<span>Размещено: сегодня, 09:15</span>');
   assert.ok(Math.abs(today - Date.now()) < 26 * 3600_000);
-  assert.ok(postedFromText('<p>Добавлено 3 августа 2026</p>'));
+  assert.strictEqual(postedFromText('<p>Добавлено 3 августа 2026</p>'), null, 'без времени — не выдумываем');
+  const { dayFromText } = require('../src/sources/page');
+  assert.strictEqual(new Date(dayFromText('<span class="date">25.09.2026</span>')).toISOString(), '2026-09-24T19:00:00.000Z', 'полночь по Алматы');
+  const onlyDay = parseDetail('<meta property="og:title" content="X"><span>25.09.2026</span>', { id: 1, url: 'https://obyavleniya.kaspi.kz/a/1/' });
+  assert.strictEqual(onlyDay.createdAt, null);
+  assert.ok(onlyDay.postedDay);
 });
 
 test('витрина Kaspi: при запуске только запоминаем, новое с витрины — подходящим поискам; край для турбо', async () => {
@@ -329,4 +334,15 @@ test('витрина Kaspi: поднятое старое (маленький н
   } finally {
     Object.assign(k, { fetchShowcase: orig.show, fetchDetail: orig.detail });
   }
+});
+
+test('точное время подачи из кода страницы, хоть на экране только дата', () => {
+  const { postedFromCode } = require('../src/sources/page');
+  const iso = postedFromCode('<script>window.__DATA__={"id":123509497,"updatedAt":"2026-09-25T15:00:00","createdAt":"2026-09-25T14:02:11"}</script>');
+  assert.strictEqual(new Date(iso).toISOString(), '2026-09-25T09:02:11.000Z', 'без пояса — Алматы');
+  assert.strictEqual(postedFromCode('{"created_at":1790000000}'), 1790000000 * 1000);
+  assert.strictEqual(postedFromCode('<script>{\\"publishedAt\\":\\"2026-09-25T14:02:11Z\\"}</script>'), Date.parse('2026-09-25T14:02:11Z'));
+  assert.strictEqual(postedFromCode('{"updatedAt":"2026-09-25T15:00:00"}'), null, 'изменение — не подача');
+  const d = parseDetail('<meta property="og:title" content="X"><span>25.09.2026</span><script>{"createdAt":"2026-09-25T14:02:11"}</script>', { id: 1, url: 'https://obyavleniya.kaspi.kz/a/1/' });
+  assert.strictEqual(new Date(d.createdAt).toISOString(), '2026-09-25T09:02:11.000Z');
 });

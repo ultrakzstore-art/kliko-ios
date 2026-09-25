@@ -507,6 +507,7 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
     price && !drop ? (/^[🔁🎁]/u.test(price) ? `<b>${esc(price)}</b>` : `💰 <b>${esc(price)}</b>`) : '',
     place ? `📍 ${esc(place)}` : '',
     ad.createdAt ? `🕒 Подано ${ago(ad.createdAt)} назад · ${fmtTime(ad.createdAt)}`
+      : ad.postedDay ? `📅 Опубликовано ${fmtDay(ad.postedDay)}`
       // Даты на странице нет, но поймано по номеру у самого края — вышло только что.
       : via === 'turbo' ? `🕒 Только что вышло · ${fmtTime(Date.now())}` : '',
     flags.join(' · '),
@@ -533,6 +534,14 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
     .filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== ''))
     .join('\n')
     .slice(0, 4000);
+}
+
+// «сегодня» / «вчера» / 25.09.2026 — по Алматы.
+function fmtDay(ts) {
+  const day = (t) => new Date(t).toLocaleDateString('ru-RU', { timeZone: 'Asia/Almaty' });
+  if (day(ts) === day(Date.now())) return 'сегодня';
+  if (day(ts) === day(Date.now() - 86400_000)) return 'вчера';
+  return day(ts);
 }
 
 function fmtTime(ts) {

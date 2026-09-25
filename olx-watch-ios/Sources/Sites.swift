@@ -165,9 +165,9 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     /// Kaspi: сортировка «сначала новые». Как она зовётся в ссылке, заранее неизвестно — ищем
     /// на первой странице выдачи (ссылка или пункт списка «Сначала новые» / «Новые» / «По дате»).
     /// nil — ещё не искали; ("", "") — искали, не нашлось.
-    /// Kaspi и так «сначала новые» по умолчанию — поиск сортировки выключен (("", "") — «не нужна»).
-    static var kaspiSort: (name: String, value: String)? = ("", "")
-    private static let sortWords = #"(сначала\s+нов|нов(ые|ее|инки)|по\s+дат|свеж|недавн|newest|date)"#
+    static var kaspiSort: (name: String, value: String)?
+    /// По умолчанию у Kaspi — «Рекомендуемые»; нужна «Самые новые». «По дате» и «старые» не берём.
+    private static let sortWords = #"^(?!.*(стар|oldest|asc|возраст)).*(сначала\s+нов|сам(ые|ое)\s+нов|нов(ые|ее|инки)|свеж|недавн|newest)"#
 
     static func findSort(_ html: String) -> (name: String, value: String)? {
         let text = html.replacingOccurrences(of: "&amp;", with: "&")
@@ -382,7 +382,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         if ad.createdAt == nil, let s = meta("article:published_time", in: html).first ?? matches(#"itemprop=["']datePublished["'][^>]*content=["']([^"']+)"#, in: html).first {
             ad.createdAt = parseDate(s)
         }
-        if ad.createdAt == nil { ad.createdAt = postedFromText(html) }
+        if ad.createdAt == nil { ad.createdAt = postedFromCode(html) ?? postedFromText(html) }
         if source == .kaspi {
             ad.crumbs = breadcrumbs(html, url: url)
             // Город Kaspi — из крошек (/astana/…), если его нет в разметке.
@@ -541,6 +541,31 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         s.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
     }
 
+    /// Точное время подачи из кода страницы (JSON в <script>): «createdAt»: "2026-09-25T14:02:11" или
+    /// секунды. На экране может быть только дата — а в данных есть время. Поля изменения/поднятия не берём.
+    static func postedFromCode(_ html: String) -> Date? {
+        let text = html.replacingOccurrences(of: "\\\"", with: "\"")
+        let keys = "created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded"
+        let value = #"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|\d{10}(?:\d{3})?)"#
+        let pattern = "\"(?:" + keys + ")\"" + #"\s*:\s*"?"# + value
+        guard let raw = matches(pattern, in: text).first else { return nil }
+        var date: Date?
+        if raw.allSatisfy(\.isNumber), let n = Double(raw) {
+            date = Date(timeIntervalSince1970: raw.count == 10 ? n : n / 1000)
+        } else {
+            var iso = raw.replacingOccurrences(of: " ", with: "T")
+            if iso.range(of: #"(Z|[+-]\d{2}:?\d{2})$"#, options: .regularExpression) == nil { iso += "+05:00" }   // без пояса — Алматы
+            let f = ISO8601DateFormatter()
+            date = f.date(from: iso)
+            if date == nil {
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                date = f.date(from: iso)
+            }
+        }
+        guard let d = date, abs(d.timeIntervalSinceNow) < 400 * 86400 else { return nil }
+        return d
+    }
+
     /// Дата подачи из текста: «Опубликовано 25.09.2026 в 14:02», «Размещено: сегодня, 09:15», «вчера»,
     /// «3 августа 2026». Время — алматинское.
     static func postedFromText(_ html: String) -> Date? {
@@ -550,10 +575,10 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Almaty") ?? .current
         var c = DateComponents()
-        if let hm = matches(#"(\d{1,2}:\d{2})"#, in: s).first {
-            let p = hm.split(separator: ":")
-            c.hour = Int(p[0]); c.minute = Int(p[1])
-        }
+        // Без времени — только день: время подачи не выдумываем (полночь отсеяла бы новое как старое).
+        guard let hm = matches(#"(\d{1,2}:\d{2})"#, in: s).first else { return nil }
+        let hp = hm.split(separator: ":")
+        c.hour = Int(hp[0]); c.minute = Int(hp[1])
         let now = cal.dateComponents([.year, .month, .day], from: Date())
         if s.contains("сегодня") || s.contains("вчера") {
             c.year = now.year; c.month = now.month; c.day = now.day
