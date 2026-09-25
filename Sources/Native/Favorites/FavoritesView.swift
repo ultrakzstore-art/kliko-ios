@@ -17,6 +17,18 @@ struct FavoritesView: View {
     /// Крупный текст для доступности — сетка в одну колонку, как в ленте (этап 11, ListingCard.сетка).
     @Environment(\.dynamicTypeSize) private var размерТекста
 
+    /// Этап 20: режим «Сравнить» — нажатие на карточку отмечает её, а не открывает.
+    @State private var сравниваем = false
+    /// Отмеченные для сравнения номера — в порядке нажатий: так же встанут и колонки.
+    @State private var отмеченные: [String] = []
+    /// Нажали четвёртую — сказать, что больше трёх нельзя.
+    @State private var упёрлись = false
+    @State private var показатьСравнение = false
+
+    /// Сравнение объявлений — от двух до трёх.
+    private static let сравнитьОт = 2
+    private static let сравнитьДо = 3
+
     var body: some View {
         Group {
             if избранное.товары.isEmpty {
@@ -56,19 +68,107 @@ struct FavoritesView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(FavoritesText.т("title"))
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func карточка(_ товар: Listing) -> some View {
-        /* Как в ленте: карточка нативная или, при выключенном рубильнике этапа 2, страница сайта. */
-        Group {
-            if Config.нативнаяКарточка {
-                NavigationLink(value: товар) { ListingCard(товар: товар) }
-            } else {
-                Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }
+        /* Этап 20: «Сравнить» — когда есть что сравнивать. */
+        .toolbar {
+            if Config.сравнение && (сравниваем || избранное.товары.count >= Self.сравнитьОт) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(CompareText.т(сравниваем ? "done" : "compare")) { переключитьСравнение() }
+                }
             }
         }
-        .buttonStyle(.plain)
-        .сердечкоИзбранного(товар)
+        .safeAreaInset(edge: .bottom) {
+            if сравниваем { панельСравнения }
+        }
+        .navigationDestination(isPresented: $показатьСравнение) {
+            ЭкранСравнения(товары: отмеченныеТовары)
+        }
+        /* Сердечко сняли (здесь же, в карточке, в кабинете) — из отмеченных тоже; сравнивать стало нечего — из режима. */
+        .onChange(of: избранное.номера) { _, номера in
+            отмеченные.removeAll { !номера.contains($0) }
+            if номера.count < Self.сравнитьОт && сравниваем { переключитьСравнение() }
+        }
+    }
+
+    @ViewBuilder
+    private func карточка(_ товар: Listing) -> some View {
+        if сравниваем {
+            /* Этап 20: в режиме сравнения карточка — переключатель; сердечка нет, чтобы не снять его по ошибке. */
+            Button { отметить(товар.id) } label: { ListingCard(товар: товар) }
+                .buttonStyle(.plain)
+                .overlay(alignment: .topTrailing) { ЗначокВыбора(выбрана: отмеченные.contains(товар.id)) }
+                .выбраннаяКарточка(отмеченные.contains(товар.id))
+                .accessibilityHint(CompareText.т("select_hint"))
+        } else {
+            /* Как в ленте: карточка нативная или, при выключенном рубильнике этапа 2, страница сайта. */
+            Group {
+                if Config.нативнаяКарточка {
+                    NavigationLink(value: товар) { ListingCard(товар: товар) }
+                } else {
+                    Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }
+                }
+            }
+            .buttonStyle(.plain)
+            .сердечкоИзбранного(товар)
+        }
+    }
+
+    // MARK: - Сравнение (этап 20)
+
+    /// Отмеченные объявления в порядке нажатий — снимки избранного.
+    private var отмеченныеТовары: [Listing] {
+        отмеченные.compactMap { номер in избранное.товары.first { $0.id == номер } }
+    }
+
+    private var можноСравнить: Bool {
+        отмеченные.count >= Self.сравнитьОт && отмеченные.count <= Self.сравнитьДо
+    }
+
+    private func переключитьСравнение() {
+        сравниваем.toggle()
+        отмеченные = []
+        упёрлись = false
+    }
+
+    /// Нажатие в режиме сравнения: отметить или снять. Четвёртую не отмечаем — говорим, что больше трёх нельзя.
+    private func отметить(_ номер: String) {
+        if let место = отмеченные.firstIndex(of: номер) {
+            отмеченные.remove(at: место)
+            упёрлись = false
+        } else if отмеченные.count < Self.сравнитьДо {
+            отмеченные.append(номер)
+            упёрлись = false
+        } else {
+            упёрлись = true
+        }
+    }
+
+    private var подписьВыбора: String {
+        if упёрлись { return CompareText.т("max") }
+        if отмеченные.count < Self.сравнитьОт { return CompareText.т("pick") }
+        return String(format: CompareText.т("picked"), отмеченные.count)
+    }
+
+    private var панельСравнения: some View {
+        VStack(spacing: 8) {
+            Text(подписьВыбора)
+                .font(.footnote)
+                .foregroundStyle(упёрлись ? Color.red : Color.secondary)
+            Button { показатьСравнение = true } label: {
+                Label(CompareText.т("show"), systemImage: "tablecells")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .foregroundStyle(.white)
+                    .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!можноСравнить)
+            .opacity(можноСравнить ? 1 : 0.45)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(.regularMaterial)
     }
 }
 
