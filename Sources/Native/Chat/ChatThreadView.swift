@@ -10,6 +10,9 @@ import SwiftUI
  🔴 ОТПРАВКА ЗА РУБИЛЬНИКОМ (Config.нативныйЧатОтправка). Пока не проверено, что dm.php принимает запись с куками
  веб-сессии и CSRF-токеном страницы, вместо поля ввода — «Ответить на сайте»: переписку видно здесь, ответ пишется
  там, где он точно дойдёт. Сообщение, которое молча не ушло, хуже, чем лишнее нажатие.
+
+ Этап 17 (Config.удобныйЧат): черновик по диалогу (ChatDrafts.swift), кнопка «вниз», «Копировать» и «потяни —
+ обновится» (ChatComfort.swift). Опрос — прежний.
  */
 @MainActor
 final class ChatThreadModel: ObservableObject {
@@ -22,7 +25,14 @@ final class ChatThreadModel: ObservableObject {
     /// Почему не ушло — коротко, под ошибкой: на проверке отправки (владелец 25.09.2026) это сразу скажет, что именно
     /// ответил сайт, а не только «не отправлено».
     @Published private(set) var причина = ""
-    @Published var черновик = ""
+    @Published var черновик = "" {
+        /* Этап 17: недописанное — в черновик диалога (ЧерновикиЧата). Пока сообщение уходит, поле уже пустое, но
+           сохранённый черновик не трогаем: сотрёт его отправить(), когда сайт примет сообщение. */
+        didSet {
+            guard Config.удобныйЧат, !отправляем, черновик != oldValue else { return }
+            ЧерновикиЧата.shared.запомнить(черновик, для: tid)
+        }
+    }
 
     private(set) var tid: String
     private let собеседник: String
@@ -55,7 +65,30 @@ final class ChatThreadModel: ObservableObject {
         } catch {
             ошибка = .сеть
         }
+        сверитьЧерновик()
         загружено = true
+    }
+
+    /// Этап 17: номер диалога известен — в пустое поле возвращаем его черновик, а написанное, пока номера не было
+    /// (open не прошёл, человек начал писать), кладём под этот номер. «Нужен вход» — не трогаем: переписка могла
+    /// пережить в стеке вкладки выход из аккаунта, и её текст в памяти вернул бы на диск стёртый черновик ушедшего.
+    private func сверитьЧерновик() {
+        guard Config.удобныйЧат, !tid.isEmpty, ошибка != .нуженВход else { return }
+        if черновик.isEmpty {
+            if let сохранённый = ЧерновикиЧата.shared.черновик(tid) { черновик = сохранённый }
+        } else {
+            ЧерновикиЧата.shared.запомнить(черновик, для: tid)
+        }
+    }
+
+    /// Этап 17: «потяни — обновится» — один внеочередной опрос. Не прошёл — молча, как и обычный опрос: на экране
+    /// остаётся пришедшее, а через три секунды опрос попробует снова. Номера диалога нет — опрашивать нечего.
+    func обновить() async {
+        guard !tid.isEmpty else { return }
+        if let снимок = try? await ChatAPI.переписка(tid) {
+            применить(снимок.0, снимок.заблокирован)
+            ошибка = nil
+        }
     }
 
     /// Опрос новых сообщений, пока экран открыт (задача .task отменяется при уходе с экрана).
@@ -74,7 +107,12 @@ final class ChatThreadModel: ObservableObject {
         неОтправлено = false
         let было = черновик
         черновик = ""
-        defer { отправляем = false }
+        defer {
+            отправляем = false
+            /* Этап 17: ушло — поле пустое, и черновик диалога стирается; не ушло — в поле вернулся текст, он и остаётся
+               черновиком. Написанное, пока сообщение уходило, тоже сохраняется. */
+            if Config.удобныйЧат { ЧерновикиЧата.shared.запомнить(черновик, для: tid) }
+        }
         do {
             if let переписка = try await ChatAPI.написать(tid: tid, текст: текст) {
                 применить(переписка, заблокирован)
@@ -112,6 +150,14 @@ struct ChatThreadView: View {
     @StateObject private var модель: ChatThreadModel
     let заголовок: String
     let открыть: (URL) -> Void
+    /// Этап 17: отметка низа переписки на экране. Знает об этом только ленивый стек (onAppear/onDisappear отметки):
+    /// onScrollGeometryChange — лишь с iOS 18.
+    @State private var низВиден = true
+    /// Кнопка «вниз» — когда низа нет на экране дольше 0,3 с. Сразу нельзя: новое сообщение на миг выталкивает отметку
+    /// за край, пока лента доезжает вниз, и кнопка мигала бы. По ней же решаем, ехать ли вниз с новым сообщением.
+    @State private var кнопкаВниз = false
+    /// Сколько сообщений собеседника пришло, пока человек читал выше.
+    @State private var новыхНиже = 0
 
     init(модель: @autoclosure @escaping () -> ChatThreadModel, заголовок: String, открыть: @escaping (URL) -> Void) {
         _модель = StateObject(wrappedValue: модель())
@@ -154,7 +200,11 @@ struct ChatThreadView: View {
         }
         /* Этап 16: переписка на экране — просьба оценить её не перебивает (ПросьбаОценить). */
         .onAppear { ПросьбаОценить.shared.делоНаЭкране() }
-        .onDisappear { ПросьбаОценить.shared.делоУшло(карточка: false) }
+        .onDisappear {
+            ПросьбаОценить.shared.делоУшло(карточка: false)
+            /* Этап 17: ушли из переписки — черновик на диск сейчас, не дожидаясь паузы после последней буквы. */
+            if Config.удобныйЧат { ЧерновикиЧата.shared.сохранитьСейчас() }
+        }
     }
 
     private var лента: some View {
@@ -169,16 +219,59 @@ struct ChatThreadView: View {
                     }
                     ForEach(модель.сообщения) { с in пузырь(с).id(с.id) }
                     Color.clear.frame(height: 1).id("низ")
+                        .onAppear { низВиден = true }
+                        .onDisappear { низВиден = false }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: модель.сообщения.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+            .modifier(ОбновлениеПереписки(модель: модель))          // этап 17: «потяни — обновится»
+            .overlay(alignment: .bottomTrailing) {
+                if Config.удобныйЧат && кнопкаВниз {
+                    КнопкаВнизЧата(новых: новыхНиже) { вниз(прокрутка) }
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 12)
+                        .transition(.scale(scale: 0.6).combined(with: .opacity))
+                }
+            }
+            .onChange(of: модель.сообщения.count) { было, стало in
+                пришли(было: было, стало: стало, прокрутка)
             }
             .onAppear { прокрутка.scrollTo("низ", anchor: .bottom) }
+            .task(id: низВиден) { await следитьЗаНизом() }
         }
+    }
+
+    /// Пришли сообщения. Человек внизу или последнее — его собственное (только что отправил) — едем вниз, как раньше.
+    /// Этап 17: читает выше — экран не дёргаем, а на кнопку «вниз» ставим, сколько пришло от собеседника.
+    private func пришли(было: Int, стало: Int, _ прокрутка: ScrollViewProxy) {
+        let своё = модель.сообщения.last?.моё == true
+        if Config.удобныйЧат && кнопкаВниз && !своё {
+            новыхНиже += модель.сообщения.suffix(max(0, стало - было)).filter { !$0.моё }.count
+            return
+        }
+        withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+    }
+
+    /// Этап 17: кнопка «вниз» нажата.
+    private func вниз(_ прокрутка: ScrollViewProxy) {
+        новыхНиже = 0
+        withAnimation(.easeOut(duration: 0.25)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+    }
+
+    /// Этап 17: низ вернулся — кнопку прячем, число сбрасываем. Пропал — кнопка через 0,3 с, если он не вернулся:
+    /// смена низВиден отменяет эту задачу (.task(id:)).
+    private func следитьЗаНизом() async {
+        guard Config.удобныйЧат else { return }
+        if низВиден {
+            новыхНиже = 0
+            if кнопкаВниз { withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = false } }
+            return
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        guard !Task.isCancelled, !низВиден else { return }
+        withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
     }
 
     private func пузырь(_ с: ЧатСообщение) -> some View {
@@ -193,14 +286,22 @@ struct ChatThreadView: View {
                     }
                     .frame(width: 200, height: 200)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else if Config.удобныйЧат && с.копируемое {
+                    /* Этап 17: «Копировать» меню долгого нажатия вместо выделения текста — оба висят на долгом
+                       нажатии и мешали бы друг другу. */
+                    облако(с)
+                        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .contextMenu {
+                            Button {
+                                ЧатБуфер.скопировать(с.текст)
+                            } label: {
+                                Label(ChatComfortText.т("copy"), systemImage: "doc.on.doc")
+                            }
+                        }
+                } else if Config.удобныйЧат {
+                    облако(с)
                 } else {
-                    Text(с.подпись)
-                        .font(.body)
-                        .foregroundStyle(с.моё ? Color.white : Color.primary)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(с.моё ? Theme.green : Color(.secondarySystemBackground),
-                                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    облако(с).textSelection(.enabled)
                 }
                 let время = ЧатВремя.время(с.когда)
                 if !время.isEmpty {
@@ -215,6 +316,17 @@ struct ChatThreadView: View {
         /* Этап 11: VoiceOver — одной фразой «Вы: …» или «<собеседник>: …» со временем, а не текст и время порознь. */
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(с.голос(собеседник: заголовок))
+        .modifier(КопироватьДляГолоса(текст: Config.удобныйЧат && с.копируемое ? с.текст : nil))   // этап 17
+    }
+
+    /// Текст сообщения в облачке.
+    private func облако(_ с: ЧатСообщение) -> some View {
+        Text(с.подпись)
+            .font(.body)
+            .foregroundStyle(с.моё ? Color.white : Color.primary)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(с.моё ? Theme.green : Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     @ViewBuilder
