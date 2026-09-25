@@ -129,6 +129,16 @@ enum Theme {
     /// Значок «Проверен через eGov» (VFY сайта) — #1d9bf0.
     static let проверен = Color(uiColor: hex(0x1D9BF0))
 
+    // MARK: - Нижняя панель объявления (этап 29, .mk-stickyone и .mk-sb-*)
+
+    /// Пилюля: linear-gradient(135deg, #1d7d4a, #0f5132) — одинаковая в обеих темах, белый текст на ней читается и там.
+    static let панельСвязиНачало = Color(uiColor: hex(0x1D7D4A))
+    static let панельСвязиКонец = Color(uiColor: hex(0x0F5132))
+    /// Левая часть пилюли (.mk-stickyone .mk-mescrow): #1d7d4a → #116039.
+    static let кнопкаСвязиКонец = Color(uiColor: hex(0x116039))
+    /// Кнопка WhatsApp (.mk-sb-wa) — #25d366.
+    static let whatsApp = Color(uiColor: hex(0x25D366))
+
     // MARK: - Скругления (--r-*)
 
     enum Радиус {
