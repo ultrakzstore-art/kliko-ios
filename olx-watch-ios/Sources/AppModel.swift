@@ -667,7 +667,7 @@ final class AppModel {
 
     static func nameFromURL(_ url: String) -> String {
         let path = URLComponents(string: url)?.path.removingPercentEncoding ?? ""
-        let parts = path.split(separator: "/").map(String.init).filter { !["d", "kk", "list"].contains($0) }
+        let parts = path.split(separator: "/").map(String.init).filter { !["d", "kk", "ru", "rus", "list"].contains($0) }
         if let q = parts.first(where: { $0.hasPrefix("q-") }) { return q.dropFirst(2).replacingOccurrences(of: "-", with: " ") }
         return parts.suffix(2).joined(separator: " / ").isEmpty ? "Поиск" : parts.suffix(2).joined(separator: " / ")
     }

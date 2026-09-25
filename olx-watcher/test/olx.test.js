@@ -12,6 +12,9 @@ test('короткий код в ссылке — номер объявлени�
   assert.strictEqual(olx.encodeId(401214633), 'r9sfL');
   assert.strictEqual(olx.idFromUrl(url), 401214632);
   assert.strictEqual(olx.idFromUrl('https://www.olx.kz/d/elektronika/q-hp/'), null);
+  // Свежая ссылка, пока объявление без кода: /d/ru/obyavlenie/<название>.html#<номер>
+  assert.strictEqual(olx.idFromUrl('https://www.olx.kz/d/ru/obyavlenie/prodam-noutbuk.html#401224244'), 401224244);
+  assert.strictEqual(olx.idFromUrl('https://www.olx.kz/d/ru/obyavlenie/prodam-noutbuk.html#401224244;promoted'), 401224244);
 });
 
 test('поиск переворачивается «сначала новые», чужие сайты не принимаются', () => {

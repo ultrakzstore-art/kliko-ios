@@ -42,7 +42,7 @@ enum OLX {
 
     static func adId(fromURL url: String) -> Int? {
         if let code = firstMatch(#"-ID([0-9a-zA-Z]+)\.html"#, in: url) { return decode(code) }
-        if let num = firstMatch(#"#(\d{6,})$"#, in: url) { return Int(num) }
+        if let num = firstMatch(#"#(\d{6,})"#, in: url) { return Int(num) }
         return nil
     }
 
@@ -346,7 +346,7 @@ enum OLX {
             guard let d = node as? [String: Any] else { return }
             let link = ["url", "href", "path", "link", "searchUrl", "normalizedUrl"].lazy.compactMap { d[$0] as? String }.first
             let name = ["name", "label", "title", "displayName"].lazy.compactMap { d[$0] as? String }.first
-            if let link, let name, let slug = firstMatch(#"/d/(?:kk/)?([a-z0-9-]+(?:/[a-z0-9-]+)*)/?"#, in: link) {
+            if let link, let name, let slug = firstMatch(#"/d/(?:(?:kk|ru)/)?([a-z0-9-]+(?:/[a-z0-9-]+)*)/?"#, in: link) {
                 let parts = slug.split(separator: "/")
                 if parts.count == depth, slug.hasPrefix(parent + "/"), let last = parts.last.map(String.init),
                    !citySlugs.contains(last), !last.hasPrefix("q-"), seen.insert(slug).inserted, !name.isEmpty, name.count <= 60 {
@@ -420,9 +420,9 @@ enum OLX {
 
     static func parseSubcategories(_ html: String, parent: String) -> [Category] {
         let citySlugs = Set(cities.map(\.slug))
-        let skip: Set<String> = ["obyavlenie", "kk", "list", "myaccount", "account", "post-new-ad"]
+        let skip: Set<String> = ["obyavlenie", "kk", "ru", "list", "myaccount", "account", "post-new-ad"]
         let depth = parent.split(separator: "/").count + 1
-        let pattern = #"<a\b[^>]*href="(?:https?://(?:www\.)?olx\.kz)?/d/(?:kk/)?([a-z0-9-]+(?:/[a-z0-9-]+)*)/?(?:\?[^"]*)?"[^>]*>(.*?)</a>"#
+        let pattern = #"<a\b[^>]*href="(?:https?://(?:www\.)?olx\.kz)?/d/(?:(?:kk|ru)/)?([a-z0-9-]+(?:/[a-z0-9-]+)*)/?(?:\?[^"]*)?"[^>]*>(.*?)</a>"#
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
         var out: [Category] = []
         var seen = Set<String>()

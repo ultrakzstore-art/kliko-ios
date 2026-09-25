@@ -581,7 +581,7 @@ function prettyPhone(n) {
 
 function nameFromUrl(url) {
   const u = new URL(url);
-  const parts = decodeURIComponent(u.pathname).split('/').filter((p) => p && p !== 'd' && p !== 'kk' && p !== 'list');
+  const parts = decodeURIComponent(u.pathname).split('/').filter((p) => p && !['d', 'kk', 'ru', 'rus', 'list'].includes(p));
   const q = parts.find((p) => p.startsWith('q-'));
   return (q ? q.slice(2).replace(/-/g, ' ') : parts.slice(-2).join(' / ')) || 'Поиск';
 }

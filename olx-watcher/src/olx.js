@@ -33,7 +33,7 @@ function encodeId(n) {
 function idFromUrl(url) {
   const m = /-ID([0-9a-zA-Z]+)\.html/.exec(url);
   if (m) return decodeId(m[1]);
-  const h = /#(\d{6,})$/.exec(url);
+  const h = /#(\d{6,})/.exec(url);
   return h ? Number(h[1]) : null;
 }
 
