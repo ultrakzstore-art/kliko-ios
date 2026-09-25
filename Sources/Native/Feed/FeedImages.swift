@@ -25,36 +25,75 @@ final class КартинкиЛенты {
         кэш.totalCostLimit = 100 * 1024 * 1024
         return кэш
     }()
+    /// Одна скачивающаяся картинка: общая задача и сколько ячеек её ещё ждёт (не отменённых).
+    private struct Загрузка {
+        let номер: Int
+        let задача: Task<UIImage?, Never>
+        var ждут: Int
+    }
     /// Картинки, которые уже качаются: вторая ячейка ждёт ту же загрузку, а не начинает свою.
-    private var вПути: [String: Task<UIImage?, Never>] = [:]
+    private var вПути: [String: Загрузка] = [:]
+    private var номерЗагрузки = 0
 
     private init() {}
 
-    private static func ключ(_ адрес: URL, _ пикселей: Int) -> String {
-        адрес.absoluteString + "#" + String(пикселей)
+    /// Ключ — адрес, размер и режим: для «заполнить» картинка уменьшается иначе (по короткой стороне).
+    private static func ключ(_ адрес: URL, _ пикселей: Int, _ заполнить: Bool) -> String {
+        адрес.absoluteString + "#" + String(пикселей) + (заполнить ? "f" : "")
     }
 
     /// Готовая картинка из памяти или nil — без сети, для первого кадра ячейки.
-    func готовая(_ адрес: URL, пикселей: Int) -> UIImage? {
-        память.object(forKey: Self.ключ(адрес, пикселей) as NSString)
+    func готовая(_ адрес: URL, пикселей: Int, заполнить: Bool) -> UIImage? {
+        память.object(forKey: Self.ключ(адрес, пикселей, заполнить) as NSString)
     }
 
-    /// Скачать, уменьшить до `пикселей` по длинной стороне и распаковать не на главной очереди. Не вышло — nil.
-    func загрузить(_ адрес: URL, пикселей: Int) async -> UIImage? {
-        let ключ = Self.ключ(адрес, пикселей)
+    /// Скачать, уменьшить до размера ячейки и распаковать не на главной очереди. Не вышло — nil.
+    /// Ячейку убрали с экрана (её .task отменён) и загрузку больше никто не ждёт — запрос отменяется,
+    /// как это делал AsyncImage: при быстрой прокрутке сеть не забита снимками пролетевших карточек.
+    func загрузить(_ адрес: URL, пикселей: Int, заполнить: Bool) async -> UIImage? {
+        let ключ = Self.ключ(адрес, пикселей, заполнить)
         if let есть = память.object(forKey: ключ as NSString) { return есть }
-        if let идёт = вПути[ключ] { return await идёт.value }
-        let задача = Task<UIImage?, Never> {
-            guard let ответ = try? await URLSession.shared.data(from: адрес) else { return nil }
-            if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
-            guard let картинка = await КартинкиЛенты.уменьшить(ответ.0, пикселей: пикселей) else { return nil }
-            self.память.setObject(картинка, forKey: ключ as NSString, cost: КартинкиЛенты.вес(картинка))
-            return картинка
+        if Task.isCancelled { return nil }
+        let загрузка: Загрузка
+        if var идёт = вПути[ключ] {
+            идёт.ждут += 1
+            вПути[ключ] = идёт
+            загрузка = идёт
+        } else {
+            номерЗагрузки += 1
+            let задача = Task<UIImage?, Never> {
+                guard let ответ = try? await URLSession.shared.data(from: адрес) else { return nil }
+                if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+                if Task.isCancelled { return nil }
+                guard let картинка = await КартинкиЛенты.уменьшить(ответ.0, пикселей: пикселей, заполнить: заполнить)
+                else { return nil }
+                self.память.setObject(картинка, forKey: ключ as NSString, cost: КартинкиЛенты.вес(картинка))
+                return картинка
+            }
+            загрузка = Загрузка(номер: номерЗагрузки, задача: задача, ждут: 1)
+            вПути[ключ] = загрузка
         }
-        вПути[ключ] = задача
-        let картинка = await задача.value
-        вПути[ключ] = nil
+        let номер = загрузка.номер
+        let картинка = await withTaskCancellationHandler {
+            await загрузка.задача.value
+        } onCancel: {
+            Task { @MainActor in КартинкиЛенты.shared.отпустить(ключ, номер: номер) }
+        }
+        // Задача уже закончилась (готовое лежит в памяти) — запись больше не нужна. Номер: не тронуть новую загрузку.
+        if вПути[ключ]?.номер == номер { вПути[ключ] = nil }
         return картинка
+    }
+
+    /// Одна из ждущих ячеек отменена. Не осталось ни одной — отменить загрузку (URLSession рвёт запрос).
+    private func отпустить(_ ключ: String, номер: Int) {
+        guard var идёт = вПути[ключ], идёт.номер == номер else { return }
+        идёт.ждут -= 1
+        if идёт.ждут > 0 {
+            вПути[ключ] = идёт
+        } else {
+            идёт.задача.cancel()
+            вПути[ключ] = nil
+        }
     }
 
     /// Сколько байт занимает растр — цена для NSCache.
@@ -64,14 +103,28 @@ final class КартинкиЛенты {
     }
 
     /// Уменьшение и распаковка (ShouldCacheImmediately) — вне главной очереди: nonisolated async уходит с MainActor.
-    /// Больше исходника не растягивает: MaxPixelSize — только потолок.
-    nonisolated private static func уменьшить(_ данные: Data, пикселей: Int) async -> UIImage? {
+    /// Больше исходника не растягивает: MaxPixelSize — только потолок, и он ограничивает ДЛИННУЮ сторону.
+    /// Для «заполнить» (scaledToFill) короткая сторона тоже должна покрыть ячейку, иначе вертикальное фото в
+    /// горизонтальной ячейке (или 16:9 в квадратной) растягивается и мылится — потолок поднимается во столько раз,
+    /// во сколько длинная сторона снимка больше короткой (но не больше самого снимка и не больше 4× ячейки).
+    nonisolated private static func уменьшить(_ данные: Data, пикселей: Int, заполнить: Bool) async -> UIImage? {
         let параметрыИсточника = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let источник = CGImageSourceCreateWithData(данные as CFData, параметрыИсточника) else { return nil }
+        var потолок = пикселей
+        if заполнить,
+           let свойства = CGImageSourceCopyPropertiesAtIndex(источник, 0, nil) as? [String: Any],
+           let ширина = (свойства[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
+           let высота = (свойства[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
+           ширина > 0, высота > 0 {
+            let длинная = max(ширина, высота)
+            let короткая = min(ширина, высота)
+            let нужно = Int((Double(пикселей) * Double(длинная) / Double(короткая)).rounded(.up))
+            потолок = max(пикселей, min(длинная, нужно, пикселей * 4))
+        }
         let параметры = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                          kCGImageSourceShouldCacheImmediately: true,
                          kCGImageSourceCreateThumbnailWithTransform: true,
-                         kCGImageSourceThumbnailMaxPixelSize: пикселей] as CFDictionary
+                         kCGImageSourceThumbnailMaxPixelSize: потолок] as CFDictionary
         guard let растр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры) else { return nil }
         return UIImage(cgImage: растр)
     }
@@ -119,7 +172,7 @@ struct КартинкаЛенты<Заглушка: View>: View {
     private var показать: UIImage? {
         guard let цель = адрес else { return nil }
         if загруженАдрес == цель, let своя = загруженная { return своя }
-        return КартинкиЛенты.shared.готовая(цель, пикселей: пикселей)
+        return КартинкиЛенты.shared.готовая(цель, пикселей: пикселей, заполнить: заполнить)
     }
 
     @MainActor
@@ -127,12 +180,12 @@ struct КартинкаЛенты<Заглушка: View>: View {
         guard let цель = адрес else { return }
         if загруженАдрес == цель && загруженная != nil { return }
         let размер = пикселей
-        if let есть = КартинкиЛенты.shared.готовая(цель, пикселей: размер) {
+        if let есть = КартинкиЛенты.shared.готовая(цель, пикселей: размер, заполнить: заполнить) {
             загруженная = есть
             загруженАдрес = цель
             return
         }
-        let пришла = await КартинкиЛенты.shared.загрузить(цель, пикселей: размер)
+        let пришла = await КартинкиЛенты.shared.загрузить(цель, пикселей: размер, заполнить: заполнить)
         guard !Task.isCancelled, let новая = пришла else { return }
         загруженная = новая
         загруженАдрес = цель
