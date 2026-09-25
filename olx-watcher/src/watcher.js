@@ -541,13 +541,18 @@ class Watcher {
   async morePages(src, url, subs, ads) {
     if (src.key !== 'olx') return ads;
     const ready = subs.filter((s) => s.initialized);
-    if (!ready.length) return ads;
-    const mark = Math.min(...ready.map((s) => s.watermark));
+    // Только что выданная VIP-рубрика: сразу читаем 3 страницы — выучить номера её подрубрик с
+    // первого прохода, а не по мере того, как они попадутся в выдаче.
+    const lockSubs = new Set(this.activeLocks().map((l) => l.sub_id));
+    const vipFirst = subs.some((s) => !s.initialized && lockSubs.has(s.id));
+    if (!ready.length && !vipFirst) return ads;
+    const mark = ready.length ? Math.min(...ready.map((s) => s.watermark)) : Infinity;
     let all = ads;
     let page = ads;
     for (let n = 2; n <= 3; n++) {
       const regular = page.filter((a) => !a.promoted);
-      if (regular.length < 20 || Math.min(...regular.map((a) => a.id)) <= mark) break;
+      if (!vipFirst && (regular.length < 20 || Math.min(...regular.map((a) => a.id)) <= mark)) break;
+      if (vipFirst && !page.length) break;
       await sleep(700);
       try {
         page = await src.fetchSearch(url, n);

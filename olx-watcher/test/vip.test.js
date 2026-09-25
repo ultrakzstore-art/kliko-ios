@@ -89,3 +89,21 @@ test('VIP-рубрика: жёсткое правило по каждому об
     olx.fetchOffer = origOffer;
   }
 });
+
+test('VIP-рубрика: подрубрики выучиваются сразу — первый проход читает 3 страницы', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-vip3-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const origSearch = olx.fetchSearch;
+  const pages = { 1: [11, 12], 2: [21], 3: [31] };   // номер рубрики на каждой странице
+  olx.fetchSearch = async (url, page = 1) => ({ source: 'state', ads: (pages[page] || []).map((c, i) => ({ id: page * 100 + i, title: 'x', city: 'Алматы', categoryId: c, createdAt: Date.now() })) });
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 30 * 60_000 },
+    notify: async () => {}, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'VIP');
+    assert.ok(vip.grant(db, 1, 'elektronika/noutbuki-i-aksesuary', 'almaty', 30).ok);
+    await w.searchTick();
+    assert.deepStrictEqual([...db.locks()[0].category_ids].sort(), [11, 12, 21, 31]);
+  } finally {
+    olx.fetchSearch = origSearch;
+  }
+});
