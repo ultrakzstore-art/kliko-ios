@@ -435,13 +435,11 @@ enum КонтактыПродавца {
         }
     }
 
-    /// CSRF загруженной страницы: _MKP_CSRF витрины (им подписывает mkGetContact), запасной — KlikoCsrf моста.
+    /// CSRF загруженной страницы: _MKP_CSRF витрины (им подписывает mkGetContact), запасной — KlikoCsrf моста. С этапа 35
+    /// — общий геттер SiteSession.csrf(), тот же, что у чата и избранного.
     @MainActor
     private static func токен() async -> String? {
-        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else { return nil }
-        let js = "String(window._MKP_CSRF || window.KlikoCsrf || '')"
-        guard let строка = try? await web.evaluateJavaScript(js) as? String, !строка.isEmpty else { return nil }
-        return строка
+        await SiteSession.csrf()
     }
 
     private static func да(_ значение: Any?) -> Bool {

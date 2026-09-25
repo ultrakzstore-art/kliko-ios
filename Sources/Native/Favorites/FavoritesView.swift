@@ -6,9 +6,15 @@ import SwiftUI
  ленты, где они уже есть, — двойная регистрация одного маршрута в одном стеке SwiftUI не любит.
 
  Обновить с сервера нечего: список живёт на телефоне (FavoritesStore). Цена освежается, когда карточку открывают.
+
+ Этап 35 (Config.избранноеССайтом): у вошедшего список — избранное его аккаунта. Вкладка при каждом открытии сверяется с
+ сайтом (СинхронИзбранного: не чаще раза в 10 с), «потяни — обновится» — сразу; пока пустой список ждёт сайта —
+ «Загружаем объявления», а не «пусто». Подпись внизу говорит, где хранится избранное: в аккаунте или на телефоне.
  */
 struct FavoritesView: View {
     @ObservedObject private var избранное = FavoritesStore.shared
+    /// Этап 35: сверка с сайтом — идёт ли она и сверен ли телефон с аккаунтом.
+    @ObservedObject private var синхрон = СинхронИзбранного.shared
     /// Открыть страницу сайта в веб-обёртке.
     let открыть: (URL) -> Void
     /// «Перейти в ленту» на пустом экране — переключить вкладку. nil — кнопки нет (экран открыт из самой ленты).
@@ -31,7 +37,10 @@ struct FavoritesView: View {
 
     var body: some View {
         Group {
-            if избранное.товары.isEmpty && Config.дизайнКакНаСайте {
+            if избранное.товары.isEmpty && синхрон.загружаем && Config.избранноеССайтом {
+                /* Этап 35: пустой список ждёт сайта — не «пусто», а загрузка. */
+                загрузка
+            } else if избранное.товары.isEmpty && Config.дизайнКакНаСайте {
                 /* Этап 30: пустое избранное — экраном в краске сайта. */
                 ПустоСайта(значок: "heart", заголовок: FavoritesText.т("empty"), подпись: FavoritesText.т("empty_sub"),
                            кнопка: вЛенту == nil ? nil : FavoritesText.т("to_feed"), действие: вЛенту)
@@ -58,7 +67,7 @@ struct FavoritesView: View {
                             }
                         }
                         .padding(.horizontal, 12)
-                        Text(FavoritesText.т("local"))
+                        Text(FavoritesText.т(подписьХранения))
                             .font(.caption)
                             .foregroundStyle(Config.дизайнКакНаСайте ? Theme.текстВторой : Color.secondary)
                             .multilineTextAlignment(.center)
@@ -67,11 +76,14 @@ struct FavoritesView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 24)
                 }
+                .modifier(ОбновлениеИзбранногоССайта())
                 .animation(.easeInOut(duration: 0.2), value: избранное.номера)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Config.дизайнКакНаСайте ? Theme.фонСтраницы : Color(.systemGroupedBackground))
+        /* Этап 35: открыли вкладку — сверка с сайтом (у гостя — только вопрос странице, без запросов). */
+        .onAppear { синхрон.сверить(пауза: 10) }
         .navigationTitle(FavoritesText.т("title"))
         .navigationBarTitleDisplayMode(.inline)
         /* Этап 30: панель в краске сайта — поверхность и жирный заголовок. */
@@ -110,6 +122,26 @@ struct FavoritesView: View {
             отмеченные.removeAll { !номера.contains($0) }
             if номера.count < Self.сравнитьОт && сравниваем { переключитьСравнение() }
         }
+    }
+
+    /// Этап 35: где хранится избранное — в аккаунте (сверено с сайтом) или на телефоне; со сверкой избранное гостя при
+    /// входе вольётся в аккаунт, и «не переносится на сайт» было бы неправдой.
+    private var подписьХранения: String {
+        guard Config.избранноеССайтом else { return "local" }
+        return синхрон.связано ? "synced" : "local_merge"
+    }
+
+    /// Этап 35: пустой список ждёт ответа сайта — колесо и «Загружаем объявления» (fl_loading сайта).
+    private var загрузка: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(Theme.акцент)
+            Text(FavoritesText.т("loading"))
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.текстВторой)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     /// Этап 30: «♥ Избранное 3» — как заголовок ряда «Рекомендуем» главной сайта (точка краской, жирное название, число).
@@ -278,6 +310,18 @@ struct КнопкаИзбранного: View {
     private var сердце: some View {
         Image(systemName: сохранено ? "heart.fill" : "heart")
             .symbolEffect(.bounce, value: сохранено)
+    }
+}
+
+/// Этап 35: «потяни — обновится» в избранном — сверка с сайтом сейчас. Рубильник выключен — как на этапе 5: обновлять
+/// нечего, и жеста нет.
+private struct ОбновлениеИзбранногоССайта: ViewModifier {
+    func body(content: Content) -> some View {
+        if Config.избранноеССайтом {
+            content.refreshable { await СинхронИзбранного.shared.обновить() }
+        } else {
+            content
+        }
     }
 }
 

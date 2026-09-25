@@ -21,6 +21,8 @@ struct CabinetView: View {
     @ObservedObject private var мост = WebBridge.shared
     @ObservedObject private var замок = AppLock.shared
     @ObservedObject private var избранное = FavoritesStore.shared
+    /// Этап 35: избранное вошедшего сверено с аккаунтом — оно живёт на сайте, и «Очистить» на телефоне не к месту.
+    @ObservedObject private var синхронИзбранного = СинхронИзбранного.shared
     @ObservedObject private var недавние = RecentStore.shared
     @Environment(\.scenePhase) private var фаза
 
@@ -303,7 +305,8 @@ struct CabinetView: View {
                     кэшБайт = ДанныеТелефона.кэшБайт
                 }
             }
-            if Config.избранное {
+            /* Этап 35: избранное в аккаунте — очистка телефона вернулась бы следующей сверкой; снимают его сердечком. */
+            if Config.избранное && !избранноеВАккаунте {
                 СтрокаОчистки(CabinetText.т("clear_favorites"), значок: "heart",
                               подпись: число(избранное.товары.count),
                               вопрос: CabinetText.т("favorites_q"), пояснение: CabinetText.т("favorites_msg"),
@@ -328,8 +331,15 @@ struct CabinetView: View {
         } header: {
             Text(CabinetText.т("data"))
         } footer: {
-            if Config.избранное || Config.недавние { Text(CabinetText.т("data_footer")) }
+            if Config.избранное || Config.недавние {
+                Text(CabinetText.т(избранноеВАккаунте ? "data_footer_synced" : "data_footer"))
+            }
         }
+    }
+
+    /// Этап 35: избранное этого телефона сверено с аккаунтом вошедшего (СинхронИзбранного).
+    private var избранноеВАккаунте: Bool {
+        Config.избранноеССайтом && Config.избранное && синхронИзбранного.связано
     }
 
     private func число(_ сколько: Int) -> String? {
