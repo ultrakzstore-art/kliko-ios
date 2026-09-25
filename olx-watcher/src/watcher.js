@@ -110,6 +110,7 @@ class Watcher {
 
   start() {
     this.timers.push(setInterval(() => this.searchTick().catch((e) => this.log(`поиск: ${e.message}`)), 1_000));
+    this.timers.push(setInterval(() => this.searchTick(true).catch((e) => this.log(`поиск Kaspi: ${e.message}`)), 1_000));
     this.timers.push(setInterval(() => this.boardTick().catch((e) => this.log(`доска: ${e.message}`)), (this.cfg.boardSec || 2) * 1000));
     if (this.cfg.discounts !== false) {
       this.timers.push(setInterval(() => this.recheckTick().catch((e) => this.log(`скидки: ${e.message}`)), 10_000));
@@ -204,13 +205,15 @@ class Watcher {
     return this.cfg.pollSec * 1000;   // тест и платный — одинаково, разница только в сроке
   }
 
-  async searchTick() {
-    if (this.searchBusy) return;
-    this.searchBusy = true;
+  // Поиски Kaspi — своей очередью: их карточки открываются медленно и не должны задерживать OLX.
+  async searchTick(kaspi = false) {
+    const flag = kaspi ? 'kaspiSearchBusy' : 'searchBusy';
+    if (this[flag]) return;
+    this[flag] = true;
     try {
       const now = Date.now();
       const due = this.db.subs().filter((s) => {
-        if (s.paused) return false;
+        if (s.paused || ((s.source || 'olx') === 'kaspi') !== kaspi) return false;
         const u = this.db.user(s.user_id);
         if (!u || u.blocked || !this.db.hasAccess(u, s.source || 'olx')) return false;   // нет доступа к площадке — не проверяем
         return now - s.last_poll >= this.intervalFor(s);
@@ -230,7 +233,7 @@ class Watcher {
         await sleep(150 + Math.random() * 250);
       }
     } finally {
-      this.searchBusy = false;
+      this[flag] = false;
     }
   }
 

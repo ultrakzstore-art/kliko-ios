@@ -64,6 +64,8 @@ final class AppModel {
     private(set) var running = false
 
     private var loop: Task<Void, Never>?
+    /// Kaspi — своим циклом: его запросы (поиск края, очередь номеров на проверке) не задерживают OLX.
+    private var kaspiLoop: Task<Void, Never>?
     private var lastTurbo = Date.distantPast
     private var lastAnchor = Date.distantPast
     private var backoff: TimeInterval = 0
@@ -128,11 +130,20 @@ final class AppModel {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
+        kaspiLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.kaspiTick()
+                self?.publish()
+                try? await Task.sleep(for: .milliseconds(1000))
+            }
+        }
     }
 
     func stop() {
         loop?.cancel()
         loop = nil
+        kaspiLoop?.cancel()
+        kaspiLoop = nil
         running = false
         saveNow()
         scheduleBackgroundRefresh()
@@ -154,7 +165,7 @@ final class AppModel {
         // пройдут все поиски подряд.
         let now = Date()
         let due = state.subs.filter { sub in
-            !sub.paused && !siteBlocked(sub.site) && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
+            sub.site != .kaspi && !sub.paused && !siteBlocked(sub.site) && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
         }
         if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }) {
             await poll(next.id)
@@ -163,12 +174,27 @@ final class AppModel {
             lastTurbo = Date()
             await turbo()
         }
-        if !siteBlocked(.kaspi), Date().timeIntervalSince(lastShowcase) >= 3 {
+    }
+
+    /// Kaspi: поиски Kaspi, витрина и ловля по номеру — отдельно от OLX, параллельно с ним.
+    @ObservationIgnored private var kaspiBusy = false
+    private func kaspiTick() async {
+        guard !kaspiBusy, !siteBlocked(.kaspi) else { return }
+        kaspiBusy = true
+        defer { kaspiBusy = false }
+        let now = Date()
+        let due = state.subs.filter { sub in
+            sub.site == .kaspi && !sub.paused && (sub.lastPoll.map { now.timeIntervalSince($0) >= speed.poll } ?? true)
+        }
+        if let next = due.min(by: { ($0.lastPoll ?? .distantPast) < ($1.lastPoll ?? .distantPast) }) {
+            await poll(next.id)
+        }
+        if Date().timeIntervalSince(lastShowcase) >= 3 {
             lastShowcase = Date()
             await kaspiShowcase()
         }
         // Kaspi по номеру: номера идут по порядку подачи — следующие за самым большим открываем сразу.
-        if kaspiByNumber, state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 3 {
+        if kaspiByNumber, state.turbo, !siteBlocked(.kaspi), Date().timeIntervalSince(lastKaspiTurbo) >= 2 {
             lastKaspiTurbo = Date()
             await kaspiTurbo()
         }
