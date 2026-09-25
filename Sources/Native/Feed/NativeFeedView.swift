@@ -16,6 +16,8 @@ import SwiftUI
  */
 struct NativeFeedView: View {
     @StateObject private var модель = FeedModel()
+    /// «Вы смотрели» и история поиска (этап 6) — на телефоне, общие для всей ленты.
+    @ObservedObject private var недавние = RecentStore.shared
     /// Открыть страницу сайта (объявление, кабинет) в веб-обёртке.
     let открыть: (URL) -> Void
     /// Лента API не работает — показать ленту сайта.
@@ -29,6 +31,11 @@ struct NativeFeedView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
+                    if показатьНедавние {
+                        ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
+                            withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
+                        })
+                    }
                     if !разделы.isEmpty { полосаРазделов }
                     содержимое
                 }
@@ -81,12 +88,51 @@ struct NativeFeedView: View {
             }
             .searchable(text: $модель.поиск, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: FeedText.т("search"))
-            .onSubmit(of: .search) { модель.искать() }
+            .searchSuggestions { подсказкиПоиска }
+            .onSubmit(of: .search) {
+                модель.искать()
+                if Config.недавние { недавние.запомнитьЗапрос(модель.поиск) }
+            }
             .onChange(of: модель.поиск) { _, текст in
                 if текст.isEmpty { модель.поискОчищен() }
             }
         }
         .task { await модель.начать() }
+    }
+
+    // MARK: - Недавнее (этап 6)
+
+    /// «Вы смотрели» — только в обычной ленте: пока в поле что-то набрано, место — под выдачу.
+    private var показатьНедавние: Bool {
+        Config.недавние && модель.поиск.isEmpty && !недавние.товары.isEmpty
+    }
+
+    /// История поиска под пустым полем. Нажали запрос — ищем сразу, как по кнопке «Найти»: подсказки только при
+    /// пустом поле, поэтому после нажатия они сами уходят и видна выдача.
+    @ViewBuilder
+    private var подсказкиПоиска: some View {
+        if Config.недавние && модель.поиск.isEmpty && !недавние.запросы.isEmpty {
+            ForEach(недавние.запросы, id: \.self) { запрос in
+                Button { искатьСнова(запрос) } label: {
+                    Label {
+                        Text(запрос).foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityHint(RecentText.т("query_hint"))
+            }
+            Button(role: .destructive, action: { недавние.очиститьЗапросы() }) {
+                Label(RecentText.т("clear_history"), systemImage: "trash")
+            }
+        }
+    }
+
+    private func искатьСнова(_ запрос: String) {
+        модель.поиск = запрос
+        модель.искать()
+        недавние.запомнитьЗапрос(запрос)
+        КлавиатураПоиска.спрятать()
     }
 
     // MARK: - Разделы

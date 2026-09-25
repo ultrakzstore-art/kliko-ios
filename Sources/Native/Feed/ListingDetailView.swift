@@ -65,9 +65,14 @@ struct ListingDetailView: View {
         }
         .safeAreaInset(edge: .bottom) { нижняяПанель }
         .task { await догрузить() }
-        /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5). */
+        /* Открыли — наверх полосы «Вы смотрели» над лентой (этап 6). */
+        .onAppear {
+            if Config.недавние { RecentStore.shared.запомнить(товар) }
+        }
+        /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5), и в «Вы смотрели» (этап 6). */
         .onChange(of: товар) { _, свежий in
             if Config.избранное { FavoritesStore.shared.освежить(свежий) }
+            if Config.недавние { RecentStore.shared.освежить(свежий) }
         }
         .fullScreenCover(item: Binding(get: { фотоНаВесьЭкран.map(ФотоИндекс.init) },
                                        set: { фотоНаВесьЭкран = $0?.id })) { выбранное in
