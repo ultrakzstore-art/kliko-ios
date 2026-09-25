@@ -12,6 +12,11 @@ import WebKit
 
  Сырой ответ первой страницы без поиска и раздела отдаём наверх целиком (`сырое`): его кладут на диск
  (ListingsCache), и следующий запуск показывает ленту мгновенно и без сети.
+
+ Этап 32 (владелец 25.09.2026): город в куках сайт НЕ держит — он живёт в localStorage страницы и уходит в каждый
+ запрос ленты параметрами (_mkApiQS в js/marketplace-feed.min.js): city=<название>, без города — region=<ключ>, и
+ district=<ключ>. Поэтому выбор города приложения (ВыборГорода) каждый запрос несёт так же — Запрос.где; по умолчанию
+ это сохранённый выбор, а без рубильника Config.выборГорода — вся страна, как раньше.
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -25,6 +30,8 @@ enum ListingsAPI {
         var per = 24
         var cat = ""
         var q = ""
+        /// Где искать (этап 32): город, регион или район — выбор, сохранённый на телефоне в момент создания запроса.
+        var где = ГдеИскать.сохранённое()
 
         /// Ленту по умолчанию кладём на диск; поиск и разделы — нет, они быстро устаревают и нужны реже.
         var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty }
@@ -50,6 +57,7 @@ enum ListingsAPI {
                     URLQueryItem(name: "per", value: String(з.per))]
         if !з.cat.isEmpty { поля.append(URLQueryItem(name: "cat", value: з.cat)) }
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
+        поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
         ч.queryItems = поля
 
         var запрос = URLRequest(url: ч.url!)

@@ -14,6 +14,9 @@ import WebKit
  — тоже скриптом страницы (mkPhotoSearch): своих адресов у них нет. Поэтому и город, и камера открывают ленту сайта
  без главной (/kz/<язык>/?all=1 — MH.all в js/marketplace-home.js), где в той же шапке есть и город, и камера.
  Кнопки «Карта» нет: карта сайта — тоже слой страницы (mkMapOpen) без адреса, а угаданный адрес хуже никакого.
+
+ Этап 32: при Config.выборГорода город больше не ведёт на сайт — он открывает свой лист «Где ищете?» (ЛистГорода,
+ Native/Geo), а подпись — выбор приложения (ВыборГорода.подпись), а не #mk-city-lbl страницы.
  */
 struct ШапкаСайта<Справа: View, УПоиска: View>: View {
     @Binding var текст: String
@@ -21,6 +24,8 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
     /// Подпись города — как на странице сайта (#mk-city-lbl), по умолчанию «По всей стране».
     let город: String
     let открытьГород: () -> Void
+    /// Подсказка VoiceOver у города: «Откроется на сайте» (этап 25) или выбор в приложении (этап 32).
+    let подсказкаГорода: String
     /// Камера в поле; nil — без неё.
     let поискПоФото: (() -> Void)?
     let найти: () -> Void
@@ -28,12 +33,14 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
     let уПоиска: УПоиска
 
     init(текст: Binding<String>, фокус: FocusState<Bool>.Binding, город: String,
-         открытьГород: @escaping () -> Void, поискПоФото: (() -> Void)?, найти: @escaping () -> Void,
+         открытьГород: @escaping () -> Void, подсказкаГорода: String = DesignText.т("on_site"),
+         поискПоФото: (() -> Void)?, найти: @escaping () -> Void,
          @ViewBuilder справа: () -> Справа, @ViewBuilder уПоиска: () -> УПоиска) {
         _текст = текст
         self.фокус = фокус
         self.город = город
         self.открытьГород = открытьГород
+        self.подсказкаГорода = подсказкаГорода
         self.поискПоФото = поискПоФото
         self.найти = найти
         self.справа = справа()
@@ -105,7 +112,7 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(DesignText.т("city") + ": " + город)
-        .accessibilityHint(DesignText.т("on_site"))
+        .accessibilityHint(подсказкаГорода)
         .accessibilityAddTraits(.isButton)
     }
 

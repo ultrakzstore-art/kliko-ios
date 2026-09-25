@@ -58,6 +58,9 @@ final class ПодборкиГлавной: ObservableObject {
     /// Ни один запрос не прошёл, а показать нечего — строка «Не удалось загрузить подборки» с «Повторить».
     @Published private(set) var неудача = false
 
+    /// Этап 32: пока ряды грузились, их попросили снова (сменили город) — по окончании загрузить ещё раз, уже для него.
+    private var ещёРаз = false
+
     /// Первый показ: ряды уже есть — второй раз не просим.
     func начать() async {
         guard ряды.isEmpty, !грузим else { return }
@@ -66,11 +69,23 @@ final class ПодборкиГлавной: ObservableObject {
 
     /// Все разделы разом, с первой страницы. Не пришло ничего — прежние ряды остаются на экране.
     func загрузить() async {
-        guard !грузим else { return }
+        guard !грузим else {
+            ещёРаз = true
+            return
+        }
         грузим = true
         defer { грузим = false }
+        repeat {
+            ещёРаз = false
+            await загрузитьРаз()
+        } while ещёРаз && !Task.isCancelled
+    }
+
+    /// Один проход по разделам — для города, выбранного на его начало (этап 32): числа на плитках и ряды — его.
+    private func загрузитьРаз() async {
+        let где = ГдеИскать.сохранённое()
         let куки = await SiteSession.куки()
-        let ответы = await Self.запросить(куки: куки)
+        let ответы = await Self.запросить(куки: куки, где: где)
         guard !Task.isCancelled else { return }
         guard !ответы.isEmpty else {
             неудача = ряды.isEmpty
@@ -90,8 +105,8 @@ final class ПодборкиГлавной: ObservableObject {
         счёт = числа
     }
 
-    /// Первая страница каждого раздела: api/listings.php?cat=<раздел>&per=10 с куками, взятыми один раз.
-    nonisolated private static func запросить(куки: [String: String]) async -> [String: ListingsPage] {
+    /// Первая страница каждого раздела: api/listings.php?cat=<раздел>&per=10 (и город этапа 32) с куками, взятыми один раз.
+    nonisolated private static func запросить(куки: [String: String], где: ГдеИскать) async -> [String: ListingsPage] {
         await withTaskGroup(of: ОтветРяда.self, returning: [String: ListingsPage].self) { группа in
             for раздел in РазделГлавной.все {
                 let ключ = раздел.ключ
@@ -99,6 +114,7 @@ final class ПодборкиГлавной: ObservableObject {
                     var з = ListingsAPI.Запрос()
                     з.per = 10
                     з.cat = ключ
+                    з.где = где
                     let страница = try? await ListingsAPI.загрузить(з, куки: куки).страница
                     return ОтветРяда(ключ: ключ, страница: страница)
                 }
