@@ -31,31 +31,37 @@ struct ListingDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                галерея
-                VStack(alignment: .leading, spacing: 14) {
-                    шапка
-                    if неДогрузилась {
-                        Label(FeedText.т("detail_partial"), systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+            /* Этап 8: открыли по ссылке, а известен только номер — не пустая карточка, а ожидание или честный отказ. */
+            if товар.заготовка {
+                экранЗаготовки
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    галерея
+                    VStack(alignment: .leading, spacing: 14) {
+                        шапка
+                        if неДогрузилась {
+                            Label(FeedText.т("detail_partial"), systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        if !товар.характеристики.isEmpty { характеристики }
+                        if let описание = товар.описание { блокОписания(описание) }
+                        if товар.продавец != nil { строкаПродавца }
+                        if догружаем {
+                            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }
                     }
-                    if !товар.характеристики.isEmpty { характеристики }
-                    if let описание = товар.описание { блокОписания(описание) }
-                    if товар.продавец != nil { строкаПродавца }
-                    if догружаем {
-                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
-                    }
+                    .padding(16)
+                    /* Этап 7: похожие — вне отступов карточки, чтобы полоса листалась от края до края. */
+                    if Config.похожие { ПолосаПохожих(состояние: похожие) }
                 }
-                .padding(16)
-                /* Этап 7: похожие — вне отступов карточки, чтобы полоса листалась от края до края. */
-                if Config.похожие { ПолосаПохожих(состояние: похожие) }
             }
         }
         .background(Color(.systemBackground))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if Config.избранное {
+            /* Заготовку по ссылке в избранное не кладём: сохранилась бы пустая запись (этап 8). */
+            if Config.избранное && !товар.заготовка {
                 ToolbarItem(placement: .topBarTrailing) {
                     КнопкаИзбранного(товар: товар, место: .шапка)
                 }
@@ -67,23 +73,60 @@ struct ListingDetailView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) { нижняяПанель }
+        .safeAreaInset(edge: .bottom) { if !товар.заготовка { нижняяПанель } }
         .task { await догрузить() }
         /* Похожие — своей задачей, параллельно с догрузкой. Раздел у строки из избранного или «Вы смотрели» известен
            только из полной карточки, поэтому задача перезапускается, когда он появился. */
         .task(id: товар.категория) { await загрузитьПохожие() }
         /* Открыли — наверх полосы «Вы смотрели» над лентой (этап 6). */
         .onAppear {
-            if Config.недавние { RecentStore.shared.запомнить(товар) }
+            if Config.недавние && !товар.заготовка { RecentStore.shared.запомнить(товар) }
         }
-        /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5), и в «Вы смотрели» (этап 6). */
-        .onChange(of: товар) { _, свежий in
+        /* Дотянулась полная карточка сохранённого — свежая цена и в избранное (этап 5), и в «Вы смотрели» (этап 6).
+           Открытое по ссылке (этап 8) ложится в «Вы смотрели» только теперь, когда стало что показать. */
+        .onChange(of: товар) { прежний, свежий in
             if Config.избранное { FavoritesStore.shared.освежить(свежий) }
-            if Config.недавние { RecentStore.shared.освежить(свежий) }
+            if Config.недавние {
+                if !прежний.заготовка {
+                    RecentStore.shared.освежить(свежий)
+                } else if !свежий.заготовка {
+                    RecentStore.shared.запомнить(свежий)
+                }
+            }
         }
         .fullScreenCover(item: Binding(get: { фотоНаВесьЭкран.map(ФотоИндекс.init) },
                                        set: { фотоНаВесьЭкран = $0?.id })) { выбранное in
             ФотоНаВесьЭкран(адреса: товар.фотоАдреса, начало: выбранное.id)
+        }
+    }
+
+    // MARK: - Открыто по ссылке (этап 8)
+
+    /// Пока карточка грузится — колесо, а не «Цена по запросу» без названия; не дотянулась (сняли с продажи, нет
+    /// связи) — сказать это и дать повторить или открыть страницу сайта.
+    @ViewBuilder
+    private var экранЗаготовки: some View {
+        if догружаем {
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 160)
+                .accessibilityLabel(LinksText.т("opening"))
+        } else {
+            ContentUnavailableView {
+                Label(LinksText.т("failed"), systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(LinksText.т("failed_sub"))
+            } actions: {
+                Button(FeedText.т("retry")) { Task { await догрузить() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.green)
+                if let адрес = товар.адрес {
+                    Button(FeedText.т("open_site")) { открыть(адрес) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 80)
         }
     }
 

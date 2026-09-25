@@ -22,13 +22,22 @@ struct NativeFeedView: View {
     let открыть: (URL) -> Void
     /// Лента API не работает — показать ленту сайта.
     let открытьСайт: () -> Void
+    /// Стек ленты снаружи — у вкладок (этап 8): ссылка из пуша кладёт в него объявление. nil — стек свой, как раньше.
+    private let внешнийПуть: Binding<NavigationPath>?
+    @State private var свойПуть = NavigationPath()
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
     private let колонки = [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: 12, alignment: .top)]
 
+    init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil) {
+        self.открыть = открыть
+        self.открытьСайт = открытьСайт
+        внешнийПуть = путь
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: внешнийПуть ?? $свойПуть) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if показатьНедавние {

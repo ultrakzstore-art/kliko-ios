@@ -53,24 +53,25 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Холодный старт по нажатию на плашку сделки (widgetURL) или по кнопке «Открыть в приложении»
         // (kliko://open?u=…). Раньше это ловил .onOpenURL у WindowGroup.
         // Адрес проходит через Config.deepLink: он переводит схему в страницу и отсекает чужие домены.
-        if let адрес = connectionOptions.urlContexts.first?.url { мост.pendingURL = Config.deepLink(адрес) }
+        // Объявление и переписка открываются нативными экранами (этап 8, WebBridge.открытьСнаружи), прочее — сайтом.
+        if let адрес = connectionOptions.urlContexts.first?.url, let наш = Config.deepLink(адрес) { мост.открытьСнаружи(наш) }
 
         // Холодный старт по ссылке сайта из поиска, письма или сообщения (Universal Links, applinks:kliko.kz).
         // Домен здесь уже проверила iOS — по файлу apple-app-site-association; Config.deepLink страхует.
         if let ссылка = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }),
-           let адрес = ссылка.webpageURL, let наш = Config.deepLink(адрес) { мост.pendingURL = наш }
+           let адрес = ссылка.webpageURL, let наш = Config.deepLink(адрес) { мост.открытьСнаружи(наш) }
     }
 
     /// Плашка сделки или кнопка «Открыть в приложении», когда приложение уже запущено.
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.pendingURL = наш }
+        if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.открытьСнаружи(наш) }
     }
 
     /// Ссылка сайта из поиска, письма или чужого приложения, когда наше уже запущено (Universal Links).
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
               let адрес = userActivity.webpageURL, let наш = Config.deepLink(адрес) else { return }
-        WebBridge.shared.pendingURL = наш
+        WebBridge.shared.открытьСнаружи(наш)
     }
 
     // Вход по Face ID (AppLock): закрыть содержимое при уходе, запереть после минуты в фоне, спросить при возврате.

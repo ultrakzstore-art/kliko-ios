@@ -18,8 +18,13 @@ struct NativeTabsView: View {
     enum Вкладка: Hashable { case лента, избранное, сообщения, разместить, кабинет }
 
     @ObservedObject private var мост = WebBridge.shared
+    /// Пуш и ссылки сайта (этап 8): куда вести — объявление в ленте или сообщения.
+    @ObservedObject private var маршрут = NativeRouter.shared
     @StateObject private var чаты = ChatListModel()
     @State private var вкладка: Вкладка = .лента
+    /// Стеки ленты и сообщений — здесь, а не внутри вкладок, чтобы ссылка могла положить в них экран (этап 8).
+    @State private var путьЛенты = NavigationPath()
+    @State private var путьСообщений = NavigationPath()
     @Environment(\.scenePhase) private var фаза
 
     let открыть: (URL) -> Void
@@ -27,7 +32,7 @@ struct NativeTabsView: View {
 
     var body: some View {
         TabView(selection: $вкладка) {
-            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт)
+            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты)
                 .tabItem { Label(TabsText.т("feed"), systemImage: "square.grid.2x2") }
                 .tag(Вкладка.лента)
 
@@ -45,7 +50,7 @@ struct NativeTabsView: View {
             }
 
             if Config.нативныйЧат {
-                NavigationStack {
+                NavigationStack(path: $путьСообщений) {
                     ChatListView(модель: чаты, открыть: открыть)
                         .чатМаршруты(открыть: открыть)
                 }
@@ -79,18 +84,45 @@ struct NativeTabsView: View {
                 break
             }
         }
-        /* Вернулся со страницы сайта на главную — в ленту: «Главная» сайта ведёт на главную, а главная здесь — лента. */
+        /* Вернулся со страницы сайта на главную — в ленту: «Главная» сайта ведёт на главную, а главная здесь — лента.
+           Слой вернула ссылка снаружи (этап 8) — вкладку выберет она. */
         .onChange(of: мост.лентаВидна) { _, видна in
             guard видна else { return }
-            вкладка = .лента
+            if маршрут.цель == nil { вкладка = .лента }
             Task { await обновитьСчётчик() }
         }
+        /* Ссылка снаружи (этап 8) — в следующем такте: вместе с целью мост мог вернуть слой на экран, а в каком порядке
+           SwiftUI позовёт два onChange, он не обещает; обработчик выше иначе мог бы перебить вкладку лентой. */
+        .onChange(of: маршрут.цель) { _, новая in
+            guard новая != nil else { return }
+            Task { @MainActor in принятьСсылку() }
+        }
+        /* Холодный старт по пушу или ссылке: цель пришла раньше, чем вкладки появились. */
+        .onAppear { принятьСсылку() }
         .task {
             guard Config.нативныйЧат else { return }
             while !Task.isCancelled {
                 await обновитьСчётчик()
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
             }
+        }
+    }
+
+    /// Ссылка снаружи — на её экран, и цель обнуляем: тот же пуш второй раз экран не откроет. Объявление ложится
+    /// поверх того, что было открыто в ленте, — «Назад» вернёт туда. Сообщения — к списку, а не в открытую переписку:
+    /// пуш о новом сообщении, и видно его в списке.
+    private func принятьСсылку() {
+        guard let куда = маршрут.цель else { return }
+        маршрут.цель = nil
+        switch куда {
+        case .объявление(let номер):
+            вкладка = .лента
+            путьЛенты.append(Listing(номер: номер))
+        case .сообщения:
+            guard Config.нативныйЧат else { return }
+            путьСообщений = NavigationPath()
+            вкладка = .сообщения
+            Task { await чаты.загрузить() }
         }
     }
 
