@@ -40,7 +40,9 @@ enum ListingsAPI {
         return URLSession(configuration: c)
     }()
 
-    static func загрузить(_ з: Запрос) async throws -> (страница: ListingsPage, сырое: Data) {
+    /// `куки` — заголовки заранее: фоновая проверка сохранённых поисков (этап 12) берёт их у WebKit сама, с пределом
+    /// по времени, и одни на все запросы; пустые — запрос без куков. nil — как раньше, у WebKit перед запросом.
+    static func загрузить(_ з: Запрос, куки заданные: [String: String]? = nil) async throws -> (страница: ListingsPage, сырое: Data) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
         var поля = [URLQueryItem(name: "sort", value: "reco"),
@@ -52,7 +54,9 @@ enum ListingsAPI {
 
         var запрос = URLRequest(url: ч.url!)
         запрос.httpShouldHandleCookies = false
-        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
+        let заголовки: [String: String]
+        if let заданные { заголовки = заданные } else { заголовки = await SiteSession.куки() }
+        for (имя, значение) in заголовки { запрос.setValue(значение, forHTTPHeaderField: имя) }
 
         let данные: Data
         let ответ: URLResponse

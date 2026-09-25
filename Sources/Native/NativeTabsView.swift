@@ -32,6 +32,8 @@ struct NativeTabsView: View {
     @State private var поискЛенты = false
     /// «Поиск» с иконки пришёл, а поле трогать рано: на экране замок Face ID или страница сайта. Ждём их ухода.
     @State private var поискЖдёт = false
+    /// Сохранённый поиск для ленты (этап 12: уведомление о новых, строка кабинета). Лента подставит его и обнулит.
+    @State private var найтиВЛенте: ИскомоеЛенты? = nil
     @ObservedObject private var замок = AppLock.shared
     @Environment(\.scenePhase) private var фаза
 
@@ -40,7 +42,8 @@ struct NativeTabsView: View {
 
     var body: some View {
         TabView(selection: $вкладка) {
-            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты, поиск: $поискЛенты)
+            NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты, поиск: $поискЛенты,
+                           найти: $найтиВЛенте)
                 .tabItem { Label(TabsText.т("feed"), systemImage: "square.grid.2x2") }
                 .tag(Вкладка.лента)
 
@@ -162,6 +165,11 @@ struct NativeTabsView: View {
             guard Config.избранное else { return }
             путьИзбранного = NavigationPath()
             вкладка = .избранное
+        case .найти(let искомое):
+            /* Этап 12: к корню ленты, а поиск подставит сама лента (NativeFeedView.применитьСнаружи) — модель у неё. */
+            путьЛенты = NavigationPath()
+            вкладка = .лента
+            найтиВЛенте = искомое
         }
     }
 

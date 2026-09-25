@@ -28,6 +28,12 @@ struct NativeFeedView: View {
     /// Поле поиска активно — снаружи его включает быстрое действие «Поиск» с иконки (этап 10). nil — своё, как раньше.
     private let внешнийПоиск: Binding<Bool>?
     @State private var свойПоиск = false
+    /// Сохранённый поиск снаружи — уведомление о новых или строка кабинета (этап 12). nil — входа нет (без вкладок).
+    private let внешнееИскомое: Binding<ИскомоеЛенты?>?
+    /// Колокольчик «Сохранить поиск» (этап 12) спрашивает здесь, сохранён ли уже поиск ленты.
+    @ObservedObject private var сохранённые = SavedSearchStore.shared
+    /// Сохранённых поисков уже предел — объяснить, а не вытеснять старый молча.
+    @State private var поисковПолно = false
 
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.прочитать()?.rows.filter { !$0.k.isEmpty } ?? []
 
@@ -35,11 +41,12 @@ struct NativeFeedView: View {
     @Environment(\.dynamicTypeSize) private var размерТекста
 
     init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil,
-         поиск: Binding<Bool>? = nil) {
+         поиск: Binding<Bool>? = nil, найти: Binding<ИскомоеЛенты?>? = nil) {
         self.открыть = открыть
         self.открытьСайт = открытьСайт
         внешнийПуть = путь
         внешнийПоиск = поиск
+        внешнееИскомое = найти
     }
 
     var body: some View {
@@ -72,6 +79,13 @@ struct NativeFeedView: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Kliko")
+                }
+                /* Этап 12: колокольчик — сохранить поиск, пока в ленте поиск или раздел. Заполненный — уже сохранён,
+                   нажатие убирает. */
+                if Config.сохранённыеПоиски && !модель.действующее.пустое {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        кнопкаСохранитьПоиск
+                    }
                 }
                 /* С нижними вкладками (этап 4) избранное, сообщения и кабинет — там; в шапке их второй раз не показываем. */
                 if Config.избранное && !Config.нижниеВкладки {
@@ -111,8 +125,51 @@ struct NativeFeedView: View {
             .onChange(of: модель.поиск) { _, текст in
                 if текст.isEmpty { модель.поискОчищен() }
             }
+            .alert(SavedSearchText.т("full"), isPresented: $поисковПолно) {
+                Button(SavedSearchText.т("ok"), role: .cancel) {}
+            } message: {
+                Text(String(format: SavedSearchText.т("full_msg"), SavedSearchStore.предел))
+            }
+            /* Сохранённый поиск снаружи (этап 12): пришёл, пока лента на экране, — onChange; раньше, чем она
+               появилась (холодный старт по уведомлению), — onAppear. */
+            .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
+            .onAppear { применитьСнаружи() }
         }
         .task { await модель.начать() }
+    }
+
+    // MARK: - Сохранённые поиски (этап 12)
+
+    private var кнопкаСохранитьПоиск: some View {
+        let искомое = модель.действующее
+        let сохранён = сохранённые.есть(искомое)
+        return Button { переключитьСохранённый(искомое) } label: {
+            Image(systemName: сохранён ? "bell.fill" : "bell")
+        }
+        .accessibilityLabel(SavedSearchText.т(сохранён ? "unsave" : "save"))
+    }
+
+    /// Колокольчик: сохранить поиск или убрать. Точка отсчёта — выдача на экране, если она уже пришла именно по этому
+    /// поиску: её человек видел, уведомлять о ней не надо. Первое сохранение спрашивает разрешение на уведомления.
+    private func переключитьСохранённый(_ искомое: ИскомоеЛенты) {
+        if сохранённые.есть(искомое) {
+            сохранённые.убрать(искомое)
+            return
+        }
+        let названиеРаздела = разделы.first(where: { $0.k == искомое.раздел })?.название
+        let видели: [String]? = модель.выдачаГотова ? модель.items.map(\.id) : nil
+        guard сохранённые.добавить(искомое, названиеРаздела: названиеРаздела, видели: видели) else {
+            поисковПолно = true
+            return
+        }
+        Task { await ПроверкаПоисков.попроситьРазрешение() }
+    }
+
+    /// Сохранённый поиск снаружи — в поле и раздел, и забыть: тот же вход второй раз ленту не сбросит.
+    private func применитьСнаружи() {
+        guard let внешнее = внешнееИскомое, let искомое = внешнее.wrappedValue else { return }
+        внешнее.wrappedValue = nil
+        модель.применить(искомое)
     }
 
     // MARK: - Недавнее (этап 6)

@@ -709,6 +709,7 @@ struct WebContainer: UIViewRepresentable {
                 Task { @MainActor in RecentStore.shared.стереть() }      // и что он смотрел и искал (этап 6)
                 ПоискТелефона.стереть()          // и его просмотры из поиска iPhone (этап 10)
                 Task { @MainActor in ЗначокПриложения.снять() }   // и его непрочитанные с иконки (этап 11)
+                Task { @MainActor in SavedSearchStore.shared.стереть() }   // и его сохранённые поиски с проверкой (этап 12)
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

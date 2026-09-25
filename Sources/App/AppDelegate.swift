@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Этап 12: обработчик фоновой проверки сохранённых поисков — строго до конца запуска, иначе iOS роняет
+        // приложение при первом же фоновом запуске задания.
+        ПроверкаПоисков.зарегистрировать()
         requestPushAuthorization()
         // Холодный старт по тапу на уведомление.
         if let notif = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
@@ -62,7 +65,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        handlePayload(response.notification.request.content.userInfo)
+        let info = response.notification.request.content.userInfo
+        // Этап 12: своё локальное уведомление о новых по сохранённому поиску узнаём по метке в userInfo и ведём в
+        // ленту с этим поиском. У пушей сайта метки нет — они, как раньше, идут по "url".
+        if let искомое = ПроверкаПоисков.искомое(из: info) {
+            Task { @MainActor in ПроверкаПоисков.открыть(искомое) }
+        } else {
+            handlePayload(info)
+        }
         completionHandler()
     }
 

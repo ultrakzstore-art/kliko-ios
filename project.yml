@@ -89,7 +89,10 @@ targets:
           - CFBundleURLName: kz.kliko.app
             CFBundleTypeRole: Editor
             CFBundleURLSchemes: [kliko]
-        UIBackgroundModes: [remote-notification]      # фоновые/тихие пуши
+        UIBackgroundModes: [remote-notification, fetch]   # фоновые/тихие пуши; fetch — BGAppRefreshTask (этап 12)
+        # ФОНОВАЯ ПРОВЕРКА СОХРАНЁННЫХ ПОИСКОВ (этап 12, ПроверкаПоисков). Идентификатор задания обязан быть в этом
+        # списке: BGTaskScheduler.register с незаявленным идентификатором роняет приложение на запуске.
+        BGTaskSchedulerPermittedIdentifiers: [kz.kliko.app.saved-search]
         NSSupportsLiveActivities: true                # Live Activity сделки (локскрин/Dynamic Island)
         # ТЕКСТЫ РАЗРЕШЕНИЙ. App Review в письме по нашей сборке отдельно напомнил
         # правило 5.1.1: каждая строка обязана объяснять, ЗАЧЕМ нужен доступ, и в

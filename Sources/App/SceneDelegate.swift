@@ -99,7 +99,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     // Вход по Face ID (AppLock): закрыть содержимое при уходе, запереть после минуты в фоне, спросить при возврате.
     func sceneWillResignActive(_ scene: UIScene)    { AppLock.shared.sceneWillResignActive() }
-    func sceneDidEnterBackground(_ scene: UIScene)  { AppLock.shared.sceneDidEnterBackground() }
+    func sceneDidEnterBackground(_ scene: UIScene)  {
+        AppLock.shared.sceneDidEnterBackground()
+        ПроверкаПоисков.запланировать()             // этап 12: проверка сохранённых поисков — не раньше чем через час
+    }
     func sceneWillEnterForeground(_ scene: UIScene) { AppLock.shared.sceneWillEnterForeground() }
     func sceneDidBecomeActive(_ scene: UIScene)     { AppLock.shared.sceneDidBecomeActive() }
 }
