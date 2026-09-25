@@ -13,6 +13,9 @@ import SwiftUI
 
  Разделы — из снимка, который присылает главная сайта (FeedSnapshot): там названия на языке человека и краски
  разделов, и второй словарь разделов в приложении не заводим. Снимка нет — лента без полосы разделов.
+
+ С этапа 14 на iPad в широком окне лента и выбранное объявление — рядом, в две колонки (раскладкаРядом,
+ Native/IPad/FeedSplit.swift); iPhone и узкое окно — прежний стек (раскладкаСтеком).
  */
 struct NativeFeedView: View {
     @StateObject private var модель = FeedModel()
@@ -40,102 +43,229 @@ struct NativeFeedView: View {
     /// Размер текста в Настройках: при крупном для доступности — сетка в одну колонку (этап 11, ListingCard.сетка).
     @Environment(\.dynamicTypeSize) private var размерТекста
 
+    /// Выбранное объявление правой колонки на iPad (этап 14). Снаружи — у вкладок: ссылка из пуша выбирает объявление,
+    /// а не кладёт его поверх ленты. nil — своё (лента без вкладок).
+    private let внешнееВыбранное: Binding<Listing?>?
+    @State private var своёВыбранное: Listing? = nil
+    /// Колонки на iPad: обе на экране, и в вертикальном положении тоже; спрятать ленту можно кнопкой колонки.
+    @State private var видимостьКолонок: NavigationSplitViewVisibility = .all
+    /// Широкое окно iPad — лента и карточка рядом (ДвеКолонки.включены).
+    @Environment(\.horizontalSizeClass) private var ширинаОкна
+
     init(открыть: @escaping (URL) -> Void, открытьСайт: @escaping () -> Void, путь: Binding<NavigationPath>? = nil,
-         поиск: Binding<Bool>? = nil, найти: Binding<ИскомоеЛенты?>? = nil) {
+         поиск: Binding<Bool>? = nil, найти: Binding<ИскомоеЛенты?>? = nil, выбранное: Binding<Listing?>? = nil) {
         self.открыть = открыть
         self.открытьСайт = открытьСайт
         внешнийПуть = путь
         внешнийПоиск = поиск
         внешнееИскомое = найти
+        внешнееВыбранное = выбранное
     }
 
     var body: some View {
-        NavigationStack(path: внешнийПуть ?? $свойПуть) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    if показатьНедавние {
-                        ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
-                            withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
-                        })
-                    }
-                    if !разделы.isEmpty { полосаРазделов }
-                    содержимое
-                }
-                .padding(.bottom, 24)
+        Group {
+            /* Этап 14: iPad в широком окне — лента и карточка рядом. iPhone и узкое окно iPad — стек, как раньше. */
+            if двеКолонки {
+                раскладкаРядом
+            } else {
+                раскладкаСтеком
             }
-            .background(Color(.systemGroupedBackground))
-            .refreshable { await модель.обновить() }
-            .navigationDestination(for: Listing.self) { товар in
-                ListingDetailView(товар: товар, открыть: открыть)
-            }
-            .чатМаршруты(открыть: открыть)
-            .избранноеМаршруты(открыть: открыть)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 8) {
-                        KlikoLogoIcon(size: 22)
-                        KlikoWordmark(height: 15)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Kliko")
-                }
-                /* Этап 12: колокольчик — сохранить поиск, пока в ленте поиск или раздел. Заполненный — уже сохранён,
-                   нажатие убирает. */
-                if Config.сохранённыеПоиски && !модель.действующее.пустое {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        кнопкаСохранитьПоиск
-                    }
-                }
-                /* С нижними вкладками (этап 4) избранное, сообщения и кабинет — там; в шапке их второй раз не показываем. */
-                if Config.избранное && !Config.нижниеВкладки {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        NavigationLink(value: ИзбранноеЦель.список) {
-                            Image(systemName: "heart")
-                        }
-                        .accessibilityLabel(FavoritesText.т("title"))
-                    }
-                }
-                if Config.нативныйЧат && !Config.нижниеВкладки {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        NavigationLink(value: ЧатЦель.список) {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                        }
-                        .accessibilityLabel(ChatText.т("title"))
-                    }
-                }
-                if !Config.нижниеВкладки {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            if let u = Config.url("/cabinet.php") { открыть(u) }
-                        } label: {
-                            Image(systemName: "person.crop.circle")
-                        }
-                        .accessibilityLabel(FeedText.т("cabinet"))
-                    }
-                }
-            }
-            .searchable(text: $модель.поиск, isPresented: внешнийПоиск ?? $свойПоиск,
-                        placement: .navigationBarDrawer(displayMode: .always), prompt: FeedText.т("search"))
-            .searchSuggestions { подсказкиПоиска }
-            .onSubmit(of: .search) {
-                модель.искать()
-                if Config.недавние { недавние.запомнитьЗапрос(модель.поиск) }
-            }
-            .onChange(of: модель.поиск) { _, текст in
-                if текст.isEmpty { модель.поискОчищен() }
-            }
-            .alert(SavedSearchText.т("full"), isPresented: $поисковПолно) {
-                Button(SavedSearchText.т("ok"), role: .cancel) {}
-            } message: {
-                Text(String(format: SavedSearchText.т("full_msg"), SavedSearchStore.предел))
-            }
-            /* Сохранённый поиск снаружи (этап 12): пришёл, пока лента на экране, — onChange; раньше, чем она
-               появилась (холодный старт по уведомлению), — onAppear. */
-            .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
-            .onAppear { применитьСнаружи() }
         }
         .task { await модель.начать() }
+    }
+
+    /// Стек ленты (этапы 1–13): карточка, чат и избранное ложатся поверх ленты.
+    private var раскладкаСтеком: some View {
+        NavigationStack(path: путьСтека) {
+            лента
+                .navigationDestination(for: Listing.self) { товар in
+                    ListingDetailView(товар: товар, открыть: открыть)
+                }
+                .чатМаршруты(открыть: открыть)
+                .избранноеМаршруты(открыть: открыть)
+        }
+        /* Этап 14: окно iPad сузили (Split View, Slide Over) — правой колонки больше нет. На iPhone выбранного не
+           бывает, и здесь ничего не происходит. */
+        .onAppear { выбранноеВСтек() }
+    }
+
+    /**
+     iPad, широкое окно (этап 14): слева лента, справа выбранное объявление со своим стеком — похожие и «Написать»
+     ложатся в него, «Назад» ведёт к выбранному.
+
+     Путь стека правой колонки — тот же, что у ленты в стеке (путьСтека). Поэтому «к корню ленты» у вкладок (этапы 8,
+     10, 12) снимает открытое поверх выбранного, а при смене ширины окна открытые экраны сами переезжают из колонки в
+     стек и обратно.
+     */
+    private var раскладкаРядом: some View {
+        NavigationSplitView(columnVisibility: $видимостьКолонок) {
+            /* Колонка ленты шире стандартной боковой: при 400 pt в ней две карточки в ряд, сетка та же (ListingCard.сетка). */
+            лента
+                .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 560)
+        } detail: {
+            NavigationStack(path: путьСтека) {
+                колонкаКарточки
+                    .navigationDestination(for: Listing.self) { товар in
+                        ListingDetailView(товар: товар, открыть: открыть)
+                    }
+                    .чатМаршруты(открыть: открыть)
+                    .избранноеМаршруты(открыть: открыть)
+            }
+        }
+        /* balanced — колонки делят ширину, а не лента наплывает на карточку: иначе в вертикальном положении iPad
+           лента пряталась бы за кнопку, и человек видел бы одну подсказку «Выберите объявление». */
+        .navigationSplitViewStyle(.balanced)
+        /* «Поиск» с иконки (этап 10) — поле в колонке ленты: спрятанную колонку показать. */
+        .onChange(of: поискПоказан.wrappedValue) { _, показан in
+            if показан { показатьЛенту() }
+        }
+    }
+
+    /// Правая колонка: выбранное объявление или подсказка. Другое объявление — новая карточка со своим состоянием
+    /// (.id); то же самое — прежняя, уже дотянутая: ссылка на открытое объявление не сбросит его к заготовке.
+    @ViewBuilder
+    private var колонкаКарточки: some View {
+        if let товар = выбор.wrappedValue {
+            ListingDetailView(товар: товар, открыть: открыть)
+                .id(товар.id)
+        } else {
+            ЗаглушкаКарточки()
+        }
+    }
+
+    /// Сама лента: «Вы смотрели», разделы, сетка, шапка и поиск — одна и та же в стеке и в левой колонке.
+    private var лента: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if показатьНедавние {
+                    ПолосаНедавних(товары: недавние.товары, открыть: открыть, очистить: {
+                        withAnimation(.easeInOut(duration: 0.2)) { недавние.очиститьПросмотры() }
+                    }, выбрать: выборНедавнего)
+                }
+                if !разделы.isEmpty { полосаРазделов }
+                содержимое
+            }
+            .padding(.bottom, 24)
+        }
+        .background(Color(.systemGroupedBackground))
+        .refreshable { await модель.обновить() }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    KlikoLogoIcon(size: 22)
+                    KlikoWordmark(height: 15)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Kliko")
+            }
+            /* Этап 12: колокольчик — сохранить поиск, пока в ленте поиск или раздел. Заполненный — уже сохранён,
+               нажатие убирает. */
+            if Config.сохранённыеПоиски && !модель.действующее.пустое {
+                ToolbarItem(placement: .topBarTrailing) {
+                    кнопкаСохранитьПоиск
+                }
+            }
+            /* С нижними вкладками (этап 4) избранное, сообщения и кабинет — там; в шапке их второй раз не показываем. */
+            if Config.избранное && !Config.нижниеВкладки {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ссылкаШапки(ИзбранноеЦель.список, значок: "heart", подпись: FavoritesText.т("title"))
+                }
+            }
+            if Config.нативныйЧат && !Config.нижниеВкладки {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ссылкаШапки(ЧатЦель.список, значок: "bubble.left.and.bubble.right", подпись: ChatText.т("title"))
+                }
+            }
+            if !Config.нижниеВкладки {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        if let u = Config.url("/cabinet.php") { открыть(u) }
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                    }
+                    .accessibilityLabel(FeedText.т("cabinet"))
+                }
+            }
+        }
+        .searchable(text: $модель.поиск, isPresented: поискПоказан,
+                    placement: .navigationBarDrawer(displayMode: .always), prompt: FeedText.т("search"))
+        .searchSuggestions { подсказкиПоиска }
+        .onSubmit(of: .search) {
+            модель.искать()
+            if Config.недавние { недавние.запомнитьЗапрос(модель.поиск) }
+        }
+        .onChange(of: модель.поиск) { _, текст in
+            if текст.isEmpty { модель.поискОчищен() }
+        }
+        .alert(SavedSearchText.т("full"), isPresented: $поисковПолно) {
+            Button(SavedSearchText.т("ok"), role: .cancel) {}
+        } message: {
+            Text(String(format: SavedSearchText.т("full_msg"), SavedSearchStore.предел))
+        }
+        /* Сохранённый поиск снаружи (этап 12): пришёл, пока лента на экране, — onChange; раньше, чем она
+           появилась (холодный старт по уведомлению), — onAppear. */
+        .onChange(of: внешнееИскомое?.wrappedValue) { _, _ in применитьСнаружи() }
+        .onAppear { применитьСнаружи() }
+    }
+
+    // MARK: - Лента и карточка рядом (этап 14)
+
+    /// Лента в две колонки — сейчас, в этом окне.
+    private var двеКолонки: Bool { ДвеКолонки.включены(ширинаОкна) }
+
+    /// Стек ленты или, в две колонки, стек правой колонки. Снаружи — у вкладок (этап 8), иначе свой.
+    private var путьСтека: Binding<NavigationPath> { внешнийПуть ?? $свойПуть }
+
+    /// Поле поиска активно. Снаружи его включает «Поиск» с иконки (этап 10), иначе своё.
+    private var поискПоказан: Binding<Bool> { внешнийПоиск ?? $свойПоиск }
+
+    /// Объявление в правой колонке: у вкладок — их, без вкладок — своё.
+    private var выбор: Binding<Listing?> { внешнееВыбранное ?? $своёВыбранное }
+
+    /// «Вы смотрели» в две колонки тоже выбирает в правую колонку; в стеке — nil: ссылки в стек, как раньше.
+    private var выборНедавнего: ((Listing) -> Void)? {
+        guard двеКолонки else { return nil }
+        return { товар in выбрать(товар) }
+    }
+
+    /// Объявление — в правую колонку. Стек колонки — к началу: и другое объявление, и то же самое, закрытое сверху
+    /// похожими или чатом, видно сразу, без «Назад».
+    private func выбрать(_ товар: Listing) {
+        путьСтека.wrappedValue = NavigationPath()
+        выбор.wrappedValue = товар
+    }
+
+    /// Окно сузили — выбранное из правой колонки ложится в стек поверх ленты, как это делает и сама NavigationSplitView,
+    /// когда сворачивается: человек остаётся в той же карточке. Если над ним в колонке уже были похожие или чат, они и
+    /// так в пути стека и остаются на экране; само выбранное под них не подложить — путь стека непрозрачен.
+    private func выбранноеВСтек() {
+        guard Config.айпадДвеКолонки, let товар = выбор.wrappedValue else { return }
+        выбор.wrappedValue = nil
+        if путьСтека.wrappedValue.isEmpty { путьСтека.wrappedValue.append(товар) }
+    }
+
+    /// Колонку ленты спрятали кнопкой, а в неё пришёл поиск — показать, иначе поле и выдача остались бы за кадром.
+    private func показатьЛенту() {
+        guard двеКолонки, видимостьКолонок != .all else { return }
+        видимостьКолонок = .all
+    }
+
+    /// Кнопка шапки, когда нижних вкладок нет (избранное, сообщения). В стеке — ссылка, как раньше; в две колонки у
+    /// колонки ленты своего стека нет, и экран ложится в стек правой колонки.
+    @ViewBuilder
+    private func ссылкаШапки<Цель: Hashable>(_ цель: Цель, значок: String, подпись: String) -> some View {
+        if двеКолонки {
+            Button { путьСтека.wrappedValue.append(цель) } label: {
+                Image(systemName: значок)
+            }
+            .accessibilityLabel(подпись)
+        } else {
+            NavigationLink(value: цель) {
+                Image(systemName: значок)
+            }
+            .accessibilityLabel(подпись)
+        }
     }
 
     // MARK: - Сохранённые поиски (этап 12)
@@ -170,6 +300,7 @@ struct NativeFeedView: View {
         guard let внешнее = внешнееИскомое, let искомое = внешнее.wrappedValue else { return }
         внешнее.wrappedValue = nil
         модель.применить(искомое)
+        показатьЛенту()                     // этап 14: колонку ленты могли спрятать — выдача там
     }
 
     // MARK: - Недавнее (этап 6)
@@ -271,9 +402,13 @@ struct NativeFeedView: View {
             }
             LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
                 ForEach(модель.items) { товар in
-                    /* Этап 2: карточка нативная. Рубильник выключен — как на этапе 1, страница сайта. */
+                    /* Этап 2: карточка нативная. Рубильник выключен — как на этапе 1, страница сайта. Этап 14: в две
+                       колонки карточка не уводит с ленты, а открывается справа, и выбранная обведена. */
                     Group {
-                        if Config.нативнаяКарточка {
+                        if двеКолонки {
+                            Button { выбрать(товар) } label: { ListingCard(товар: товар) }
+                                .выбраннаяКарточка(выбор.wrappedValue?.id == товар.id)
+                        } else if Config.нативнаяКарточка {
                             NavigationLink(value: товар) { ListingCard(товар: товар) }
                         } else {
                             Button { if let u = товар.адрес { открыть(u) } } label: { ListingCard(товар: товар) }

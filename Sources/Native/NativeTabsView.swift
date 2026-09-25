@@ -34,6 +34,10 @@ struct NativeTabsView: View {
     @State private var поискЖдёт = false
     /// Сохранённый поиск для ленты (этап 12: уведомление о новых, строка кабинета). Лента подставит его и обнулит.
     @State private var найтиВЛенте: ИскомоеЛенты? = nil
+    /// Объявление в правой колонке ленты на iPad (этап 14) — здесь, чтобы ссылка могла выбрать его, а не класть в стек.
+    @State private var выбранноеВЛенте: Listing? = nil
+    /// Широкое окно iPad — лента в две колонки (ДвеКолонки.включены), и объявление из ссылки встаёт в правую.
+    @Environment(\.horizontalSizeClass) private var ширинаОкна
     @ObservedObject private var замок = AppLock.shared
     @Environment(\.scenePhase) private var фаза
 
@@ -43,7 +47,7 @@ struct NativeTabsView: View {
     var body: some View {
         TabView(selection: $вкладка) {
             NativeFeedView(открыть: открыть, открытьСайт: открытьСайт, путь: $путьЛенты, поиск: $поискЛенты,
-                           найти: $найтиВЛенте)
+                           найти: $найтиВЛенте, выбранное: $выбранноеВЛенте)
                 .tabItem { Label(TabsText.т("feed"), systemImage: "square.grid.2x2") }
                 .tag(Вкладка.лента)
 
@@ -149,7 +153,14 @@ struct NativeTabsView: View {
         switch куда {
         case .объявление(let номер):
             вкладка = .лента
-            путьЛенты.append(Listing(номер: номер))
+            if ДвеКолонки.включены(ширинаОкна) {
+                /* Этап 14: на iPad лента и карточка рядом — объявление встаёт в правую колонку вместо выбранного,
+                   открытое над тем (похожие, чат) снимаем: иначе новое оказалось бы под ним. */
+                путьЛенты = NavigationPath()
+                выбранноеВЛенте = Listing(номер: номер)
+            } else {
+                путьЛенты.append(Listing(номер: номер))
+            }
         case .сообщения:
             guard Config.нативныйЧат else { return }
             путьСообщений = NavigationPath()
