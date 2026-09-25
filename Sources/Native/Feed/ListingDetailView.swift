@@ -22,6 +22,8 @@ struct ListingDetailView: View {
     @State private var похожие: Похожие.Состояние = .нет
     /// Этап 13: на экране копия с телефона, а не ответ сайта, — когда она легла. nil — карточка живая (или строка ленты).
     @State private var сохранённаяКопия: Date?
+    /// Масштаб экрана — в нём рисуется картинка для «Поделиться» (этап 19), чтобы в мессенджере она была чёткой.
+    @Environment(\.displayScale) private var масштабЭкрана
 
     /// Открыть страницу сайта в веб-обёртке.
     let открыть: (URL) -> Void
@@ -72,8 +74,16 @@ struct ListingDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 if let адрес = товар.адрес {
-                    ShareLink(item: адрес) { Image(systemName: "square.and.arrow.up") }
-                        .accessibilityLabel(FeedText.т("share"))
+                    /* Этап 19: ссылка и картинка объявления. Заготовке по ссылке (этап 8) рисовать нечего — только
+                       ссылка, как и при выключенном рубильнике. */
+                    if Config.поделитьсяКартинкой && !товар.заготовка {
+                        Button { поделитьсяКартинкой(адрес) } label: { Image(systemName: "square.and.arrow.up") }
+                            .accessibilityLabel(FeedText.т("share"))
+                            .accessibilityHint(ShareCardText.т("hint"))
+                    } else {
+                        ShareLink(item: адрес) { Image(systemName: "square.and.arrow.up") }
+                            .accessibilityLabel(FeedText.т("share"))
+                    }
                 }
             }
         }
@@ -371,6 +381,16 @@ struct ListingDetailView: View {
         .padding(.top, 10)
         .padding(.bottom, 6)
         .background(.regularMaterial)
+    }
+
+    // MARK: - Поделиться картинкой (этап 19)
+
+    /// Картинка — с тем фото, что открыто в галерее (если оно уже скачано), и ссылка. Не нарисовалась — одна ссылка.
+    private func поделитьсяКартинкой(_ адрес: URL) {
+        let адреса = товар.фотоАдреса
+        let фото = адреса.indices.contains(страница) ? адреса[страница] : адреса.first
+        let картинка = ОтправкаКартинкой.картинка(товар, фото: фото, масштаб: масштабЭкрана)
+        ОтправкаКартинкой.поделиться(адрес: адрес, картинка: картинка)
     }
 
     // MARK: - Загрузка
