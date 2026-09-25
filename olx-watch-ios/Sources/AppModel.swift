@@ -621,7 +621,8 @@ final class AppModel {
     /// ответ не сбрасывает паузу OLX (и наоборот).
     // Турбо Kaspi: номера объявлений сквозные; граница — самый большой номер из выдачи Kaspi.
     @ObservationIgnored private var kaspiFrontier = UserDefaults.standard.integer(forKey: "kaspi_edge")
-    @ObservationIgnored private var kaspiMisses: [Int: Int] = [:]
+    /// Номера на проверке у Kaspi (открывается заглушка): когда добавили и когда проверяли.
+    @ObservationIgnored private var kaspiMisses: [Int: (added: Date, checked: Date)] = [:]
     @ObservationIgnored private var kaspiJump = 0
     @ObservationIgnored private var lastKaspiTurbo = Date.distantPast
 
@@ -777,10 +778,19 @@ final class AppModel {
             do { try await kaspiSync(); ok(site: .kaspi) } catch { fail(error, site: .kaspi) }
             return
         }
-        var ids = (1...3).map { kaspiFrontier + $0 }
+        // Номер выдаётся при подаче, но пока объявление на проверке у Kaspi (обычно 2–3 мин, бывает
+        // до часа), по нему заглушка. Такие номера — в очереди: первые 10 минут каждые 4 с, потом
+        // раз в 30 с, до часа. Сначала — самые давно проверенные.
+        let now = Date()
+        var ids = [kaspiFrontier + 1, kaspiFrontier + 2]
         kaspiJump = kaspiJump % 16 + 1
-        ids.append(kaspiFrontier + 4 + kaspiJump)
-        for (n, c) in kaspiMisses where n < kaspiFrontier && n > kaspiFrontier - 50 && c < 30 && ids.count < 5 { ids.append(n) }
+        ids.append(kaspiFrontier + 2 + kaspiJump)
+        let due = kaspiMisses
+            .filter { $0.key <= kaspiFrontier && !ids.contains($0.key)
+                && now.timeIntervalSince($0.value.checked) >= (now.timeIntervalSince($0.value.added) < 600 ? 4 : 30) }
+            .sorted { $0.value.checked < $1.value.checked }
+            .prefix(4)
+        ids += due.map { $0.key }
         for n in ids {
             let found: Ad?
             do {
@@ -791,8 +801,15 @@ final class AppModel {
                 if siteBlocked(.kaspi) { break }
                 continue
             }
-            guard var ad = found else { kaspiMisses[n, default: 0] += 1; continue }
+            guard var ad = found else {
+                kaspiMisses[n] = (kaspiMisses[n]?.added ?? now, now)
+                continue
+            }
             kaspiMisses[n] = nil
+            // Перескочили через номера — они тоже в очередь: скорее всего, ещё на проверке.
+            if n - kaspiFrontier > 1 {
+                for m in (kaspiFrontier + 1)..<n where n - m <= 40 && kaspiMisses[m] == nil { kaspiMisses[m] = (now, now) }
+            }
             bumpKaspi(n)
             guard !seenSet.contains(ad.id) else { continue }
             if traceLog[ad.id] == nil { trace(ad.id, "⚡ вышло (по номеру): \(kaspiInfo(ad))") }
@@ -812,7 +829,7 @@ final class AppModel {
             deliver(ad, to: hit)
             trace(ad.id, "Kaspi по номеру: пришло в «\(hit.map(\.name).joined(separator: "», «"))»")
         }
-        kaspiMisses = kaspiMisses.filter { $0.key > kaspiFrontier - 200 }
+        kaspiMisses = kaspiMisses.filter { now.timeIntervalSince($0.value.added) < 3600 && $0.key > kaspiFrontier - 1500 }
         save()
     }
 

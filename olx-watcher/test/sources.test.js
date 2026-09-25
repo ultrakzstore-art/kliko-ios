@@ -248,6 +248,12 @@ test('Kaspi по номеру: крошки карточки → рубрика 
     assert.deepStrictEqual(sent, ['turbo:123509499']);
     await w.kaspiTurboTick();
     assert.deepStrictEqual(sent, ['turbo:123509499'], 'второй раз не шлём');
+    // 123509498 был на проверке у Kaspi (заглушка), и край ушёл дальше. Прошёл проверку — приходит.
+    assert.ok(w.kaspiMisses.has(123509498), 'номер на проверке — в очереди');
+    live.set(123509498, { ...ad, id: 123509498 });
+    w.kaspiMisses.get(123509498).checked = 0;
+    await w.kaspiTurboTick();
+    assert.deepStrictEqual(sent, ['turbo:123509499', 'turbo:123509498']);
   } finally {
     k.fetchById = orig;
   }

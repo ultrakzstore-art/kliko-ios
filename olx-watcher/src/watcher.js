@@ -472,16 +472,25 @@ class Watcher {
         try { await this.kaspiSync(); } catch (e) { this.handleError(e, 'kaspi'); }
         return;
       }
-      const ids = [];
-      for (let id = this.kaspiFrontier + 1; ids.length < 3 && id <= this.kaspiFrontier + 10; id++) ids.push(id);
-      // И один номер подальше (+5…+20 по кругу): если следующие три так и не откроются (сняты,
-      // на проверке), граница всё равно уйдёт вперёд.
+      // Номер выдаётся при подаче, но пока объявление на проверке у Kaspi (обычно 2–3 мин, бывает
+      // до часа), по нему открывается заглушка. Такие номера держим в очереди и перепроверяем:
+      // первые 10 минут — каждые 4 с, потом — раз в 30 с, до часа. Сначала — самые давние.
+      const now = Date.now();
+      const ids = [this.kaspiFrontier + 1, this.kaspiFrontier + 2];
+      // И один подальше (+3…+18 по кругу): так граница уходит вперёд, даже если ближние на проверке.
       this.kaspiJump = ((this.kaspiJump || 0) % 16) + 1;
-      ids.push(this.kaspiFrontier + 4 + this.kaspiJump);
-      // Пропущенные чуть ниже границы (номер открылся позже соседа) — ещё немного пробуем.
-      for (const [id, n] of this.kaspiMisses) {
-        if (id < this.kaspiFrontier && id > this.kaspiFrontier - 50 && n < 30 && ids.length < 5) ids.push(id);
-      }
+      ids.push(this.kaspiFrontier + 2 + this.kaspiJump);
+      const due = [...this.kaspiMisses.entries()]
+        .filter(([id, m]) => id <= this.kaspiFrontier && !ids.includes(id)
+          && now - m.checked >= (now - m.added < 10 * 60_000 ? 4_000 : 30_000))
+        .sort((x, y) => x[1].checked - y[1].checked)
+        .slice(0, 4);
+      ids.push(...due.map(([id]) => id));
+      const miss = (id) => {
+        const m = this.kaspiMisses.get(id) || { added: now, checked: 0 };
+        m.checked = now;
+        this.kaspiMisses.set(id, m);
+      };
       for (const id of ids) {
         let ad;
         try {
@@ -491,8 +500,10 @@ class Watcher {
           if (this.handleError(e, 'kaspi')) break;
           continue;
         }
-        if (!ad) { this.kaspiMisses.set(id, (this.kaspiMisses.get(id) || 0) + 1); continue; }
+        if (!ad) { miss(id); continue; }
         this.kaspiMisses.delete(id);
+        // Перескочили через номера — они тоже в очередь: скорее всего, ещё на проверке.
+        for (let n = this.kaspiFrontier + 1; n < id && id - n <= 40; n++) if (!this.kaspiMisses.has(n)) this.kaspiMisses.set(n, { added: now, checked: now });
         this.bumpKaspi(id);
         this.trace(id, 'Kaspi по номеру: нашли');
         for (const s of subs) {
@@ -506,7 +517,7 @@ class Watcher {
           this.stats.sent += 1;
         }
       }
-      for (const id of this.kaspiMisses.keys()) if (id < this.kaspiFrontier - 200) this.kaspiMisses.delete(id);
+      for (const [id, m] of this.kaspiMisses) if (now - m.added > 3600_000 || id < this.kaspiFrontier - 1500) this.kaspiMisses.delete(id);
     } finally {
       this.kaspiBusy = false;
     }
