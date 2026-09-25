@@ -52,7 +52,11 @@ function parseDetail(html, { id, url, currency = '₸' }) {
   const ld = jsonLd(html);
   const product = ld.find((x) => x && (x.offers || /Product|Offer|Car|Vehicle|Apartment|House|Residence|Accommodation/i.test(String(x['@type']))));
   const offer = product && (Array.isArray(product.offers) ? product.offers[0] : product.offers);
-  const title = decode(product?.name || meta(html, 'og:title')[0] || (/<title>([^<]*)<\/title>/i.exec(html) || [])[1] || '').trim();
+  // Kaspi: og:title — «Ноутбук: №123560852 — ноутбуки в Астане — Kaspi Объявления»,
+  // настоящий заголовок — в h1 «desktop-template__title»; иначе отрезаем «: №…».
+  const h1 = (/<h1\b[^>]*class=["'][^"']*desktop-template__title[^"']*["'][^>]*>([\s\S]{0,300}?)<\/h1>/i.exec(html) || [])[1];
+  const title = decode(product?.name || (h1 && h1.replace(/<[^>]+>/g, ' ')) || meta(html, 'og:title')[0]
+    || (/<title>([^<]*)<\/title>/i.exec(html) || [])[1] || '').replace(/\s*:\s*№\s*\d+.*$/, '').replace(/\s+/g, ' ').trim();
   const description = decode(product?.description || meta(html, 'og:description')[0] || meta(html, 'description')[0] || '').trim();
   const images = [
     ...[].concat(product?.image || []).map((i) => (typeof i === 'string' ? i : i?.url)).filter(Boolean),
@@ -67,6 +71,8 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     const m = el && /(\d[\d\s\u00a0]{2,})\s*(?:₸|〒|тг|тенге|KZT)/i.exec(decode(el[1].replace(/<[^>]+>/g, ' ')));
     price = m ? num(m[1]) : null;
   }
+  // Kaspi: в данных страницы — price:"450 000 ₸".
+  if (!price) price = num((/(?:["']|\b)price["']?\s*:\s*["']([\d\s\u00a0]+)\s*(?:₸|〒|тг|тенге|KZT)?["']/i.exec(String(html).replace(/\\"/g, '"')) || [])[1]);
   if (!price) {
     const m = /(\d[\d\s\u00a0]{3,})\s*(?:₸|〒|тг|тенге|KZT)/i.exec(`${title} ${description}`);
     price = m ? num(m[1]) : null;
@@ -134,6 +140,19 @@ function breadcrumbs(html, ld, url) {
       const item = it?.item;
       add(typeof item === 'string' ? item : item?.['@id'] || item?.url || it?.url || '');
     }
+  }
+  // Kaspi: верхние крошки — город того, КТО смотрит (из куки), а город объявления —
+  // в нижних: <a href="/astana/elektronika/…" data-test-id="breadcrumb_category">.
+  if (!paths.size) {
+    for (const a of html.matchAll(/<a\b[^>]*data-test-id=["']breadcrumb_[a-z]+["'][^>]*>/gi)) {
+      const h = /href=["']([^"']+)["']/i.exec(a[0]);
+      if (h) add(h[1]);
+    }
+  }
+  // Или из данных страницы: breadcrumbsList:[{url:"\u002Fastana\u002F…"}].
+  if (!paths.size) {
+    const list = /breadcrumbsList\s*:\s*\[([\s\S]{0,3000}?)\]/.exec(html);
+    if (list) for (const u of list[1].matchAll(/url\s*:\s*"([^"]+)"/g)) add(u[1].replace(/\\u002F/gi, '/'));
   }
   if (!paths.size) {
     const m = /<(?:nav|ol|ul|div)\b[^>]*class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/(?:nav|ol|ul)>/i.exec(html);
@@ -203,10 +222,11 @@ function postedFromText(html) {
 // Точное время подачи из кода страницы: на экране может быть только «25.09.2026», а в данных
 // страницы (JSON в <script>) — «createdAt»: "2026-09-25T14:02:11+05:00" или число секунд.
 // Берём поля создания/публикации, не изменения и не поднятия.
-const CODE_DATE_KEYS = 'created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded';
+// Kaspi кладёт данные без кавычек у названий: {dateCreate:"2026-09-25T17:54:34+05:00",dateUpdate:…}.
+const CODE_DATE_KEYS = 'dateCreate|created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded';
 function postedFromCode(html) {
   const text = String(html).replace(/\\"/g, '"');
-  const re = new RegExp(`"(${CODE_DATE_KEYS})"\\s*:\\s*"?(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?|\\d{10}(?:\\d{3})?)"?`, 'i');
+  const re = new RegExp(`(?:["']|\\b)(${CODE_DATE_KEYS})["']?\\s*:\\s*"?(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?|\\d{10}(?:\\d{3})?)"?`, 'i');
   const m = re.exec(text);
   if (!m) return null;
   let t;

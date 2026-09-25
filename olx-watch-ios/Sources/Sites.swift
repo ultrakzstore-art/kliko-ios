@@ -327,7 +327,12 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         }
         let offers = product?["offers"]
         let offer: [String: Any]? = (offers as? [[String: Any]])?.first ?? (offers as? [String: Any])
-        ad.title = decode((product?["name"] as? String) ?? meta("og:title", in: html).first ?? matches(#"<title>([^<]*)</title>"#, in: html).first ?? "")
+        // Kaspi: og:title — «Ноутбук: №123560852 — ноутбуки в Астане — Kaspi Объявления»,
+        // настоящий заголовок — h1 «desktop-template__title»; иначе отрезаем «: №…».
+        let h1 = matches(#"<h1\b[^>]*class=["'][^"']*desktop-template__title[^"']*["'][^>]*>([\s\S]{0,300}?)</h1>"#, in: html).first.map(stripTags)
+        ad.title = decode((product?["name"] as? String) ?? h1 ?? meta("og:title", in: html).first ?? matches(#"<title>([^<]*)</title>"#, in: html).first ?? "")
+            .replacingOccurrences(of: #"\s*:\s*№\s*\d+.*$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         ad.description = String(decode((product?["description"] as? String) ?? meta("og:description", in: html).first ?? meta("description", in: html).first ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines).prefix(2000))
@@ -345,6 +350,10 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         var price = number(offer?["price"]) ?? number(offer?["lowPrice"])
         // Нет в JSON-LD — метки цены, itemprop=price, элемент с «price» в классе, потом текст.
         if price == nil { price = (meta("product:price:amount", in: html).first ?? meta("og:price:amount", in: html).first).flatMap { number($0) } }
+        // Kaspi: в данных страницы — price:"450 000 ₸" (названия без кавычек).
+        if price == nil, let raw = matches(#"(?:["']|\b)price["']?\s*:\s*["']([\d\s ]+)\s*(?:₸|〒|тг|тенге|KZT)?["']"#, in: html.replacingOccurrences(of: "\\\"", with: "\"")).first {
+            price = Double(raw.filter(\.isNumber))
+        }
         if price == nil, let raw = matches(#"itemprop=["']price["'][^>]*content=["']([\d\s.,]+)["']"#, in: html).first { price = number(raw) }
         if price == nil, let el = matches(#"<[a-z]+\b[^>]*class=["'][^"']*price[^"']*["'][^>]*>([\s\S]{0,200}?)</[a-z]+>"#, in: html).first,
            let raw = matches(#"(\d[\d\s ]{2,})\s*(?:₸|〒|тг|тенге|KZT)"#, in: decode(stripTags(el))).first {
@@ -408,6 +417,17 @@ enum Site: String, CaseIterable, Identifiable, Codable {
                 else if let d = it["item"] as? [String: Any], let s = (d["@id"] as? String) ?? (d["url"] as? String) { add(s) }
                 else if let s = it["url"] as? String { add(s) }
             }
+        }
+        // Kaspi: верхние крошки — город того, КТО смотрит (из куки), город объявления — в нижних:
+        // <a href="/astana/elektronika/…" data-test-id="breadcrumb_category">.
+        if out.isEmpty {
+            for a in matches(#"(<a\b[^>]*data-test-id=["']breadcrumb_[a-z]+["'][^>]*>)"#, in: html) {
+                if let h = matches(#"href=["']([^"']+)["']"#, in: a).first { add(h) }
+            }
+        }
+        // Или из данных страницы: breadcrumbsList:[{url:"\u002Fastana\u002F…"}].
+        if out.isEmpty, let list = matches(#"breadcrumbsList\s*:\s*\[([\s\S]{0,3000}?)\]"#, in: html).first {
+            for u in matches(#"url\s*:\s*"([^"]+)""#, in: list) { add(u.replacingOccurrences(of: "\\u002F", with: "/")) }
         }
         if out.isEmpty, let block = matches(#"<(?:nav|ol|ul|div)\b[^>]*class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]{0,4000}?)</(?:nav|ol|ul)>"#, in: html).first {
             for h in matches(#"href=["']([^"']+)["']"#, in: block) { add(h) }
@@ -545,9 +565,9 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     /// секунды. На экране может быть только дата — а в данных есть время. Поля изменения/поднятия не берём.
     static func postedFromCode(_ html: String) -> Date? {
         let text = html.replacingOccurrences(of: "\\\"", with: "\"")
-        let keys = "created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded"
+        let keys = "dateCreate|created|createdAt|created_at|createDate|creationDate|dateCreated|publishedAt|published_at|publicationDate|publishDate|datePublished|postedAt|posted_at|addedAt|added_at|dateAdded"
         let value = #"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|\d{10}(?:\d{3})?)"#
-        let pattern = "\"(?:" + keys + ")\"" + #"\s*:\s*"?"# + value
+        let pattern = #"(?:["']|\b)(?:"# + keys + #")["']?\s*:\s*"?"# + value
         guard let raw = matches(pattern, in: text).first else { return nil }
         var date: Date?
         if raw.allSatisfy(\.isNumber), let n = Double(raw) {

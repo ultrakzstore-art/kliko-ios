@@ -346,3 +346,27 @@ test('точное время подачи из кода страницы, хо�
   const d = parseDetail('<meta property="og:title" content="X"><span>25.09.2026</span><script>{"createdAt":"2026-09-25T14:02:11"}</script>', { id: 1, url: 'https://obyavleniya.kaspi.kz/a/1/' });
   assert.strictEqual(new Date(d.createdAt).toISOString(), '2026-09-25T09:02:11.000Z');
 });
+
+test('Kaspi: время и цена из данных страницы без кавычек у названий (как на живой странице)', () => {
+  const { postedFromCode } = require('../src/sources/page');
+  const live = '<script>window.__NUXT__=(function(a,b){return {data:[{advert:{address:r,dateCreate:"2026-09-25T17:54:34+05:00",dateUpdate:"2026-09-25T17:55:04+05:00",id:123560852,isOwner:b,categoryIds:["5",g,"268"],phonePrefix:"+7 (778)",price:"450 000 ₸",priceType:"price",expiryDate:"2026-10-23T17:55:04+05:00",alias:"noutbuk"}}]}}(1,2))</script>';
+  assert.strictEqual(new Date(postedFromCode(live)).toISOString(), '2026-09-25T12:54:34.000Z', 'dateCreate, не dateUpdate');
+  const d = parseDetail(`<meta property="og:title" content="Ноутбук">${live}`, { id: 123560852, url: 'https://obyavleniya.kaspi.kz/a/noutbuk-123560852/' });
+  assert.strictEqual(d.price, 450000);
+  assert.strictEqual(new Date(d.createdAt).toISOString(), '2026-09-25T12:54:34.000Z');
+});
+
+test('Kaspi: город и заголовок с живой страницы — не из верхних крошек (там город смотрящего)', () => {
+  const html = `<meta property="og:title" content="Ноутбук: №123560852 — ноутбуки в Астане — Kaspi Объявления">
+<nav class="breadcrumbs"><a href="/shymkent/">Шымкент</a><a href="/shymkent/elektronika/">Электроника</a></nav>
+<h1 class="desktop-template__title">Ноутбук</h1><p class="desktop-template__price">450 000 ₸</p>
+<div class="desktop-template__breadcrumbs bread-crumbs"><a href="/astana/elektronika/?advertSource=x" data-test-id="breadcrumb_section">Электроника</a>
+<a href="/astana/elektronika/computery/noutbuki/?advertSource=x" data-test-id="breadcrumb_category">Ноутбуки</a></div>`;
+  const d = parseDetail(html, { id: 123560852, url: 'https://obyavleniya.kaspi.kz/a/noutbuk-123560852/' });
+  assert.strictEqual(d.title, 'Ноутбук');
+  assert.deepStrictEqual(d.crumbs, ['astana/elektronika', 'astana/elektronika/computery/noutbuki']);
+  assert.strictEqual(d.price, 450000);
+  const nuxt = parseDetail('<meta property="og:title" content="Ноутбук: №1 — x"><nav class="breadcrumbs"><a href="/shymkent/">Ш</a></nav><script>{breadcrumbsList:[{url:"\\u002Falmaty\\u002Felektronika\\u002F",name:a}]}</script>', { id: 1, url: 'https://obyavleniya.kaspi.kz/a/1/' });
+  assert.strictEqual(nuxt.title, 'Ноутбук');
+  assert.deepStrictEqual(nuxt.crumbs, ['almaty/elektronika']);
+});

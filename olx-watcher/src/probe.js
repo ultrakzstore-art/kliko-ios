@@ -158,7 +158,7 @@ async function kaspiProbe(id) {
     const html = await getHtml(`https://obyavleniya.kaspi.kz/a/${id}/`);
     if (html) {
       const text = html.replace(/\\"/g, '"');
-      const found = [...text.matchAll(/"([A-Za-z_]{2,40})"\s*:\s*"?(\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|1[5-9]\d{8}(?:\d{3})?)"?/g)]
+      const found = [...text.matchAll(/["']?\b([A-Za-z_]{2,40})["']?\s*:\s*"?(\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|1[5-9]\d{8}(?:\d{3})?)"?/g)]
         .map((m) => `${m[1]} = ${m[2]}`);
       const onPage = (/(\d{2}\.\d{2}\.20\d{2})(?:[^\d]{1,5}(\d{1,2}:\d{2}))?/.exec(html.replace(/<[^>]+>/g, ' ')) || []).slice(1).filter(Boolean).join(' ');
       const at = postedFromCode(html);
