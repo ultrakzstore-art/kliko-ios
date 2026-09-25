@@ -1,0 +1,9 @@
+гость /kz/ru/cabinet.php -> 200 https://kliko.kz/kz/ru/cabinet.php
+гость /kz/ru/cabinet?go=add -> 200 https://kliko.kz/kz/ru/cabinet?go=add
+гость /kz/ru/cabinet?egov=1 -> 200 https://kliko.kz/kz/ru/cabinet?egov=1
+гость /kz/ru/cabinet.php?go=wallet -> 200 https://kliko.kz/kz/ru/cabinet.php?go=wallet
+гость /kz/ru/cabinet.php?s=messages -> 200 https://kliko.kz/kz/ru/cabinet.php?s=messages
+CSRF на странице входа: есть
+ответ входа: {"ok": true}, uid есть
+вход удался: True
+JS/CSS: 41

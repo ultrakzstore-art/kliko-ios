@@ -1,0 +1,8 @@
+200 /kz/ru/cabinet.php
+200 /kz/ru/cabinet?go=add
+200 /kz/ru/cabinet?egov=1
+200 /kz/ru/cabinet.php?go=wallet
+200 /kz/ru/cabinet.php?s=messages
+200 /css/cabinet.css?v=1790155730
+200 /css/cabinet-parts.min.css?v=1790261403
+200 /css/cabinet-app.min.css?v=1789664892
