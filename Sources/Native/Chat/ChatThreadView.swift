@@ -19,6 +19,9 @@ final class ChatThreadModel: ObservableObject {
     @Published private(set) var заблокирован = false
     @Published private(set) var отправляем = false
     @Published private(set) var неОтправлено = false
+    /// Почему не ушло — коротко, под ошибкой: на проверке отправки (владелец 25.09.2026) это сразу скажет, что именно
+    /// ответил сайт, а не только «не отправлено».
+    @Published private(set) var причина = ""
     @Published var черновик = ""
 
     private(set) var tid: String
@@ -82,6 +85,18 @@ final class ChatThreadModel: ObservableObject {
         } catch {
             черновик = было
             неОтправлено = true
+            причина = Self.код(error)
+        }
+    }
+
+    private static func код(_ ошибка: Error) -> String {
+        guard let e = ошибка as? ChatAPI.Ошибка else { return "?" }
+        switch e {
+        case .сеть:            return "network"
+        case .нуженВход:       return "auth/csrf"
+        case .статус(let к):   return "HTTP \(к)"
+        case .разбор:          return "format"
+        case .отказ(let п):    return п.isEmpty ? "refused" : п
         }
     }
 
@@ -208,9 +223,10 @@ struct ChatThreadView: View {
         } else if Config.нативныйЧатОтправка {
             VStack(spacing: 4) {
                 if модель.неОтправлено {
-                    Text(ChatText.т("not_sent"))
+                    Text(ChatText.т("not_sent") + (модель.причина.isEmpty ? "" : " (\(модель.причина))"))
                         .font(.caption)
                         .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
                 }
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(ChatText.т("placeholder"), text: $модель.черновик, axis: .vertical)
