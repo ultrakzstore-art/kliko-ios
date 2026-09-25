@@ -52,7 +52,7 @@ enum ListingsAPI {
 
         var запрос = URLRequest(url: ч.url!)
         запрос.httpShouldHandleCookies = false
-        for (имя, значение) in await кукиСайта() { запрос.setValue(значение, forHTTPHeaderField: имя) }
+        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
 
         let данные: Data
         let ответ: URLResponse
@@ -70,7 +70,7 @@ enum ListingsAPI {
         ч.queryItems = [URLQueryItem(name: "id", value: id)]
         var запрос = URLRequest(url: ч.url!)
         запрос.httpShouldHandleCookies = false
-        for (имя, значение) in await кукиСайта() { запрос.setValue(значение, forHTTPHeaderField: имя) }
+        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
 
         let данные: Data
         let ответ: URLResponse
@@ -83,17 +83,6 @@ enum ListingsAPI {
 
     static func разобрать(_ данные: Data) throws -> ListingsPage {
         do { return try JSONDecoder().decode(ListingsPage.self, from: данные) } catch { throw Ошибка.разбор }
-    }
-
-    /// Куки kliko.kz из WebKit — заголовком «Cookie». Хранилище WebKit живёт на главной нити.
-    @MainActor
-    private static func кукиСайта() async -> [String: String] {
-        let все = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
-        let наши = все.filter { кука in
-            let домен = кука.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            return домен == "kliko.kz" || домен == "www.kliko.kz"
-        }
-        return HTTPCookie.requestHeaderFields(with: наши)
     }
 }
 

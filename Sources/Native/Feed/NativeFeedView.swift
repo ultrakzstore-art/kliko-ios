@@ -39,6 +39,17 @@ struct NativeFeedView: View {
             .navigationDestination(for: Listing.self) { товар in
                 ListingDetailView(товар: товар, открыть: открыть)
             }
+            .navigationDestination(for: ЧатЦель.self) { цель in
+                switch цель {
+                case .список:
+                    ChatListView(открыть: открыть)
+                case .диалог(let д):
+                    ChatThreadView(модель: ChatThreadModel(tid: д.id), заголовок: д.собеседник, открыть: открыть)
+                case .продавец(let id, let имя, let объявление):
+                    ChatThreadView(модель: ChatThreadModel(собеседник: id, объявление: объявление),
+                                   заголовок: имя, открыть: открыть)
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -48,6 +59,14 @@ struct NativeFeedView: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Kliko")
+                }
+                if Config.нативныйЧат {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        NavigationLink(value: ЧатЦель.список) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                        }
+                        .accessibilityLabel(ChatText.т("title"))
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

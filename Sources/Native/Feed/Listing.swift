@@ -29,6 +29,8 @@ struct Listing: Identifiable, Hashable {
     var фото: [String] = []
     var описание: String?
     var продавец: String?
+    /// Номер продавца — чтобы открыть с ним диалог (dm.php open, peer_id).
+    var продавецID: String?
     var продавецПроверен = false
     var просмотры: Int?
     var создано: String?
@@ -118,6 +120,7 @@ extension Listing: Decodable {
             .compactMap { непусто($0) }
         описание = непусто(строка("description"))
         продавец = непусто(строка("seller"))
+        продавецID = непусто(строка("seller_id"))
         продавецПроверен = да("seller_verified")
         просмотры = число("views").map { Int($0) }
         создано = непусто(строка("created_at"))

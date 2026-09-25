@@ -211,17 +211,44 @@ struct ListingDetailView: View {
 
     private var нижняяПанель: some View {
         VStack(spacing: 6) {
-            Button {
-                if let адрес = товар.адрес { открыть(адрес) }
-            } label: {
-                Label(FeedText.т("contact"), systemImage: "bubble.left.and.bubble.right.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .foregroundStyle(.white)
-                    .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            /* Этап 3: «Написать» — нативный чат с продавцом, «Купить безопасно» — страница сделки на сайте. Диалог по
+               объявлению создаётся запросом open, то есть записью, — поэтому кнопка появляется вместе с отправкой
+               (Config.нативныйЧатОтправка). До того — одна кнопка на страницу объявления, как на этапе 2. */
+            if Config.нативныйЧат && Config.нативныйЧатОтправка, let продавец = товар.продавецID {
+                HStack(spacing: 10) {
+                    NavigationLink(value: ЧатЦель.продавец(id: продавец, имя: товар.продавец ?? "", объявление: товар.id)) {
+                        Label(ChatText.т("write"), systemImage: "bubble.left.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .foregroundStyle(Theme.green)
+                            .background(Theme.mint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    Button {
+                        if let адрес = товар.адрес { открыть(адрес) }
+                    } label: {
+                        Label(ChatText.т("buy"), systemImage: "shield.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .foregroundStyle(.white)
+                            .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    if let адрес = товар.адрес { открыть(адрес) }
+                } label: {
+                    Label(FeedText.т("contact"), systemImage: "bubble.left.and.bubble.right.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .foregroundStyle(.white)
+                        .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             Text(FeedText.т("contact_sub"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
