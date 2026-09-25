@@ -167,3 +167,33 @@ test('Kaspi: сортировка «сначала новые» находитс
   assert.deepStrictEqual(kaspiSort('{"sortOptions":[{"value":"cheap","title":"Дешевле"},{"value":"created_desc","title":"Сначала новые"}]}'), ['sort', 'created_desc']);
   assert.strictEqual(kaspiSort('<a href="/a/iphone-15-112633239/">iPhone 15 новый</a>'), null, 'ссылки на объявления — не сортировка');
 });
+
+test('Kaspi «весь Казахстан»: города берутся со страницы; новые из любого города приходят, хоть номер и ниже', async () => {
+  const html = '<a href="/astana/elektronika/computery/noutbuki/">Астана</a><a href="https://obyavleniya.kaspi.kz/kosshy/elektronika/computery/noutbuki/?x=1">Косшы</a><a href="/a/noutbuk-hp-112633239/">HP</a>';
+  assert.deepStrictEqual(sources.kaspiCityLinks(html, 'elektronika/computery/noutbuki').sort(), ['astana', 'kosshy']);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-all-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const k = sources.get('kaspi');
+  const orig = { search: k.fetchSearch, detail: k.fetchDetail };
+  let batch = [];
+  k.fetchSearch = async () => batch;
+  k.fetchDetail = async (ad) => ({ title: `Ноутбук ${ad.id}` });
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a) => { if (a) sent.push(a.id); }, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    db.extend(1, 30, ['kaspi']);
+    const sub = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
+    batch = [{ id: 500, url: 'u', anyOrder: true, seedOnly: true }, { id: 900, url: 'u', anyOrder: true, seedOnly: true }];
+    await w.pollUrl(sub.url, [db.sub(sub.id)]);           // первый проход: только запомнили
+    batch = [{ id: 300, url: 'u', anyOrder: true, seedOnly: true }];
+    await w.pollUrl(sub.url, [db.sub(sub.id)]);           // новый город впервые: тоже только запомнили
+    batch = [{ id: 300, url: 'u', anyOrder: true }, { id: 301, url: 'u', anyOrder: true }, { id: 950, url: 'u', anyOrder: true }];
+    await w.pollUrl(sub.url, [db.sub(sub.id)]);
+    assert.deepStrictEqual(sent.sort((a, b) => a - b), [301, 950], '301 ниже отметки 900, но из другого города — новое');
+  } finally {
+    Object.assign(k, { fetchSearch: orig.search, fetchDetail: orig.detail });
+  }
+});

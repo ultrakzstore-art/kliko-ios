@@ -273,8 +273,9 @@ final class AppModel {
         let mark = sub.watermark ?? top
         sub.watermark = max(mark, top)
         state.subs[index] = sub
-        for var ad in ads.sorted(by: { $0.id < $1.id }) where ad.id > mark && !seenSet.contains(ad.id) {
+        for var ad in ads.sorted(by: { $0.id < $1.id }) where (ad.anyOrder == true || ad.id > mark) && !seenSet.contains(ad.id) {
             remember(ad.id)
+            if ad.seedOnly == true { continue }   // Kaspi: город впервые — только запоминаем
             if let full = try? await site.detail(ad) { ad.merge(full) }
             // Дата подачи есть не у всех карточек; есть и старше часа — это не новое.
             if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) { continue }

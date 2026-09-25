@@ -266,7 +266,10 @@ class Watcher {
       let sent = sub.sent;
       for (const a of ads) {
         if (this.db.wasSent(sub.id, a.id)) continue;
-        const late = a.id <= sub.watermark;
+        // Kaspi «весь Казахстан»: город впервые после запуска — только запоминаем, что уже есть.
+        if (a.seedOnly) { this.db.markSent(sub.id, a.id); continue; }
+        // Номера из разных городов идут вперемешку: для них «ниже отметки» ничего не значит.
+        const late = !a.anyOrder && a.id <= sub.watermark;
         // Ниже отметки: по дате из выдачи сразу отсекаем то, что было ещё до поиска.
         if (late && (src.key !== 'olx' || a.promoted || (a.createdAt && a.createdAt <= sub.created_at))) continue;
         const full = await enrich(a);

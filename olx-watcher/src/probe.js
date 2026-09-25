@@ -55,6 +55,36 @@ async function deepProbe(id) {
   console.log('\nЕсли объявление на модерации видит только один из способов — пришлите этот вывод.');
 }
 
+// Kaspi по номеру: ссылка на объявление — /a/<название>-<номер>/. Пробуем, открывается ли оно без
+// названия (сайт может перенаправить на полный адрес) — тогда объявления можно ловить по номерам.
+async function kaspiProbe(id) {
+  const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'text/html' };
+  const base = 'https://obyavleniya.kaspi.kz';
+  const tries = [`${base}/a/${id}/`, `${base}/a/-${id}/`, `${base}/a/x-${id}/`, `${base}/a/show/${id}`, `${base}/${id}/`];
+  console.log(`Kaspi, номер ${id}\n`);
+  for (const u of tries) {
+    try {
+      const res = await fetch(u, { headers: H, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+      const text = await res.text();
+      const title = ((/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)/i.exec(text) || [])[1]
+        || (/<title>([^<]*)<\/title>/i.exec(text) || [])[1] || '').trim().slice(0, 90);
+      const loc = res.headers.get('location');
+      console.log(`${u.replace(base, '')}: HTTP ${res.status}${loc ? ` → ${loc}` : ''}${title ? ` · ${title}` : ''}`);
+    } catch (e) {
+      console.log(`${u.replace(base, '')}: ошибка ${e.message}`);
+    }
+  }
+  for (const n of [id + 1, id + 2, id + 3]) {
+    try {
+      const res = await fetch(`${base}/a/x-${n}/`, { headers: H, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+      console.log(`следующий ${n}: HTTP ${res.status}${res.headers.get('location') ? ` → ${res.headers.get('location')}` : ''}`);
+    } catch (e) {
+      console.log(`следующий ${n}: ошибка ${e.message}`);
+    }
+  }
+  console.log('\nПришлите этот вывод: если какой-то адрес открывает объявление — Kaspi можно ловить по номерам, как OLX.');
+}
+
 (async () => {
   const url = process.argv[2];
   if (/^\d{6,}$/.test(String(url || '').trim())) return deepProbe(Number(url.trim()));
@@ -66,6 +96,9 @@ async function deepProbe(id) {
     return;
   }
   // Kolesa, Krisha, Kaspi: выдача и карточка самого свежего — как их увидит бот.
+  // «kaspi 123558941» — номер объявления Kaspi без ссылки: какие адреса по нему открываются.
+  const kaspiNum = /^kaspi\D*(\d{6,})$/i.exec(String(url || '').trim());
+  if (kaspiNum) return kaspiProbe(Number(kaspiNum[1]));
   const src = url && sources.byUrl(url);
   // Ссылка на одно объявление Kolesa / Krisha / Kaspi: как бот понял продавца и почему.
   if (src && src.key !== 'olx' && src.isAdUrl(url)) {

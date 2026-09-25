@@ -179,12 +179,84 @@ function kaspiSort(html) {
 }
 let kaspiSortParam;   // undefined — ещё не искали, null — на странице не нашлось
 
+// «Весь Казахстан» у Kaspi — такой выдачи нет: без города в ссылке сайт показывает один город.
+// Поэтому ссылку без города обходим по городам по кругу — за проверку несколько городов, первая
+// страница каждого (с сортировкой «сначала новые»). Список городов: крупные из нашего списка плюс
+// все города, на которые ссылается сама страница Kaspi (выбор города), — так попадают и мелкие.
+// Город, впервые увиденный после запуска, только запоминается (что уже есть — не присылаем).
+const KASPI_CITIES_PER_POLL = 3;
+// Запасной список: крупные и средние города. Неверный адрес города (Kaspi ответил 404) сам
+// выпадает из обхода, а недостающие добавляются со страницы Kaspi.
+const KASPI_CITY_SLUGS = [...CITIES.map((c) => c.slug), 'uralsk', 'kyzylorda', 'petropavlovsk',
+  'taldykorgan', 'turkestan', 'kokshetau', 'ekibastuz', 'temirtau', 'zhezkazgan', 'rudnyy',
+  'balkhash', 'satpaev', 'kaskelen', 'konaev', 'zhanaozen', 'aksay', 'stepnogorsk', 'shchuchinsk'];
+const kaspiRounds = new Map();   // ссылка без города → { cities: [], next, seeded: Set, dead: Set }
+
+function kaspiSplit(url) {
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  const citySlugs = new Set([...KASPI_CITY_SLUGS, ...[...kaspiRounds.values()].flatMap((r) => r.cities)]);
+  const city = parts.length > 1 && citySlugs.has(parts[0]) ? parts[0] : '';
+  return { u, city, path: (city ? parts.slice(1) : parts).join('/') };
+}
+
+// Города, на которые страница ссылается в той же рубрике: /<город>/<рубрика>/.
+function kaspiCityLinks(html, path) {
+  const out = new Set();
+  const esc = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:obyavleniya\\.kaspi\\.kz)?/([a-z][a-z0-9-]{2,30})/${esc}/?["'?#]`, 'gi');
+  for (const m of String(html).matchAll(re)) {
+    const slug = m[1].toLowerCase();
+    if (!['a', 'k', 'api', 'static', 'img', 'search'].includes(slug)) out.add(slug);
+  }
+  return [...out];
+}
+
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
   isAdUrl: (url) => { try { return /^\/a\/.+-\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
   // Сортировку «сначала новые» ссылкой Kaspi не включить (не нашёл как) — смотрим 3 страницы.
   async fetchSearch(url) {
+    const { city } = kaspiSplit(this.normalize(url));
+    if (!city) return this.fetchAllCities(url);
+    return this.fetchOne(url);
+  },
+
+  // Ссылка без города: несколько городов за раз, по кругу.
+  async fetchAllCities(url) {
+    const { u, path } = kaspiSplit(this.normalize(url));
+    const key = `${path}${u.search}`;
+    let r = kaspiRounds.get(key);
+    if (!r) {
+      r = { cities: [...KASPI_CITY_SLUGS], next: 0, seeded: new Set(), dead: new Set() };
+      kaspiRounds.set(key, r);
+      // Страница без города: заодно берём с неё список городов (там есть выбор города).
+      const html = await getHtml(this.normalize(url)).catch(() => null);
+      if (html) for (const c of kaspiCityLinks(html, path)) if (!r.cities.includes(c)) r.cities.push(c);
+    }
+    const out = [];
+    for (let i = 0; i < KASPI_CITIES_PER_POLL && r.cities.length; i++) {
+      const c = r.cities[r.next % r.cities.length];
+      r.next = (r.next + 1) % r.cities.length;
+      const cityUrl = new URL(`${KASPI_BASE}/${c}/${path}/`);
+      for (const [k, v] of u.searchParams) cityUrl.searchParams.set(k, v);
+      let ads;
+      try {
+        ads = await this.fetchOne(cityUrl.toString(), 1);
+      } catch (e) {
+        if (/404/.test(e.message)) { r.cities = r.cities.filter((x) => x !== c); r.dead.add(c); continue; }
+        throw e;
+      }
+      const seed = !r.seeded.has(c);
+      r.seeded.add(c);
+      // Номера у разных городов идут вперемешку — «ниже отметки» здесь не значит «старое».
+      for (const a of ads) out.push({ ...a, anyOrder: true, seedOnly: seed || undefined });
+    }
+    return out;
+  },
+
+  async fetchOne(url, pages = 3) {
     let base = this.normalize(url);
     const hasSort = (u) => /[?&](sort|order|sortBy|sort_by|orderBy)=/i.test(u);
     if (!hasSort(base) && kaspiSortParam) base = withParam(base, kaspiSortParam);
@@ -198,7 +270,7 @@ const KASPI = {
       }
     }
     const all = new Map(kaspiIds(html).map((a) => [a.id, a]));
-    for (let page = 2; page <= 3 && all.size; page++) {
+    for (let page = 2; page <= pages && all.size; page++) {
       const u = new URL(base);
       u.searchParams.set('page', String(page));
       const more = await getHtml(u.toString()).catch(() => null);
@@ -239,4 +311,4 @@ function byUrl(url) {
   return ALL.find((s) => s.hostRe.test(host)) || null;
 }
 
-module.exports = { kaspiIds, kaspiSort, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };

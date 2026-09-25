@@ -30,6 +30,10 @@ struct Ad: Codable, Identifiable, Hashable {
     var source: String?
     /// Krisha: true — «Хозяин недвижимости», false — агент; Kolesa: false — автосалон / дилер; nil — неизвестно.
     var owner: Bool?
+    /// Kaspi «весь Казахстан»: номера из разных городов идут вперемешку — «ниже отметки» не значит
+    /// «старое»; seedOnly — город впервые после запуска: только запомнить, не присылать.
+    var anyOrder: Bool?
+    var seedOnly: Bool?
 
     /// Пойман «турбо» — по номеру, раньше, чем объявление попало в поиск OLX.
     var early: Bool { via == "turbo" }

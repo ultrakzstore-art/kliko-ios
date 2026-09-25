@@ -201,8 +201,63 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         return c.url ?? url
     }
 
+    /// Kaspi: «весь Казахстан» такой выдачи не имеет — ссылку без города обходим по городам по
+    /// кругу, по 3 города за проверку. Список — крупные и средние города плюс все, на которые
+    /// ссылается сама страница Kaspi; город, ответивший 404, выпадает из обхода.
+    static let kaspiCitySlugs = ["almaty", "astana", "shymkent", "karaganda", "aktobe", "taraz", "pavlodar",
+        "ust-kamenogorsk", "semey", "kostanay", "atyrau", "aktau", "uralsk", "kyzylorda", "petropavlovsk",
+        "taldykorgan", "turkestan", "kokshetau", "ekibastuz", "temirtau", "zhezkazgan", "rudnyy", "balkhash",
+        "satpaev", "kaskelen", "konaev", "zhanaozen", "aksay", "stepnogorsk", "shchuchinsk"]
+    static var kaspiRounds: [String: (cities: [String], next: Int, seeded: Set<String>)] = [:]
+
+    private static func kaspiSplit(_ url: URL) -> (city: String, path: String) {
+        let parts = url.path.split(separator: "/").map(String.init)
+        let known = Set(kaspiCitySlugs + kaspiRounds.values.flatMap { $0.cities })
+        if parts.count > 1, known.contains(parts[0]) { return (parts[0], parts.dropFirst().joined(separator: "/")) }
+        return ("", parts.joined(separator: "/"))
+    }
+
+    private func searchAllCities(_ url: URL, path: String) async throws -> [Ad] {
+        let key = path + (url.query.map { "?" + $0 } ?? "")
+        var r = Site.kaspiRounds[key] ?? (cities: Site.kaspiCitySlugs, next: 0, seeded: Set<String>())
+        if Site.kaspiRounds[key] == nil, let page = try? await Site.html(url) {
+            let esc = NSRegularExpression.escapedPattern(for: path)
+            for c in Site.matches(#"(?:obyavleniya\.kaspi\.kz)?/([a-z][a-z0-9-]{2,30})/"# + esc + #"/?["'?#]"#, in: page)
+            where !["a", "k", "api", "static", "img", "search"].contains(c.lowercased()) && !r.cities.contains(c.lowercased()) {
+                r.cities.append(c.lowercased())
+            }
+        }
+        var out: [Ad] = []
+        for _ in 0..<3 where !r.cities.isEmpty {
+            let city = r.cities[r.next % r.cities.count]
+            r.next = (r.next + 1) % r.cities.count
+            guard var c = URLComponents(string: "\(base)/\(city)/\(path)/") else { continue }
+            c.queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            guard let cityURL = c.url else { continue }
+            do {
+                let ads = try await searchOne(cityURL.absoluteString, pages: 1)
+                let seed = !r.seeded.contains(city)
+                r.seeded.insert(city)
+                out += ads.map { var a = $0; a.anyOrder = true; if seed { a.seedOnly = true }; return a }
+            } catch OLX.Failure.http(let code) where code == 404 {
+                r.cities.removeAll { $0 == city }
+            }
+        }
+        Site.kaspiRounds[key] = r
+        return out
+    }
+
     /// Выдача: номера (со сдвигом площадки) и ссылки. Подробности — отдельно, только для нового.
     func search(_ raw: String) async throws -> [Ad] {
+        if self == .kaspi {
+            let url = try newestFirst(raw)
+            let split = Site.kaspiSplit(url)
+            if split.city.isEmpty { return try await searchAllCities(url, path: split.path) }
+        }
+        return try await searchOne(raw)
+    }
+
+    private func searchOne(_ raw: String, pages: Int = 3) async throws -> [Ad] {
         if self == .olx { return try await OLX.search(raw) }
         var firstURL = try newestFirst(raw)
         let hasSort = firstURL.absoluteString.range(of: #"[?&](sort|order|sortBy|sort_by|orderBy)="#, options: [.regularExpression, .caseInsensitive]) != nil
@@ -216,8 +271,8 @@ enum Site: String, CaseIterable, Identifiable, Codable {
             }
         }
         // Kaspi: даже с сортировкой смотрим ещё 2 страницы — на случай продвигаемых сверху.
-        if self == .kaspi {
-            for n in 2...3 {
+        if self == .kaspi, pages > 1 {
+            for n in 2...pages {
                 guard var c = URLComponents(url: firstURL, resolvingAgainstBaseURL: false) else { break }
                 c.queryItems = (c.queryItems ?? []).filter { $0.name != "page" } + [URLQueryItem(name: "page", value: String(n))]
                 guard let u = c.url, let more = try? await Site.html(u) else { break }
