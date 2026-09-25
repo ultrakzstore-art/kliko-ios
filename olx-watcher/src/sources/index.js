@@ -126,24 +126,27 @@ const KASPI_CATEGORIES = [
     { name: 'Ноутбуки', path: 'elektronika/computery/noutbuki' },
     { name: 'Техника для дома', path: 'elektronika/tehnika-dlya-doma' },
   ] },
+  { name: 'Apple', path: 'apple', subs: [
+    { name: 'iPhone', path: 'apple/iphones' },
+    { name: 'MacBook и компьютеры Apple', path: 'apple/apple-computers' },
+  ] },
   { name: 'Дом и дача', path: 'dom-dacha', subs: [
     { name: 'Мебель и интерьер', path: 'dom-dacha/mebel-interer' },
   ] },
   { name: 'Животные', path: 'zhivotnye' },
   { name: 'Услуги', path: 'uslugi' },
+  { name: 'Личные вещи', path: 'lichnye-vezchi' },
+  { name: 'Прокат и аренда', path: 'prokat-i-arenda' },
   { name: 'Бизнес и оборудование', path: 'biznes' },
 ];
 
+// Объявление Kaspi: /a/<название>-<номер>/ (например /a/iphone-15-112633239/).
 function kaspiIds(html) {
   const out = new Map();
-  for (const m of html.matchAll(/href=["']([^"'#]+)["']/gi)) {
-    const href = m[1].replace(/&amp;/g, '&');
+  for (const m of html.matchAll(/(?:href=["']|["'(\s])((?:https?:\/\/obyavleniya\.kaspi\.kz)?\/a\/[^"'#\s)]*?-(\d{6,})\/?)(?=["'?#\s)])/gi)) {
     let u;
-    try { u = new URL(href, KASPI_BASE); } catch { continue; }
-    if (!/(^|\.)kaspi\.kz$/i.test(u.hostname) || /\/k--/.test(u.pathname)) continue;
-    const nums = u.pathname.match(/\d{6,}/g);
-    if (!nums) continue;
-    const id = Number(nums[nums.length - 1]);
+    try { u = new URL(m[1].replace(/&amp;/g, '&'), KASPI_BASE); } catch { continue; }
+    const id = Number(m[2]);
     if (!out.has(id)) out.set(id, { id, title: '', url: `${u.origin}${u.pathname}` });
   }
   return [...out.values()];
@@ -152,11 +155,21 @@ function kaspiIds(html) {
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
-  isAdUrl: (url) => { try { return /\d{6,}/.test(new URL(url).pathname) && !/\/k--/.test(url); } catch { return false; } },
+  isAdUrl: (url) => { try { return /^\/a\/.+-\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
+  // Сортировку «сначала новые» ссылкой Kaspi не включить (не нашёл как) — смотрим 3 страницы.
   async fetchSearch(url) {
-    const html = await getHtml(this.normalize(url));
+    const base = this.normalize(url);
+    const html = await getHtml(base);
     if (html == null) throw new Error('Kaspi ответил 404 — проверьте ссылку');
-    return kaspiIds(html);
+    const all = new Map(kaspiIds(html).map((a) => [a.id, a]));
+    for (let page = 2; page <= 3 && all.size; page++) {
+      const u = new URL(base);
+      u.searchParams.set('page', String(page));
+      const more = await getHtml(u.toString()).catch(() => null);
+      if (!more) break;
+      for (const a of kaspiIds(more)) if (!all.has(a.id)) all.set(a.id, a);
+    }
+    return [...all.values()];
   },
   async fetchDetail(ad) {
     const html = await getHtml(ad.url);

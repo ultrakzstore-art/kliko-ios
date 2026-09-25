@@ -107,8 +107,10 @@ test('Kaspi Объявления: весь Казахстан, город, сл�
   assert.ok(sources.byUrl('https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/').key === 'kaspi');
   assert.ok(!k.isAdUrl('https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/'));
   const html = '<a href="/astana/elektronika/computery/noutbuki/">рубрика</a><a href="/elektronika/computery/noutbuki/asus--143/">бренд</a>'
-    + '<a href="/ad/123456789/">Ноутбук</a><a href="https://obyavleniya.kaspi.kz/offer/987654321?x=1">Ещё</a><a href="/ad/123456789/">дубль</a>';
-  assert.deepStrictEqual(sources.kaspiIds(html).map((a) => a.id), [123456789, 987654321]);
+    + '<a href="/a/iphone-15-112633239/">iPhone 15</a><a href="https://obyavleniya.kaspi.kz/a/iphone-15-pro-max-512-gb-112856030/?x=1">Ещё</a>'
+    + '<a href="/a/iphone-15-112633239/">дубль</a>{"url":"/a/macbook-air-m1-116605153/"}';
+  assert.deepStrictEqual(sources.kaspiIds(html).map((a) => a.id), [112633239, 112856030, 116605153]);
+  assert.ok(k.isAdUrl('https://obyavleniya.kaspi.kz/a/iphone-15-112633239/'));
 });
 
 test('Krisha: хозяин или агент по подписи в карточке; «только от хозяев» пропускает только хозяев', async () => {

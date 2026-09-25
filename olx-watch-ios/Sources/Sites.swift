@@ -69,8 +69,10 @@ enum Site: String, CaseIterable, Identifiable, Codable {
                 ("Электроника › Мобильные телефоны", "elektronika/telefony/mobilnye-telefony"),
                 ("Электроника › Компьютеры", "elektronika/computery"), ("Электроника › Ноутбуки", "elektronika/computery/noutbuki"),
                 ("Электроника › Техника для дома", "elektronika/tehnika-dlya-doma"),
+                ("Apple", "apple"), ("Apple › iPhone", "apple/iphones"), ("Apple › MacBook и компьютеры", "apple/apple-computers"),
                 ("Дом и дача", "dom-dacha"), ("Дом и дача › Мебель и интерьер", "dom-dacha/mebel-interer"),
-                ("Животные", "zhivotnye"), ("Услуги", "uslugi"), ("Бизнес и оборудование", "biznes"),
+                ("Животные", "zhivotnye"), ("Личные вещи", "lichnye-vezchi"), ("Прокат и аренда", "prokat-i-arenda"),
+                ("Услуги", "uslugi"), ("Бизнес и оборудование", "biznes"),
             ]
             return list.map { OLX.Category(name: $0.0, path: $0.1) }
         }
@@ -138,7 +140,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         case .kolesa, .krisha: return url.range(of: #"/a/show/\d+"#, options: .regularExpression) != nil
         case .kaspi:
             guard let path = URLComponents(string: url)?.path else { return false }
-            return path.range(of: #"\d{6,}"#, options: .regularExpression) != nil && !path.contains("/k--")
+            return path.range(of: #"^/a/.+-\d{6,}/?$"#, options: .regularExpression) != nil
         }
     }
 
@@ -163,7 +165,17 @@ enum Site: String, CaseIterable, Identifiable, Codable {
     /// Выдача: номера (со сдвигом площадки) и ссылки. Подробности — отдельно, только для нового.
     func search(_ raw: String) async throws -> [Ad] {
         if self == .olx { return try await OLX.search(raw) }
-        guard let page = try await Site.html(try newestFirst(raw)) else { throw OLX.Failure.http(404) }
+        let firstURL = try newestFirst(raw)
+        guard var page = try await Site.html(firstURL) else { throw OLX.Failure.http(404) }
+        // Kaspi: «сначала новые» ссылкой не включить — смотрим ещё 2 страницы.
+        if self == .kaspi {
+            for n in 2...3 {
+                guard var c = URLComponents(url: firstURL, resolvingAgainstBaseURL: false) else { break }
+                c.queryItems = (c.queryItems ?? []).filter { $0.name != "page" } + [URLQueryItem(name: "page", value: String(n))]
+                guard let u = c.url, let more = try? await Site.html(u) else { break }
+                page += more
+            }
+        }
         var out: [Ad] = []
         var seen = Set<Int>()
         func add(_ native: Int, _ url: String) {
@@ -179,12 +191,11 @@ enum Site: String, CaseIterable, Identifiable, Codable {
                 if let n = Int(m) { add(n, "\(base)/a/show/\(n)") }
             }
         case .kaspi:
-            // Объявление — ссылка на kaspi.kz, в пути которой длинное число (не рубрика, не k--слова).
-            for href in Site.matches(#"href=["']([^"'#]+)["']"#, in: page) {
-                guard let u = URL(string: Site.decode(href), relativeTo: URL(string: base))?.absoluteURL,
-                      let host = u.host, host.hasSuffix("kaspi.kz"), !u.path.contains("/k--") else { continue }
-                guard let last = Site.matches(#"(\d{6,})"#, in: u.path).last, let n = Int(last) else { continue }
-                add(n, "\(u.scheme ?? "https")://\(host)\(u.path)")
+            // Объявление Kaspi: /a/<название>-<номер>/ (например /a/iphone-15-112633239/).
+            for path in Site.matches(#"((?:https?://obyavleniya\.kaspi\.kz)?/a/[^"'#\s)?]*?-\d{6,}/?)(?=["'?#\s)])"#, in: page) {
+                guard let u = URL(string: path, relativeTo: URL(string: base))?.absoluteURL,
+                      let last = Site.matches(#"-(\d{6,})/?$"#, in: u.path).last, let n = Int(last) else { continue }
+                add(n, "https://obyavleniya.kaspi.kz\(u.path)")
             }
         case .olx: break
         }
