@@ -40,8 +40,16 @@ struct RootWebView: View {
                с объявления — та же прокрутка и тот же поиск, без повторного запроса. Сплэш и «нет связи» ей не нужны:
                у неё своя лента с диска и свои экраны ошибок. */
             if Config.нативнаяЛента {
-                NativeFeedView(открыть: { адрес in bridge.pendingURL = адрес },
-                               открытьСайт: { bridge.открытьСайтВместоЛенты() })
+                Group {
+                    /* Этап 4: лента — первая из нижних вкладок (NativeTabsView). */
+                    if Config.нижниеВкладки {
+                        NativeTabsView(открыть: { адрес in bridge.pendingURL = адрес },
+                                       открытьСайт: { bridge.открытьСайтВместоЛенты() })
+                    } else {
+                        NativeFeedView(открыть: { адрес in bridge.pendingURL = адрес },
+                                       открытьСайт: { bridge.открытьСайтВместоЛенты() })
+                    }
+                }
                     .opacity(bridge.лентаВидна ? 1 : 0)
                     .allowsHitTesting(bridge.лентаВидна)
                     .accessibilityHidden(!bridge.лентаВидна)

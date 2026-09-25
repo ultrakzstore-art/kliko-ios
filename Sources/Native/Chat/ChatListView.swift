@@ -26,10 +26,21 @@ final class ChatListModel: ObservableObject {
         }
         загружено = true
     }
+
+    /// Непрочитанных во всех диалогах — счётчик на вкладке «Сообщения».
+    var непрочитано: Int { диалоги.reduce(0) { $0 + $1.непрочитано } }
+}
+
+/// Список диалогов со своей моделью — для входа из шапки ленты, когда нижних вкладок нет.
+struct ChatListScreen: View {
+    @StateObject private var модель = ChatListModel()
+    let открыть: (URL) -> Void
+    var body: some View { ChatListView(модель: модель, открыть: открыть) }
 }
 
 struct ChatListView: View {
-    @StateObject private var модель = ChatListModel()
+    /// Модель снаружи: вкладка «Сообщения» держит её и показывает счётчик непрочитанных.
+    @ObservedObject var модель: ChatListModel
     /// Открыть страницу сайта (вход, переписка на сайте).
     let открыть: (URL) -> Void
 
@@ -171,5 +182,22 @@ enum ЧатВремя {
         ф.timeZone = TimeZone(identifier: "UTC")
         ф.dateFormat = "HH:mm"
         return ф.string(from: дата)
+    }
+}
+
+/// Экраны чата в стеке навигации — один набор и для ленты, и для вкладки «Сообщения».
+extension View {
+    func чатМаршруты(открыть: @escaping (URL) -> Void) -> some View {
+        navigationDestination(for: ЧатЦель.self) { цель in
+            switch цель {
+            case .список:
+                ChatListScreen(открыть: открыть)
+            case .диалог(let д):
+                ChatThreadView(модель: ChatThreadModel(tid: д.id), заголовок: д.собеседник, открыть: открыть)
+            case .продавец(let id, let имя, let объявление):
+                ChatThreadView(модель: ChatThreadModel(собеседник: id, объявление: объявление),
+                               заголовок: имя, открыть: открыть)
+            }
+        }
     }
 }

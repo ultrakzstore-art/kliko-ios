@@ -39,17 +39,7 @@ struct NativeFeedView: View {
             .navigationDestination(for: Listing.self) { товар in
                 ListingDetailView(товар: товар, открыть: открыть)
             }
-            .navigationDestination(for: ЧатЦель.self) { цель in
-                switch цель {
-                case .список:
-                    ChatListView(открыть: открыть)
-                case .диалог(let д):
-                    ChatThreadView(модель: ChatThreadModel(tid: д.id), заголовок: д.собеседник, открыть: открыть)
-                case .продавец(let id, let имя, let объявление):
-                    ChatThreadView(модель: ChatThreadModel(собеседник: id, объявление: объявление),
-                                   заголовок: имя, открыть: открыть)
-                }
-            }
+            .чатМаршруты(открыть: открыть)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -60,7 +50,8 @@ struct NativeFeedView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Kliko")
                 }
-                if Config.нативныйЧат {
+                /* С нижними вкладками (этап 4) сообщения и кабинет — там; в шапке их второй раз не показываем. */
+                if Config.нативныйЧат && !Config.нижниеВкладки {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink(value: ЧатЦель.список) {
                             Image(systemName: "bubble.left.and.bubble.right")
@@ -68,13 +59,15 @@ struct NativeFeedView: View {
                         .accessibilityLabel(ChatText.т("title"))
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        if let u = Config.url("/cabinet.php") { открыть(u) }
-                    } label: {
-                        Image(systemName: "person.crop.circle")
+                if !Config.нижниеВкладки {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            if let u = Config.url("/cabinet.php") { открыть(u) }
+                        } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityLabel(FeedText.т("cabinet"))
                     }
-                    .accessibilityLabel(FeedText.т("cabinet"))
                 }
             }
             .searchable(text: $модель.поиск, placement: .navigationBarDrawer(displayMode: .always),
