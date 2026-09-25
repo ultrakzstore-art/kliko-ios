@@ -70,6 +70,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // ленту с этим поиском. У пушей сайта метки нет — они, как раньше, идут по "url".
         if let искомое = ПроверкаПоисков.искомое(из: info) {
             Task { @MainActor in ПроверкаПоисков.открыть(искомое) }
+        } else if let номер = СнижениеЦены.номер(из: info) {
+            // Этап 21: уведомление о снижении цены в избранном — та же метка, своё значение; ведёт в нативную карточку.
+            Task { @MainActor in СнижениеЦены.открыть(номер) }
         } else {
             handlePayload(info)
         }

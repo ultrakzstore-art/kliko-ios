@@ -714,6 +714,7 @@ struct WebContainer: UIViewRepresentable {
                 ListingDetailCache.стереть()     // и копии его объявлений для карточки без сети (этап 13)
                 Task { @MainActor in ПросьбаОценить.shared.стереть() }   // и номера его объявлений в счёте просьбы оценить (этап 16)
                 Task { @MainActor in ЧерновикиЧата.shared.стереть() }    // и его недописанные сообщения (этап 17)
+                СнижениеЦены.стереть()           // и уведомление о снижении цен его избранного, и выбор в кабинете (этап 21)
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
         }

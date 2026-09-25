@@ -73,13 +73,17 @@ enum ListingsAPI {
     }
 
     /// То же и сырой ответ целиком (этап 13): его кладёт на диск ListingDetailCache — копия для карточки без сети.
-    static func объявлениеСОтветом(_ id: String) async throws -> (товар: Listing, сырое: Data) {
+    /// `куки` — как у загрузить(_:куки:): фоновая проверка цены избранного (этап 21) берёт их у WebKit заранее, с
+    /// пределом по времени; nil — у WebKit перед запросом, как раньше.
+    static func объявлениеСОтветом(_ id: String, куки заданные: [String: String]? = nil) async throws -> (товар: Listing, сырое: Data) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
         ч.queryItems = [URLQueryItem(name: "id", value: id)]
         var запрос = URLRequest(url: ч.url!)
         запрос.httpShouldHandleCookies = false
-        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
+        let заголовки: [String: String]
+        if let заданные { заголовки = заданные } else { заголовки = await SiteSession.куки() }
+        for (имя, значение) in заголовки { запрос.setValue(значение, forHTTPHeaderField: имя) }
 
         let данные: Data
         let ответ: URLResponse
