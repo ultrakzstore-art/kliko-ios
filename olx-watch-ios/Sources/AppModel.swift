@@ -721,9 +721,10 @@ final class AppModel {
     @ObservationIgnored private var kaspiLastTick = Date.distantPast
     @ObservationIgnored private var kaspiLiveStart = true
 
-    /// Номер n или сразу за ним (снятые дают дырки по 1–2): первый существующий или 0.
+    /// Номер n или сразу за ним: первый существующий или 0.
     private func kaspiExists(_ n: Int) async throws -> Int {
-        for id in n...(n + 2) {
+        // Пустых подряд бывает до 5 (на проверке, сняты) — смотрим 6 номеров.
+        for id in n...(n + 5) {
             if try await Site.kaspiById(id) != nil { return id }
         }
         return 0

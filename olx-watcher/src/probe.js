@@ -70,11 +70,16 @@ async function kaspiWatch(ms) {
   let edge = 0;               // самый большой номер: номера идут по порядку подачи
   const byNum = new Map();    // номер → когда открылся по номеру
   const misses = new Map();   // номер → сколько раз «нет такого»
+  let lastShow = 0;
   console.log(`Наблюдаю за Kaspi ${Math.round(ms / 60_000)} мин (витрина «Самые новые»). Строки ниже — по мере появления.\n`);
   while (Date.now() - t0 < ms) {
     try {
-      const show = await k.fetchShowcase('');
+      // Витрина — раз в 15 с (там почти одно платное), номера — каждые 2 с.
+      const due = first || Date.now() - lastShow >= 15_000;
+      const show = due ? await k.fetchShowcase('') : [];
+      if (due) lastShow = Date.now();
       if (show == null) { console.log('Витрины (главной) нет — наблюдать нечего'); return; }
+      if (first && !show.length) { console.log('Витрина пустая — наблюдать не от чего'); return; }
       if (first) {
         console.log(`${clock()} старт: на витрине ${show.length}`);
         console.log(`   номера по порядку витрины: ${show.slice(0, 12).map((a) => a.id).join(', ')}${show.length > 12 ? ', …' : ''}`);
@@ -86,6 +91,21 @@ async function kaspiWatch(ms) {
         }
         show.forEach((a) => onShow.set(a.id, 0));
         edge = Math.max(...show.map((a) => a.id));
+        // Витрина отстаёт на минуты — сразу ищем настоящий последний номер: шаг вперёд удваиваем,
+        // где объявлений уже нет — делим пополам (пустых подряд бывает до 5 — смотрим по 6).
+        const exists = async (n) => { for (let id = n; id <= n + 5; id++) if (await k.fetchById(id).catch(() => null)) return id; return 0; };
+        const from = edge;
+        let step = 8;
+        let hit;
+        while ((hit = await exists(edge + step))) { edge = hit; step *= 2; }
+        let hi = edge + step;
+        while (hi - edge > 6) {
+          const mid = Math.floor((edge + hi) / 2);
+          if ((hit = await exists(mid))) edge = hit; else hi = mid;
+        }
+        for (let n = edge + 1; n <= hi + 5; n++) if (await k.fetchById(n).catch(() => null)) edge = n;
+        console.log(`${clock()} последний номер: ${edge} (витрина отставала на ${edge - from} номеров) — дальше ловлю каждый следующий\n`);
+        lastShow = Date.now();
         first = false;
       } else {
         for (const [i, a] of show.entries()) {
@@ -122,7 +142,7 @@ async function kaspiWatch(ms) {
     } catch (e) {
       console.log(`${clock()} ошибка: ${e.message}`);
     }
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 2000));
   }
   const mins = (Date.now() - t0) / 60_000;
   console.log('\nИтог:');

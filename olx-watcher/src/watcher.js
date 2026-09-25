@@ -411,7 +411,8 @@ class Watcher {
   // Есть ли объявление с номером n или сразу за ним (номера бывают сняты — дырки по 1–2).
   async kaspiExists(n) {
     const k = sources.get('kaspi');
-    for (const id of [n, n + 1, n + 2]) {
+    // Пустых подряд бывает до 5 (на проверке, сняты) — смотрим 6 номеров.
+    for (let id = n; id <= n + 5; id++) {
       const ad = await k.fetchById(id);
       this.okRequest('kaspi');
       if (ad) return id;
