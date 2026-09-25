@@ -94,7 +94,8 @@ async function kaspiWatch(ms) {
         const d = await k.fetchById(n).catch(() => null);
         if (d) {
           byNum.set(n, Date.now());
-          console.log(`${clock()} по номеру: открылся ${n} · ${String(d.title).slice(0, 50)}${onShow.has(n) ? '' : ' — на витрине его ещё нет'}`);
+          const when = d.createdAt ? `подано ${new Date(d.createdAt).toLocaleTimeString('ru-RU', { timeZone: 'Asia/Almaty' })} (${Math.round((Date.now() - d.createdAt) / 1000)} с назад)` : 'время подачи не найдено';
+          console.log(`${clock()} ⚡ по номеру: открылся ${n} · ${String(d.title).slice(0, 50)} · ${d.priceLabel || 'цена —'} · ${d.city || 'город —'} · ${when}${onShow.has(n) ? '' : ' — на витрине его ещё нет'}`);
         }
       }
     } catch (e) {

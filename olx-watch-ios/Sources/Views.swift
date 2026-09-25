@@ -829,6 +829,7 @@ struct SettingsView: View {
         Form {
             StatusSection()
             WhySection()
+            if model.state.subs.contains(where: { $0.site == .kaspi }) { KaspiMonitorSection() }
 
             Section {
                 LabeledContent("Проверка", value: model.running ? "идёт, пока приложение открыто" : "на паузе")
@@ -1011,6 +1012,41 @@ struct StatusSection: View {
     }
 }
 
+/// Монитор Kaspi: живая лента — вышло новое (по номеру, на витрине, в поиске), кому пришло и
+/// почему пропущено (платное, другая рубрика или город). Свежее сверху.
+struct KaspiMonitorSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var showAll = false
+
+    var body: some View {
+        Section {
+            LabeledContent("Последний номер", value: model.kaspiEdgeShown > 0
+                ? "№\(model.kaspiEdgeShown)" + (model.kaspiEdgeExact ? "" : " · ищу точный") : "ещё не знаю")
+            LabeledContent("Сортировка", value: "Самые новые")
+            if model.kaspiLive.isEmpty {
+                Text("Пока пусто — новое появится здесь, как только выйдет.").font(.footnote).foregroundStyle(.secondary)
+            }
+            ForEach(Array(model.kaspiLive.prefix(showAll ? 200 : 25).enumerated()), id: \.offset) { _, line in
+                Text(verbatim: line)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(line.contains("✅") ? Color.green : line.contains("пропуск") || line.contains("не подошло") ? Color.secondary : Color.primary)
+                    .textSelection(.enabled)
+            }
+            if model.kaspiLive.count > 25 {
+                Button(showAll ? "Свернуть" : "Показать все (\(model.kaspiLive.count))") { showAll.toggle() }
+            }
+            if !model.kaspiLive.isEmpty {
+                Button("Скопировать всё") { UIPasteboard.general.string = model.kaspiLive.joined(separator: "\n") }
+                Button("Очистить", role: .destructive) { model.clearKaspiLive() }
+            }
+        } header: {
+            Text("Монитор Kaspi")
+        } footer: {
+            Text("⚡ — поймано по номеру раньше выдачи; «витрина» — новое на главной Kaspi; «поиск» — в выдаче вашего поиска. «Пропуск» — платное или поднятое старое. Работает, пока приложение открыто.")
+        }
+    }
+}
+
 /// «Почему не пришло?» — номер объявления (из Lotify, с сайта) → что приложение о нём знает:
 /// видело ли, когда и откуда, кому подошло и почему нет.
 struct WhySection: View {
@@ -1025,7 +1061,9 @@ struct WhySection: View {
                     .keyboardType(.numberPad)
                 Button("Проверить") {
                     let digits = number.filter(\.isNumber)
-                    if let id = OLX.adId(fromURL: number) ?? Int(digits) { answer = model.why(id) }
+                    if number.contains("kaspi.kz"), let n = Site.matches(#"/a/(?:[^/?#]*-)?(\d{6,})"#, in: number).first.flatMap({ Int($0) }) {
+                        answer = model.why(Site.kaspi.idOffset + n)
+                    } else if let id = OLX.adId(fromURL: number) ?? Int(digits) { answer = model.why(id) }
                 }
                 .disabled(number.isEmpty)
             }

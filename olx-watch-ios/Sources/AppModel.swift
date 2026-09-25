@@ -86,6 +86,11 @@ final class AppModel {
     @ObservationIgnored private var subSeenSet = Set<String>()
     @ObservationIgnored private var traceLog: [Int: [String]] = [:]
     @ObservationIgnored private var traceOrder: [Int] = []
+    /// Монитор Kaspi: что вышло, откуда пришло, почему пропущено — свежее сверху, последние 200.
+    private(set) var kaspiLive: [String] = []
+    /// Последний известный номер Kaspi (край) и найден ли он точно — для монитора.
+    private(set) var kaspiEdgeShown = UserDefaults.standard.integer(forKey: "kaspi_frontier")
+    private(set) var kaspiEdgeExact = false
     private var busy = false
 
     private(set) var pushStatus = ""
@@ -286,8 +291,12 @@ final class AppModel {
             remember(ad.id)
             if ad.seedOnly == true { continue }   // Kaspi: город впервые — только запоминаем
             if let full = try? await site.detail(ad) { ad.merge(full) }
+            if site == .kaspi { trace(ad.id, "поиск «\(sub.name)»: новое в выдаче — \(kaspiInfo(ad))") }
             // Дата подачи есть не у всех карточек; есть и старше часа — это не новое.
-            if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) { continue }
+            if let created = ad.createdAt, Date().timeIntervalSince(created) > TimeInterval(max(freshnessMinutes, 60) * 60) {
+                if site == .kaspi { trace(ad.id, "поиск «\(sub.name)»: подано давно (платное / поднятое) — пропуск") }
+                continue
+            }
             // Kaspi: платные (поднятые) стоят сверху и при «Самых новых» — это старьё.
             if site == .kaspi, kaspiOld(ad) { trace(ad.id, "Kaspi: платное / поднятое старое — пропуск"); continue }
             // Krisha «только от хозяев»: пропускаем только с подписью «Хозяин недвижимости».
@@ -301,6 +310,7 @@ final class AppModel {
             ad.foundAt = Date()
             recordAll(ad)
             deliver(ad, to: [sub])
+            if site == .kaspi { trace(ad.id, "поиск «\(sub.name)»: ✅ пришло") }
         }
         save()
     }
@@ -517,10 +527,27 @@ final class AppModel {
         lines.append("\(Self.clock.string(from: Date())) \(line)")
         if lines.count > 8 { lines.removeFirst(lines.count - 8) }
         traceLog[id] = lines
+        if Site.of(adId: id) == .kaspi { kaspiNote("№\(id - Site.kaspi.idOffset) \(line)") }
+    }
+
+    func kaspiNote(_ line: String) {
+        kaspiLive.insert("\(Self.clock.string(from: Date())) \(line)", at: 0)
+        if kaspiLive.count > 200 { kaspiLive.removeLast(kaspiLive.count - 200) }
+    }
+
+    func clearKaspiLive() { kaspiLive = [] }
+
+    /// Коротко об объявлении Kaspi для монитора: название · цена · город · когда подано.
+    private func kaspiInfo(_ ad: Ad) -> String {
+        let when = ad.createdAt.map { "подано " + $0.formatted(date: Calendar.current.isDateInToday($0) ? .omitted : .abbreviated, time: .shortened) } ?? "время подачи не найдено"
+        return [ad.title.isEmpty ? "без названия" : ad.title, ad.priceText, ad.city, when].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     /// «Почему не пришло?» — по номеру объявления.
     func why(_ id: Int) -> String {
+        // Номер Kaspi без ссылки: в ленте он хранится со сдвигом.
+        let k = id + Site.kaspi.idOffset
+        if id < Site.kolesa.idOffset, traceLog[id] == nil, !seenSet.contains(id), traceLog[k] != nil || seenSet.contains(k) { return why(k) }
         var out: [String] = []
         if let ad = state.ads.first(where: { $0.id == id }) {
             let names = state.subs.filter { ad.subIds.contains($0.id) }.map(\.name)
@@ -596,6 +623,7 @@ final class AppModel {
     private func bumpKaspi(_ n: Int) {
         guard n > kaspiFrontier else { return }
         kaspiFrontier = n
+        kaspiEdgeShown = n
         UserDefaults.standard.set(n, forKey: "kaspi_frontier")
     }
 
@@ -639,6 +667,7 @@ final class AppModel {
                 if seed || seenSet.contains(a.id) { continue }
                 var ad = a
                 if let full = try? await Site.kaspi.detail(a) { ad.merge(full) }
+                trace(ad.id, "витрина\(page.isEmpty ? "" : " (\(Site.kaspiCityName(page)))"): новое на витрине — \(kaspiInfo(ad))")
                 // Поднятое / платное старое тоже всплывает наверх витрины.
                 if kaspiOld(ad) { trace(ad.id, "витрина Kaspi: поднятое старое — пропуск"); continue }
                 var hit: [Sub] = []
@@ -673,6 +702,7 @@ final class AppModel {
     @ObservationIgnored private var kaspiStep = 16
     @ObservationIgnored private var kaspiHi = 0
     @ObservationIgnored private var kaspiLastTick = Date.distantPast
+    @ObservationIgnored private var kaspiLiveStart = true
 
     /// Номер n или сразу за ним (снятые дают дырки по 1–2): первый существующий или 0.
     private func kaspiExists(_ n: Int) async throws -> Int {
@@ -699,6 +729,8 @@ final class AppModel {
                     if try await Site.kaspiById(id) != nil { lo = id }
                 }
                 kaspiSynced = true
+                kaspiEdgeExact = true
+                kaspiNote("край найден: последний номер №\(lo) — дальше ловлю каждый следующий")
                 kaspiHi = 0
                 kaspiStep = 16
                 break
@@ -708,6 +740,7 @@ final class AppModel {
             if hit > 0 { lo = hit } else { kaspiHi = mid }
         }
         kaspiFrontier = lo
+        kaspiEdgeShown = lo
         UserDefaults.standard.set(lo, forKey: "kaspi_frontier")
     }
 
@@ -715,7 +748,12 @@ final class AppModel {
         let subs = state.subs.filter { !$0.paused && $0.ready && $0.site == .kaspi }
         guard !subs.isEmpty, kaspiFrontier > 0 else { return }
         // Приложение было закрыто дольше 5 минут — край ищем заново (пропущенное принесёт выдача).
-        if Date().timeIntervalSince(kaspiLastTick) > 300 { kaspiSynced = false }
+        if Date().timeIntervalSince(kaspiLastTick) > 300 {
+            if kaspiSynced || kaspiLiveStart { kaspiNote("ищу последний номер Kaspi (от №\(kaspiFrontier)) — пока ищу, ничего не шлю") }
+            kaspiLiveStart = false
+            kaspiSynced = false
+            kaspiEdgeExact = false
+        }
         kaspiLastTick = Date()
         if !kaspiSynced {
             do { try await kaspiSync(); ok(site: .kaspi) } catch { fail(error, site: .kaspi) }
@@ -739,6 +777,7 @@ final class AppModel {
             kaspiMisses[n] = nil
             bumpKaspi(n)
             guard !seenSet.contains(ad.id) else { continue }
+            if traceLog[ad.id] == nil { trace(ad.id, "⚡ вышло (по номеру): \(kaspiInfo(ad))") }
             var hit: [Sub] = []
             for s in subs {
                 if let why = Site.kaspiMismatch(s, ad) {
