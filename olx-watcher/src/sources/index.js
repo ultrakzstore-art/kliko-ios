@@ -6,6 +6,7 @@
 const olx = require('../olx');
 const cats = require('../categories');
 const { getHtml, idsFromListing, parseDetail } = require('./page');
+const { stem } = require('../match');
 
 const CITIES = [
   ['Алматы', 'almaty'], ['Астана', 'astana'], ['Шымкент', 'shymkent'], ['Караганда', 'karaganda'],
@@ -256,6 +257,16 @@ const KASPI = {
     return out;
   },
 
+  // Объявление по одному номеру: /a/<номер>/ — сайт сам ведёт на полную ссылку. Нет такого (или
+  // ещё на проверке) — null. Заглушка вместо карточки (ни цены, ни фото) — тоже null.
+  async fetchById(id) {
+    const url = `${KASPI_BASE}/a/${id}/`;
+    const html = await getHtml(url);
+    if (html == null) return null;
+    const d = parseDetail(html, { id, url });
+    return d.title && (d.price || d.photos.length) ? { ...d, id, url, source: 'kaspi' } : null;
+  },
+
   async fetchOne(url, pages = 3) {
     let base = this.normalize(url);
     const hasSort = (u) => /[?&](sort|order|sortBy|sort_by|orderBy)=/i.test(u);
@@ -311,4 +322,36 @@ function byUrl(url) {
   return ALL.find((s) => s.hostRe.test(host)) || null;
 }
 
-module.exports = { kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+// Подходит ли объявление Kaspi, найденное по номеру, поиску Kaspi: рубрика (по крошкам карточки),
+// город, слова. Не понятно (крошек нет, город не указан) — «нет» с причиной: его принесёт поиск.
+function kaspiMismatch(sub, ad) {
+  let parts;
+  try { parts = new URL(sub.url).pathname.split('/').filter(Boolean); } catch { return 'ссылка поиска'; }
+  const cities = new Set([...KASPI_CITY_SLUGS, ...[...kaspiRounds.values()].flatMap((r) => r.cities)]);
+  const city = parts.length > 1 && cities.has(parts[0]) ? parts.shift() : '';
+  const wordsSeg = parts.findIndex((p) => p.startsWith('k--'));
+  const words = wordsSeg >= 0 ? decodeURIComponent(parts[wordsSeg].slice(3)).split(/[-\s]+/).filter(Boolean) : [];
+  const path = (wordsSeg >= 0 ? parts.slice(0, wordsSeg) : parts).join('/').toLowerCase();
+  const crumbs = ad.crumbs || [];
+  if (!crumbs.length) return 'рубрика объявления не видна';
+  let adCity = '';
+  const cats = crumbs.map((c) => {
+    const p = c.split('/');
+    if (p.length > 1 && cities.has(p[0])) { adCity = adCity || p[0]; return p.slice(1).join('/'); }
+    return c;
+  });
+  if (path && !cats.some((c) => c === path || c.startsWith(`${path}/`))) return 'другая рубрика';
+  if (city) {
+    const name = (CITIES.find((c) => c.slug === city) || {}).name || '';
+    const same = adCity ? adCity === city : !!(name && ad.city && ad.city.toLowerCase() === name.toLowerCase());
+    if (!same) return adCity || ad.city ? 'другой город' : 'город объявления не виден';
+  }
+  if (words.length) {
+    const text = `${ad.title || ''} ${ad.description || ''}`.toLowerCase();
+    const miss = words.find((w) => !text.includes(stem(w.toLowerCase())));
+    if (miss) return `нет слова «${miss}»`;
+  }
+  return null;
+}
+
+module.exports = { kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };

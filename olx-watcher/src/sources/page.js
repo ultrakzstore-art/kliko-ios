@@ -99,7 +99,34 @@ function parseDetail(html, { id, url, currency = '₸' }) {
     params: [],
     photo: [...new Set(images)][0] || '',
     photos: [...new Set(images)].slice(0, 12),
+    crumbs: breadcrumbs(html, ld, url),
   };
+}
+
+// Хлебные крошки карточки: пути рубрик, в которых лежит объявление (/astana/elektronika/…).
+// Сначала из JSON-LD BreadcrumbList, иначе — ссылки внутри блока с «breadcrumb» в классе.
+// Меню сайта сюда не попадает: оно ссылается на все рубрики, и объявление «подошло» бы всем.
+function breadcrumbs(html, ld, url) {
+  const paths = new Set();
+  const add = (href) => {
+    try {
+      const u = new URL(decode(String(href)), url);
+      const p = u.pathname.replace(/^\/+|\/+$/g, '');
+      if (p && !/^a\//.test(p)) paths.add(p.toLowerCase());
+    } catch { /* не ссылка */ }
+  };
+  for (const x of ld) {
+    if (!/BreadcrumbList/i.test(String(x?.['@type']))) continue;
+    for (const it of [].concat(x.itemListElement || [])) {
+      const item = it?.item;
+      add(typeof item === 'string' ? item : item?.['@id'] || item?.url || it?.url || '');
+    }
+  }
+  if (!paths.size) {
+    const m = /<(?:nav|ol|ul|div)\b[^>]*class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/(?:nav|ol|ul)>/i.exec(html);
+    if (m) for (const h of m[1].matchAll(/href=["']([^"']+)["']/gi)) add(h[1]);
+  }
+  return [...paths];
 }
 
 // Страница продавца — «все объявления автора». Сначала из JSON-LD (seller/author с url),

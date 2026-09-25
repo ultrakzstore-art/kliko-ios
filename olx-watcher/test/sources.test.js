@@ -197,3 +197,45 @@ test('Kaspi «весь Казахстан»: города берутся со с
     Object.assign(k, { fetchSearch: orig.search, fetchDetail: orig.detail });
   }
 });
+
+test('Kaspi по номеру: крошки карточки → рубрика и город; подходящее новое приходит сразу', async () => {
+  const page = `<meta property="og:title" content="Ноутбук HP 250 G8"><meta property="og:image" content="https://x/1.jpg">
+    <script type="application/ld+json">{"@type":"BreadcrumbList","itemListElement":[
+      {"@type":"ListItem","position":1,"item":"https://obyavleniya.kaspi.kz/astana/"},
+      {"@type":"ListItem","position":2,"item":"https://obyavleniya.kaspi.kz/astana/elektronika/"},
+      {"@type":"ListItem","position":3,"item":{"@id":"https://obyavleniya.kaspi.kz/astana/elektronika/computery/noutbuki/"}}]}</script>
+    <nav class="menu"><a href="/apple/iphones/">iPhone</a></nav>`;
+  const ad = { ...parseDetail(page, { id: 123509497, url: 'https://obyavleniya.kaspi.kz/a/123509497/' }), id: 123509497 };
+  assert.ok(ad.crumbs.includes('astana/elektronika/computery/noutbuki'));
+  const sub = (url) => ({ url });
+  assert.strictEqual(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/'), ad), null, 'весь Казахстан');
+  assert.strictEqual(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/astana/elektronika/'), ad), null, 'родительская рубрика');
+  assert.strictEqual(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/almaty/elektronika/computery/noutbuki/'), ad), 'другой город');
+  assert.strictEqual(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/apple/iphones/'), ad), 'другая рубрика', 'меню не считается');
+  assert.strictEqual(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/k--hp/'), ad), null);
+  assert.match(sources.kaspiMismatch(sub('https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/k--lenovo/'), ad), /lenovo/);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-kaspi-turbo-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const k = sources.get('kaspi');
+  const orig = k.fetchById;
+  const live = new Map([[123509497, ad]]);
+  k.fetchById = async (id) => live.get(id) || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a, subs, via) => { if (a) sent.push(`${via}:${a.id}`); }, alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    db.extend(1, 30, ['kaspi']);
+    const s = db.addSub(1, 'Ноутбуки', 'https://obyavleniya.kaspi.kz/elektronika/computery/noutbuki/', 'kaspi');
+    db.updateSub(s.id, { initialized: 1, watermark: 123509490 });
+    w.bumpKaspi(123509495);
+    await w.kaspiTurboTick();   // 496 ещё нет, 497 есть
+    assert.deepStrictEqual(sent, ['turbo:123509497']);
+    assert.strictEqual(w.kaspiFrontier, 123509497);
+    await w.kaspiTurboTick();
+    assert.deepStrictEqual(sent, ['turbo:123509497'], 'второй раз не шлём');
+  } finally {
+    k.fetchById = orig;
+  }
+});

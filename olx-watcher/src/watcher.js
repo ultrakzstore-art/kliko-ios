@@ -114,6 +114,7 @@ class Watcher {
       this.timers.push(setInterval(() => this.recheckTick().catch((e) => this.log(`скидки: ${e.message}`)), 10_000));
     }
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
+    this.timers.push(setInterval(() => this.kaspiTurboTick().catch((e) => this.log(`турбо Kaspi: ${e.message}`)), 2_000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
 
@@ -226,6 +227,7 @@ class Watcher {
       return;
     }
     if (src.key === 'olx') for (const a of ads) this.bumpFrontier(a.id);
+    if (src.key === 'kaspi') this.bumpKaspi(ads.reduce((m, a) => Math.max(m, a.id), 0));
     // Выдача поиска VIP по его рубрике: запоминаем объявления и учим номера рубрик.
     for (const l of this.activeLocks()) {
       if (!subs.some((s) => s.id === l.sub_id)) continue;
@@ -291,6 +293,72 @@ class Watcher {
         sent += 1;
       }
       this.db.updateSub(sub.id, { ...patch, sent, watermark: Math.max(sub.watermark, maxId) });
+    }
+  }
+
+  // ---------- турбо Kaspi ----------
+  // Как у OLX: номера объявлений Kaspi сквозные, и /a/<номер>/ открывает объявление без названия.
+  // Проверяем следующие номера за самым большим, что видели в выдаче, — новое приходит раньше,
+  // чем попадёт в выдачу поиска (и из любого города). Подошло ли поиску — по рубрике из крошек
+  // карточки, городу и словам; не понятно — не шлём, его принесёт обход выдачи.
+
+  bumpKaspi(id) {
+    if (!id) return;
+    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_frontier', 0);
+    if (id > this.kaspiFrontier) {
+      this.kaspiFrontier = id;
+      this.db.set('kaspi_frontier', id);
+    }
+  }
+
+  async kaspiTurboTick() {
+    if (this.kaspiBusy || this.blocked('kaspi')) return;
+    if (!this.kaspiFrontier) this.kaspiFrontier = this.db.get('kaspi_frontier', 0);
+    if (!this.kaspiFrontier) return;
+    const subs = this.db.subs().filter((s) => s.source === 'kaspi' && !s.paused && s.initialized
+      && this.db.hasAccess(s.user_id, 'kaspi') && !this.db.user(s.user_id)?.blocked);
+    if (!subs.length) return;
+    this.kaspiBusy = true;
+    const k = sources.get('kaspi');
+    this.kaspiMisses = this.kaspiMisses || new Map();
+    try {
+      const ids = [];
+      for (let id = this.kaspiFrontier + 1; ids.length < 3 && id <= this.kaspiFrontier + 10; id++) ids.push(id);
+      // И один номер подальше (+5…+20 по кругу): если следующие три так и не откроются (сняты,
+      // на проверке), граница всё равно уйдёт вперёд.
+      this.kaspiJump = ((this.kaspiJump || 0) % 16) + 1;
+      ids.push(this.kaspiFrontier + 4 + this.kaspiJump);
+      // Пропущенные чуть ниже границы (номер открылся позже соседа) — ещё немного пробуем.
+      for (const [id, n] of this.kaspiMisses) {
+        if (id < this.kaspiFrontier && id > this.kaspiFrontier - 50 && n < 30 && ids.length < 5) ids.push(id);
+      }
+      for (const id of ids) {
+        let ad;
+        try {
+          ad = await k.fetchById(id);
+          this.okRequest('kaspi');
+        } catch (e) {
+          if (this.handleError(e, 'kaspi')) break;
+          continue;
+        }
+        if (!ad) { this.kaspiMisses.set(id, (this.kaspiMisses.get(id) || 0) + 1); continue; }
+        this.kaspiMisses.delete(id);
+        this.bumpKaspi(id);
+        this.trace(id, 'Kaspi по номеру: нашли');
+        for (const s of subs) {
+          if (this.db.wasSent(s.id, id)) continue;
+          const why = sources.kaspiMismatch(s, ad);
+          if (why) { this.trace(id, `Kaspi по номеру → поиск #${s.id}: не подошло — ${why}`); continue; }
+          if (!this.allowed(s.user_id, ad) || !this.db.markSent(s.id, id)) continue;
+          this.trace(id, `Kaspi по номеру → поиск #${s.id}: отправлено`);
+          this.db.updateSub(s.id, { sent: s.sent + 1 });
+          await this.notify(s.user_id, ad, [s], 'turbo');
+          this.stats.sent += 1;
+        }
+      }
+      for (const id of this.kaspiMisses.keys()) if (id < this.kaspiFrontier - 200) this.kaspiMisses.delete(id);
+    } finally {
+      this.kaspiBusy = false;
     }
   }
 
