@@ -191,6 +191,10 @@ struct ChatListView: View {
                 } placeholder: {
                     Theme.mint
                 }
+                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: этот ряд и был в сборке 33 — широкие фото
+                   вылезали за край экрана и на имя. Обрезка шла по размеру самой картинки после scaledToFill, а не по
+                   ячейке 48×48; .frame у Group ниже не режет. Сначала рамка, потом обрезка. */
+                .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 Circle()
