@@ -231,14 +231,9 @@ struct ChatThreadView: View {
                 LazyVStack(spacing: 6) {
                     if модель.сообщения.isEmpty {
                         if Config.дизайнКакНаСайте {
-                            /* Этап 30: системная строка .kc-sys — по центру, серым на --kc-soft. */
-                            Text(ChatText.т("first"))
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.текстВторой)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            /* Этап 30: системная строка .kc-sys — по центру, серым на --kc-soft. С исправлений с
+                               телефона (сборка 33) — та же строка, что у уведомлений сервера. */
+                            УведомлениеЧатаСайта(текст: ChatText.т("first"))
                                 .padding(.top, 40)
                         } else {
                             Text(ChatText.т("first"))
@@ -280,9 +275,12 @@ struct ChatThreadView: View {
     /// едем вниз, как раньше. Этап 17: читает выше — экран не дёргаем, а на кнопку «вниз» ставим, сколько пришло от
     /// собеседника.
     private func пришли(было: Int, стало: Int, _ прокрутка: ScrollViewProxy) {
-        let своё = модель.сообщения.last?.моё == true
+        /* Владелец 25.09.2026, проверка на телефоне, сборка 33: уведомление сервера приходит с автором того, кто его
+           вызвал. «Покупатель отозвал…» с mine = true не считаем своим сообщением (оно дёргало бы экран вниз), а
+           уведомления со стороны собеседника — новыми сообщениями на кнопке «вниз». */
+        let своё = модель.сообщения.last.map { $0.моё && !$0.системное } ?? false
         if Config.удобныйЧат && кнопкаВниз && !своё && !полеВФокусе {
-            новыхНиже += модель.сообщения.suffix(max(0, стало - было)).filter { !$0.моё }.count
+            новыхНиже += модель.сообщения.suffix(max(0, стало - было)).filter { !$0.моё && !$0.системное }.count
             return
         }
         withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
@@ -326,7 +324,38 @@ struct ChatThreadView: View {
         withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
     }
 
+    /// Строка переписки: служебное уведомление — по центру без облака, остальное — облаком своей стороны.
+    @ViewBuilder
     private func пузырь(_ с: ЧатСообщение) -> some View {
+        if с.системное {
+            уведомление(с)
+        } else {
+            сообщениеЧеловека(с)
+        }
+    }
+
+    /// Владелец 25.09.2026, проверка на телефоне, сборка 33: «Продавец вышел из чата» было серым облаком собеседника
+    /// с «Копировать». У сайта уведомления — строка .kc-sys по центру: без стороны, без времени, без меню. Голосом —
+    /// один текст, без «Вы:» и имени.
+    private func уведомление(_ с: ЧатСообщение) -> some View {
+        Group {
+            if Config.дизайнКакНаСайте {
+                УведомлениеЧатаСайта(текст: с.текст)
+            } else {
+                Text(с.текст)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(с.голос(собеседник: заголовок))
+    }
+
+    private func сообщениеЧеловека(_ с: ЧатСообщение) -> some View {
         HStack {
             if с.моё { Spacer(minLength: 48) }
             VStack(alignment: с.моё ? .trailing : .leading, spacing: 3) {

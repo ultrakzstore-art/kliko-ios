@@ -50,6 +50,8 @@ struct ЧатДиалог: Identifiable, Hashable, Decodable {
     let обложка: String
     let последнее: String
     let последнееМоё: Bool
+    /// Последнее — служебное уведомление («Покупатель отозвал своё предложение.»), а не слова человека.
+    let последнееСистемное: Bool
     let последнееКогда: String
     let непрочитано: Int
 
@@ -66,11 +68,24 @@ struct ЧатДиалог: Identifiable, Hashable, Decodable {
         обложка = c.строка("listing_img") ?? ""
         непрочитано = c.целое("unread")
         if let last = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("last")) {
-            последнее = ЧатСообщение.подпись(тип: last.строка("type") ?? "text", текст: last.строка("text") ?? "")
-            последнееМоё = last.да("mine")
+            let типПоследнего = last.строка("type") ?? "text"
+            let текстПоследнего = last.строка("text") ?? ""
+            /* Владелец 25.09.2026, проверка на телефоне, сборка 33: в списке было «Вы: Покупатель отозвал своё
+               предложение.» — сервер пишет уведомление от имени того, кто его вызвал (mine = true). У сайта это
+               служебная строка без автора, поэтому «Вы: » у неё не ставим: последнееМоё — только у слов человека. */
+            let служебное = ЧатСообщение.этоУведомление(
+                роль: last.строка("role") ?? c.строка("last_role") ?? "",
+                вид: last.строка("kind") ?? c.строка("last_kind") ?? "",
+                тип: типПоследнего,
+                флаг: last.да("sys") || last.да("system") || last.да("is_system"),
+                текст: текстПоследнего)
+            последнее = ЧатСообщение.подпись(тип: типПоследнего, текст: текстПоследнего)
+            последнееСистемное = служебное
+            последнееМоё = last.да("mine") && !служебное
             последнееКогда = last.строка("at") ?? ""
         } else {
             последнее = ""
+            последнееСистемное = false
             последнееМоё = false
             последнееКогда = c.строка("updated") ?? ""
         }
@@ -86,6 +101,9 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     let когда: String
     /// Фото в сообщении, если сервер прислал адрес (meta.url).
     let фото: URL?
+    /// Служебное уведомление («Продавец вышел из чата», «Покупатель отозвал своё предложение.») — у сайта это строка
+    /// .kc-sys по центру, без автора и без облака.
+    let системное: Bool
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
@@ -93,6 +111,12 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
         тип = c.строка("type") ?? "text"
         текст = c.строка("text") ?? ""
         когда = c.строка("at") ?? ""
+        /* Владелец 25.09.2026, проверка на телефоне, сборка 33: «Продавец вышел из чата» пришло серым облаком
+           собеседника. Сервер кладёт уведомления в переписку обычными сообщениями с автором (mine — кто вызвал
+           событие), а приложение читало только mine/type/text и не могло их отличить. Все поля — терпимым разбором:
+           нет поля — просто «нет». */
+        системное = Self.этоУведомление(роль: c.строка("role") ?? "", вид: c.строка("kind") ?? "", тип: тип,
+                                        флаг: c.да("sys") || c.да("system") || c.да("is_system"), текст: текст)
         if let meta = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("meta")),
            let адрес = meta.строка("url") ?? meta.строка("src") {
             фото = тип == "image" ? Config.url(адрес) : nil
@@ -114,6 +138,42 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     }
 
     var подпись: String { Self.подпись(тип: тип, текст: текст) }
+
+    /// Виды уведомлений о предложении цены — как MK_CHAT_SYS_KINDS сайта (mkChatBubble рисует их строкой .kc-sys).
+    private static let видыСайта: Set<String> = ["offer_funded", "offer_unfunded", "offer_no", "offer_ok"]
+    /// Виды событий переписки — отзыв предложения и присутствие (chat.php offer_withdraw, presence_event left/back).
+    /// Как их помечает dm.php, не видели — берём и эти названия, и общие.
+    private static let видыСобытий: Set<String> = ["offer_withdrawn", "offer_withdraw", "withdraw", "withdrawn",
+                                                     "presence", "left", "back", "system", "sys", "event", "notice",
+                                                     "service"]
+    /// Тип сообщения, который означает уведомление, а не текст человека.
+    private static let типыУведомлений: Set<String> = ["system", "sys", "event", "notice", "service", "info"]
+
+    /// Служебное ли сообщение. role == "system" и виды сайта — как в mkChatBubble; остальное — на случай, если dm.php
+    /// помечает иначе. Предложение, встречное и обмен контактами (offer, counter, contact) — слова человека, не
+    /// уведомления. Последняя страховка — точные фразы сервера, виденные на телефоне.
+    static func этоУведомление(роль: String, вид: String, тип: String, флаг: Bool, текст: String) -> Bool {
+        let р = роль.lowercased()
+        let в = вид.lowercased()
+        let т = тип.lowercased()
+        if р == "system" { return true }
+        if видыСайта.contains(в) || видыСобытий.contains(в) { return true }
+        if типыУведомлений.contains(т) { return true }
+        if флаг { return true }
+        return похожеНаСобытие(текст)
+    }
+
+    /// Текст — одна из фраз-уведомлений сервера целиком: «Продавец вышел из чата», «Покупатель вернулся в чат»,
+    /// «Покупатель отозвал своё предложение.». Шаблон привязан к началу и концу строки: сообщение, где человек сам
+    /// написал что-то похожее среди других слов, не попадёт. Буква «ё» — в составленном виде, как её пишет сервер.
+    static func похожеНаСобытие(_ текст: String) -> Bool {
+        let строка = текст.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !строка.isEmpty, строка.count <= 80 else { return false }
+        return строка.range(of: шаблонСобытия, options: .regularExpression) != nil
+    }
+
+    private static let шаблонСобытия =
+        "^(Покупатель|Продавец) (вышел из чата|вернулся в чат|отозвал сво[её] предложение)\\.?$"
 }
 
 /// Переписка: open / poll / send отдают её целиком.

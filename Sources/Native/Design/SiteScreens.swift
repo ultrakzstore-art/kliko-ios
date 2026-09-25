@@ -143,6 +143,26 @@ struct ОблакоСайта: View {
     }
 }
 
+/// Служебная строка переписки (.kc-sys): по центру, мелко (--kc-fs-sm 12), серым (--kc-mut) на --kc-soft,
+/// скругление 12, отступы 6/12, не шире 92 %. Без автора, времени и облака — так сайт рисует уведомления
+/// (role == "system" и виды MK_CHAT_SYS_KINDS в mkChatBubble) и подсказку пустой переписки.
+struct УведомлениеЧатаСайта: View {
+    let текст: String
+
+    var body: some View {
+        Text(текст)
+            .font(.system(size: 12))
+            .lineSpacing(2)
+            .foregroundStyle(Theme.текстВторой)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+    }
+}
+
 /// Середина панели переписки (.kc-head): зелёный кружок с первой буквой и имя.
 struct ШапкаПерепискиСайта: View {
     let имя: String
