@@ -111,6 +111,11 @@ test('Kaspi Объявления: весь Казахстан, город, сл�
     + '<a href="/a/iphone-15-112633239/">дубль</a>{"url":"/a/macbook-air-m1-116605153/"}';
   assert.deepStrictEqual(sources.kaspiIds(html).map((a) => a.id), [112633239, 112856030, 116605153]);
   assert.ok(k.isAdUrl('https://obyavleniya.kaspi.kz/a/iphone-15-112633239/'));
+  // Ссылки только с номером: /a/123509497 (без названия и со слэшем в конце или без).
+  const short = '<a href="/a/123509497">Ноутбук</a><a href="https://obyavleniya.kaspi.kz/a/123558941/">Ещё</a>{"href":"/a/123600000"}';
+  assert.deepStrictEqual(sources.kaspiIds(short).map((a) => a.id), [123509497, 123558941, 123600000]);
+  assert.ok(k.isAdUrl('https://obyavleniya.kaspi.kz/a/123509497'));
+  assert.ok(!k.isAdUrl('https://obyavleniya.kaspi.kz/a/'));
 });
 
 test('Krisha: хозяин или агент по подписи в карточке; «только от хозяев» пропускает только хозяев', async () => {

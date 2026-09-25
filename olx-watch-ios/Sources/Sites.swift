@@ -140,7 +140,7 @@ enum Site: String, CaseIterable, Identifiable, Codable {
         case .kolesa, .krisha: return url.range(of: #"/a/show/\d+"#, options: .regularExpression) != nil
         case .kaspi:
             guard let path = URLComponents(string: url)?.path else { return false }
-            return path.range(of: #"^/a/.+-\d{6,}/?$"#, options: .regularExpression) != nil
+            return path.range(of: #"^/a/(?:.+-)?\d{6,}/?$"#, options: .regularExpression) != nil
         }
     }
 
@@ -297,9 +297,9 @@ enum Site: String, CaseIterable, Identifiable, Codable {
             }
         case .kaspi:
             // Объявление Kaspi: /a/<название>-<номер>/ (например /a/iphone-15-112633239/).
-            for path in Site.matches(#"((?:https?://obyavleniya\.kaspi\.kz)?/a/[^"'#\s)?]*?-\d{6,}/?)(?=["'?#\s)])"#, in: page) {
+            for path in Site.matches(#"((?:https?://obyavleniya\.kaspi\.kz)?/a/(?:[^"'#\s)?/]*?-)?\d{6,}/?)(?=["'?#\s)])"#, in: page) {
                 guard let u = URL(string: path, relativeTo: URL(string: base))?.absoluteURL,
-                      let last = Site.matches(#"-(\d{6,})/?$"#, in: u.path).last, let n = Int(last) else { continue }
+                      let last = Site.matches(#"[-/](\d{6,})/?$"#, in: u.path).last, let n = Int(last) else { continue }
                 add(n, "https://obyavleniya.kaspi.kz\(u.path)")
             }
         case .olx: break

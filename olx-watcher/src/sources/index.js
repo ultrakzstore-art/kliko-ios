@@ -141,10 +141,10 @@ const KASPI_CATEGORIES = [
   { name: 'Бизнес и оборудование', path: 'biznes' },
 ];
 
-// Объявление Kaspi: /a/<название>-<номер>/ (например /a/iphone-15-112633239/).
+// Объявление Kaspi: /a/<номер> или /a/<название>-<номер>/ (например /a/123509497, /a/iphone-15-112633239/).
 function kaspiIds(html) {
   const out = new Map();
-  for (const m of html.matchAll(/(?:href=["']|["'(\s])((?:https?:\/\/obyavleniya\.kaspi\.kz)?\/a\/[^"'#\s)]*?-(\d{6,})\/?)(?=["'?#\s)])/gi)) {
+  for (const m of html.matchAll(/(?:href=["']|["'(\s])((?:https?:\/\/obyavleniya\.kaspi\.kz)?\/a\/(?:[^"'#\s)\/]*?-)?(\d{6,})\/?)(?=["'?#\s)])/gi)) {
     let u;
     try { u = new URL(m[1].replace(/&amp;/g, '&'), KASPI_BASE); } catch { continue; }
     const id = Number(m[2]);
@@ -216,7 +216,7 @@ function kaspiCityLinks(html, path) {
 const KASPI = {
   key: 'kaspi', title: 'Kaspi Объявления', emoji: '🔴', hostRe: /(^|\.)kaspi\.kz$/i, turbo: false,
   normalize: (url) => { checkHost(url, /(^|\.)kaspi\.kz$/i, 'Kaspi'); return url.split('#')[0]; },
-  isAdUrl: (url) => { try { return /^\/a\/.+-\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
+  isAdUrl: (url) => { try { return /^\/a\/(?:.+-)?\d{6,}\/?$/.test(new URL(url).pathname); } catch { return false; } },
   // Сортировку «сначала новые» ссылкой Kaspi не включить (не нашёл как) — смотрим 3 страницы.
   async fetchSearch(url) {
     const { city } = kaspiSplit(this.normalize(url));
