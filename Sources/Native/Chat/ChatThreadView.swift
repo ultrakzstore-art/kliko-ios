@@ -158,6 +158,12 @@ struct ChatThreadView: View {
     @State private var кнопкаВниз = false
     /// Сколько сообщений собеседника пришло, пока человек читал выше.
     @State private var новыхНиже = 0
+    /// Поле ввода в фокусе (исправление после ревью этапа 17, владелец 25.09.2026). 🔴 Клавиатура сжимает ленту, и
+    /// отметка низа уходит за край — без этого «человек читает выше» включалось само, и ответ собеседника, пока
+    /// человек пишет, оставался числом на кнопке. Пишет — значит, он в конце переписки: туда и едем.
+    @FocusState private var полеВФокусе: Bool
+    /// Поле только что получило фокус, клавиатура ещё выезжает: пропавшая отметка низа — её работа, кнопку не показываем.
+    @State private var клавиатураЕдет = false
 
     init(модель: @autoclosure @escaping () -> ChatThreadModel, заголовок: String, открыть: @escaping (URL) -> Void) {
         _модель = StateObject(wrappedValue: модель())
@@ -238,20 +244,42 @@ struct ChatThreadView: View {
             .onChange(of: модель.сообщения.count) { было, стало in
                 пришли(было: было, стало: стало, прокрутка)
             }
+            .onChange(of: полеВФокусе) { _, вФокусе in
+                if вФокусе { полеПолучилоФокус(прокрутка) }
+            }
             .onAppear { прокрутка.scrollTo("низ", anchor: .bottom) }
             .task(id: низВиден) { await следитьЗаНизом() }
         }
     }
 
-    /// Пришли сообщения. Человек внизу или последнее — его собственное (только что отправил) — едем вниз, как раньше.
-    /// Этап 17: читает выше — экран не дёргаем, а на кнопку «вниз» ставим, сколько пришло от собеседника.
+    /// Пришли сообщения. Человек внизу, пишет (поле в фокусе) или последнее — его собственное (только что отправил) —
+    /// едем вниз, как раньше. Этап 17: читает выше — экран не дёргаем, а на кнопку «вниз» ставим, сколько пришло от
+    /// собеседника.
     private func пришли(было: Int, стало: Int, _ прокрутка: ScrollViewProxy) {
         let своё = модель.сообщения.last?.моё == true
-        if Config.удобныйЧат && кнопкаВниз && !своё {
+        if Config.удобныйЧат && кнопкаВниз && !своё && !полеВФокусе {
             новыхНиже += модель.сообщения.suffix(max(0, стало - было)).filter { !$0.моё }.count
             return
         }
         withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+    }
+
+    /// Поле ввода получило фокус — вниз, когда клавиатура доедет и лента уже сжата: раньше прокручивать нечего, сжатие
+    /// оставляет прокрутку от верха, и низ всё равно ушёл бы под клавиатуру. Пока едет — кнопку «вниз» не показываем;
+    /// клавиатуру успели убрать, а низа на экране нет — кнопка, как обычно.
+    private func полеПолучилоФокус(_ прокрутка: ScrollViewProxy) {
+        guard Config.удобныйЧат else { return }
+        новыхНиже = 0
+        клавиатураЕдет = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            клавиатураЕдет = false
+            if полеВФокусе {
+                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+            } else if !низВиден {
+                withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
+            }
+        }
     }
 
     /// Этап 17: кнопка «вниз» нажата.
@@ -270,7 +298,7 @@ struct ChatThreadView: View {
             return
         }
         try? await Task.sleep(nanoseconds: 300_000_000)
-        guard !Task.isCancelled, !низВиден else { return }
+        guard !Task.isCancelled, !низВиден, !клавиатураЕдет else { return }
         withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
     }
 
@@ -349,6 +377,7 @@ struct ChatThreadView: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField(ChatText.т("placeholder"), text: $модель.черновик, axis: .vertical)
                         .lineLimit(1...5)
+                        .focused($полеВФокусе)
                         .padding(.horizontal, 14).padding(.vertical, 9)
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     Button { Task { await модель.отправить() } } label: {

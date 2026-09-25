@@ -9,9 +9,12 @@ enum WhatsNewText {
         return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
     }
 
+    /// Подпись шапки (subtitle) — без названий возможностей (исправление после ревью, владелец 25.09.2026): шапку видно
+    /// всегда, а пункты под ней — только по рубильникам (ПунктНового.список). Назови она карточку или сообщения, при
+    /// выключенном рубильнике лист обещал бы то, чего нет.
     private static let тексты: [String: [String: String]] = [
         "ru": ["title": "Что нового", "version": "Версия %@", "ok": "Понятно", "row": "Что нового",
-               "subtitle": "Лента, объявления и сообщения теперь открываются прямо в приложении — быстрее и без загрузки страниц сайта.",
+               "subtitle": "Приложение теперь многое умеет само — быстрее и без загрузки страниц сайта.",
                "feed": "Быстрая лента",
                "feed_sub": "Поиск, разделы и подгрузка без загрузки страниц. Без сети — последняя лента с телефона.",
                "card": "Карточка объявления",
@@ -35,7 +38,7 @@ enum WhatsNewText {
                "cabinet": "Кабинет",
                "cabinet_sub": "Вход по Face ID, уведомления и данные на телефоне — в одном месте."],
         "kk": ["title": "Не жаңалық", "version": "Нұсқа %@", "ok": "Түсінікті", "row": "Не жаңалық",
-               "subtitle": "Лента, хабарландырулар мен хабарламалар енді тікелей қосымшада ашылады — жылдамырақ және сайт беттерін жүктемей.",
+               "subtitle": "Қосымша енді көп нәрсені өзі істейді — жылдамырақ және сайт беттерін жүктемей.",
                "feed": "Жылдам лента",
                "feed_sub": "Іздеу, бөлімдер және жүктеу беттерді жүктемей. Желі болмаса — телефондағы соңғы лента.",
                "card": "Хабарландыру карточкасы",
@@ -59,7 +62,7 @@ enum WhatsNewText {
                "cabinet": "Кабинет",
                "cabinet_sub": "Face ID арқылы кіру, push-хабарландырулар және телефондағы деректер — бір жерде."],
         "en": ["title": "What's new", "version": "Version %@", "ok": "Got it", "row": "What's new",
-               "subtitle": "The feed, listings and messages now open right in the app — faster, without loading website pages.",
+               "subtitle": "The app now does a lot more on its own — faster, without loading website pages.",
                "feed": "Faster feed",
                "feed_sub": "Search, categories and scrolling without page loads. Offline, you see the last feed saved on your phone.",
                "card": "Listing details",
@@ -83,7 +86,7 @@ enum WhatsNewText {
                "cabinet": "Account",
                "cabinet_sub": "Face ID sign-in, notifications and data on this phone — all in one place."],
         "ar": ["title": "ما الجديد", "version": "الإصدار %@", "ok": "حسنًا", "row": "ما الجديد",
-               "subtitle": "الإعلانات والرسائل تُفتح الآن داخل التطبيق مباشرة — أسرع ومن دون تحميل صفحات الموقع.",
+               "subtitle": "أصبح التطبيق يؤدي الكثير بنفسه الآن — أسرع ومن دون تحميل صفحات الموقع.",
                "feed": "إعلانات أسرع",
                "feed_sub": "البحث والأقسام والتحميل المتواصل من دون تحميل الصفحات. ومن دون اتصال — آخر إعلانات محفوظة على الهاتف.",
                "card": "صفحة الإعلان",

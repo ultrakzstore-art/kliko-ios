@@ -10,7 +10,7 @@ enum SavedSearchText {
     }
 
     private static let тексты: [String: [String: String]] = [
-        "ru": ["save": "Сохранить поиск", "unsave": "Удалить сохранённый поиск",
+        "ru": ["save": "Сохранить поиск", "unsave": "Удалить сохранённый поиск", "saved": "Поиск сохранён",
                "full": "Сохранённых поисков слишком много",
                "full_msg": "Можно сохранить до %d поисков. Удалите ненужные в Кабинете → «Сохранённые поиски», чтобы сохранить новый.",
                "ok": "Понятно",
@@ -22,7 +22,7 @@ enum SavedSearchText {
                "refresh_off": "Обновление контента для Kliko выключено в Настройках iPhone — проверок не будет.",
                "notif_title": "Новые объявления: «%@»", "notif_count": "Новых объявлений: %d",
                "notif_more": "Ещё: %@", "notif_item": "«%@» — %d"],
-        "kk": ["save": "Іздеуді сақтау", "unsave": "Сақталған іздеуді жою",
+        "kk": ["save": "Іздеуді сақтау", "unsave": "Сақталған іздеуді жою", "saved": "Іздеу сақталды",
                "full": "Сақталған іздеулер тым көп",
                "full_msg": "%d іздеуге дейін сақтауға болады. Жаңасын сақтау үшін Кабинет → «Сақталған іздеулер» бөлімінен қажетсіздерін жойыңыз.",
                "ok": "Түсінікті",
@@ -34,7 +34,7 @@ enum SavedSearchText {
                "refresh_off": "iPhone баптауларында Kliko үшін контентті фондық жаңарту өшірулі — тексеру болмайды.",
                "notif_title": "Жаңа хабарландырулар: «%@»", "notif_count": "Жаңа хабарландырулар саны: %d",
                "notif_more": "Тағы: %@", "notif_item": "«%@» — %d"],
-        "en": ["save": "Save search", "unsave": "Remove saved search",
+        "en": ["save": "Save search", "unsave": "Remove saved search", "saved": "Search saved",
                "full": "Too many saved searches",
                "full_msg": "You can save up to %d searches. Remove the ones you no longer need in Account → Saved searches to save a new one.",
                "ok": "OK",
@@ -46,7 +46,7 @@ enum SavedSearchText {
                "refresh_off": "Background App Refresh is off for Kliko in iPhone Settings, so searches won't be checked.",
                "notif_title": "New listings: “%@”", "notif_count": "New listings: %d",
                "notif_more": "Also: %@", "notif_item": "“%@” — %d"],
-        "ar": ["save": "حفظ البحث", "unsave": "حذف البحث المحفوظ",
+        "ar": ["save": "حفظ البحث", "unsave": "حذف البحث المحفوظ", "saved": "تم حفظ البحث",
                "full": "عمليات البحث المحفوظة كثيرة جدًا",
                "full_msg": "يمكنك حفظ ما يصل إلى %d عملية بحث. احذف ما لا تحتاجه في الحساب ← عمليات البحث المحفوظة لتحفظ بحثًا جديدًا.",
                "ok": "حسنًا",
