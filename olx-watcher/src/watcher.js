@@ -26,7 +26,10 @@ class Watcher {
     this.backoffMs = 0;
     this.stats = { searchOk: 0, searchErr: 0, turboFound: 0, turboProbes: 0, lastTurboHit: null, sent: 0 };
     this.timers = [];
-    this.lockSeen = new Map();   // VIP-рубрика → номера объявлений из выдачи её поиска
+    this.lockSeen = new Map();
+    // Пропуски у края ленты доски — номера, которых в ленте нет: обычно объявления на проверке
+    // (номер выдан при подаче, в ленту попадут после проверки). Турбо перепроверяет их 15 минут.
+    this.gaps = new Map();   // номер → { added, checked }   // VIP-рубрика → номера объявлений из выдачи её поиска
     this.lockCache = { at: 0, list: [] };
   }
 
@@ -247,6 +250,12 @@ class Watcher {
         return;
       }
       const top = ads.reduce((m, a) => Math.max(m, a.id), 0);
+      const onBoard = new Set(ads.map((a) => a.id));
+      const now = Date.now();
+      for (let id = Math.max(1, top - 300); id <= top; id++) {
+        if (!onBoard.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
+      }
+      for (const [id, g] of this.gaps) if (now - g.added > 15 * 60_000 || onBoard.has(id)) this.gaps.delete(id);
       if (top > this.frontier + this.cfg.turboWindow * 3) {
         this.frontier = top - this.cfg.turboWindow;   // прыжок: турбо проверит последние номера сам
         this.db.set('frontier', this.frontier);
@@ -343,7 +352,12 @@ class Watcher {
         .sort((a, b) => b - a)
         .slice(0, Math.ceil(this.cfg.turboWindow / 3));
       ids.push(...retry);
-      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow + retry.length && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
+      // И пропуски ниже края ленты — давно не проверенные первыми.
+      const gapIds = [...this.gaps.entries()].sort((a, b) => a[1].checked - b[1].checked || b[0] - a[0])
+        .slice(0, this.cfg.turboWindow).map(([id]) => id).filter((id) => !ids.includes(id));
+      for (const id of gapIds) this.gaps.get(id).checked = Date.now();
+      ids.push(...gapIds);
+      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow + retry.length + gapIds.length && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
         if ((this.misses.get(id) || 0) < MISS_GIVE_UP) ids.push(id);
       }
       // Все номера прохода — одновременно.
@@ -354,6 +368,7 @@ class Watcher {
         this.stats.turboProbes += 1;
         if (!o) { this.misses.set(id, (this.misses.get(id) || 0) + 1); continue; }
         this.misses.delete(id);
+        this.gaps.delete(id);
         this.bumpFrontier(id);
         this.stats.turboFound += 1;
         this.stats.lastTurboHit = Date.now();

@@ -193,3 +193,31 @@ test('продавец: все / частные / бизнес', () => {
   assert.ok(w.sellerOk({ seller: 'business' }, shop) && !w.sellerOk({ seller: 'business' }, person));
   assert.ok(w.sellerOk({ seller: 'business', source: 'kolesa' }, person), 'у Kolesa признака нет — фильтр не мешает');
 });
+
+test('на проверке: номер ниже края ленты (его нет в ленте) турбо находит и присылает', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-gap-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const now = Date.now();
+  const ad = (id, title, extra = {}) => ({ id, title, url: 'u', price: 200000, city: 'Алматы', categoryId: 1234, createdAt: now, ...extra });
+  const origLatest = olx.fetchLatest;
+  const origOffer = olx.fetchOffer;
+  const offers = new Map();
+  olx.fetchLatest = async () => [ad(5000, 'iPhone'), ad(4990, 'Диван')];
+  olx.fetchOffer = async (id) => offers.get(id) || null;
+  const sent = [];
+  const w = new Watcher({ db, config: { pollSec: 2, turboSec: 1, turboWindow: 5, freshMs: 1800_000 },
+    notify: async (userId, a, subs, via) => sent.push(`${via}:${a.id}`), alert: async () => {}, log: () => {} });
+  try {
+    db.touchUser(1, 'Я');
+    const sub = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp/');
+    db.updateSub(sub.id, { initialized: 1, watermark: 1000 });
+    offers.set(4995, ad(4995, 'HP 250 на проверке', { status: 'moderated', createdAt: now - 4 * 60_000 }));
+    await w.boardTick();
+    assert.ok(w.gaps.has(4995), 'пропуск запомнен');
+    for (let i = 0; i < 40 && !sent.length; i++) await w.turboTick();
+    assert.deepStrictEqual(sent, ['turbo:4995'], 'поймано, хотя ниже края ленты');
+  } finally {
+    olx.fetchLatest = origLatest;
+    olx.fetchOffer = origOffer;
+  }
+});

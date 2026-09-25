@@ -29,7 +29,7 @@ final class AppModel {
         /// Как часто смотреть самые свежие объявления всей доски — главный источник новых.
         var board: TimeInterval { self == .normal ? 5 : self == .fast ? 3 : 1.5 }
         var poll: TimeInterval { self == .normal ? 30 : self == .fast ? 15 : 10 }
-        var turbo: TimeInterval { self == .normal ? 10 : self == .fast ? 5 : 3 }
+        var turbo: TimeInterval { self == .normal ? 10 : self == .fast ? 5 : 2 }
     }
 
     var speed: Speed = Speed(rawValue: UserDefaults.standard.string(forKey: "speed") ?? "") ?? .max {
@@ -68,6 +68,12 @@ final class AppModel {
     private var lastAnchor = Date.distantPast
     private var backoff: TimeInterval = 0
     private var misses: [Int: Int] = [:]
+    /// Пропуски: номера у края ленты, которых в ленте нет, — обычно объявления на проверке
+    /// (номер выдан при подаче, в ленту попадёт после проверки). Перепроверяем по кругу 15 минут.
+    private var gaps: [Int: (added: Date, checked: Date)] = [:]
+    private static let gapWindow = 200
+    private static let gapsPerPass = 12
+    private static let gapLife: TimeInterval = 15 * 60
     private var seenSet = Set<Int>()
     private var busy = false
 
@@ -246,7 +252,9 @@ final class AppModel {
     /// наверх выдачи — его отсекаем по дате подачи, а если даты нет — по номеру: у поднятого
     /// старья он сильно меньше самых свежих номеров.
     private func isStale(_ ad: Ad, frontier: Int) -> Bool {
-        if let created = ad.createdAt { return Date().timeIntervalSince(created) > TimeInterval(freshnessMinutes * 60) }
+        // На проверке — новое для всех ещё до 30 минут: его подали раньше, но в поиске его нет.
+        let minutes = ad.onReview ? max(freshnessMinutes, 30) : freshnessMinutes
+        if let created = ad.createdAt { return Date().timeIntervalSince(created) > TimeInterval(minutes * 60) }
         return frontier > 0 && ad.id < frontier - 5_000
     }
 
@@ -273,6 +281,12 @@ final class AppModel {
             return
         }
         guard let top = ads.map(\.id).max() else { return }
+        let onBoard = Set(ads.map(\.id))
+        let now = Date()
+        for id in max(1, top - Self.gapWindow)...top where !onBoard.contains(id) && !seenSet.contains(id) && gaps[id] == nil {
+            gaps[id] = (now, .distantPast)
+        }
+        gaps = gaps.filter { now.timeIntervalSince($0.value.added) < Self.gapLife && !seenSet.contains($0.key) }
         if top > state.frontier + Self.turboWindow * 3 {
             state.frontier = top - Self.turboWindow   // прыжок; последние номера турбо ещё проверит
         }
@@ -299,6 +313,11 @@ final class AppModel {
             if (misses[n] ?? 0) < Self.missGiveUp && !seenSet.contains(n) { ids.append(n) }
             n += 1
         }
+        // И столько же пропусков ниже края — давно не проверенные первыми.
+        let now = Date()
+        let gapIds = gaps.sorted { $0.value.checked != $1.value.checked ? $0.value.checked < $1.value.checked : $0.key > $1.key }.prefix(Self.gapsPerPass).map { $0.key }
+        for id in gapIds { gaps[id]?.checked = now }
+        ids += gapIds.filter { !ids.contains($0) }
         // Все номера прохода — одновременно: быстрее ловим и не ждём каждый ответ по очереди.
         let results = await withTaskGroup(of: (Int, Result<Ad?, Error>).self) { group in
             for id in ids {
@@ -323,6 +342,7 @@ final class AppModel {
             }
             guard var ad = offer else { misses[id, default: 0] += 1; continue }
             misses[id] = nil
+            gaps[id] = nil
             bumpFrontier(id)
             state.stats.turboFound += 1
             state.stats.lastTurboHit = Date()
