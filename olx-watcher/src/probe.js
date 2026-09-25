@@ -29,14 +29,19 @@ async function deepProbe(id) {
         try {
           const j = JSON.parse(text);
           const d = j.data || j;
-          const one = Array.isArray(d) ? d.find((x) => Number(x.id) === id) || d[0] : d;
-          info = one && typeof one === 'object'
+          // Список может не понять фильтр и отдать просто свежие объявления — тогда
+          // первое в нём чужое. Показываем только наше, иначе прямо пишем, что его нет.
+          const one = Array.isArray(d) ? d.find((x) => Number(x.id) === id) : d;
+          if (Array.isArray(d) && !one) info = `этого номера в ответе нет (в списке ${d.length} других объявлений)`;
+          else info = one && typeof one === 'object'
             ? `статус «${one.status ?? '—'}» · ${one.title ?? ''}${Array.isArray(d) ? ` · в списке ${d.length}` : ''}`
             : text.slice(0, 160);
         } catch { info = text.slice(0, 160); }
       } else {
         const title = (/<title>([^<]*)<\/title>/i.exec(text) || [])[1] || '';
-        const mod = /модерац|на проверке|moderat/i.test(text) ? ' · есть слово «модерация»' : '';
+        // Где именно стоит слово — чтобы отличить «объявление на модерации» от общего текста страницы.
+        const hit = /модерац|на проверке|moderat/i.exec(text);
+        const mod = hit ? ` · есть слово «модерация»: «…${text.slice(Math.max(0, hit.index - 60), hit.index + 60).replace(/<[^>]+>/g, ' ')}…»` : '';
         const st = (/\\?"status\\?"\s*:\s*\\?"([a-z_]+)/i.exec(text) || [])[1];
         info = `${title.trim().slice(0, 90)}${st ? ` · status=${st}` : ''}${mod}`;
       }
