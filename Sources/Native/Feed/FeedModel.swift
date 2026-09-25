@@ -14,6 +14,9 @@ final class FeedModel: ObservableObject {
     @Published private(set) var ошибка: ListingsAPI.Ошибка?
     /// На экране лента с диска, а не свежая.
     @Published private(set) var сДиска = false
+    /// Ответ на запрос уже был — удачный или с ошибкой. Без него пустой ответ («ничего не нашлось») не отличить
+    /// от «ещё грузим», и пустой поиск навсегда оставался бы серыми карточками.
+    @Published private(set) var ответПришёл = false
     @Published var поиск = ""
     @Published private(set) var раздел = ""
 
@@ -85,6 +88,7 @@ final class FeedModel: ObservableObject {
             if сброс {
                 items = страница.items
                 сДиска = false
+                ответПришёл = true
                 if з.поУмолчанию { ListingsCache.сохранить(сырое) }
             } else {
                 /* Лента «рекомендаций» между запросами может сдвинуться, и объявление приедет второй раз. Два
@@ -95,10 +99,12 @@ final class FeedModel: ObservableObject {
             if страница.items.count < з.per { естьЕщё = false }
         } catch let e as ListingsAPI.Ошибка {
             guard номер == поколение, !Task.isCancelled else { return }
+            ответПришёл = true
             ошибка = e
             if !сброс { запрос.page -= 1 }       // следующая попытка — за той же страницей
         } catch {
             guard номер == поколение, !Task.isCancelled else { return }
+            ответПришёл = true
             ошибка = .сеть
             if !сброс { запрос.page -= 1 }
         }
@@ -107,6 +113,8 @@ final class FeedModel: ObservableObject {
     /// Повтор после ошибки внизу ленты.
     func повторить() {
         ошибка = nil
+        /* Ошибку сняли сразу, а задача стартует чуть позже: без сброса на пустом экране мелькнуло бы «ничего не нашлось». */
+        if items.isEmpty { ответПришёл = false }
         if items.isEmpty || запрос.page == 1 { перезапустить() }
         else {
             запрос.page += 1
