@@ -27,7 +27,7 @@ class Watcher {
   }
 
   start() {
-    this.timers.push(setInterval(() => this.searchTick().catch((e) => this.log(`поиск: ${e.message}`)), 5_000));
+    this.timers.push(setInterval(() => this.searchTick().catch((e) => this.log(`поиск: ${e.message}`)), 1_000));
     this.timers.push(setInterval(() => this.turboTick().catch((e) => this.log(`турбо: ${e.message}`)), this.cfg.turboSec * 1000));
     this.timers.push(setInterval(() => this.db.prune(), 6 * 3600_000));
   }
@@ -91,7 +91,7 @@ class Watcher {
       for (const [key, subs] of byUrl) {
         if (this.blocked()) break;
         await this.pollUrl(key.slice(key.indexOf('|') + 1), subs);
-        await sleep(1000 + Math.random() * 1000);
+        await sleep(150 + Math.random() * 250);
       }
     } finally {
       this.searchBusy = false;
@@ -105,6 +105,7 @@ class Watcher {
       ads = await src.fetchSearch(url);
       this.okRequest();
       this.stats.searchOk += 1;
+      ads = await this.morePages(src, url, subs, ads);
     } catch (e) {
       this.stats.searchErr += 1;
       for (const s of subs) this.db.updateSub(s.id, { last_poll: Date.now(), last_error: e.message });
@@ -149,6 +150,33 @@ class Watcher {
     }
   }
 
+  // Вся первая страница новее отметки — значит, между проверками вышло больше, чем на ней
+  // помещается (тестовый доступ смотрит раз в 10 минут). Дочитываем ещё до 2 страниц, чтобы
+  // не потерять объявления, которые уже уехали со страницы 1.
+  async morePages(src, url, subs, ads) {
+    if (src.key !== 'olx') return ads;
+    const ready = subs.filter((s) => s.initialized);
+    if (!ready.length) return ads;
+    const mark = Math.min(...ready.map((s) => s.watermark));
+    let all = ads;
+    let page = ads;
+    for (let n = 2; n <= 3; n++) {
+      const regular = page.filter((a) => !a.promoted);
+      if (regular.length < 20 || Math.min(...regular.map((a) => a.id)) <= mark) break;
+      await sleep(700);
+      try {
+        page = await src.fetchSearch(url, n);
+      } catch {
+        break;
+      }
+      const have = new Set(all.map((a) => a.id));
+      const fresh = page.filter((a) => !have.has(a.id));
+      if (!fresh.length) break;
+      all = [...all, ...fresh];
+    }
+    return all;
+  }
+
   notifyReady(sub, count) {
     this.notify(sub.user_id, null, [sub], 'ready', count);
   }
@@ -163,8 +191,16 @@ class Watcher {
     if (!subs.length) return;
     this.turboBusy = true;
     try {
+      // Сначала — пропущенные номера чуть ниже границы: номер мог ещё не открыться, когда
+      // следующий уже появился и граница ушла вперёд. Дальше — новые номера за границей.
       const ids = [];
-      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
+      const retry = [...this.misses.entries()]
+        .filter(([id, n]) => id < this.frontier && id > this.frontier - 300 && n < MISS_GIVE_UP)
+        .map(([id]) => id)
+        .sort((a, b) => b - a)
+        .slice(0, Math.ceil(this.cfg.turboWindow / 3));
+      ids.push(...retry);
+      for (let id = this.frontier + 1; ids.length < this.cfg.turboWindow + retry.length && id <= this.frontier + this.cfg.turboWindow * 5; id++) {
         if ((this.misses.get(id) || 0) < MISS_GIVE_UP) ids.push(id);
       }
       // Все номера прохода — одновременно.

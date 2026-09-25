@@ -67,10 +67,10 @@ test('турбо-фильтр: слова, цена, выученные рубр
   assert.ok(!matches({ url: 'https://www.olx.kz/d/', learned: {} }, ad));
 });
 
-test('ссылка в уведомлении — с номером после #, название поиска — из ссылки', () => {
-  assert.strictEqual(adLink({ id: 401214632, url: 'https://www.olx.kz/d/obyavlenie/hp-IDr9sfK.html' }), 'https://www.olx.kz/d/obyavlenie/hp-IDr9sfK.html#401214632');
-  assert.strictEqual(adLink({ id: 401214632 }), 'https://www.olx.kz/d/obyavlenie/-IDr9sfK.html#401214632');
+test('ссылка в уведомлении — чистая, без номера после #; название поиска — из ссылки', () => {
+  assert.strictEqual(adLink({ id: 401214632, url: 'https://www.olx.kz/d/obyavlenie/hp-IDr9sfK.html#401214632' }), 'https://www.olx.kz/d/obyavlenie/hp-IDr9sfK.html');
+  assert.strictEqual(adLink({ id: 401214632 }), 'https://www.olx.kz/d/obyavlenie/-IDr9sfK.html');
   assert.strictEqual(nameFromUrl('https://www.olx.kz/d/elektronika/almaty/q-hp-250/'), 'hp 250');
   const c = card({ title: 'HP <250>', price: 250000, city: 'Алматы', status: 'moderated' }, [{ name: 'Ноуты' }], 'turbo');
-  assert.ok(c.includes('HP &lt;250&gt;') && c.includes('⚡ раньше поиска') && c.includes('на проверке'));
+  assert.ok(c.includes('HP &lt;250&gt;') && c.includes('⚡ эксклюзив') && c.includes('на проверке'));
 });

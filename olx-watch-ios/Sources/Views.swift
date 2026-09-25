@@ -179,7 +179,7 @@ struct AdRow: View {
             PhotoCarousel(photos: ad.gallery, height: 200) { index in viewer = .init(index: index) }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                Text(verbatim: ad.title.isEmpty ? "Объявление" : ad.title)
                     .font(.subheadline.weight(.semibold)).lineLimit(2)
                 HStack(spacing: 6) {
                     if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).font(.headline) }
@@ -309,7 +309,7 @@ struct LinkRow: View {
                 PhotoCarousel(photos: ad.gallery, height: 160) { index in viewer = .init(index: index) }
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+                Text(verbatim: ad.title.isEmpty ? "Объявление" : ad.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
                 if let url = ad.link {

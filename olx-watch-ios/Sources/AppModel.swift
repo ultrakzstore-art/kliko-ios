@@ -349,7 +349,7 @@ final class AppModel {
 
     private func notify(_ ad: Ad, subs: [Sub]) {
         let content = UNMutableNotificationContent()
-        content.title = (ad.early ? "⚡ " : "") + (ad.title.isEmpty ? "Объявление \(ad.id)" : ad.title)
+        content.title = (ad.early ? "⚡ " : "") + (ad.title.isEmpty ? "Объявление" : ad.title)
         content.subtitle = [ad.priceText, ad.city].filter { !$0.isEmpty }.joined(separator: " · ")
         content.body = subs.map(\.name).joined(separator: ", ")
         content.sound = .default

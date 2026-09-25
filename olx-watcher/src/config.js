@@ -16,9 +16,9 @@ function prices(name) {
 module.exports = {
   token: (process.env.BOT_TOKEN || '').trim(),
   adminId: parseInt(process.env.ADMIN_ID || process.env.OWNER_ID || '', 10) || null,
-  pollSec: int('POLL_SEC', 30, 10),              // платные: поиск раз в N сек
+  pollSec: int('POLL_SEC', 2, 1),                // платные: поиск раз в N сек
   freePollSec: int('FREE_POLL_SEC', 600, 60),    // бесплатные: раз в 10 минут
-  turboSec: int('TURBO_SEC', 5, 2),
+  turboSec: int('TURBO_SEC', 1, 1),
   turboWindow: int('TURBO_WINDOW', 10, 1),
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
   trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней

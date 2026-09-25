@@ -59,11 +59,11 @@ struct Ad: Codable, Identifiable, Hashable {
         return s < 120 ? "поймано через \(s) с" : "поймано через \(s / 60) мин"
     }
 
-    /// Ссылка с номером после # — сайт эту часть игнорирует, а номер под рукой.
+    /// Ссылка на объявление — чистая, как на сайте.
     var link: URL? {
         if site != .olx { return URL(string: url) }
         let base = url.hasPrefix("http") ? String(url.split(separator: "#").first ?? "") : "\(OLX.base)/d/obyavlenie/-ID\(OLX.encode(id)).html"
-        return URL(string: "\(base)#\(id)")
+        return URL(string: base)
     }
 
     var site: Site { source.flatMap(Site.init(rawValue:)) ?? .olx }

@@ -30,7 +30,8 @@ function matches(sub, ad) {
   const f = filtersFromUrl(sub.url);
   const L = sub.learned || {};
   const title = `${ad.title} ${ad.description || ''}`.toLowerCase();
-  if (f.words.length && !f.words.every((w) => title.includes(w))) return false;
+  // Слова — по основе: «ноутбуки» найдёт «ноутбук», «ноутбука»; поиск OLX тоже так ищет.
+  if (f.words.length && !f.words.every((w) => title.includes(stem(w)))) return false;
   if (f.priceFrom && ad.price != null && ad.price < f.priceFrom) return false;
   if (f.priceTo && ad.price != null && ad.price > f.priceTo) return false;
   // Рубрика: пока поиск не показал ни одной — не судим; потом только знакомые рубрики.
@@ -42,4 +43,9 @@ function matches(sub, ad) {
   return true;
 }
 
-module.exports = { filtersFromUrl, learn, matches };
+// Грубая основа слова: у длинных слов отбрасываем окончание (до 2 букв).
+function stem(w) {
+  return w.length > 5 ? w.slice(0, w.length - 2) : w;
+}
+
+module.exports = { filtersFromUrl, learn, matches, stem };

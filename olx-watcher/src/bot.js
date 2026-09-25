@@ -5,7 +5,7 @@
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
 const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
-const { watermark, fetchImage } = require('./watermark');
+const { collage, fetchImage } = require('./watermark');
 const olx = require('./olx');
 const sources = require('./sources');
 const { registerWizard } = require('./wizard');
@@ -44,14 +44,14 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   function planText(userId) {
     const u = db.user(userId);
-    const paidLine = `Платно: раз в ${config.pollSec} сек + ⚡ турбо на OLX (ловит объявления раньше поиска), до ${config.paidSubs} поисков.`;
+    const paidLine = `Платно: ⚡ мгновенные уведомления, до ${config.paidSubs} поисков.`;
     const paid = db.accessList(userId);
     if (paid.length) {
       const lines = paid.map((a) => `${sources.get(a.source).emoji} ${esc(sources.get(a.source).title)} — до ${fmtDate(a.until)}`);
       return `💎 <b>Платный доступ</b>\n${lines.join('\n')}\nПроверка раз в ${config.pollSec} сек, до ${config.paidSubs} поисков.`;
     }
     if (db.isTrial(u)) {
-      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, без турбо, до ${config.freeSubs} поисков.\n${paidLine}`;
+      return `🧪 <b>Тестовый доступ</b> до ${fmtDate(u.trial_until)} — все площадки\nПроверка раз в ${Math.round(config.freePollSec / 60)} мин, до ${config.freeSubs} поисков.\n${paidLine}`;
     }
     return `⛔ <b>Тестовый доступ закончился</b> — поиски на паузе, объявления не приходят.\n${paidLine}\nПодключить: /access`;
   }
@@ -103,11 +103,11 @@ function createBot({ token, db, config, getWatcher, log }) {
       kb.row();
     }
     const what = p.key === 'all' ? 'все площадки: ' + sources.ALL.map((x) => x.title).join(', ') : sources.get(p.key).title;
-    await ctx.reply(`<b>${esc(p.title)}</b> — ${esc(what)}.\nПроверка раз в ${config.pollSec} сек${p.sources.includes('olx') ? ', ⚡ турбо на OLX' : ''}, до ${config.paidSubs} поисков.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
+    await ctx.reply(`<b>${esc(p.title)}</b> — ${esc(what)}.\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
       { parse_mode: 'HTML', reply_markup: kb });
   });
 
-  const HELP = `Присылаю новые объявления OLX.kz по вашим поискам — через секунды после подачи.
+  const HELP = `Присылаю новые объявления по вашим поискам — сразу после подачи.
 
 Площадки: OLX, Kolesa, Krisha, Kaspi Объявления.
 ➕ /new — новый поиск кнопками: площадка → рубрика → город → цена.
@@ -134,7 +134,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     if (!amount) return;
     await ctx.replyWithInvoice(
       `${p.title.replace(/^\S+\s/, '')} на ${days} дней`,
-      `Проверка раз в ${config.pollSec} сек${p.sources.includes('olx') ? ', турбо на OLX' : ''}, до ${config.paidSubs} поисков.`,
+      `⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.`,
       `stars:${p.key}:${days}:${ctx.from.id}`,
       'XTR',
       [{ label: `${days} дней`, amount }],
@@ -329,62 +329,65 @@ function createBot({ token, db, config, getWatcher, log }) {
     return config.sellerUrl.replace('{code}', encodeURIComponent(code)).replace('{id}', encodeURIComponent(userId));
   }
 
-  // Фото с водяным знаком готовим один раз на объявление: первому получателю — загрузкой,
-  // остальным — по file_id, который вернул Телеграм (без повторной обработки и загрузки).
-  const albums = new Map();   // ключ объявления → [file_id]
+  // Коллаж из первых 4 фото готовим один раз на объявление: первому
+  // получателю — загрузкой, остальным — по file_id, который вернул Телеграм.
+  const collages = new Map();   // ключ объявления → file_id
   function watermarkText() {
     const w = config.watermark;
     if (!w || w === 'off') return '';
     return w === 'auto' ? (bot.botInfo?.username ? `@${bot.botInfo.username}` : '') : w;
   }
 
-  async function sendAlbum(userId, ad, urls) {
-    const key = `${ad.source || 'olx'}:${ad.id}`;
-    let media = albums.get(key);
-    if (!media) {
-      const mark = watermarkText();
-      media = mark
-        ? await Promise.all(urls.map(async (u) => {
-          try { return new InputFile(await watermark(await fetchImage(u), mark), 'photo.jpg'); } catch { return u; }
-        }))
-        : urls;
+  // Водяной знак — только на тестовом доступе; у оплативших площадку фото чистые.
+  async function collagePhoto(ad, urls, marked) {
+    const mark = marked ? watermarkText() : '';
+    const key = `${ad.source || 'olx'}:${ad.id}:${mark ? 'wm' : 'clean'}`;
+    if (collages.has(key)) return { key, media: collages.get(key) };
+    const buffers = (await Promise.all(urls.slice(0, 4).map((u) => fetchImage(u).catch(() => null)))).filter(Boolean);
+    if (!buffers.length) return { key, media: urls[0] };   // скачать не вышло — пусть Телеграм возьмёт сам
+    return { key, media: new InputFile(await collage(buffers, mark), 'photos.jpg') };
+  }
+
+  // Подпись к фото — до 1024 знаков: не влезает — укорачиваем описание.
+  function captionFor(ad, subs, via) {
+    let text = card(ad, subs, via, config.cardSections);
+    for (let max = 900; text.length > 1024 && max >= 0; max -= 150) {
+      text = card(ad, subs, via, config.cardSections, max);
     }
-    const sent = media.length === 1
-      ? [await bot.api.sendPhoto(userId, media[0])]
-      : await bot.api.sendMediaGroup(userId, media.map((m) => ({ type: 'photo', media: m })));
-    const ids = sent.map((m) => m.photo?.[m.photo.length - 1]?.file_id).filter(Boolean);
-    if (ids.length === media.length) {
-      albums.set(key, ids);
-      if (albums.size > 300) albums.delete(albums.keys().next().value);
-    }
+    return text.length > 1024 ? card(ad, subs, via, new Set(), 0) : text;
   }
 
   async function notify(userId, ad, subs, via, count) {
     if (via === 'ready') {
       return send(userId, `«${subs[0].name}»: слежу. Сейчас в выдаче ${count} объявлений — присылать буду только новые.`);
     }
-    const caption = card(ad, subs, via, config.cardSections);
     const kb = new InlineKeyboard().url(`Открыть на ${sources.get(ad.source).title}`, adLink(ad));
     if (ad.userId && (ad.source || 'olx') === 'olx') kb.row().url('Все объявления автора', sellerLink(ad.userId));
     else if (ad.sellerUrl) kb.row().url('Все объявления автора', ad.sellerUrl);
-    // Сначала все фото одним альбомом (с водяным знаком), под ним — карточка с кнопками.
-    // Альбом не удался — фото хотя бы превью над карточкой.
-    let preview = { is_disabled: true };
-    const photos = (ad.photos?.length ? ad.photos : ad.photo ? [ad.photo] : []).slice(0, 10);
+    // Одно сообщение: коллаж из до 4 фото, под ним карточка и кнопки. Остальные фото — на сайте.
+    const photos = (ad.photos?.length ? ad.photos : ad.photo ? [ad.photo] : []);
     if (photos.length) {
       try {
-        await sendAlbum(userId, ad, photos);
+        const { key, media } = await collagePhoto(ad, photos, !db.isPaid(userId, ad.source || 'olx'));
+        const msg = await bot.api.sendPhoto(userId, media, { caption: captionFor(ad, subs, via), parse_mode: 'HTML', reply_markup: kb });
+        const fileId = msg.photo?.[msg.photo.length - 1]?.file_id;
+        if (fileId && !collages.has(key)) {
+          collages.set(key, fileId);
+          if (collages.size > 300) collages.delete(collages.keys().next().value);
+        }
+        return;
       } catch (e) {
         if (e instanceof GrammyError && e.error_code === 403) { db.setBlocked(userId, true); return; }
-        log(`альбом ${ad.id}: ${e.message}`);
-        preview = { url: photos[0], prefer_large_media: true, show_above_text: true };
+        if (e instanceof GrammyError && e.error_code === 429) await sleep((e.parameters?.retry_after || 3) * 1000);
+        log(`фото ${ad.id}: ${e.message}`);
       }
     }
+    // Без фото или фото не ушло — полная карточка текстом.
+    const caption = card(ad, subs, via, config.cardSections);
     try {
-      await bot.api.sendMessage(userId, caption, { parse_mode: 'HTML', reply_markup: kb, link_preview_options: preview });
+      await bot.api.sendMessage(userId, caption, { parse_mode: 'HTML', reply_markup: kb, link_preview_options: { is_disabled: true } });
     } catch (e) {
       if (e instanceof GrammyError && e.error_code === 403) { db.setBlocked(userId, true); return; }
-      if (e instanceof GrammyError && e.error_code === 429) await sleep((e.parameters?.retry_after || 3) * 1000);
       await send(userId, caption, { parse_mode: 'HTML', reply_markup: kb, link_preview_options: { is_disabled: true } });
     }
   }
@@ -427,10 +430,10 @@ function createBot({ token, db, config, getWatcher, log }) {
 // Карточка: заголовок, цена, город, свежесть, телефон из текста, пометки, параметры, описание.
 // Карточка объявления по разделам: главное, характеристики, описание, продавец, поиск.
 // Шлётся текстом (до 4096 знаков), фото — превью над текстом.
-function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller'])) {
+function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller']), descMax = 1500) {
   const src = sources.get(ad.source);
   const flags = [];
-  if (via === 'turbo') flags.push('⚡ раньше поиска');
+  if (via === 'turbo') flags.push('⚡ эксклюзив');
   if (ad.status && ad.status !== 'active') flags.push('⏳ на проверке');
   if (ad.promoted) flags.push('📣 продвигается');
   // Номер, который продавец написал в тексте, — Телеграм сам делает его нажимаемым (звонок).
@@ -451,8 +454,8 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   const specs = params.length && sections.has('specs') ? ['', '<b>Характеристики</b>', ...params.map((p) => `• ${esc(p)}`)] : [];
 
   const desc = String(ad.description || '').trim();
-  const description = desc && sections.has('description')
-    ? ['', '<b>Описание</b>', `<blockquote expandable>${esc(desc.slice(0, 1500))}${desc.length > 1500 ? '…' : ''}</blockquote>`]
+  const description = desc && descMax > 20 && sections.has('description')
+    ? ['', '<b>Описание</b>', `<blockquote expandable>${esc(desc.slice(0, descMax))}${desc.length > descMax ? '…' : ''}</blockquote>`]
     : [];
 
   const seller = [];
@@ -461,7 +464,8 @@ function card(ad, subs, via, sections = new Set(['specs', 'description', 'seller
   if (ad.sellerAbout) seller.push(`ℹ️ ${esc(ad.sellerAbout)}`);
   const sellerBlock = seller.length && sections.has('seller') ? ['', '<b>Продавец</b>', ...seller] : [];
 
-  const tail = ['', `🔎 Поиск: ${subs.map((s) => esc(s.name)).join(', ')}`, `🆔 ${ad.id}`];
+  const more = (ad.photos?.length || 0) - 4;
+  const tail = ['', more > 0 ? `📷 Ещё ${more} фото — по кнопке «Открыть»` : '', `🔎 Поиск: ${subs.map((s) => esc(s.name)).join(', ')}`];
   return [...head, ...specs, ...description, ...sellerBlock, ...tail].filter((l) => l !== null && l !== undefined && l !== false)
     .filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== ''))
     .join('\n')

@@ -62,8 +62,10 @@ function newestFirst(searchUrl) {
   return u.toString();
 }
 
-async function fetchSearch(searchUrl) {
-  const html = await (await get(newestFirst(searchUrl), 'text/html')).text();
+async function fetchSearch(searchUrl, page = 1) {
+  const u = new URL(newestFirst(searchUrl));
+  if (page > 1) u.searchParams.set('page', String(page));
+  const html = await (await get(u.toString(), 'text/html')).text();
   return parseSearchHtml(html);
 }
 

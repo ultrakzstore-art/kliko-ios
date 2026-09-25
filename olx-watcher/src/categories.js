@@ -118,6 +118,13 @@ const FALLBACK = {
     ['Зоотовары', 'zootovary'],
   ],
 };
+// Третий уровень — для самых частых подрубрик (адрес проверяется пробным поиском в мастере).
+Object.assign(FALLBACK, {
+  'elektronika/noutbuki-i-aksesuary': [['Ноутбуки', 'noutbuki'], ['Аксессуары для ноутбуков', 'aksessuary-dlya-noutbukov']],
+  'elektronika/telefony-i-aksesuary': [['Мобильные телефоны и смартфоны', 'mobilnye-telefony-smartfony'], ['Аксессуары для телефонов', 'aksessuary-dlya-telefonov']],
+  'elektronika/kompyutery-i-komplektuyuschie': [['Настольные компьютеры', 'nastolnye-kompyutery'], ['Мониторы', 'monitory'], ['Комплектующие', 'komplektuyuschie-i-aksesuary']],
+  'elektronika/planshety-el-knigi-i-aksessuary': [['Планшеты', 'planshetnye-kompyutery'], ['Электронные книги', 'elektronnye-knigi']],
+});
 const FALLBACK_CHILDREN = Object.fromEntries(Object.entries(FALLBACK).map(([parent, list]) =>
   [parent, list.map(([name, slug]) => ({ name, path: `${parent}/${slug}` }))]));
 

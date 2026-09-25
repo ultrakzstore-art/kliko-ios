@@ -58,10 +58,41 @@ function roundCorners(img, r) {
   }
 }
 
+// Коллаж из 1–4 фото на холсте 1200×900: 1 — целиком, 2 — рядом, 3 — одно большое слева
+// и два справа, 4 — сеткой 2×2. Каждое фото обрезается по центру под свою клетку. Тонкие
+// белые разделители. Потом — водяной знак (если текст задан).
+const W = 1200;
+const H = 900;
+const GAP = 6;
+
+async function collage(buffers, mark = '') {
+  const imgs = [];
+  for (const b of buffers.slice(0, 4)) {
+    try { imgs.push(await Jimp.read(b)); } catch { /* битое фото пропускаем */ }
+  }
+  if (!imgs.length) throw new Error('ни одно фото не открылось');
+  const half = (W - GAP) / 2;
+  const halfH = (H - GAP) / 2;
+  const cells = {
+    1: [[0, 0, W, H]],
+    2: [[0, 0, half, H], [half + GAP, 0, half, H]],
+    3: [[0, 0, half, H], [half + GAP, 0, half, halfH], [half + GAP, halfH + GAP, half, halfH]],
+    4: [[0, 0, half, halfH], [half + GAP, 0, half, halfH], [0, halfH + GAP, half, halfH], [half + GAP, halfH + GAP, half, halfH]],
+  }[imgs.length];
+  const canvas = new Jimp({ width: W, height: H, color: 0xffffffff });
+  imgs.forEach((img, i) => {
+    const [x, y, w, h] = cells[i].map(Math.round);
+    img.cover({ w, h });
+    canvas.composite(img, x, y);
+  });
+  const jpeg = await canvas.getBuffer('image/jpeg', { quality: 85 });
+  return mark ? watermark(jpeg, mark) : jpeg;
+}
+
 async function fetchImage(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`фото ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
 
-module.exports = { watermark, fetchImage };
+module.exports = { watermark, collage, fetchImage };

@@ -38,11 +38,11 @@ const OLX = {
   normalize: (url) => olx.newestFirst(url),
   isAdUrl: (url) => olx.idFromUrl(url) != null,
   // Через модуль olx — чтобы тесты могли подменять сеть.
-  fetchSearch: (url) => olx.fetchSearch(url).then((r) => r.ads),
+  fetchSearch: (url, page) => olx.fetchSearch(url, page).then((r) => r.ads),
   fetchDetail: (ad) => olx.fetchOffer(ad.id),
   link: (ad) => {
     const base = ad.url && /^https?:/.test(ad.url) ? ad.url.split('#')[0] : `${olx.BASE}/d/obyavlenie/-ID${olx.encodeId(ad.id)}.html`;
-    return `${base}#${ad.id}`;
+    return base;
   },
   wizard: 'olx',   // свой мастер с подрубриками (wizard.js)
 };
