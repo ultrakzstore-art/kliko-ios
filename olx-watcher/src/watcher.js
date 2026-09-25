@@ -36,6 +36,13 @@ class Watcher {
     return this.lockCache.list;
   }
 
+  // Продавец: все / частные / бизнес (у OLX; у остальных площадок признака нет — все).
+  sellerOk(sub, ad) {
+    const want = sub.seller || 'all';
+    if (want === 'all' || (sub.source || 'olx') !== 'olx') return true;
+    return want === 'business' ? !!ad.business : !ad.business;
+  }
+
   // Жёсткое правило VIP: объявление из чужой закреплённой рубрики и города — не отправляем.
   allowed(userId, ad) {
     const owner = vip.lockOwner(this.activeLocks(), ad, this.lockSeen);
@@ -178,6 +185,7 @@ class Watcher {
         const full = await enrich(a);
         if (!this.isFresh(full)) continue;   // поднятое или продвинутое старьё
         if (!this.allowed(sub.user_id, full)) continue;   // чужая VIP-рубрика
+        if (!this.sellerOk(sub, full)) continue;         // частные / бизнес
         if (!this.db.markSent(sub.id, a.id)) continue;
         await this.notify(sub.user_id, full, [sub], 'search');
         this.stats.sent += 1;
@@ -251,7 +259,7 @@ class Watcher {
         a.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
-          if (a.id <= s.watermark || !matches(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
+          if (a.id <= s.watermark || !matches(s, a) || !this.sellerOk(s, a) || !this.allowed(s.user_id, a) || !this.db.markSent(s.id, a.id)) continue;
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }
@@ -284,7 +292,7 @@ class Watcher {
         if (onlySent && !sentTo.has(s.id)) continue;
         if (matcher && !matches(s, full)) continue;   // лента доски: только подходящим поискам
         if (!this.db.hasAccess(s.user_id, source) || this.db.user(s.user_id)?.blocked) continue;
-        if (!this.allowed(s.user_id, full) || !this.db.markDiscount(s.id, a.id, a.price)) continue;
+        if (!this.sellerOk(s, full) || !this.allowed(s.user_id, full) || !this.db.markDiscount(s.id, a.id, a.price)) continue;
         byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
       }
       for (const [userId, hit] of byUser) {
@@ -353,7 +361,7 @@ class Watcher {
         o.source = 'olx';
         const byUser = new Map();
         for (const s of subs) {
-          if (!matches(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
+          if (!matches(s, o) || !this.sellerOk(s, o) || !this.allowed(s.user_id, o) || !this.db.markSent(s.id, id)) continue;
           byUser.set(s.user_id, [...(byUser.get(s.user_id) || []), s]);
           this.db.updateSub(s.id, { sent: s.sent + 1 });
         }

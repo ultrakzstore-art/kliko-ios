@@ -21,7 +21,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   });
   const st = () => als.getStore();
 
-  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, ksub: null, city: null, words: '', priceFrom: null, priceTo: null, url: '' });
+  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, ksub: null, city: null, words: '', priceFrom: null, priceTo: null, seller: 'all', url: '' });
   const src = () => sources.get(st().w.source);
   const current = () => st().w.stack[st().w.stack.length - 1] || null;
 
@@ -66,6 +66,15 @@ function registerWizard(bot, { db, log, canAdd }) {
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nЦена? Напишите: <i>до 300000</i>, <i>от 100000 до 250000</i>, <i>300к</i>.`, kb);
   }
 
+  // Продавец (только OLX): все, частные или бизнес. По умолчанию — все.
+  async function stepSeller(ctx) {
+    if (st().w.source !== 'olx') return stepConfirm(ctx);
+    st().w.step = 'seller';
+    const kb = new InlineKeyboard().text('👥 Все', 'w:seller:all').row()
+      .text('👤 Только частные', 'w:seller:private').text('🏪 Только бизнес', 'w:seller:business');
+    await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nОт кого присылать?`, kb);
+  }
+
   // Пробный запрос к OLX: показываем, что реально найдётся по этой ссылке, до сохранения.
   async function stepConfirm(ctx) {
     st().w.step = 'confirm';
@@ -100,6 +109,7 @@ function registerWizard(bot, { db, log, canAdd }) {
       `Город: ${st().w.city ? esc(st().w.city.name) : 'весь Казахстан'}`,
       st().w.words ? `Слова: ${esc(st().w.words)}` : '',
       price ? `Цена: ${price}` : '',
+      st().w.seller !== 'all' ? `Продавец: ${SELLER[st().w.seller]}` : '',
     ].filter(Boolean).join('\n');
   }
 
@@ -204,13 +214,18 @@ function registerWizard(bot, { db, log, canAdd }) {
       return st().w.source === 'olx' ? stepWords(ctx) : stepPrice(ctx);
     }
     if (data === 'w:skipwords') return stepPrice(ctx);
-    if (data === 'w:skipprice') return stepConfirm(ctx);
+    if (data === 'w:skipprice') return stepSeller(ctx);
+    if (data.startsWith('w:seller:')) {
+      const v = data.slice(9);
+      st().w.seller = SELLER[v] ? v : 'all';
+      return stepConfirm(ctx);
+    }
 
     if (data === 'w:save') {
       const uid = ctx.from.id;
       const limit = canAdd(uid, st().w.source, st().w.url);
       if (limit !== true) { await ctx.editMessageText(limit, { parse_mode: 'HTML' }).catch(() => {}); st().w = null; return; }
-      const sub = db.addSub(uid, subName(), st().w.url, st().w.source);
+      const sub = db.addSub(uid, subName(), st().w.url, st().w.source, st().w.seller);
       log(`новый поиск #${sub.id}: ${st().w.url}`);
       st().w = null;
       await ctx.editMessageText(`Сохранил поиск «${esc(sub.name)}» (#${sub.id}).\nПервый проход — запомню, что уже есть, дальше присылаю только новые.`, { parse_mode: 'HTML' }).catch(() => {});
@@ -231,9 +246,11 @@ function registerWizard(bot, { db, log, canAdd }) {
     if (!p) return ctx.reply('Не понял цену. Например: до 300000, от 100000 до 250000, 300к — или «Любая цена».');
     st().w.priceFrom = p.from;
     st().w.priceTo = p.to;
-    return stepConfirm(ctx);
+    return stepSeller(ctx);
   };
 }
+
+const SELLER = { all: 'все', private: 'частные', business: 'бизнес' };
 
 function fmt(n) {
   return Number(n).toLocaleString('ru-RU');

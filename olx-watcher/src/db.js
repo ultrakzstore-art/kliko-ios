@@ -90,6 +90,8 @@ class Db {
     if (!cols.includes('user_id')) this.db.exec('ALTER TABLE subs ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
     if (!cols.includes('watermark')) this.db.exec('ALTER TABLE subs ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0');
     if (!cols.includes('source')) this.db.exec("ALTER TABLE subs ADD COLUMN source TEXT NOT NULL DEFAULT 'olx'");
+    // Продавец: all — все, private — частные, business — бизнес-аккаунты.
+    if (!cols.includes('seller')) this.db.exec("ALTER TABLE subs ADD COLUMN seller TEXT NOT NULL DEFAULT 'all'");
     const pcols = this.db.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
     if (!pcols.includes('product')) this.db.exec("ALTER TABLE payments ADD COLUMN product TEXT NOT NULL DEFAULT 'olx'");
     // Платный доступ до площадок был только к OLX — переносим его в таблицу доступа.
@@ -253,8 +255,8 @@ class Db {
 
   // ---------- поиски ----------
 
-  addSub(userId, name, url, source = 'olx') {
-    const r = this.db.prepare('INSERT INTO subs (user_id, name, url, source, created_at) VALUES (?, ?, ?, ?, ?)').run(userId, name, url, source, Date.now());
+  addSub(userId, name, url, source = 'olx', seller = 'all') {
+    const r = this.db.prepare('INSERT INTO subs (user_id, name, url, source, seller, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(userId, name, url, source, seller, Date.now());
     return this.sub(Number(r.lastInsertRowid));
   }
 
@@ -271,7 +273,7 @@ class Db {
   }
 
   updateSub(id, patch) {
-    const allowed = ['name', 'paused', 'initialized', 'learned', 'last_poll', 'last_error', 'sent', 'watermark', 'user_id'];
+    const allowed = ['name', 'paused', 'initialized', 'learned', 'last_poll', 'last_error', 'sent', 'watermark', 'user_id', 'seller'];
     const keys = Object.keys(patch).filter((k) => allowed.includes(k));
     if (!keys.length) return;
     const vals = keys.map((k) => (k === 'learned' ? JSON.stringify(patch[k]) : patch[k]));

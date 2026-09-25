@@ -308,6 +308,19 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.reply(`${src.emoji} Добавил поиск «${sub.name}». Первый проход — запомню, что уже есть, дальше присылаю только новые.`);
   });
 
+  // Продавец у поиска OLX: все → частные → бизнес → все.
+  const SELLER_NEXT = { all: 'private', private: 'business', business: 'all' };
+  const SELLER_ICON = { all: '👥', private: '👤', business: '🏪' };
+  const SELLER_TEXT = { all: 'все продавцы', private: 'только частные', business: 'только бизнес' };
+  bot.callbackQuery(/^seller:(\d+)$/, async (ctx) => {
+    const sub = db.sub(Number(ctx.match[1]));
+    if (!sub || sub.user_id !== ctx.from.id) return ctx.answerCallbackQuery('Не найдено');
+    const next = SELLER_NEXT[sub.seller || 'all'];
+    db.updateSub(sub.id, { seller: next });
+    await ctx.answerCallbackQuery(`${SELLER_ICON[next]} ${SELLER_TEXT[next]}`);
+    await sendList(ctx, true);
+  });
+
   bot.callbackQuery(/^(pause|resume|del):(\d+)$/, async (ctx) => {
     const [, action, idStr] = ctx.match;
     const sub = db.sub(Number(idStr));
@@ -322,11 +335,13 @@ function createBot({ token, db, config, getWatcher, log }) {
     const subs = db.subs(ctx.from.id);
     const head = `${planText(ctx.from.id)}\n\nПоиски (${subs.length}/${limitFor(ctx.from.id)}):`;
     const body = subs.length
-      ? subs.map((s, i) => `${i + 1}. ${s.paused ? '⏸' : sources.get(s.source).emoji} ${esc(s.name)} — прислано ${s.sent}${!db.hasAccess(ctx.from.id, s.source) ? ' · нет доступа' : ''}${s.last_error ? ` ⚠ ${esc(s.last_error)}` : ''}`).join('\n')
+      ? subs.map((s, i) => `${i + 1}. ${s.paused ? '⏸' : sources.get(s.source).emoji} ${esc(s.name)} — прислано ${s.sent}${(s.seller || 'all') !== 'all' ? ` · ${SELLER_ICON[s.seller]} ${SELLER_TEXT[s.seller]}` : ''}${!db.hasAccess(ctx.from.id, s.source) ? ' · нет доступа' : ''}${s.last_error ? ` ⚠ ${esc(s.last_error)}` : ''}`).join('\n')
       : 'пока нет.';
     const kb = new InlineKeyboard().text('➕ Новый поиск', 'w:new').text('💎 Доступ', 'access').row();
     subs.forEach((s, i) => {
-      kb.text(`${s.paused ? '▶️' : '⏸'} ${i + 1}`, `${s.paused ? 'resume' : 'pause'}:${s.id}`).text(`🗑 ${i + 1}`, `del:${s.id}`).row();
+      kb.text(`${s.paused ? '▶️' : '⏸'} ${i + 1}`, `${s.paused ? 'resume' : 'pause'}:${s.id}`);
+      if ((s.source || 'olx') === 'olx') kb.text(`${SELLER_ICON[s.seller || 'all']} ${i + 1}`, `seller:${s.id}`);
+      kb.text(`🗑 ${i + 1}`, `del:${s.id}`).row();
     });
     const opts = { parse_mode: 'HTML', reply_markup: kb, link_preview_options: { is_disabled: true } };
     if (edit) await ctx.editMessageText(`${head}\n${body}`, opts).catch(() => {});

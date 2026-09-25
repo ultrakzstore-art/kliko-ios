@@ -86,6 +86,9 @@ test('мастер: рубрика → подрубрика → город → �
     await text('hp 250');
     assert.match(lastText(), /Цена/);
     await text('до 300к');
+    assert.match(lastText(), /От кого присылать/);
+    assert.ok(buttons().some((b) => b.callback_data === 'w:seller:all'), 'по умолчанию — все');
+    await press('w:seller:private');
     assert.match(lastText(), /HP 250 G9/, 'пробный поиск показан до сохранения');
     assert.strictEqual(searched, 'https://www.olx.kz/d/elektronika/noutbuki/almaty/q-hp-250/?search%5Bfilter_float_price%3Ato%5D=300000');
     await press('w:save');
@@ -93,6 +96,7 @@ test('мастер: рубрика → подрубрика → город → �
     assert.strictEqual(subs.length, 1);
     assert.strictEqual(subs[0].name.replace(/\u00a0/g, ' '), 'hp 250 · Алматы · до 300 000');
     assert.strictEqual(subs[0].url, searched);
+    assert.strictEqual(subs[0].seller, 'private', 'выбор продавца сохранён');
 
     // Другой человек — тоже пользователь, со своими поисками и бесплатным доступом.
     const other = { id: 7, is_bot: false, first_name: 'Гость' };

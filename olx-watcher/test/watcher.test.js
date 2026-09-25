@@ -183,3 +183,13 @@ test('скидки: цена знакомого объявления упала 
     olx.fetchOffer = origOffer;
   }
 });
+
+test('продавец: все / частные / бизнес', () => {
+  const w = new Watcher({ db: { get: () => 0 }, config: {}, notify: async () => {}, alert: async () => {}, log: () => {} });
+  const shop = { business: true };
+  const person = { business: false };
+  assert.ok(w.sellerOk({ seller: 'all' }, shop) && w.sellerOk({ seller: 'all' }, person), 'по умолчанию — все');
+  assert.ok(w.sellerOk({ seller: 'private' }, person) && !w.sellerOk({ seller: 'private' }, shop));
+  assert.ok(w.sellerOk({ seller: 'business' }, shop) && !w.sellerOk({ seller: 'business' }, person));
+  assert.ok(w.sellerOk({ seller: 'business', source: 'kolesa' }, person), 'у Kolesa признака нет — фильтр не мешает');
+});
