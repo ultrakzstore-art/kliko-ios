@@ -299,6 +299,9 @@ private struct ВводИмпорта: View {
                          модель.фотоПодпись.isEmpty ? т("src_photos_hint") : модель.фотоПодпись) {
                     PhotosPicker(т("pick_photos"), selection: $фото, maxSelectionCount: 30, matching: .images)
                 }
+                // .imp-acts сайта: «Показать на примере» (aiDemoFill) рядом с «Разобрать через Kliko AI».
+                КнопкаБизнеса(подпись: т("imp_demo"), второстепенная: true) { модель.показатьПример() }
+                    .disabled(модель.грузимВвод)
                 КнопкаБизнеса(подпись: т("parse"), занято: модель.грузимВвод) { модель.разобрать() }
             }
         } else {
@@ -562,6 +565,8 @@ private struct ПроверкаИмпорта: View {
     @State private var наценкаОткрыта = false
     @State private var наценка = ""
     @State private var плашка: String? = nil
+    @State private var плашкаНомер = 0
+    @State private var фотоДля: UUID? = nil
 
     private func т(_ ключ: String) -> String { ИмпортText.т(ключ) }
     private func т(_ ключ: String, _ з: [String: String]) -> String { ИмпортText.т(ключ, з) }
@@ -587,9 +592,15 @@ private struct ПроверкаИмпорта: View {
                 }
                 массово
                 ForEach($модель.строки) { $строка in
+                    let номер = строка.id
                     СтрокаПроверки(строка: $строка, имяРаздела: модель.имяРаздела(строка.раздел),
-                                   выбратьРаздел: { разделДля = строка.id },
-                                   убрать: { модель.убрать(строка.id) })
+                                   загрузка: модель.загрузкиФото[номер],
+                                   выбратьРаздел: { разделДля = номер },
+                                   открытьФото: { фотоДля = номер },
+                                   убратьФото: { адрес in
+                                       withAnimation(ДвижениеСайта.выбор) { модель.убратьФото(адрес, строка: номер) }
+                                   },
+                                   убрать: { модель.убрать(номер) })
                 }
                 Text(т("rv_hint"))
                     .font(.system(size: 12.5))
@@ -605,6 +616,14 @@ private struct ПроверкаИмпорта: View {
                 if let i = модель.строки.firstIndex(where: { $0.id == цель.id }) { модель.строки[i].раздел = ключ }
                 разделДля = nil
             })
+        }
+        .sheet(item: Binding(get: { фотоДля.map { ВыборРаздела.Цель(id: $0) } }, set: { фотоДля = $0?.id })) { цель in
+            ФотоСтрокиИмпорта(модель: модель, номер: цель.id)
+        }
+        .onChange(of: модель.весть) { _, весть in
+            // Пока открыт лист фото, плашку показывает он.
+            guard let весть, фотоДля == nil else { return }
+            показать(весть.текст, долго: весть.долго)
         }
         .sheet(isPresented: $разделВсем) {
             ВыборРаздела(справочники: модель.справочники, выбрано: { ключ in
@@ -672,12 +691,15 @@ private struct ПроверкаИмпорта: View {
         .disabled(модель.строки.isEmpty)
     }
 
-    private func показать(_ текст: String) {
-        withAnimation { плашка = текст }
+    private func показать(_ текст: String, долго: Bool = false) {
+        плашкаНомер += 1
+        let свой = плашкаНомер
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_800_000_000)
-            withAnimation { плашка = nil }
+            try? await Task.sleep(nanoseconds: долго ? 4_200_000_000 : 2_800_000_000)
+            guard свой == плашкаНомер else { return }
+            withAnimation(ДвижениеСайта.уход) { плашка = nil }
         }
     }
 
@@ -766,12 +788,17 @@ private struct ПроверкаИмпорта: View {
 private struct СтрокаПроверки: View {
     @Binding var строка: СтрокаИмпорта
     let имяРаздела: String
+    /// Идущая загрузка фото в эту строку.
+    let загрузка: ЗагрузкаФотоСтроки?
     let выбратьРаздел: () -> Void
+    let открытьФото: () -> Void
+    let убратьФото: (String) -> Void
     let убрать: () -> Void
 
     @State private var подробно = false
 
     private func т(_ ключ: String) -> String { ИмпортText.т(ключ) }
+    private func т(_ ключ: String, _ з: [String: String]) -> String { ИмпортText.т(ключ, з) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -885,26 +912,75 @@ private struct СтрокаПроверки: View {
         .opacity(строка.выбрана ? 1 : 0.62)
     }
 
-    @ViewBuilder
+    /// _aiPhotoCellHTML: первое фото с «×», «+N» остальных и «＋» — лист фото товара; во время загрузки — кольцо
+    /// хода и «i из n».
     private var фото: some View {
-        if let первое = строка.фото.first, let адрес = Config.url(первое) {
-            AsyncImage(url: адрес.absoluteURL) { фаза in
-                if let картинка = фаза.image {
-                    картинка.resizable().scaledToFill()
-                } else {
-                    Theme.поверхность2
+        let первое = строка.фото.first
+        return ZStack(alignment: .topTrailing) {
+            Button(action: открытьФото) {
+                ZStack {
+                    if let первое {
+                        МиниатюраИмпорта(адрес: первое)
+                    } else {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 19))
+                            .foregroundStyle(Theme.акцент)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Theme.поверхность2)
+                    }
+                    if let загрузка {
+                        Color.black.opacity(0.45)
+                        КольцоЗагрузкиИмпорта(доля: загрузка.общая,
+                                              подпись: т("ph_prog", ["i": String(min(загрузка.всего, загрузка.номер + 1)),
+                                                                     "n": String(загрузка.всего)]))
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+                .overlay(alignment: .bottomLeading) {
+                    if строка.фото.count > 1 && загрузка == nil {
+                        Text("+" + String(строка.фото.count - 1))
+                            .font(.system(size: 10.5, weight: .heavy))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.black.opacity(0.62), in: Capsule())
+                            .padding(3)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if первое != nil && загрузка == nil {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .heavy))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 17, height: 17)
+                            .background(Theme.акцент, in: Circle())
+                            .padding(3)
+                    }
                 }
             }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-            .accessibilityHidden(true)
-        } else {
-            Image(systemName: "photo")
-                .foregroundStyle(Theme.текстВторой)
-                .frame(width: 56, height: 56)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-                .accessibilityHidden(true)
+            .buttonStyle(.plain)
+            .accessibilityLabel(строка.фото.isEmpty ? т("ph_add") : т("ph_t"))
+            .accessibilityValue(строка.фото.isEmpty ? "" : String(строка.фото.count))
+            if let первое, загрузка == nil {
+                Button {
+                    убратьФото(первое)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8.5, weight: .heavy))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 18, height: 18)
+                        .background(Color.black.opacity(0.7), in: Circle())
+                        .overlay { Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .offset(x: 6, y: -6)
+                .accessibilityLabel(т("ph_del"))
+                .transition(.scale.combined(with: .opacity))
+            }
         }
+        .animation(ДвижениеСайта.выбор, value: строка.фото)
+        .animation(ДвижениеСайта.смена, value: загрузка == nil)
     }
 
     private func поле(_ подсказка: String, _ значение: Binding<String>) -> some View {

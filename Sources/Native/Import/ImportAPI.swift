@@ -196,15 +196,19 @@ enum ИмпортAPI {
 
     /**
      uploadImageSmart сайта для одного снимка: сжатие и водяной знак (ОбработкаФото), три попытки upload_photo и
-     миниатюра. Итог — ответ сервера ({ok, url, thumb} | {prohibited} | {error}).
+     миниатюра. Итог — ответ сервера ({ok, url, thumb} | {prohibited} | {error}). шаг — доля готовности, как onp
+     сайта: 0,05 в начале, 0,6 после сжатия и знака, 0,72 перед отправкой, 1 с ответом.
      */
-    static func загрузитьФото(_ данные: Data) async throws -> [String: Any] {
+    static func загрузитьФото(_ данные: Data, шаг: ((Double) -> Void)? = nil) async throws -> [String: Any] {
+        шаг?(0.05)
         let готовое = await Task.detached(priority: .userInitiated) { () -> ГотовоеФото? in
             ОбработкаФото.подготовить(данные)
         }.value
         guard let готовое else { return ["ok": false, "error": ""] }
+        шаг?(0.6)
         let основное = ОбработкаФото.dataURL(готовое.картинка)
         let мини = готовое.миниатюра.isEmpty ? "" : ОбработкаФото.dataURL(готовое.миниатюра)
+        шаг?(0.72)
         var повторили = false
         while true {
             let токен = try await A.токенСейчас()
@@ -215,6 +219,7 @@ enum ИмпортAPI {
                 A.забыть()
                 continue
             }
+            шаг?(1)
             return ответ
         }
     }

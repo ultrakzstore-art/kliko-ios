@@ -95,6 +95,8 @@ struct СтрокаИмпорта: Identifiable, Equatable {
         т["year"] = year.trimmingCharacters(in: .whitespaces)
         т["description"] = описание.trimmingCharacters(in: .whitespacesAndNewlines)
         т["images"] = фото
+        // a.image = a.images[0] сайта: первое фото — обложка.
+        if исходное["image"] != nil || !фото.isEmpty { т["image"] = фото.first ?? "" }
         return т
     }
 }
@@ -111,6 +113,26 @@ struct НезаконченныйРазбор: Equatable {
 struct ЧерновикИмпорта: Identifiable, Equatable {
     let id: String
     let название: String
+}
+
+/// Плашка-сообщение (toast сайта). Свой id — чтобы тот же текст показался ещё раз; долго — 4,2 с вместо обычных.
+struct ВестьИмпорта: Equatable {
+    let id = UUID()
+    let текст: String
+    let долго: Bool
+}
+
+/// Загрузка фото в одну строку (aiRowPhotoUpload): какой снимок идёт, сколько всего и доля текущего.
+struct ЗагрузкаФотоСтроки: Equatable {
+    var номер: Int
+    var всего: Int
+    var доля: Double
+
+    /// Доля всей пачки: готовые снимки и часть текущего.
+    var общая: Double {
+        guard всего > 0 else { return 0 }
+        return min(1, (Double(номер) + доля) / Double(всего))
+    }
 }
 
 @MainActor
@@ -180,6 +202,15 @@ final class ИмпортМодель: ObservableObject {
     @Published private(set) var итог = ""
     @Published private(set) var итогПодробно = ""
     @Published private(set) var черновики: [ЧерновикИмпорта] = []
+
+    // Пример (aiDemoFill), плашки и фото строк (aiRowPhotoUpload)
+    /// _aiDemoMode сайта: строки из примера — публикация не создаёт черновиков.
+    @Published private(set) var демо = false
+    @Published private(set) var весть: ВестьИмпорта? = nil
+    /// Идущие загрузки фото по строкам.
+    @Published private(set) var загрузкиФото: [UUID: ЗагрузкаФотоСтроки] = [:]
+    /// «Не больше 8 фото на товар» (_aiPickToggle, aiRowPhotoUpload).
+    static let фотоНаТовар = 8
 
     @Published private(set) var незаконченный: НезаконченныйРазбор? = nil
     @Published private(set) var pro = false
@@ -277,6 +308,7 @@ final class ИмпортМодель: ObservableObject {
 
     /// link_import по каждой ссылке, картинки — скачать и загрузить (до 8, у одной — до 10), строки — на проверку.
     private func перенести(_ адреса: [String]) async {
+        демо = false
         начатьХод(адреса.count == 1 ? т("lip_t") : т("lm_q"))
         var готовые: [СтрокаИмпорта] = []
         var непрочитано = 0
@@ -491,6 +523,7 @@ final class ИмпортМодель: ObservableObject {
             return
         }
         заметка = nil
+        демо = false
         Task {
             if естьКартинка {
                 await разобратьКусками(чистый)
@@ -706,6 +739,7 @@ final class ИмпортМодель: ObservableObject {
     // MARK: - Незаконченный разбор (aiJobResume, aiJobDrop)
 
     func продолжить(_ номер: String) async {
+        демо = false
         начатьХод(т("prog_t"))
         do {
             let j = try await ИмпортAPI.задание("ai_job_get", ["job": номер])
@@ -810,6 +844,8 @@ final class ИмпортМодель: ObservableObject {
 
     func заново() {
         строки = []
+        демо = false
+        загрузкиФото = [:]
         этап = .ввод
         заметка = nil
         публикуем = nil
@@ -888,9 +924,144 @@ final class ИмпортМодель: ObservableObject {
         for i in строки.indices { строки[i].состояние = состояние }
     }
 
+    // MARK: - Пример (aiDemoFill)
+
+    /// «Показать на примере»: пример прайса в поле, ход разбора и шесть строк — без запросов и без квоты Kliko AI.
+    func показатьПример() {
+        guard этап == .ввод, !грузимВвод else { return }
+        демо = true
+        заметка = nil
+        let язык = ИмпортText.язык
+        текст = ПримерИмпорта.текст(язык)
+        let пример = ПримерИмпорта.строки(язык)
+        Task { await вестиПример(пример) }
+    }
+
+    /// Шаг 220 мс, +7…24 % (17·random + 7), «распознано N из 6»; на 100 % — «Готово», через 550 мс — строки.
+    private func вестиПример(_ пример: [[String: Any]]) async {
+        начатьХод(т("demo_prog_t"))
+        ход(0.04, т("prog_single"))
+        var доля = 0.0
+        while доля < 1 {
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard демо, этап == .идёт else { return }
+            доля = min(1, доля + (Double.random(in: 0..<1) * 17 + 7) / 100)
+            let распознано = min(пример.count, Int((доля * Double(пример.count)).rounded()))
+            while найдено.count < распознано {
+                найдено.append(A.строка(пример[найдено.count]["title"]))
+            }
+            if доля < 1 {
+                ход(доля, т("demo_prog_n", ["i": String(распознано), "n": String(пример.count)]))
+            } else {
+                ход(1, т("prog_done_s"))
+                заголовокХода = т("prog_done")
+            }
+        }
+        try? await Task.sleep(nanoseconds: 550_000_000)
+        guard демо, этап == .идёт else { return }
+        строки = пример.map { СтрокаИмпорта($0) }
+        сИИ = true
+        осталосьИИ = ПримерИмпорта.осталосьИИ
+        изСсылок = false
+        задание = ""
+        колонки = []
+        разметка = [:]
+        опубликовано = 0
+        добавлено = 0
+        этап = .проверка
+    }
+
+    // MARK: - Фото строки (aiRowPhotoUpload, _aiPickToggle, _aiPhotoDel)
+
+    /// Загруженные за этот заход фото (_aiPhotos сайта): фото товаров и снимки, добавленные в строки.
+    var пулФото: [String] {
+        var видели: Set<String> = []
+        var итог: [String] = []
+        for ответ in фотоТоваров {
+            let адрес = A.строка(ответ["url"])
+            if !адрес.isEmpty && !видели.contains(адрес) {
+                видели.insert(адрес)
+                итог.append(адрес)
+            }
+        }
+        return итог
+    }
+
+    /// _aiPhotoOwner: номер другой строки (с 1), к которой уже привязано это фото.
+    func владелецФото(_ адрес: String, кроме id: UUID) -> Int? {
+        for (i, строка) in строки.enumerated() where строка.id != id && строка.фото.contains(адрес) {
+            return i + 1
+        }
+        return nil
+    }
+
+    /// _aiPickToggle: привязать фото из загруженных или снять; не больше 8 на товар.
+    func переключитьФото(_ адрес: String, строка id: UUID) {
+        guard let i = строки.firstIndex(where: { $0.id == id }) else { return }
+        if let k = строки[i].фото.firstIndex(of: адрес) {
+            строки[i].фото.remove(at: k)
+            return
+        }
+        guard строки[i].фото.count < Self.фотоНаТовар else {
+            сообщить(т("ph_max"))
+            return
+        }
+        строки[i].фото.append(адрес)
+    }
+
+    /// _aiPhotoDel: убрать фото из строки (в загруженных оно остаётся).
+    func убратьФото(_ адрес: String, строка id: UUID) {
+        guard let i = строки.firstIndex(where: { $0.id == id }) else { return }
+        строки[i].фото.removeAll { $0 == адрес }
+    }
+
+    /// aiRowPhotoUpload: снимки по одному — обработка и upload_photo как у uploadImageSmart (ИмпортAPI.загрузитьФото),
+    /// каждый — в загруженные и, пока их меньше 8, в строку.
+    func загрузитьФото(_ снимки: [Data], строка id: UUID) {
+        guard !снимки.isEmpty, загрузкиФото[id] == nil else { return }
+        загрузкиФото[id] = ЗагрузкаФотоСтроки(номер: 0, всего: снимки.count, доля: 0)
+        сообщить(т("ph_loading"))
+        Task { await загрузитьФотоСтроки(снимки, id) }
+    }
+
+    private func загрузитьФотоСтроки(_ снимки: [Data], _ id: UUID) async {
+        var прибавлено = 0
+        var запрет = false
+        for (номер, данные) in снимки.enumerated() {
+            загрузкиФото[id] = ЗагрузкаФотоСтроки(номер: номер, всего: снимки.count, доля: 0)
+            let ответ = try? await ИмпортAPI.загрузитьФото(данные, шаг: { [weak self] доля in
+                guard let self else { return }
+                withAnimation(ДвижениеСайта.прогресс) { self.загрузкиФото[id]?.доля = доля }
+            })
+            guard let ответ else { continue }
+            if A.да(ответ["prohibited"]) { запрет = true }
+            let адрес = A.строка(ответ["url"])
+            guard A.да(ответ["ok"]), !адрес.isEmpty else { continue }
+            фотоТоваров.append(["url": адрес, "name": "photo.jpg"])
+            прибавлено += 1
+            if let i = строки.firstIndex(where: { $0.id == id }), строки[i].фото.count < Self.фотоНаТовар {
+                withAnimation(ДвижениеСайта.вставкаСписка) { строки[i].фото.append(адрес) }
+            }
+        }
+        загрузкиФото[id] = nil
+        if прибавлено > 0 {
+            сообщить(т("ph_added"))
+        } else {
+            сообщить(запрет ? т("aii_prohibited") : т("aii_photo_fail"))
+        }
+    }
+
+    private func сообщить(_ текст: String, долго: Bool = false) {
+        весть = ВестьИмпорта(текст: текст, долго: долго)
+    }
+
     // MARK: - Публикация (aiPublish / liMassGo)
 
     func опубликовать() {
+        if демо {
+            сообщить(т("demo_pub"), долго: true)
+            return
+        }
         let товары = выбранные.map { $0.товар }
         guard !товары.isEmpty else {
             ошибкаПубликации = т("no_sel")
