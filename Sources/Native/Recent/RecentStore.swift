@@ -94,6 +94,14 @@ final class RecentStore: ObservableObject {
         сохранить()
     }
 
+    /// «×» у строки «Вы искали» поиска как на сайте (mkSovRmRecent): один запрос, без учёта регистра.
+    func забытьЗапрос(_ текст: String) {
+        let новые = запросы.filter { $0.caseInsensitiveCompare(текст) != .orderedSame }
+        guard новые != запросы else { return }
+        запросы = новые
+        сохранить()
+    }
+
     func очиститьЗапросы() {
         guard !запросы.isEmpty else { return }
         запросы = []

@@ -167,7 +167,6 @@ struct ШапкаСайта<Справа: View, УПоиска: View, Снизу
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(DesignText.т("photo"))
-                .accessibilityHint(DesignText.т("on_site"))
             }
         }
         .padding(.leading, 12)
