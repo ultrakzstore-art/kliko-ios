@@ -18,7 +18,8 @@
   "dependencies": {
     "electron-updater": "^6.8.9",
     "grammy": "^1.46.0",
-    "jimp": "^1.6.1"
+    "jimp": "^1.6.1",
+    "ssh2": "^1.17.0"
   },
   "productName": "OLX Watcher",
   "devDependencies": {
@@ -27,11 +28,15 @@
   },
   "build": {
     "appId": "kz.olxwatcher.desktop",
+    "npmRebuild": false,
     "productName": "OLX Watcher",
     "files": [
       "src/**/*",
       "desktop/**/*",
+      "deploy/**/*",
       "package.json",
+      "package-lock.json",
+      ".env.example",
       "!**/node_modules/**/{test,tests,__tests__,docs,doc,example,examples,benchmark,benchmarks}/**",
       "!**/node_modules/**/*.{md,markdown,map,ts,flow}",
       "!**/node_modules/**/{CHANGELOG,HISTORY,AUTHORS,CONTRIBUTING}*"

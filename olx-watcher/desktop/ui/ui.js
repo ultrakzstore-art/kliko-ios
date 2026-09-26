@@ -301,3 +301,28 @@ window.app.state().then((s) => {
   $('log').textContent = s.log.map((l) => `${l}\n`).join('');
   scrollLog();
 });
+
+// ---------- Сервер ----------
+function showServer(st) {
+  const srv = st?.settings?.server;
+  $('server-now').textContent = srv ? `Бот установлен на сервер ${srv.host} (${new Date(srv.at).toLocaleString('ru-RU')}).` : '';
+  if (srv && !$('srv-host').value) { $('srv-host').value = srv.host; $('srv-port').value = srv.port || 22; $('srv-user').value = srv.username || 'root'; }
+}
+window.app.state().then(showServer);
+window.app.onState(showServer);
+window.app.onDeployLog((text) => {
+  const o = $('deploy-out');
+  if (o.dataset.fresh !== '1') { o.textContent = ''; o.dataset.fresh = '1'; }
+  o.textContent += text;
+  o.scrollTop = o.scrollHeight;
+});
+$('btn-deploy').addEventListener('click', async () => {
+  const b = $('btn-deploy');
+  b.disabled = true;
+  $('deploy-msg').textContent = 'Идёт установка…';
+  $('deploy-out').dataset.fresh = '0';
+  const r = await window.app.deploy({ host: $('srv-host').value, port: $('srv-port').value, username: $('srv-user').value, password: $('srv-pass').value });
+  $('srv-pass').value = '';
+  $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на сервере.' : r.error;
+  b.disabled = false;
+});

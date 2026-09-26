@@ -423,6 +423,136 @@ function setupAutoUpdate() {
   });
 }
 
+// ---------- установка на сервер (VPS) ----------
+// Кнопкой из окна: по IP и паролю заходим на сервер по SSH, кладём бота в свою папку
+// /opt/olx-watcher (другие папки и программы на сервере не трогаем, ничего не удаляем), пишем
+// .env из настроек этого окна, при первой установке переносим базу (подписчики, поиски, оплаты)
+// и запускаем deploy/install.sh — он ставит свой Node.js и службу systemd. Бот на ПК при этом
+// выключаем: один токен — одна работающая копия. Пароль нигде не сохраняется.
+
+const REMOTE_DIR = '/opt/olx-watcher';
+const APP_ROOT = path.join(__dirname, '..');
+
+// Файлы бота для сервера: src/, deploy/, package.json, package-lock.json, .env.example.
+function botFiles() {
+  const out = [];
+  const walk = (rel) => {
+    for (const name of fs.readdirSync(path.join(APP_ROOT, rel))) {
+      const r = path.posix.join(rel, name);
+      const st = fs.statSync(path.join(APP_ROOT, r));
+      if (st.isDirectory()) walk(r); else out.push(r);
+    }
+  };
+  walk('src');
+  walk('deploy');
+  for (const f of ['package.json', 'package-lock.json', '.env.example']) if (fs.existsSync(path.join(APP_ROOT, f))) out.push(f);
+  return out;
+}
+
+function envFileText(token) {
+  // Значения — одной строкой, без кавычек: так их одинаково прочитает node --env-file.
+  const clean = (v) => String(v ?? '').replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
+  const lines = ['# Настройки бота — записаны приложением OLX Watcher для ПК.', `BOT_TOKEN=${clean(token)}`];
+  for (const k of KEYS) lines.push(`${k}=${clean(settings.env[k])}`);
+  return lines.join('\n') + '\n';
+}
+
+let deploying = false;
+async function deployToServer({ host, port, username, password }) {
+  if (deploying) return { ok: false, error: 'Установка уже идёт.' };
+  const token = getToken();
+  if (!token) return { ok: false, error: 'Сначала вставьте токен бота во вкладке «Настройки».' };
+  if (!host || !password) return { ok: false, error: 'Нужны IP сервера и пароль.' };
+  deploying = true;
+  const out = (t) => send('deploy-log', t);
+  const { Client } = require('ssh2');
+  const conn = new Client();
+  const wasRunning = !!bot.child;
+  try {
+    out(`Подключаюсь к ${host}…\n`);
+    await new Promise((resolve, reject) => {
+      conn.once('ready', resolve).once('error', reject)
+        .connect({ host: String(host).trim(), port: Number(port) || 22, username: String(username || 'root').trim(), password, readyTimeout: 25000, keepaliveInterval: 15000 });
+    });
+    const exec = (cmd, quiet = false) => new Promise((resolve, reject) => {
+      conn.exec(cmd, (err, stream) => {
+        if (err) return reject(err);
+        let code = null;
+        let text = '';
+        const onData = (d) => { text += d; if (!quiet) out(d.toString()); };
+        stream.on('data', onData);
+        stream.stderr.on('data', onData);
+        stream.on('exit', (c) => { code = c; });
+        stream.on('close', () => resolve({ code, text }));
+      });
+    });
+    out('Подключился.\n');
+    const who = await exec('id -u', true);
+    if (who.text.trim() !== '0') throw new Error('Нужен пользователь root (или с правами root). Войдите как root.');
+    if ((await exec('command -v systemctl >/dev/null && echo yes', true)).text.trim() !== 'yes') throw new Error('На сервере нет systemd — нужен обычный Linux (Ubuntu / Debian).');
+    const hadDb = (await exec(`test -f ${REMOTE_DIR}/data/watcher.db && echo yes`, true)).text.trim() === 'yes';
+
+    // Один токен — одна копия: бот на ПК останавливаем до запуска на сервере.
+    if (bot.child) { out('Останавливаю бота на этом компьютере…\n'); await stopBot(); }
+
+    const files = botFiles();
+    const dirs = [...new Set(files.map((f) => path.posix.dirname(f)).filter((d) => d !== '.'))];
+    await exec(`mkdir -p ${REMOTE_DIR}/data ${dirs.map((d) => `'${REMOTE_DIR}/${d}'`).join(' ')}`, true);
+    // Файлы — по SFTP, а если он на сервере выключен — через «cat > файл».
+    const sftp = await new Promise((resolve) => conn.sftp((e, s) => resolve(e ? null : s)));
+    const put = (remote, data) => new Promise((resolve, reject) => {
+      if (sftp) return sftp.writeFile(remote, data, (e) => (e ? reject(e) : resolve()));
+      conn.exec(`cat > '${remote.replace(/'/g, "'\\''")}'`, (err, stream) => {
+        if (err) return reject(err);
+        let code = null;
+        stream.on('exit', (c) => { code = c; });
+        stream.on('close', () => (code === 0 ? resolve() : reject(new Error(`не удалось записать ${remote}`))));
+        stream.stderr.on('data', () => {});
+        stream.on('data', () => {});
+        stream.end(data);
+      });
+    });
+    out(`Загружаю бота (${files.length} файлов) в ${REMOTE_DIR}…\n`);
+    for (const f of files) await put(`${REMOTE_DIR}/${f}`, fs.readFileSync(path.join(APP_ROOT, f)));
+    await put(`${REMOTE_DIR}/.env`, envFileText(token));
+    out('Настройки (токен, цены, реквизиты) записаны.\n');
+
+    // База — только при первой установке: на сервере уже работающую не перезаписываем.
+    const dbFile = path.join(app.getPath('userData'), 'watcher.db');
+    if (!hadDb && fs.existsSync(dbFile)) {
+      out('Переношу подписчиков, поиски и оплаты…\n');
+      await put(`${REMOTE_DIR}/data/watcher.db`, fs.readFileSync(dbFile));
+    } else if (hadDb) {
+      out('На сервере уже есть база — оставляю её (подписчики и оплаты там свежее).\n');
+    }
+
+    out('\nУстанавливаю и запускаю (1–3 минуты)…\n');
+    const r = await exec(`cd ${REMOTE_DIR} && bash deploy/install.sh 2>&1`);
+    const active = (await exec('systemctl is-active olx-watcher', true)).text.trim() === 'active';
+    if (r.code !== 0 || !active) throw new Error('Бот на сервере не запустился — смотрите строки выше.');
+
+    settings.server = { host: String(host).trim(), port: Number(port) || 22, username: String(username || 'root').trim(), at: Date.now() };
+    settings.autoStart = false;   // на ПК больше не запускаем сам — бот живёт на сервере
+    bot.wanted = false;
+    saveSettings();
+    pushState();
+    out(`\n✅ Готово: бот работает на сервере ${host} круглосуточно. На этом компьютере он выключен.\n`);
+    return { ok: true };
+  } catch (e) {
+    const msg = /authentication/i.test(e.message) ? 'Неверный логин или пароль от сервера.'
+      : /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|Timed out/i.test(e.message) ? `Не удалось подключиться к ${host}: проверьте IP и что сервер включён.`
+        : e.message;
+    out(`\n✖ ${msg}\n`);
+    if (wasRunning && !bot.child) { out('Бот на этом компьютере снова запущен.\n'); startBot(); }
+    return { ok: false, error: msg };
+  } finally {
+    deploying = false;
+    conn.end();
+  }
+}
+
+ipcMain.handle('deploy', (_e, opts) => deployToServer(opts || {}));
+
 // ---------- IPC ----------
 
 ipcMain.handle('state', () => publicState());

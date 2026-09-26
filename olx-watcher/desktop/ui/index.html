@@ -13,6 +13,7 @@
       <button data-tab="bot" class="active">Бот</button>
       <button data-tab="users">Подписчики</button>
       <button data-tab="settings">Настройки</button>
+      <button data-tab="server">Сервер</button>
       <button data-tab="probe">Проверка площадок</button>
       <button data-tab="log">Журнал</button>
     </nav>
@@ -196,6 +197,27 @@
         <button id="btn-data" class="secondary">Папка с данными</button>
         <button id="btn-save" class="primary">Сохранить</button>
       </div>
+    </section>
+
+    <!-- Сервер -->
+    <section id="tab-server" class="tab">
+      <div class="card">
+        <h2>Бот на сервере — круглосуточно</h2>
+        <p class="muted">Введите данные VPS и нажмите «Установить». Приложение само зайдёт на сервер, положит бота в отдельную папку <code>/opt/olx-watcher</code>, перенесёт настройки, цены, подписчиков и поиски и запустит его. Другие папки и программы на сервере не трогаются, ничего не удаляется. Бот на этом компьютере после этого выключится — один токен работает в одном месте. Пароль нигде не сохраняется.</p>
+        <p class="muted" id="server-now"></p>
+        <div class="form-grid">
+          <label>IP сервера<input id="srv-host" placeholder="например, 185.22.33.44" spellcheck="false"></label>
+          <label>Порт SSH<input id="srv-port" value="22" inputmode="numeric"></label>
+          <label>Пользователь<input id="srv-user" value="root" spellcheck="false"></label>
+          <label>Пароль<input id="srv-pass" type="password" autocomplete="off"></label>
+        </div>
+        <div class="row">
+          <button id="btn-deploy" class="primary">Установить на сервер</button>
+          <span class="muted" id="deploy-msg"></span>
+        </div>
+        <p class="muted">Обновить бота на сервере до новой версии — та же кнопка: база и подписчики на сервере сохранятся.</p>
+      </div>
+      <pre id="deploy-out" class="console">Здесь будет ход установки.</pre>
     </section>
 
     <!-- Проверка площадок -->
