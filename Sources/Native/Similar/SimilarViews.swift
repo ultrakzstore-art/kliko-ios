@@ -92,15 +92,14 @@ private struct КарточкаПохожего: View {
                 Text(товар.title)
                     .font(.system(size: 12))
                     .foregroundStyle(сайт ? Theme.текст : Color.primary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
-                if !товар.city.isEmpty {
-                    Text(товар.city)
-                        .font(.system(size: 11))
-                        .foregroundStyle(сайт ? Theme.текстВторой : Color.secondary)
-                        .lineLimit(1)
-                }
+                /* Владелец 26.09.2026: карточки полосы одной высоты — строка города держит место и без города. */
+                Text(товар.city.isEmpty ? " " : товар.city)
+                    .font(.system(size: 11))
+                    .foregroundStyle(сайт ? Theme.текстВторой : Color.secondary)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 9)
             .padding(.top, 8)

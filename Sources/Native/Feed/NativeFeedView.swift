@@ -1416,17 +1416,16 @@ struct ListingCard: View {
                     .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: !крупныйТекст)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-                if !товар.city.isEmpty {
-                    Text(товар.city)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(товар.city.isEmpty ? " " : товар.city)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.top, 9)
             .padding(.bottom, 11)
         }
+        .вВысотуРядаСетки()
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -1452,6 +1451,7 @@ struct ListingCard: View {
             фотоСайта
             телоСайта
         }
+        .вВысотуРядаСетки()             // владелец 26.09.2026: карточки ряда сетки одной высоты, как у сайта
         .background(фонКарточкиСайта)
         .overlay(alignment: .top) {
             if let краска = краскаМагазина {
@@ -1608,6 +1608,7 @@ struct ListingCard: View {
                 .lineLimit(1)
             подвалСайта
                 .padding(.top, 6)
+                .frame(maxHeight: .infinity, alignment: .bottom)    // растянутая в ряду — низ прижат книзу
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -1625,6 +1626,7 @@ struct ListingCard: View {
                 .tracking(-0.02 * кегль(19))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .вСтрокуКарточки(.system(size: кегль(19), weight: .heavy))
         } else {
             Text(" ")
                 .font(.system(size: кегль(19), weight: .heavy))
@@ -1660,6 +1662,7 @@ struct ListingCard: View {
             .foregroundStyle(Theme.текстВторой)
             .layoutPriority(1)
         }
+        .вСтрокуКарточки(.system(size: кегль(11)))     // щит «Гаранта» не выше строки — низ карточек ровный
         .padding(.top, 10)
         .overlay(alignment: .top) {
             Rectangle()

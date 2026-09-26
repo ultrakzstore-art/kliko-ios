@@ -407,6 +407,30 @@ extension Listing {
 
 extension View {
     /**
+     Строка карточки ровно в одну строку шрифта `шрифт` (владелец 26.09.2026: «размеры объявлений одинаковые должны
+     быть»): высоту задаёт невидимый пробел этим шрифтом во всю ширину, а сама строка лежит поверх него слева. Цена
+     «Договорная» курсивом помельче, значок оценки или щит «Гаранта» выше текста — высота строки та же, и карточки ряда
+     не расходятся на пару точек, как у сайта с его line-height.
+     */
+    func вСтрокуКарточки(_ шрифт: Font) -> some View {
+        Text(" ")
+            .font(шрифт)
+            .lineLimit(1)
+            .hidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) { self }
+    }
+
+    /**
+     Карточка в ячейке сетки тянется на высоту ряда — как grid с align-items: stretch у сайта: LazyVGrid ставит ячейки
+     ряда по самой высокой, и короткая карточка дотягивает подложку до неё, а не кончается выше соседки. В ленте из
+     одних строк (без предложенной высоты) это её собственная высота — ничего не меняется.
+     */
+    func вВысотуРядаСетки() -> some View {
+        frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /**
      «Поделиться» на карточке ленты — .mk-cshare сайта (этап 49): кружок 32 pt из поверхности 90 % под сердцем (46 pt от
      верха, 8 от края), стрелка из квадрата серым. Нажатие — системный лист: ссылка на объявление и ««Название» — цена»,
      как текст mkShare. Слой над карточкой, а не внутри ссылки — как сердечкоИзбранного. Не вид сайта — ничего.
@@ -565,6 +589,7 @@ struct КарточкаГлавной: View {
                 .padding(.top, 10)
                 .padding(.bottom, 12)
         }
+        .вВысотуРядаСетки()             // VIP-сетка: карточки разных разделов в ряду — одной высоты
         .background(фон)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
@@ -671,6 +696,7 @@ struct КарточкаГлавной: View {
             цена.текст(кегль: кегль(16), главная: true)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .вСтрокуКарточки(.system(size: кегль(16), weight: .heavy))
         }
     }
 
@@ -718,20 +744,21 @@ struct КарточкаГлавной: View {
                 Text(оценка.отзывы)
                     .font(.system(size: кегль(11), weight: .medium))
                     .foregroundStyle(Theme.текстВторой)
-            } else {
-                Text(" ").font(.system(size: кегль(12), weight: .bold))
             }
         }
         .lineLimit(1)
+        .вСтрокуКарточки(.system(size: кегль(12), weight: .bold))
     }
 
     /// .mh-ft — 11 px серым в строку.
+    /// Растянутая в ряду VIP-сетки карточка — подвал прижат книзу, как низ карточки сайта.
     private func подвал(_ строка: String) -> some View {
         Text(строка.isEmpty ? " " : строка)
             .font(.system(size: кегль(11)))
             .foregroundStyle(Theme.текстВторой)
             .lineLimit(1)
             .padding(.top, 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 }
 
@@ -761,6 +788,7 @@ struct КарточкаВакансииГлавной: View {
                 .font(.system(size: кегль(зарплата == nil ? 14 : 15), weight: зарплата == nil ? .semibold : .heavy))
                 .foregroundStyle(зарплата == nil ? Theme.текстВторой : Theme.текст)
                 .lineLimit(1)
+                .вСтрокуКарточки(.system(size: кегль(15), weight: .heavy))
             Text(вакансия.компания.isEmpty ? " " : вакансия.компания)
                 .font(.system(size: кегль(14), weight: .semibold))
                 .foregroundStyle(Theme.текст)
@@ -1126,16 +1154,13 @@ struct КарточкаНедавнегоСайта: View {
                 .multilineTextAlignment(.leading)
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
-            if let цена {
-                Text(цена)
-                    .font(.system(.footnote, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-            } else {
-                Color.clear.frame(height: 10)
-            }
+            /* У услуг цены нет — строка всё равно держит своё место: карточки полосы одной высоты. */
+            Text(цена ?? " ")
+                .font(.system(.footnote, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
         }
         .frame(width: ПолосаНедавнихСайта.ширина, alignment: .leading)
         .background(Theme.поверхность)
