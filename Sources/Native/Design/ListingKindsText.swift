@@ -6,7 +6,7 @@ import Foundation
 
  Русские слова — со страницы объявления сайта: словарь js/i18n-marketplace-ru.js (chk_* — кнопка и отчёт проверки,
  installment, credit, pay_methods — «Способы оплаты», rplan_t — «Схема помещения», sec_location — «Расположение»,
- open_2gis, fac_*/spec_* — подписи и значения характеристик SPEC_LBL_MAP/SPEC_VAL_MAP) и MK_REALTY_LBL в
+ open_2gis, fac_… и spec_… — подписи и значения характеристик SPEC_LBL_MAP/SPEC_VAL_MAP) и MK_REALTY_LBL в
  js/marketplace.min.js (подписи полей жилья). Тексты отчёта, которых нет в словаре, — как у сайта прямо в коде
  (_mkChkLock, _mkChkEmpty, mkCheckReport, mkPayRow).
  */
