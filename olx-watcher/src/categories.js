@@ -169,7 +169,8 @@ async function children(path) {
 function parseChildren(html, path) {
   const depth = path.split('/').length + 1;
   const out = new Map();
-  const re = /<a\b[^>]*href="(?:https?:\/\/(?:www\.)?olx\.kz)?\/d\/(?:(?:kk|ru)\/)?([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"[^>]*>([\s\S]*?)<\/a>/gi;
+  // Ссылки рубрик бывают и с /d/, и без: /d/elektronika/telefony/ и /elektronika/telefony/.
+  const re = /<a\b[^>]*href="(?:https?:\/\/(?:www\.)?olx\.kz)?\/(?:d\/)?(?:(?:kk|ru)\/)?([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"[^>]*>([\s\S]*?)<\/a>/gi;
   for (const m of html.matchAll(re)) {
     const p = m[1].toLowerCase();
     const parts = p.split('/');

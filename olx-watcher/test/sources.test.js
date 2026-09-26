@@ -403,3 +403,20 @@ test('Kaspi по номеру: заглушка «Kaspi Объявления» �
   const job = parseDetail('<h1 class="desktop-template__title">Механик</h1><script>{dateCreate:"2026-09-25T18:42:52+05:00"}</script>', { id: 123561285, url: 'https://obyavleniya.kaspi.kz/a/123561285/' });
   assert.strictEqual(kaspiReal(job), true, 'вакансия без цены, но с временем подачи');
 });
+
+test('подрубрики на любую глубину: OLX (ссылки с /d/ и без), Kaspi (со страницы и из встроенного списка)', async () => {
+  const cats = require('../src/categories');
+  const olxHtml = '<a href="/elektronika/telefony-i-aksesuary/mobilnye-telefony-smartfony/">Мобильные телефоны / смартфоны 1 234</a>'
+    + '<a href="https://www.olx.kz/d/elektronika/telefony-i-aksesuary/aksessuary-dlya-telefonov/">Аксессуары</a>'
+    + '<a href="/elektronika/telefony-i-aksesuary/almaty/">Алматы</a><a href="/d/obyavlenie/x-IDabc.html">x</a>';
+  assert.deepStrictEqual(cats.parseChildren(olxHtml, 'elektronika/telefony-i-aksesuary').map((c) => c.name), ['Мобильные телефоны / смартфоны', 'Аксессуары']);
+
+  const kHtml = '<a href="/almaty/elektronika/computery/noutbuki/?advertSource=x">Ноутбуки 512</a><a href="/elektronika/computery/monitory/">Мониторы</a><a href="/elektronika/computery/k--hp/">hp</a>';
+  assert.deepStrictEqual(sources.parseKaspiChildren(kHtml, 'elektronika/computery').map((c) => c.path), ['elektronika/computery/noutbuki', 'elektronika/computery/monitory']);
+
+  // Сайт недоступен — встроенный список, тоже по уровням.
+  const w = sources.get('kaspi').wizard;
+  const lvl1 = (await w.children('elektronika')).map((c) => c.path);
+  assert.ok(lvl1.includes('elektronika/computery') && !lvl1.includes('elektronika/computery/noutbuki'), lvl1.join());
+  assert.ok((await w.children('elektronika/computery')).some((c) => c.path === 'elektronika/computery/noutbuki'));
+});

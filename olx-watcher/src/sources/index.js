@@ -141,6 +141,38 @@ const KASPI_CATEGORIES = [
   { name: 'Бизнес и оборудование', path: 'biznes' },
 ];
 
+// Подрубрики Kaspi на уровень ниже: с самой страницы рубрики (ссылки /<рубрика>/<подрубрика>/, в
+// том числе с городом впереди), иначе — из встроенного списка. Пусто — конечная рубрика.
+const kaspiKids = new Map();   // путь → { at, list }
+function kaspiStatic(path) {
+  const all = [...KASPI_CATEGORIES, ...KASPI_CATEGORIES.flatMap((c) => c.subs || [])];
+  const depth = path.split('/').length + 1;
+  return all.filter((c) => c.path.startsWith(`${path}/`) && c.path.split('/').length === depth).map(({ name, path: p }) => ({ name, path: p }));
+}
+function parseKaspiChildren(html, path) {
+  const depth = path.split('/').length + 1;
+  const out = new Map();
+  for (const m of String(html).matchAll(/<a\b[^>]*href="(?:https?:\/\/obyavleniya\.kaspi\.kz)?\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    let parts = m[1].toLowerCase().split('/');
+    if (parts.length > 1 && KASPI_CITY_SLUGS.includes(parts[0]) && !path.startsWith(`${parts[0]}/`)) parts = parts.slice(1);
+    const p = parts.join('/');
+    if (parts.length !== depth || !p.startsWith(`${path}/`) || /^k--/.test(parts[parts.length - 1])) continue;
+    const name = m[2].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').replace(/\s*\d[\d\s]*$/, '').trim();
+    if (!name || name.length > 60 || out.has(p)) continue;
+    out.set(p, { name, path: p });
+  }
+  return [...out.values()].slice(0, 40);
+}
+async function kaspiChildren(path) {
+  const hit = kaspiKids.get(path);
+  if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.list;
+  let list = [];
+  try { list = parseKaspiChildren((await getHtml(`${KASPI_BASE}/${path}/`)) || '', path); } catch { list = []; }
+  if (!list.length) list = kaspiStatic(path);
+  kaspiKids.set(path, { at: Date.now(), list });
+  return list;
+}
+
 // Объявление Kaspi: /a/<номер> или /a/<название>-<номер>/ (например /a/123509497, /a/iphone-15-112633239/).
 function kaspiIds(html) {
   const out = new Map();
@@ -322,6 +354,7 @@ const KASPI = {
   link: (ad) => ad.url,
   wizard: {
     categories: KASPI_CATEGORIES,
+    children: (path) => kaspiChildren(path),   // подрубрики на любую глубину
     cities: CITIES,
     words: true,     // слова — частью ссылки: k--слово
     noPrice: true,   // фильтр цены у Kaspi в ссылке не проверен — не спрашиваем
@@ -401,4 +434,4 @@ function kaspiMismatch(sub, ad) {
   return null;
 }
 
-module.exports = { kaspiReal, KASPI_CITY_SLUGS, kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
+module.exports = { parseKaspiChildren, kaspiReal, KASPI_CITY_SLUGS, kaspiMismatch, kaspiIds, kaspiSort, kaspiCityLinks, kaspiRounds, kaspiSortInUse: () => kaspiSortParam, ALL, BY_KEY, byUrl, get: (key) => BY_KEY[key] || OLX, CITIES, olxCategories: cats };
