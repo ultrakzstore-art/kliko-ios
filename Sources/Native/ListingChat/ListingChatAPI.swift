@@ -23,8 +23,8 @@ import Foundation
  via — "telegram".
 
  Предложение цены — ровно mkOfferSend: text с суммой и offer {price, method: "cash", term: 0, pickup, ship_by_buyer},
- force_escalate: true. Подкрепить деньгами, отозвать, принять встречную (offer_fund / offer_unfund / offer_withdraw /
- offer_counter_*) здесь НЕТ: они держат и возвращают деньги — это остаётся на сайте.
+ force_escalate: true. Подкрепить деньгами и принять встречную (offer_fund / offer_unfund / offer_counter_*) здесь НЕТ:
+ они держат и возвращают деньги — это остаётся на сайте. Отзыв предложения (offer_withdraw) — OfferWithdraw.swift.
 
  Разбор терпимый, как у ленты (Listing): числа строкой или числом, массив — иногда объектом {"0":…}, чего нет — пусто.
  Здесь только запросы: когда слать, решает МодельЧатаОбъявления. Повторов нет: одно нажатие — один запрос.
@@ -500,7 +500,7 @@ struct СообщениеЧатаОбъявления: Identifiable, Equatable, 
 }
 
 /// offer{} своего предложения (mkOfferOwnCard).
-struct ПредложениеВЧате: Equatable, Sendable {
+struct ПредложениеВЧате: Hashable, Sendable {
     let цена: Int
     /// method: cash | inst | cred.
     let способ: String

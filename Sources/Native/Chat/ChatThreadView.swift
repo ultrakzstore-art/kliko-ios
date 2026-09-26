@@ -46,6 +46,8 @@ final class ChatThreadModel: ObservableObject {
     private let номерОткрытия: String
     /// Этап 45: thread.peer_read_at — «✓✓ Прочитано» / «✓ Отправлено» под последним моим (§6.4.8 i).
     @Published private(set) var прочиталДо = ""
+    /// lead{role, agreed, pid, no_escrow} ответа open/poll (_dmLead кабинета): торг в этой переписке.
+    @Published private(set) var торг: ТоргПереписки? = nil
 
     /// Переписка на сайте — туда ведут пуши о новых сообщениях (AppDelegate).
     static var адресПереписки: URL? { Config.url("/cabinet.php?s=messages") }
@@ -173,6 +175,12 @@ final class ChatThreadModel: ObservableObject {
         if собеседник.isEmpty && !переписка.собеседникID.isEmpty { собеседник = переписка.собеседникID }
         if переписка.сообщения != сообщения { сообщения = переписка.сообщения }
         if переписка.прочиталДо != прочиталДо { прочиталДо = переписка.прочиталДо }
+        if let новый = переписка.торг, новый != торг { торг = новый }
+        /* Ждущее своё предложение — и на страницу объявления (полоса «Ваше предложение» с той же кнопкой). */
+        let объявлениеТорга = объявлениеПредложения
+        if !объявлениеТорга.isEmpty {
+            ТоргПредложений.shared.запомнить(объявление: объявлениеТорга, ждущееПредложение)
+        }
         /* TestFlight, владелец: «последние сообщения в чате не отразились в общем списке». Переписка на экране знает
            последнее сообщение раньше списка — его строка («Вы: …», время, место наверху, погасшие непрочитанные)
            меняется сразу, а не после следующего ответа dm.php list. */
@@ -192,6 +200,8 @@ final class ChatThreadModel: ObservableObject {
         guard let когда = с.когда.isEmpty ? запасное : с.когда, !когда.isEmpty else { return nil }
         var значок: String? = nil
         var текст = с.текст
+        /* Предложение цены без текста — «Предложение: N ₸», как строка сервера; иначе превью было бы пустым. */
+        if текст.isEmpty { текст = с.текстДляСписка }
         switch с.тип {
         case "rental":
             значок = "calendar"
@@ -221,6 +231,73 @@ final class ChatThreadModel: ObservableObject {
     var естьНазначенный: Bool {
         сообщения.contains { $0.заявка?.назначена == true }
     }
+
+    // MARK: - Предложение цены (_dmOfferCard, dmOfferWithdraw)
+
+    /// offer и counter до последнего offer — «Заменено новым предложением» (_dmRender: e._replaced).
+    var заменённые: Set<String> {
+        guard let последнее = сообщения.lastIndex(where: { $0.вид == "offer" }) else { return [] }
+        var итог: Set<String> = []
+        for (место, с) in сообщения.enumerated() where место < последнее {
+            if с.вид == "offer" || с.вид == "counter" { итог.insert(с.id) }
+        }
+        return итог
+    }
+
+    /// Объявление торга: lead.pid, иначе объявление, с которым открыта переписка.
+    var объявлениеПредложения: String {
+        let изТорга = торг?.объявление ?? ""
+        return изТорга.isEmpty ? объявление : изТорга
+    }
+
+    /// Номер сообщения со своим ждущим предложением — под ним «Отозвать предложение». Как _dmOfferCard: своё (mine),
+    /// я покупатель (lead.role, если сервер его прислал), не отозвано, не заменено, не принято, цены по договорённости нет.
+    var ждущееСообщение: String? {
+        guard let место = сообщения.lastIndex(where: { $0.вид == "offer" }) else { return nil }
+        let с = сообщения[место]
+        guard с.моё, let п = с.предложение else { return nil }
+        if let торг, !торг.роль.isEmpty && !торг.покупатель { return nil }
+        guard !п.отозвано, !п.принято, (торг?.согласовано ?? 0) == 0 else { return nil }
+        return с.id
+    }
+
+    var ждущееПредложение: ЖдущееПредложениеЦены? {
+        guard let номер = ждущееСообщение, let с = сообщения.first(where: { $0.id == номер }),
+              let п = с.предложение else { return nil }
+        return ЖдущееПредложениеЦены(объявление: объявлениеПредложения, чат: tid, цена: п.цена,
+                                     подкреплено: п.подкреплено)
+    }
+
+    /// Плашка итога («Предложение отозвано…», ошибка) — .kc-toast кабинета.
+    @Published private(set) var плашка: String? = nil
+
+    /**
+     dmOfferWithdraw → _dmOfferGo("offer_withdraw"): POST {csrf, chat_id: tid} (как сайт — без pid), затем dmPollTick —
+     карточка гаснет, уведомление сервера приходит в переписку и в строку «Чата». Окно подтверждения показал экран;
+     подкреплённое деньгами при выключенных деньгах сделок сюда не приходит (экран открывает сайт).
+     */
+    func отозватьПредложение() async {
+        guard let ждущее = ждущееПредложение, !tid.isEmpty,
+              ОтзывПредложенияAPI.здесь(подкреплено: ждущее.подкреплено) else { return }
+        guard let итог = await ТоргПредложений.shared.отозвать(объявление: ждущее.объявление, чат: tid,
+                                                              сОбъявлением: false) else { return }
+        switch итог {
+        case .готово(let текст):
+            показатьПлашку(текст)
+            await обновить()
+        case .ошибка(let текст):
+            показатьПлашку(текст)
+        }
+    }
+
+    private func показатьПлашку(_ текст: String) {
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard let self, self.плашка == текст else { return }
+            withAnimation(ДвижениеСайта.уход) { self.плашка = nil }
+        }
+    }
 }
 
 struct ChatThreadView: View {
@@ -243,6 +320,9 @@ struct ChatThreadView: View {
     @State private var клавиатураЕдет = false
     /// «Назад» своей шапки сайта — системная панель в виде сайта спрятана (шапкаСайта).
     @Environment(\.dismiss) private var закрыть
+    /// Окно «Отозвать предложение?» (boostConfirm кабинета).
+    @State private var спроситьОтзыв = false
+    @ObservedObject private var торгПредложений = ТоргПредложений.shared
 
     init(модель: @autoclosure @escaping () -> ChatThreadModel, заголовок: String, открыть: @escaping (URL) -> Void) {
         _модель = StateObject(wrappedValue: модель())
@@ -302,6 +382,10 @@ struct ChatThreadView: View {
             await модель.начать()
             await модель.опрос()
         }
+        .вопросОтозватьПредложение($спроситьОтзыв) {
+            Task { await модель.отозватьПредложение() }
+        }
+        .overlay(alignment: .bottom) { плашкаТорга }
         /* Этап 16: переписка на экране — просьба оценить её не перебивает (ПросьбаОценить). */
         .onAppear { ПросьбаОценить.shared.делоНаЭкране() }
         .onDisappear {
@@ -461,10 +545,61 @@ struct ChatThreadView: View {
         withAnimation(ДвижениеСайта.появление) { кнопкаВниз = true }
     }
 
+    /// Итог отзыва предложения — плашка над строкой ввода (.kc-toast кабинета).
+    private var плашкаТорга: some View {
+        ZStack(alignment: .bottom) {
+            if let текст = модель.плашка {
+                Text(текст)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1)
+                    }
+                    .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 76)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(ДвижениеСайта.смена, value: модель.плашка)
+    }
+
+    /// «Отозвать предложение» под своей карточкой: неподкреплённое — окно подтверждения; подкреплённое деньгами при
+    /// выключенных деньгах сделок — объявление на сайте с открытым чатом.
+    private func отозватьНажали() {
+        guard let ждущее = модель.ждущееПредложение else { return }
+        if ОтзывПредложенияAPI.здесь(подкреплено: ждущее.подкреплено) {
+            спроситьОтзыв = true
+        } else if let адрес = ОтзывПредложенияAPI.чатНаСайте(объявление: ждущее.объявление) {
+            открыть(адрес)
+        } else if let адрес = ChatThreadModel.адресПереписки {
+            открыть(адрес)
+        }
+    }
+
     /// Строка переписки: служебное уведомление — по центру без облака, остальное — облаком своей стороны.
     @ViewBuilder
     private func пузырь(_ с: ЧатСообщение) -> some View {
-        if Config.нативныеСообщенияКабинета, let заявка = с.заявка {
+        if Config.нативныеСообщенияКабинета, с.вид == "offer", с.моё, let предложение = с.предложение {
+            /* TestFlight 26.09.2026: своё предложение цены — карточка _dmOfferCard кабинета («Ваше предложение», сумма,
+               способ, «Подкреплено», «Отозвано» / «Заменено…») и «Отозвать предложение» под ждущим, а не облако текста. */
+            let действие: (() -> Void)? = с.id == модель.ждущееСообщение ? { отозватьНажали() } : nil
+            КарточкаПредложенияЧата(предложение: предложение,
+                                    заменено: модель.заменённые.contains(с.id),
+                                    согласовано: модель.торг?.согласовано ?? 0,
+                                    безГаранта: модель.торг?.безГаранта ?? false,
+                                    отозвать: действие,
+                                    отзываем: торгПредложений.идёт(объявление: модель.объявлениеПредложения,
+                                                                  чат: модель.tid))
+            if с.id == модель.последнееМоё {
+                ОтметкаПрочтения(прочитано: модель.прочитано(с))
+            }
+        } else if Config.нативныеСообщенияКабинета, let заявка = с.заявка {
             /* Этап 45: заявка мастеру — карточка кабинета (_dmRender) вместо пилюли. */
             КарточкаЗаявкиВЧате(заявка: заявка, текст: с.текст, естьНазначенный: модель.естьНазначенный,
                                 открыть: открыть)

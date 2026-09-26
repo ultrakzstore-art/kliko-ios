@@ -143,6 +143,10 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     let хорошее: Bool
     /// Этап 45: служебное сообщение с meta.request — карточка заявки мастеру (_dmRender кабинета, карта §6.9.1).
     let заявка: ЗаявкаВЧате?
+    /// kind: offer | counter | offer_ok | offer_funded | offer_unfunded | offer_no | contact; пусто — обычное.
+    let вид: String
+    /// offer{} предложения цены (kind offer) — карточка _dmOfferCard кабинета: «Ваше предложение» и «Отозвать».
+    let предложение: ПредложениеВЧате?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
@@ -155,9 +159,24 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
            событие), а приложение читало только mine/type/text и не могло их отличить. Все поля — терпимым разбором:
            нет поля — просто «нет». Этап 45 (владелец 26.09.2026): поля — только проверенные по коду кабинета (карта
            §6.4.10), догадки (sys, is_system, notice, event…) убраны. */
-        let вид = c.строка("kind") ?? ""
+        вид = (c.строка("kind") ?? "").lowercased()
         системное = Self.этоУведомление(роль: c.строка("role") ?? "", вид: вид, тип: тип, текст: текст)
         хорошее = вид == "offer_ok" || вид == "offer_funded"
+        /* Предложение цены в переписке (карта кабинета §13: kind "offer", offer{price, method, term, funded, withdrawn,
+           accepted, countered}) — поля те же, что у чата объявления. */
+        if вид == "offer", let o = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("offer")) {
+            let целая = o.целое("price")
+            let цена = целая != 0 ? целая : Int(o.дробное("price").rounded())
+            предложение = ПредложениеВЧате(цена: max(0, цена),
+                                           способ: (o.строка("method") ?? "").lowercased(),
+                                           срок: max(0, o.целое("term")),
+                                           подкреплено: max(0, o.целое("funded")),
+                                           отозвано: o.да("withdrawn"),
+                                           принято: o.да("accepted"),
+                                           встречнаяПринята: max(0, o.целое("countered")))
+        } else {
+            предложение = nil
+        }
         if let meta = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("meta")) {
             /* У dm.php адрес медиа — в meta.url (карта §6.4.10); src — прежний запасной ключ этапа 3. */
             if let адрес = meta.строка("url") ?? meta.строка("src") {
@@ -189,6 +208,24 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     }
 
     var подпись: String { Self.подпись(тип: тип, текст: текст) }
+
+    /// Превью предложения цены без текста — как пишет его сервер: «Предложение: 12 500 ₸» (по-русски на любом языке, как
+    /// строки сервера в переписке).
+    static func текстПредложения(_ цена: Int) -> String {
+        let ф = NumberFormatter()
+        ф.numberStyle = .decimal
+        ф.groupingSeparator = "\u{00A0}"
+        ф.maximumFractionDigits = 0
+        let сумма = ф.string(from: NSNumber(value: цена)) ?? String(цена)
+        return "Предложение: " + сумма + "\u{00A0}₸"
+    }
+
+    /// Текст для строки «Чата» (превью): подпись, а у предложения без текста — «Предложение: N ₸».
+    var текстДляСписка: String {
+        let обычный = подпись
+        if обычный.isEmpty, let п = предложение { return Self.текстПредложения(п.цена) }
+        return обычный
+    }
 
     /// Виды уведомлений о предложении цены — MK_CHAT_SYS_KINDS витрины (MK27 @568555): mkChatBubble рисует их строкой
     /// .kc-sys. Кабинет их не знает, но карта кабинета (§6.4.10) советует считать их служебными и в нём.
@@ -236,6 +273,8 @@ struct ЧатПереписка: Decodable {
     var собеседникID: String
     /// Собеседник удалён (peer.gone / peer_gone) — витрины у него нет.
     var собеседникУшёл: Bool
+    /// lead{role, agreed, pid, no_escrow} из корня ответа open/poll (_dmLead кабинета) — торг в этой переписке.
+    var торг: ТоргПереписки? = nil
 
     private struct Любое: Decodable {
         let значение: ЧатСообщение?
@@ -303,6 +342,9 @@ struct ЧатОтвет: Decodable {
         /* Собеседник из корня ответа: open отдаёт peer{id, name, gone} рядом с thread (openDM сайта берёт p.peer.id).
            Он главнее того, что лежит в самой переписке. */
         if найдена != nil {
+            if let торг = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("lead")) {
+                найдена?.торг = ТоргПереписки(торг)
+            }
             if c.собеседникУшёл("peer") {
                 найдена?.собеседникУшёл = true
             } else if let номер = c.номерСобеседника("peer") ?? c.номерСобеседника("peer_id")
@@ -317,6 +359,27 @@ struct ЧатОтвет: Decodable {
             ok = (код ?? "").isEmpty && (найдена != nil || c.contains(ЧатКлюч("threads")))
         }
     }
+}
+
+/**
+ Торг в личной переписке — lead{role, agreed, pid, no_escrow} ответа dm.php open/poll (карта кабинета §13.2, _dmLead):
+ кто я в этой сделке, согласованная цена, объявление и «без гаранта». По нему карточка своего предложения решает, показать
+ ли «Отозвать предложение» (_dmOfferCard: только покупателю, _dmIsBuyer).
+ */
+struct ТоргПереписки: Hashable {
+    let роль: String
+    let согласовано: Int
+    let объявление: String
+    let безГаранта: Bool
+
+    init(_ c: KeyedDecodingContainer<ЧатКлюч>) {
+        роль = (c.строка("role") ?? "").lowercased()
+        согласовано = max(0, c.целое("agreed"))
+        объявление = c.строка("pid") ?? ""
+        безГаранта = c.да("no_escrow")
+    }
+
+    var покупатель: Bool { роль == "buyer" }
 }
 
 /**

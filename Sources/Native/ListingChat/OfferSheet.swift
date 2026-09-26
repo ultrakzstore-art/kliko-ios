@@ -16,19 +16,30 @@ import SwiftUI
  Способ оплаты не спрашиваем: рассрочка и кредит у сайта считаются по условиям объявления (payment), которых у приложения
  нет, — уходит «cash», выбранный сайтом по умолчанию. Окно закрывается сразу, как mkOfferClose() до запроса; отправляет
  МодельЧатаОбъявления.
+
+ Своё предложение уже ждёт ответа (TestFlight, владелец 26.09.2026: «отозвать предложение нет») — над ползунком строка
+ «Ваше предложение · N ₸ · Ждём ответа продавца» и «Отозвать предложение»: окно подтверждения и запрос — у чата
+ (ЭкранЧатаОбъявления), лист только закрывается. Новое предложение и так заменит прежнее («Заменено новым предложением»).
  */
 struct ЛистПредложенияЦены: View {
     let товар: Listing
     /// Цена, процент для текста («(-N%)» — только если выбран ползунком) и «Заберу сам».
     let отправить: (Int, Int, Bool) -> Void
+    /// Своё предложение, которое ещё ждёт ответа продавца; nil — строки нет.
+    let ждущее: ЖдущееПредложениеЦены?
+    /// «Отозвать предложение» у строки ждущего; nil — кнопки нет.
+    let отозвать: (() -> Void)?
     @State private var процент: Double = 0
     @State private var своя = ""
     @State private var забрать = false
     @FocusState private var вПоле: Bool
     @Environment(\.dismiss) private var закрыть
 
-    init(товар: Listing, отправить: @escaping (Int, Int, Bool) -> Void) {
+    init(товар: Listing, ждущее: ЖдущееПредложениеЦены? = nil, отозвать: (() -> Void)? = nil,
+         отправить: @escaping (Int, Int, Bool) -> Void) {
         self.товар = товар
+        self.ждущее = ждущее
+        self.отозвать = отозвать
         self.отправить = отправить
     }
 
@@ -88,6 +99,10 @@ struct ЛистПредложенияЦены: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 шапка
+                if let ждущее, let отозвать {
+                    СтрокаЖдущегоПредложения(ждущее: ждущее, отозвать: отозвать)
+                        .padding(.top, 10)
+                }
                 if база > 0 {
                     ценаПродавца
                         .padding(.top, 10)
@@ -356,5 +371,35 @@ struct ЛистПредложенияЦены: View {
         let g = (от[1] + (до[1] - от[1]) * t) * доля / 255
         let b = (от[2] + (до[2] - от[2]) * t) * доля / 255
         return Color(red: r, green: g, blue: b)
+    }
+}
+
+/// Строка своего ждущего предложения в окне «Предложить цену»: сумма, «Ждём ответа продавца» (или «Подкреплено · …»)
+/// и «Отозвать предложение» (.mk-ofc-x). Светлая и тёмная — краски Theme.
+private struct СтрокаЖдущегоПредложения: View {
+    let ждущее: ЖдущееПредложениеЦены
+    let отозвать: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(ТекстыОтзываПредложения.т("mine") + " · " + ListingCard.тенге(Double(ждущее.цена)))
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+            Text(ждущее.подкреплено > 0
+                 ? ТекстыОтзываПредложения.т("held") + " · " + ListingCard.тенге(Double(ждущее.подкреплено))
+                 : ТекстыОтзываПредложения.т("wait"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+            КнопкаОтозватьПредложение(занято: false, нажать: отозвать)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
     }
 }
