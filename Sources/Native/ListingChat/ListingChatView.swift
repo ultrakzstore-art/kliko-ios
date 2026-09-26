@@ -1006,6 +1006,15 @@ struct КарточкаГеоЧата: View {
     let изTelegram: Bool
     @Environment(\.openURL) private var открытьСсылку
 
+    /// Этап 45: явный init — карточку берёт и лид-чат кабинета (LeadChatView.swift), а скрытое окружение делает
+    /// встроенный init видимым только внутри этого файла.
+    init(моё: Bool, широта: Double, долгота: Double, изTelegram: Bool) {
+        self.моё = моё
+        self.широта = широта
+        self.долгота = долгота
+        self.изTelegram = изTelegram
+    }
+
     private var ссылки: [(String, URL?)] {
         let ш = String(широта)
         let д = String(долгота)

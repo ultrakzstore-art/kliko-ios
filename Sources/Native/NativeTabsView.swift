@@ -112,7 +112,10 @@ struct NativeTabsView: View {
             guard Config.нативныйЧат else { return }
             while !Task.isCancelled {
                 await обновитьСчётчик()
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                /* Этап 45: у кабинета сайта число «Чата» сверяется раз в 12 с (loadLeadsBadge), пока вкладка видна;
+                   без инбокса кабинета — прежняя минута. */
+                let пауза: UInt64 = Config.нативныеСообщенияКабинета ? 12_000_000_000 : 60_000_000_000
+                try? await Task.sleep(nanoseconds: пауза)
             }
         }
     }
@@ -416,6 +419,20 @@ struct NativeTabsView: View {
             var путь = NavigationPath()
             путь.append(КабинетЦель.сделки)
             путь.append(КабинетЦель.сделка(номер))
+            путьКабинета = путь
+            вкладка = .кабинет
+        case .заявки:
+            /* Этап 45: ?s=requests — вкладка «Кабинет» и «Заявки рядом» поверх неё. */
+            guard NativeRouter.доступна(.заявки) else { return }
+            var путь = NavigationPath()
+            путь.append(КабинетЦель.заявки)
+            путьКабинета = путь
+            вкладка = .кабинет
+        case .обращение(let номер):
+            /* Этап 45: ?ticket=<id> — переписка по обращению поверх кабинета. */
+            guard NativeRouter.доступна(.обращение(id: номер)) else { return }
+            var путь = NavigationPath()
+            путь.append(КабинетЦель.обращение(номер))
             путьКабинета = путь
             вкладка = .кабинет
         }

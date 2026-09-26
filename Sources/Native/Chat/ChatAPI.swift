@@ -12,6 +12,12 @@ import Foundation
  (непустой KlikoUser.id), поэтому гость получает «нужен вход», не дёргая dm.php: _MKP_CSRF у гостя есть, и без этой
  проверки его запрос ушёл бы на сайт.
 
+ Этап 45 (владелец 26.09.2026): me_id — как у сайта (карта кабинета §6.4.2, §6.4.8): list и poll несут его параметром,
+ open и send — полем тела (_dmMe() кабинета = localStorage.ulx_me_id = KlikoUser.id). Номер берётся только дёшево —
+ из страницы под слоем или уже известный (ИнбоксAPI.номерБыстро): страницу кабинета ради него каждые три секунды не
+ качаем. Нет номера — запрос уходит без него, как раньше. open получил tid: строка инбокса «Покупка» открывает
+ переписку по chat_id (openBuyerChat → openDM(peer, pid, имя, chat_id)), как сайт.
+
  🔴 КОНТРАКТ ИЗ ИЮЛЯ. dm.php в июле принимал bearer-токен приложения; сейчас приложение живёт на куках веб-сессии,
  как сама страница. Что dm.php отвечает на куки так же, проверено не было (кода сайта нет под рукой): отправка
  потому включается рубильником Config.нативныйЧатОтправка, а до проверки ответ пишется на сайте.
@@ -52,9 +58,12 @@ enum ChatAPI {
     // MARK: - Запись
 
     /// Открыть (или создать) диалог с собеседником, при необходимости — по объявлению.
-    static func открыть(собеседник: String, объявление: String) async throws -> (ЧатПереписка?, заблокирован: Bool) {
+    static func открыть(собеседник: String, объявление: String,
+                        номер: String = "") async throws -> (ЧатПереписка?, заблокирован: Bool) {
         var поля: [String: Any] = ["action": "open", "peer_id": собеседник]
         if !объявление.isEmpty { поля["listing_id"] = объявление }
+        /* Этап 45: tid — номер известной переписки (строка инбокса), как openDM сайта. */
+        if !номер.isEmpty { поля["tid"] = номер }
         let ответ = try await отправить(поля)
         return (ответ.переписка, ответ.заблокирован)
     }
@@ -67,7 +76,11 @@ enum ChatAPI {
 
     private static func получить(_ поля: [URLQueryItem]) async throws -> ЧатОтвет {
         var ч = URLComponents(url: адрес, resolvingAgainstBaseURL: false)!
-        ч.queryItems = поля
+        var всеПоля = поля
+        /* Этап 45: me_id — как dm.php?action=list&me_id= и poll&tid=&me_id= сайта. */
+        let я = await ИнбоксAPI.номерБыстро()
+        if !я.isEmpty { всеПоля.append(URLQueryItem(name: "me_id", value: я)) }
+        ч.queryItems = всеПоля
         var запрос = URLRequest(url: ч.url!)
         запрос.httpShouldHandleCookies = false
         for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
@@ -81,6 +94,9 @@ enum ChatAPI {
 
         var тело = поля
         тело["csrf"] = csrf
+        /* Этап 45: me_id — полем тела, как open / send / set_label сайта. */
+        let я = await ИнбоксAPI.номерБыстро()
+        if !я.isEmpty { тело["me_id"] = я }
         var запрос = URLRequest(url: адрес)
         запрос.httpMethod = "POST"
         запрос.httpShouldHandleCookies = false

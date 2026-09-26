@@ -78,7 +78,8 @@
 | 42 ✅ | Подача и правка объявления своим мастером: «Что размещаете?» с плитками сайта, семь шагов `ADD_STEPS` с проверками «Далее», каскад разделов `js/cats-<язык>.js`, поля `js/cab-refs.js` (E_SPECS, бренды, недвижимость, запчасти, регионы), мастер авто (`/api/auto_models.php`) и запчастей (`/api/parts_types.php`), фото из галереи и камеры (1280 px JPEG, водяной знак `KLK_WM`, `upload_photo` тремя способами и `thumb_for`), «Распознать» по нажатию (`recognize`, `paid: 0`), «Проверьте перед публикацией», `submit` / `edit_item` со всеми ответами сайта, «Дополнительно» (`save_payment`, `save_delivery`, `save_trust`), черновик на 7 дней; ТОП при подаче — только за `Config.цифровыеПокупки` | `Sources/Native/Posting/` |
 | 43 ✅ | «Мои сделки» своим экраном: вкладки «Я продавец» / «Я покупатель» (`my_deals`), значок у строки кабинета (`role=both`), карточка сделки (`deal`) с мастером шагов, живым обновлением (`deal_wait` по `sig` и запасной опрос раз в 15 с) и Live Activity; передача (`set_handover`, `set_track`, `courier_called`, маршрут и такси через Яндекс Go и 2ГИС, пункты `car_points` и `car_order` перевозчика), спор (`dispute`) и доказательства (`upload_evidence`), «Подтвердить условия» / «Отклонить заявку» услуги (`accept_terms`), оценка после сделки (`update_review`), `warranty_ask`, «Деньги и документы», история, чек; ссылки `?go=deals`, `?s=deals`, `?deal=<id>`; всё, что двигает деньги, — страницей сделки сайта (`Config.деньгиСделок`) | `Sources/Native/Deals/` |
 | 44 ✅ | Деньги сделок своими окнами — только за `Config.деньгиСделок` (`false`; выключен — кнопки открывают страницу сделки сайта): оплата (`points` → «Применить баллы?» / «Заморозить средства?» → ход → `pay`, `need_otp` → окно eGov `otp_step_create` / `otp_step_check`, `pay_card` → страница банка в листе приложения → возврат `?topup=ok\|fail&deal=` → `pay.php?action=confirm` до 5 раз), отмена (`cancel`, сбор 1 000 ₸ после отправки), приёмка (`buyer_confirm`), «Работа выполнена» (`seller_confirm`), взаимное решение спора, код продавца (`pin_enter`), возврат товара (`cancel {accept_fault}` + `clocal_return_confirm`), курьер Яндекса (`ship_quote` → `ship_add` / `ship_add_card`, `ship_drop`), создание (`?start_deal=`, `?start_service=` → `widget_data` → `create`), коды из ссылок (`?meet=`, `?parcel=` → `meet_scan` / `parcel_open`); денежный POST — ровно один раз по нажатию | `Sources/Native/Deals/DealMoney*.swift`, `DealCreate.swift` |
-| 45+ | Сообщения кабинета, торг, профиль… | — |
+| 45 ✅ | Сообщения кабинета своими экранами (`Config.нативныеСообщенияКабинета`): единый инбокс «Чат» — `dm.php?action=list&me_id=` + `chat.php?action=leads` + `buyer_chats` со склейкой lead > buyer > dm, вкладки «Все / Покупатели / Аренда / Обмен», поиск (и `chat.php?action=search`), «⋯» строки — `chat_pin` (до 5), `api/chat_hide.php` `hide` / `restore` / `purge` (после вопроса), число раз в 12 с; чат по лиду (`seller_chat` + long-poll `wait=1&since=`, `seller_join`, `seller_reply`, `typing`, `presence_event`, `set_label`, `subs.php block/unblock`, `request_unblock`, `report.php`, `offer_accept`, `offer_counter`; `offer_decline` — только за `Config.деньгиСделок`); «Заявки рядом» (`my_requests`, `request_action` respond / report / accept / confirm) и «Сделка состоялась?» (`my_pending_feedback` → `request_feedback`); колокольчик (записи со страницы кабинета, `mark_notif_read`); обращение в поддержку `?ticket=` (`sup_my_get`, `sup_my_reply`), «Запросить данные» (`support.php?action=create`), «Справочный центр»; переписка dm.php — `me_id`, `tid`, карточка заявки, «Прочитано / Отправлено», служебные по полям карты (§6.4.10) | `Sources/Native/Inbox/*`, `ChatModels.swift`, `ChatAPI.swift` |
+| 46+ | Профиль, безопасность, настройки, кошелёк… | — |
 
 Как устроен этап 1:
 
@@ -621,6 +622,28 @@
   `parcel_nocode`, `parcel_claim`), QR продавца (`meet_qr`), подпись талона eGov, аренда (`rentals.php`). Живая
   проверка — только решением владельца, двумя тестовыми аккаунтами (список — в шапке `DealMoneyModel.swift`). Выход
   стирает ящик заданий (`ВыходНачисто`).
+- Сообщения кабинета (этап 45) — по карте кабинета (§6.3, §6.4, §6.8, §6.9.1, §8.7) и коду сайта (`loadMessages`,
+  `_msgRow*`, `msgPin` / `msgHide` / `msgRestore` / `msgPurge`, модуль `deals`: `msgFilter`, `msgSearchInput`;
+  `openLeadChat` и `_lcm*`, `lcmOffer*`, `reportUserModal`; `loadRequests`, `reqCardHTML`, `requestRespond`,
+  `_reqDoAccept`, `_reqDoConfirm`, `checkPendingFeedback`; `toggleNotifications` → `markAllRead`; `openTicket`,
+  `supSend`, `dataReqSend`). Все запросы — изнутри страницы сайта (`КабинетСайта.вызвать`), тела как у сайта: без csrf
+  там, где сайт его не шлёт (`dm.php`, большая часть `chat.php`, `api/chat_hide.php`, `support.php?action=create`), с
+  `me_id` = `KlikoUser.id` (`ИнбоксAPI.номерБыстро` / `мойНомер`). Вкладка «Сообщения» (и список из шапки ленты) —
+  `ИнбоксЭкран` над `ИнбоксМодель` (одна на приложение; число на вкладке и иконке — из неё, раз в 12 с, пока видны
+  вкладки). Строка открывает переписку dm.php через `open` с `tid` (`ЧатЦель.переписка`), лид — `ЭкранЛида`
+  (`ЧатЦель.лид`), покупку без собеседника — чат объявления этапа 38. Лид-чат: long-poll не чаще раза в секунду
+  (у сайта 200 мс), `presence_event` — при смене `buyer_online` и при уходе приложения в фон, ответ без сети
+  возвращается в поле (у сайта — очередь). 🔴 `offer_decline` («Отказаться», «Цена окончательная») возвращает
+  обеспечение — только за `Config.деньгиСделок`, один запрос; выключен — ключ `ulx_open_lead` и страница «Чата»
+  кабинета (сайт сам откроет этот лид-чат). Во вкладке «Кабинет» — колокольчик (JSON-списка у сайта нет: записи
+  разбираются из той же страницы кабинета, `УведомленияКабинета.разобрать`), строка «Заявки рядом» со значком новых,
+  «Справочный центр» (`HELP_URL`) и окно «Сделка состоялась?» (раз за запуск; закрыть — только ответом, как у сайта).
+  Правило служебных сообщений (`ЧатСообщение.этоУведомление`) — только проверенные поля: `type == "system"` (dm.php),
+  `role == "system"` (chat.php), `kind` из `MK_CHAT_SYS_KINDS`; догадки этапа 3 (`sys`, `is_system`, `notice`…) убраны,
+  остались лишь точные фразы сервера, виденные на телефоне. Ссылки `?s=requests`, `?go=requests`, `?ticket=<id>` —
+  `АдресаКабинета` → `NativeRouter.Цель.заявки` / `.обращение`. Не перенесено (страница сайта): медиа, геолокация и
+  быстрые ответы в лид-чате, карточки аренды и обмена в dm.php, рабочее место мастера, подписки, аренды, обмены,
+  доставки. Выход стирает инбокс, заявки и номер (`ВыходНачисто`).
 - Каждый пуш в ветку собирается под симулятор (`.github/workflows/ios-check.yml`) — без подписи
   и секретов, чтобы ошибки компиляции были видны сразу.
 

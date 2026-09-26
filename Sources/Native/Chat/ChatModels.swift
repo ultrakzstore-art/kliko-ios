@@ -31,6 +31,13 @@ extension KeyedDecodingContainer where K == ЧатКлюч {
         if let s = try? decode(String.self, forKey: k), let i = Int(s) { return i }
         return 0
     }
+    /// Этап 45: дробное число (рейтинг мастера в заявке, mrating) — число или строка; прочее — 0.
+    func дробное(_ ключ: String) -> Double {
+        let k = ЧатКлюч(ключ)
+        if let d = try? decode(Double.self, forKey: k) { return d }
+        if let s = try? decode(String.self, forKey: k), let d = Double(s) { return d }
+        return 0
+    }
     func да(_ ключ: String) -> Bool {
         let k = ЧатКлюч(ключ)
         if let b = try? decode(Bool.self, forKey: k) { return b }
@@ -73,11 +80,12 @@ struct ЧатДиалог: Identifiable, Hashable, Decodable {
             /* Владелец 25.09.2026, проверка на телефоне, сборка 33: в списке было «Вы: Покупатель отозвал своё
                предложение.» — сервер пишет уведомление от имени того, кто его вызвал (mine = true). У сайта это
                служебная строка без автора, поэтому «Вы: » у неё не ставим: последнееМоё — только у слов человека. */
+            /* Этап 45: превью строки инбокса у сайта (_msgRowDm) проверяет только last.type === "system"; правило
+               уведомлений — общее с перепиской (этоУведомление), с проверенными полями карты кабинета (§6.4.10). */
             let служебное = ЧатСообщение.этоУведомление(
-                роль: last.строка("role") ?? c.строка("last_role") ?? "",
-                вид: last.строка("kind") ?? c.строка("last_kind") ?? "",
+                роль: last.строка("role") ?? "",
+                вид: last.строка("kind") ?? "",
                 тип: типПоследнего,
-                флаг: last.да("sys") || last.да("system") || last.да("is_system"),
                 текст: текстПоследнего)
             последнее = ЧатСообщение.подпись(тип: типПоследнего, текст: текстПоследнего)
             последнееСистемное = служебное
@@ -104,6 +112,11 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     /// Служебное уведомление («Продавец вышел из чата», «Покупатель отозвал своё предложение.») — у сайта это строка
     /// .kc-sys по центру, без автора и без облака.
     let системное: Bool
+    /// Этап 45: уведомление о предложении, принятом или подкреплённом (kind offer_ok / offer_funded), — зелёное, как у
+    /// mkChatBubble витрины.
+    let хорошее: Bool
+    /// Этап 45: служебное сообщение с meta.request — карточка заявки мастеру (_dmRender кабинета, карта §6.9.1).
+    let заявка: ЗаявкаВЧате?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
@@ -114,14 +127,22 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
         /* Владелец 25.09.2026, проверка на телефоне, сборка 33: «Продавец вышел из чата» пришло серым облаком
            собеседника. Сервер кладёт уведомления в переписку обычными сообщениями с автором (mine — кто вызвал
            событие), а приложение читало только mine/type/text и не могло их отличить. Все поля — терпимым разбором:
-           нет поля — просто «нет». */
-        системное = Self.этоУведомление(роль: c.строка("role") ?? "", вид: c.строка("kind") ?? "", тип: тип,
-                                        флаг: c.да("sys") || c.да("system") || c.да("is_system"), текст: текст)
-        if let meta = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("meta")),
-           let адрес = meta.строка("url") ?? meta.строка("src") {
-            фото = тип == "image" ? Config.url(адрес) : nil
+           нет поля — просто «нет». Этап 45 (владелец 26.09.2026): поля — только проверенные по коду кабинета (карта
+           §6.4.10), догадки (sys, is_system, notice, event…) убраны. */
+        let вид = c.строка("kind") ?? ""
+        системное = Self.этоУведомление(роль: c.строка("role") ?? "", вид: вид, тип: тип, текст: текст)
+        хорошее = вид == "offer_ok" || вид == "offer_funded"
+        if let meta = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("meta")) {
+            /* У dm.php адрес медиа — в meta.url (карта §6.4.10); src — прежний запасной ключ этапа 3. */
+            if let адрес = meta.строка("url") ?? meta.строка("src") {
+                фото = тип == "image" ? Config.url(адрес) : nil
+            } else {
+                фото = nil
+            }
+            заявка = тип == "system" && meta.да("request") ? ЗаявкаВЧате(meta) : nil
         } else {
             фото = nil
+            заявка = nil
         }
         /* У сообщения своего номера в июльском контракте не было. Берём его, если сервер начал присылать; иначе —
            отправитель, время и текст: двух одинаковых сообщений в одну секунду от одного человека не бывает. */
@@ -133,33 +154,35 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
         switch тип {
         case "image": return "📷 " + ChatText.т("photo")
         case "voice": return "🎤 " + ChatText.т("voice")
+        /* Этап 45: запрос аренды и предложение обмена — подписи строки инбокса сайта (dm_rental_req, dm_exchange_offer);
+           их карточки с кнопками пока на сайте. */
+        case "rental" where Config.нативныеСообщенияКабинета: return ИнбоксText.т("rental_req")
+        case "exchange" where Config.нативныеСообщенияКабинета: return ИнбоксText.т("exchange_offer")
         default:      return текст
         }
     }
 
     var подпись: String { Self.подпись(тип: тип, текст: текст) }
 
-    /// Виды уведомлений о предложении цены — как MK_CHAT_SYS_KINDS сайта (mkChatBubble рисует их строкой .kc-sys).
-    private static let видыСайта: Set<String> = ["offer_funded", "offer_unfunded", "offer_no", "offer_ok"]
-    /// Виды событий переписки — отзыв предложения и присутствие (chat.php offer_withdraw, presence_event left/back).
-    /// Как их помечает dm.php, не видели — берём и эти названия, и общие.
-    private static let видыСобытий: Set<String> = ["offer_withdrawn", "offer_withdraw", "withdraw", "withdrawn",
-                                                     "presence", "left", "back", "system", "sys", "event", "notice",
-                                                     "service"]
-    /// Тип сообщения, который означает уведомление, а не текст человека.
-    private static let типыУведомлений: Set<String> = ["system", "sys", "event", "notice", "service", "info"]
+    /// Виды уведомлений о предложении цены — MK_CHAT_SYS_KINDS витрины (MK27 @568555): mkChatBubble рисует их строкой
+    /// .kc-sys. Кабинет их не знает, но карта кабинета (§6.4.10) советует считать их служебными и в нём.
+    static let видыУведомлений: Set<String> = ["offer_funded", "offer_unfunded", "offer_no", "offer_ok"]
 
-    /// Служебное ли сообщение. role == "system" и виды сайта — как в mkChatBubble; остальное — на случай, если dm.php
-    /// помечает иначе. Предложение, встречное и обмен контактами (offer, counter, contact) — слова человека, не
-    /// уведомления. Последняя страховка — точные фразы сервера, виденные на телефоне.
-    static func этоУведомление(роль: String, вид: String, тип: String, флаг: Bool, текст: String) -> Bool {
-        let р = роль.lowercased()
-        let в = вид.lowercased()
-        let т = тип.lowercased()
-        if р == "system" { return true }
-        if видыСайта.contains(в) || видыСобытий.contains(в) { return true }
-        if типыУведомлений.contains(т) { return true }
-        if флаг { return true }
+    /**
+     Служебное ли сообщение — ЭТАП 45 (владелец 26.09.2026), по проверенным полям карты кабинета (§6.4.10), а не догадкам:
+       · type === "system" — так помечает служебное dm.php (_dmRender кабинета, CAB @1257484);
+       · role === "system" — так помечает его chat.php (лид-чат, CAB @1193300; виджет витрины);
+       · kind ∈ MK_CHAT_SYS_KINDS — уведомления о предложении цены (витрина рисует их пилюлей).
+     Других признаков (kind "system", is_system, sys, notice, event) ни кабинет, ни витрина не читают — прежний список
+     догадок этапа 3 убран. Предложение, встречное и обмен контактами (offer, counter, contact) — слова человека.
+     Последняя страховка — точные фразы сервера, виденные на телефоне (сборка 33): как сервер помечает «Покупатель отозвал
+     своё предложение» и «Продавец вышел из чата», из кода сайта не видно (карта §6.4.10: INFERRED), а на телефоне они
+     пришли облаком с mine = true. Фраза проверяется целиком, от начала до конца строки.
+     */
+    static func этоУведомление(роль: String, вид: String, тип: String, текст: String) -> Bool {
+        if роль.lowercased() == "system" { return true }
+        if тип.lowercased() == "system" { return true }
+        if видыУведомлений.contains(вид.lowercased()) { return true }
         return похожеНаСобытие(текст)
     }
 
@@ -180,6 +203,8 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
 struct ЧатПереписка: Decodable {
     let id: String
     let сообщения: [ЧатСообщение]
+    /// Этап 45: thread.peer_read_at — когда собеседник прочитал переписку («✓✓ Прочитано» под последним моим, §6.4.8 i).
+    let прочиталДо: String
 
     private struct Любое: Decodable {
         let значение: ЧатСообщение?
@@ -190,6 +215,7 @@ struct ЧатПереписка: Decodable {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
         id = c.строка("id") ?? c.строка("tid") ?? ""
         сообщения = ((try? c.decode([Любое].self, forKey: ЧатКлюч("messages"))) ?? []).compactMap(\.значение)
+        прочиталДо = c.строка("peer_read_at") ?? ""
     }
 }
 
@@ -213,5 +239,47 @@ struct ЧатОтвет: Decodable {
         заблокирован = c.да("blocked")
         диалоги = ((try? c.decode([ЛюбойДиалог].self, forKey: ЧатКлюч("threads"))) ?? []).compactMap(\.значение)
         переписка = try? c.decode(ЧатПереписка.self, forKey: ЧатКлюч("thread"))
+    }
+}
+
+/**
+ Заявка мастеру в личной переписке — ЭТАП 45 (владелец 26.09.2026). dm.php присылает её служебным сообщением
+ type "system" с meta{request: true, rid, master_id, assigned, confirmed, litem_id, litem_title, mname, mrating, mrcnt,
+ mdeals, mverified, msvcd, msvct} (карта §6.9.1), и кабинет рисует вместо пилюли карточку (_dmRender, CAB @1257484).
+ */
+struct ЗаявкаВЧате: Hashable {
+    let номер: String
+    let мастер: String
+    let назначена: Bool
+    let подтверждена: Bool
+    let объявлениеID: String
+    let объявление: String
+    let имяМастера: String
+    let рейтинг: Double
+    let отзывов: Int
+    let сделок: Int
+    let проверен: Bool
+    let услугВыполнено: Int
+    let услугВсего: Int
+
+    init(_ m: KeyedDecodingContainer<ЧатКлюч>) {
+        номер = m.строка("rid") ?? ""
+        мастер = m.строка("master_id") ?? ""
+        назначена = m.да("assigned")
+        подтверждена = m.да("confirmed")
+        объявлениеID = m.строка("litem_id") ?? ""
+        объявление = m.строка("litem_title") ?? ""
+        имяМастера = m.строка("mname") ?? ""
+        рейтинг = m.дробное("mrating")
+        отзывов = m.целое("mrcnt")
+        сделок = m.целое("mdeals")
+        проверен = m.да("mverified")
+        услугВыполнено = m.целое("msvcd")
+        услугВсего = m.целое("msvct")
+    }
+
+    /// _reqMasterProfile: профиль мастера показывается, если есть хоть что-то из имени, рейтинга, сделок, отметки, услуг.
+    var естьПрофиль: Bool {
+        !имяМастера.isEmpty || рейтинг > 0 || сделок > 0 || проверен || услугВсего > 0
     }
 }
