@@ -1,0 +1,215 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# СБОРКА В CODEMAGIC — запасной путь, пока GitHub Actions отключены на аккаунте
+# (26.09.2026: «Actions has been disabled for this user»). Делает то же, что .github/workflows:
+#   check      — проверка сборки под симулятор без подписи (как ios-check.yml), сама на каждый пуш в ветку
+#                claude/git-host-connection-88bk6g (только эту: пуши других веток не тратят минуты);
+#   testflight — архив, подпись ключом App Store Connect API, заливка и выдача сборки группам TestFlight
+#                (как ios.yml + fastlane ios beta), только ручной запуск.
+#
+# ОДИН РАЗ В CODEMAGIC (codemagic.io → вход через GitHub → Add application → kliko-ios):
+#   Environment variables → группа «kliko», все «Secure»:
+#     APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 — те же значения, что в секретах GitHub
+#       (ASC_KEY_P8 — файл .p8 целиком, он же в base64 или только тело ключа — подходит любой вид);
+#     GH_LOG_TOKEN — необязательно: токен GitHub (fine-grained, только kliko-ios, Contents: Read and write).
+#       С ним итог сборки и ошибки компилятора уходят в ветку ci/build-log — их видно без входа в Codemagic.
+#
+# ⚠️ Имена переменных в скриптах — латиницей (bash).
+# ─────────────────────────────────────────────────────────────────────────────
+
+definitions:
+  env: &env
+    xcode: latest
+    groups:
+      - kliko
+    vars:
+      APP_VERSION: "1.10"          # версия TestFlight: выше 1.9 из App Store (сборки 1.8 там не видно)
+      SCHEME: Kliko
+
+  scripts:
+    - &pick_xcode
+      name: Xcode не ниже 26
+      script: |
+        xcodebuild -version
+        major=$(xcodebuild -version | awk 'NR==1{split($2,v,"."); print v[1]}')
+        if [ "${major:-0}" -lt 26 ]; then
+          echo "Xcode ниже 26, а App Store принимает только сборки с iOS SDK 26 и выше — поменяйте xcode: в codemagic.yaml"
+          exit 1
+        fi
+    - &xcodegen
+      name: XcodeGen
+      script: |
+        command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+        xcodegen generate
+
+workflows:
+  check:
+    name: Проверка сборки
+    instance_type: mac_mini_m2
+    max_build_duration: 40
+    environment: *env
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "claude/git-host-connection-88bk6g"
+          include: true
+      cancel_previous_builds: true
+    scripts:
+      - *pick_xcode
+      - *xcodegen
+      - name: Собрать под симулятор
+        script: |
+          set -o pipefail
+          xcodebuild build \
+            -project Kliko.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || true
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | head -200 || true
+          grep -q "BUILD SUCCEEDED" build.log
+    publishing:
+      scripts:
+        - name: Итог в ветку ci/build-log
+          script: |
+            [ -n "$GH_LOG_TOKEN" ] || { echo "GH_LOG_TOKEN не задан — итог только в Codemagic"; exit 0; }
+            log="$CM_BUILD_DIR/build.log"
+            status="СБОРКА ПРОШЛА"; grep -q "BUILD SUCCEEDED" "$log" 2>/dev/null || status="СБОРКА УПАЛА"
+            out=$(mktemp -d)
+            # Ошибки компилятора с тремя строками после каждой (строка кода и ^) — без секретов: здесь их нет.
+            grep -E -A3 "error:" "$log" 2>/dev/null | head -3000 > "$out/errors.txt" || true
+            tail -200 "$log" > "$out/tail.txt" 2>/dev/null || true
+            printf "check · %s · коммит %s · ветка %s · Codemagic %s\n" "$status" "$CM_COMMIT" "$CM_BRANCH" "$BUILD_NUMBER" > "$out/README.md"
+            cd "$out"
+            git init -q
+            git config user.name "kliko-ci"
+            git config user.email "ci@users.noreply.github.com"
+            git add -A
+            git commit -qm "check $CM_COMMIT: $status"
+            # Токен — заголовком, а не в адресе: адрес git печатает в ошибках.
+            auth=$(printf 'kliko-ci:%s' "$GH_LOG_TOKEN" | base64 | tr -d '\n')
+            git -c http.extraheader="AUTHORIZATION: basic $auth" push -qf https://github.com/ultrakzstore-art/kliko-ios.git HEAD:refs/heads/ci/build-log
+
+  testflight:
+    name: TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 75
+    environment: *env
+    scripts:
+      - name: Секреты на месте
+        script: |
+          missing=""
+          [ -z "$APPLE_TEAM_ID" ] && missing="$missing APPLE_TEAM_ID"
+          [ -z "$ASC_KEY_ID" ]    && missing="$missing ASC_KEY_ID"
+          [ -z "$ASC_ISSUER_ID" ] && missing="$missing ASC_ISSUER_ID"
+          [ -z "$ASC_KEY_P8" ]    && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "Не заведены переменные:$missing — Codemagic → Environment variables → группа kliko"
+            exit 1
+          fi
+          echo "Секреты на месте."
+      - *pick_xcode
+      - name: Разложить ключ App Store Connect
+        script: |
+          # Три вида вставки, как в ios.yml: файл целиком, он же в base64, или только тело между BEGIN и END.
+          key_dir="$CM_BUILD_DIR/build/keys"
+          mkdir -p "$key_dir"
+          out="$key_dir/AuthKey_$ASC_KEY_ID.p8"
+          if printf %s "$ASC_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$ASC_KEY_P8" > "$out"
+          else
+            printf %s "$ASC_KEY_P8" | tr -d "[:space:]" | base64 -D > "$key_dir/decoded" 2>/dev/null || true
+            if head -c 40 "$key_dir/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$key_dir/decoded" "$out"
+            else
+              body=$(printf %s "$ASC_KEY_P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"
+                printf %s "$body"; echo
+                echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$key_dir/decoded"
+          fi
+          chmod 600 "$out"
+          head -1 "$out" | grep -q "BEGIN PRIVATE KEY" \
+            || { echo "ASC_KEY_P8 не похож на ключ .p8"; exit 1; }
+          echo "ASC_KEY_PATH=$out" >> "$CM_ENV"
+      - *xcodegen
+      - name: Отозвать сертификаты разработки прошлых прогонов
+        script: python3 ci/asc.py revoke-dev-certs || echo "не вышло — если подпись упадёт, причина будет в следующем шаге"
+      - name: Номер сборки
+        script: |
+          build_no=$(python3 ci/asc.py next-build-number)
+          case "$build_no" in ''|*[!0-9]*) echo "Номер сборки не получен: '$build_no'"; exit 1;; esac
+          echo "Сборка $APP_VERSION ($build_no)"
+          echo "KLIKO_BUILD_NO=$build_no" >> "$CM_ENV"
+      - name: Собрать архив
+        script: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Kliko.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$CM_BUILD_DIR/build/Kliko.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$KLIKO_BUILD_NO" \
+            MARKETING_VERSION="$APP_VERSION" > build.log 2>&1 \
+            || { grep -E "error:" build.log | head -200; tail -80 build.log; exit 1; }
+          tail -5 build.log
+      - name: Экспорт и заливка в App Store Connect
+        script: |
+          set -o pipefail
+          export_dir="$CM_BUILD_DIR/build/export"
+          mkdir -p "$export_dir"
+          cat > "$export_dir/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/build/Kliko.xcarchive" \
+            -exportOptionsPlist "$export_dir/ExportOptions.plist" \
+            -exportPath "$export_dir" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          touch "$CM_BUILD_DIR/build/uploaded"
+      - name: Выдать сборку тестировщикам
+        # Как в ios.yml: ждём обработку Apple и добавляем сборку во внутренние группы. Не вышло — сборка всё равно залита.
+        script: |
+          export FASTLANE_SKIP_UPDATE_CHECK=1 FASTLANE_HIDE_CHANGELOG=1 FASTLANE_DISABLE_COLORS=1 LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+          command -v fastlane >/dev/null 2>&1 || brew install fastlane
+          fastlane ios beta build:"$KLIKO_BUILD_NO" version:"$APP_VERSION" \
+            || echo "Выдать группам не вышло — сборка залита, её можно выдать в App Store Connect → TestFlight"
+    publishing:
+      scripts:
+        - name: Убрать ключ и записать итог
+          script: |
+            rm -rf "$CM_BUILD_DIR/build/keys"
+            [ -n "$GH_LOG_TOKEN" ] || exit 0
+            status="TESTFLIGHT $APP_VERSION (${KLIKO_BUILD_NO:-?}) ЗАЛИТА"
+            [ -f "$CM_BUILD_DIR/build/uploaded" ] || status="TESTFLIGHT УПАЛ"
+            out=$(mktemp -d)
+            grep -E -A3 "error:" "$CM_BUILD_DIR/build.log" 2>/dev/null | head -3000 > "$out/errors.txt" || true
+            printf "testflight · %s · коммит %s · ветка %s · Codemagic %s\n" "$status" "$CM_COMMIT" "$CM_BRANCH" "$BUILD_NUMBER" > "$out/README.md"
+            cd "$out"
+            git init -q
+            git config user.name "kliko-ci"
+            git config user.email "ci@users.noreply.github.com"
+            git add -A
+            git commit -qm "testflight $CM_COMMIT: $status"
+            auth=$(printf 'kliko-ci:%s' "$GH_LOG_TOKEN" | base64 | tr -d '\n')
+            git -c http.extraheader="AUTHORIZATION: basic $auth" push -qf https://github.com/ultrakzstore-art/kliko-ios.git HEAD:refs/heads/ci/build-log
