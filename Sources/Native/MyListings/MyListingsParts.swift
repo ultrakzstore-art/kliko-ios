@@ -6,8 +6,8 @@ import UIKit
  код разный»).
 
  Окна — #mod-overlay сайта (.mod-box: значок, заголовок, текст на цветной подложке, кнопки во всю ширину) и окна
- подтверждения с выбором. Карточка «Доступно» — renderSlotBanner, строки «Работы» — _jbRow, лист «Поделиться» —
- showSocialModal(…, "share") без студии роликов (модуль reel сайта) и без автопостинга (интеграции — отдельная область).
+ подтверждения с выбором. Карточка «Доступно» — renderSlotBanner, строки «Работы» — _jbRow. Окно «Поделиться»
+ (showSocialModal сайта) — ОкноПоделитьсяКабинета в CabinetShare.swift.
  */
 
 // MARK: - Окно поверх списка
@@ -440,119 +440,5 @@ struct СтрокаРаботы: View {
             }
         }
         .disabled(занято)
-    }
-}
-
-// MARK: - «Поделиться»
-
-/**
- showSocialModal(…, "share") и socialQuickShare сайта: превью, WhatsApp, Telegram, «Ссылка» (в буфер «{название} — {цена}
- ₸\n{адрес}»), «Позже». Адрес — /marketplace.php?item=<id> от корня сайта, как location.origin + "/marketplace.php?item=".
- */
-struct ЛистПоделитьсяОбъявлением: View {
-    let товар: МоёОбъявление
-    let скопировано: () -> Void
-    @Environment(\.dismiss) private var закрыть
-
-    init(товар: МоёОбъявление, скопировано: @escaping () -> Void) {
-        self.товар = товар
-        self.скопировано = скопировано
-    }
-
-    private func т(_ ключ: String) -> String { МоиОбъявленияText.т(ключ) }
-
-    private var адрес: String {
-        let номер = товар.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? товар.id
-        return (Config.url("/marketplace.php?item=" + номер)?.absoluteString) ?? ""
-    }
-
-    /// «{название} — 12 000 ₸» (toLocaleString("ru-RU") сайта; без цены — только название).
-    private var подпись: String {
-        товар.цена > 0 ? товар.название + " — " + DesignText.число(Int(товар.цена)) + " ₸" : товар.название
-    }
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text(т("share_t"))
-                .font(.system(size: 19, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .accessibilityAddTraits(.isHeader)
-            превью
-            HStack(spacing: 10) {
-                кнопка("WhatsApp", символ: "message.fill", цвет: Theme.whatsApp) {
-                    внешняя("https://wa.me/?text=" + Self.код(подпись + " " + адрес))
-                }
-                кнопка("Telegram", символ: "paperplane.fill", цвет: Theme.проверен) {
-                    внешняя("https://t.me/share/url?url=" + Self.код(адрес) + "&text=" + Self.код(подпись))
-                }
-                кнопка(т("share_link"), символ: "link", цвет: Theme.акцент) {
-                    UIPasteboard.general.string = подпись + "\n" + адрес
-                    закрыть()
-                    скопировано()
-                }
-            }
-            Button(т("later")) { закрыть() }
-                .font(.system(size: 15, weight: .semibold))
-                .tint(Theme.текстВторой)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.фонСтраницы.ignoresSafeArea())
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var превью: some View {
-        HStack(spacing: 12) {
-            КартинкаЛенты(Config.url(товар.фото), пунктов: 56) {
-                Theme.поверхность2
-            }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(товар.название)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(2)
-                Text(товар.цена > 0 ? DesignText.число(Int(товар.цена)) + "\u{00A0}₸" : т("price_negotiable"))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.акцент)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func кнопка(_ подпись: String, символ: String, цвет: Color, действие: @escaping () -> Void) -> some View {
-        Button(action: действие) {
-            VStack(spacing: 6) {
-                Image(systemName: символ)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 48, height: 48)
-                    .background(цвет, in: Circle())
-                    .accessibilityHidden(true)
-                Text(подпись)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.95))
-    }
-
-    private func внешняя(_ строка: String) {
-        guard let u = URL(string: строка) else { return }
-        UIApplication.shared.open(u)
-        закрыть()
-    }
-
-    /// encodeURIComponent: всё, кроме A–Z a–z 0–9 - _ . ! ~ * ' ( ).
-    static func код(_ текст: String) -> String {
-        let можно = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!~*'()")
-        return текст.addingPercentEncoding(withAllowedCharacters: можно) ?? текст
     }
 }

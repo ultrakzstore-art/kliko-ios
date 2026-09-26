@@ -112,11 +112,11 @@ struct ЭкранКлуба: View {
             }
             HStack(spacing: 10) {
                 внешняя("WhatsApp", цвет: Theme.whatsApp) {
-                    "https://wa.me/?text=" + ЛистПоделитьсяОбъявлением.код(т("club_share_text") + " " + к.ссылка)
+                    "https://wa.me/?text=" + ПоделитьсяСайта.код(т("club_share_text") + " " + к.ссылка)
                 }
                 внешняя("Telegram", цвет: Theme.проверен) {
-                    "https://t.me/share/url?url=" + ЛистПоделитьсяОбъявлением.код(к.ссылка) + "&text="
-                        + ЛистПоделитьсяОбъявлением.код(т("club_share_text"))
+                    "https://t.me/share/url?url=" + ПоделитьсяСайта.код(к.ссылка) + "&text="
+                        + ПоделитьсяСайта.код(т("club_share_text"))
                 }
             }
             .disabled(к.ссылка.isEmpty)

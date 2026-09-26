@@ -20,6 +20,9 @@ import CoreImage.CIFilterBuiltins
  сайт к ссылке не добавляет — не добавляем и здесь. QR у сайта — qrcode(0, "M"), тёмный #0b1f14 на белом, без знака в
  середине — так же и здесь (CIQRCodeGenerator, уровень M, увеличение целым числом без сглаживания).
 
+ Услуги и вакансии (mkIsService): «Фото-карточка» и «Для сторис» — постер услуги (_mkServicePoster сайта: тема по
+ названию, круг фото, «от <цена> ₸», «Записаться на Kliko.kz  →» и QR) — SiteServicePoster.swift.
+
  Сверх сайта (владелец): сразу в приложение WhatsApp и Telegram по их схемам с запасом на веб, SMS, Почта, QR с
  «Сохранить» в Фото и «Поделиться», «Для сторис» — та же карточка 1080 × 1920, Instagram Stories напрямую, если в
  Info.plist есть FacebookAppID (без него Instagram с 2023 года сторис от чужого приложения не принимает) — иначе как сайт.
@@ -35,14 +38,18 @@ struct ДанныеОтправкиСайта: Hashable {
     let фото: URL?
     /// Номер открытого в галерее фото — p= в ссылке, как mkShareImgIdx сайта; 0 — не добавляется.
     let номерФото: Int
+    /// Услуга или вакансия (mkIsService): «Фото-карточка» и «Для сторис» — постер услуги (SiteServicePoster.swift).
+    let услуга: ДанныеУслугиПостера?
 
-    init(id: String, название: String, цена: Double, состояние: String?, фото: URL?, номерФото: Int = 0) {
+    init(id: String, название: String, цена: Double, состояние: String?, фото: URL?, номерФото: Int = 0,
+         услуга: ДанныеУслугиПостера? = nil) {
         self.id = id
         self.название = название
         self.цена = цена
         self.состояние = состояние
         self.фото = фото
         self.номерФото = max(0, номерФото)
+        self.услуга = услуга
     }
 
     /// Из объявления ленты. `номер` — вместо товар.id (после подачи номер приходит отдельно), `фото` — открытое в галерее.
@@ -50,15 +57,22 @@ struct ДанныеОтправкиСайта: Hashable {
         let адреса = товар.фотоАдреса
         let n = адреса.indices.contains(номерФото) ? номерФото : 0
         let свой = номер ?? ""
+        let услуга: ДанныеУслугиПостера? = товар.услуга
+            ? ДанныеУслугиПостера(продавец: товар.продавец ?? "", рейтинг: товар.рейтингПродавца ?? 0,
+                                  проверен: товар.продавецПроверен, город: товар.city, раздел: товар.категория ?? "")
+            : nil
         self.init(id: свой.isEmpty ? товар.id : свой, название: товар.title, цена: товар.price ?? 0,
                   состояние: товар.состояние, фото: адреса.indices.contains(n) ? Optional(адреса[n]) : товар.обложка,
-                  номерФото: n)
+                  номерФото: n, услуга: услуга)
     }
 
-    /// Из «Моих объявлений».
-    init(моё товар: МоёОбъявление) {
+    /// Из «Моих объявлений». `продавец` — имя из профиля кабинета: у услуги оно на постере (без него — буква «K»).
+    init(моё товар: МоёОбъявление, продавец: String = "") {
+        let услуга: ДанныеУслугиПостера? = РазделыСайта.услуга(товар.раздел)
+            ? ДанныеУслугиПостера(продавец: продавец, раздел: товар.раздел)
+            : nil
         self.init(id: товар.id, название: товар.название, цена: товар.цена, состояние: nil,
-                  фото: Config.url(товар.фото))
+                  фото: Config.url(товар.фото), услуга: услуга)
     }
 
     /// «14 500 000 ₸» или «Договорная».
@@ -699,9 +713,14 @@ enum ПоделитьсяСайта {
         return UIImage(cgImage: готово)
     }
 
-    /// Карточка сайта (mkShareCard) шириной 1080 пикселей: 1350 — «Фото-карточка», 1920 — для сторис.
+    /// Карточка сайта (mkShareCard) шириной 1080 пикселей: 1350 — «Фото-карточка», 1920 — для сторис. У услуги —
+    /// постер услуги (_mkServicePoster сайта) с QR справа внизу.
     @MainActor
     static func постер(_ данные: ДанныеОтправкиСайта, фото: UIImage?, высота: CGFloat) -> UIImage? {
+        if let услуга = данные.услуга {
+            return ПостерУслугиСайта.нарисовать(данные, услуга: услуга, фото: фото,
+                                                qr: qr(данные.адрес.absoluteString, модуль: 6), высота: высота)
+        }
         let вид = ПостерОбъявленияСайта(данные: данные, фото: фото, qr: qr(данные.адрес.absoluteString, модуль: 12),
                                          высота: высота)
         let рисовальщик = ImageRenderer(content: вид)
@@ -960,7 +979,9 @@ enum SiteShareText {
             "poster_item": "Объявление", "poster_guarantee": "Гарант-сделка",
             "poster_b1": "Оплата защищена (гарант-сделка)", "poster_b2": "Проверенные продавцы",
             "poster_b3": "Доставка по Казахстану", "poster_qr": "Наведи камеру на QR →",
-            "poster_open": "Открыть на Kliko.kz  →"
+            "poster_open": "Открыть на Kliko.kz  →",
+            "svc_label": "УСЛУГА · KLIKO.KZ", "svc_cta": "Записаться на Kliko.kz  →", "svc_verified": "✓ Проверен",
+            "svc_from": "от %@", "svc_item": "Услуга"
         ],
         "kk": [
             "title": "Хабарландырумен бөлісу", "copy": "Көшіру", "copied": "Көшірілді!",
@@ -974,7 +995,9 @@ enum SiteShareText {
             "poster_item": "Хабарландыру", "poster_guarantee": "Кепіл-мәміле",
             "poster_b1": "Төлем қорғалған (кепіл-мәміле)", "poster_b2": "Тексерілген сатушылар",
             "poster_b3": "Қазақстан бойынша жеткізу", "poster_qr": "Камераны QR-ға бағытта →",
-            "poster_open": "Kliko.kz-те ашу  →"
+            "poster_open": "Kliko.kz-те ашу  →",
+            "svc_label": "ҚЫЗМЕТ · KLIKO.KZ", "svc_cta": "Kliko.kz-те жазылу  →", "svc_verified": "✓ Тексерілген",
+            "svc_from": "%@ бастап", "svc_item": "Қызмет"
         ],
         "en": [
             "title": "Share listing", "copy": "Copy", "copied": "Copied!",
@@ -988,7 +1011,9 @@ enum SiteShareText {
             "poster_item": "Listing", "poster_guarantee": "Escrow deal",
             "poster_b1": "Payment protected (escrow deal)", "poster_b2": "Verified sellers",
             "poster_b3": "Delivery across Kazakhstan", "poster_qr": "Point your camera at the QR →",
-            "poster_open": "Open on Kliko.kz  →"
+            "poster_open": "Open on Kliko.kz  →",
+            "svc_label": "SERVICE · KLIKO.KZ", "svc_cta": "Book on Kliko.kz  →", "svc_verified": "✓ Verified",
+            "svc_from": "from %@", "svc_item": "Service"
         ],
         "ar": [
             "title": "مشاركة الإعلان", "copy": "نسخ", "copied": "تم النسخ!",
@@ -1002,7 +1027,9 @@ enum SiteShareText {
             "poster_item": "إعلان", "poster_guarantee": "صفقة مضمونة",
             "poster_b1": "الدفع محمي (صفقة مضمونة)", "poster_b2": "بائعون موثّقون",
             "poster_b3": "التوصيل في جميع أنحاء كازاخستان", "poster_qr": "وجّه الكاميرا إلى رمز QR ←",
-            "poster_open": "افتح على Kliko.kz  ←"
+            "poster_open": "افتح على Kliko.kz  ←",
+            "svc_label": "خدمة · KLIKO.KZ", "svc_cta": "احجز على Kliko.kz  ←", "svc_verified": "✓ موثّق",
+            "svc_from": "من %@", "svc_item": "خدمة"
         ]
     ]
 }
