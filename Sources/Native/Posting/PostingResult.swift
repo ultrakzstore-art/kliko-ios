@@ -237,20 +237,16 @@ struct ЭкранПослеПодачи: View {
                 .foregroundStyle(Theme.текст)
             HStack(spacing: 8) {
                 быстрая(т("wa"), значок: "message.fill", краска: Color(red: 37 / 255, green: 211 / 255, blue: 102 / 255)) {
-                    открытьЧерез("https://wa.me/", [URLQueryItem(name: "text", value: текстОтправки + " " + ссылка.absoluteString)])
+                    ПоделитьсяСайта.whatsApp(ДанныеОтправкиСайта(товар, номер: id))
                 }
                 быстрая(т("tg"), значок: "paperplane.fill", краска: Color(red: 34 / 255, green: 158 / 255, blue: 217 / 255)) {
-                    открытьЧерез("https://t.me/share/url", [URLQueryItem(name: "url", value: ссылка.absoluteString),
-                                                            URLQueryItem(name: "text", value: текстОтправки)])
+                    ПоделитьсяСайта.telegram(ДанныеОтправкиСайта(товар, номер: id))
                 }
                 быстрая(скопировано ? т("copied") : т("copy"), значок: скопировано ? "checkmark" : "link",
                         краска: скопировано ? Theme.зелёныйЯркий : Theme.текстВторой) {
                     скопировать(ссылка)
                 }
-                ShareLink(item: ссылка, subject: Text(товар.title), message: Text(текстОтправки)) {
-                    ярлык(п("share"), значок: "square.and.arrow.up", краска: Theme.акцент)
-                }
-                .buttonStyle(.plain)
+                быстрая(п("share"), значок: "square.and.arrow.up", краска: Theme.акцент) { ЛистПоделитьсяСайта.показать(товар, номер: id) }
             }
             if !опубликовано {
                 Text(т("share_mod"))

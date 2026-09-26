@@ -438,8 +438,8 @@ extension View {
      */
     func поделитьсяНаКарточке(_ товар: Listing) -> some View {
         overlay(alignment: .topTrailing) {
-            if Config.дизайнКакНаСайте, let адрес = товар.адрес {
-                ShareLink(item: адрес, subject: Text(товар.title), message: Text(товар.текстОтправкиКарточки)) {
+            if Config.дизайнКакНаСайте, товар.адрес != nil {
+                Button { ЛистПоделитьсяСайта.показать(товар) } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Theme.текстВторой)

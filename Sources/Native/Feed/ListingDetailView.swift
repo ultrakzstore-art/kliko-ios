@@ -158,7 +158,7 @@ struct ListingDetailView: View {
                             .accessibilityLabel(FeedText.т("share"))
                             .accessibilityHint(ShareCardText.т("hint"))
                     } else {
-                        ShareLink(item: адрес) { Image(systemName: "square.and.arrow.up") }
+                        Button { ЛистПоделитьсяСайта.показать(товар) } label: { Image(systemName: "square.and.arrow.up") }
                             .accessibilityLabel(FeedText.т("share"))
                     }
                 }
@@ -454,10 +454,7 @@ struct ListingDetailView: View {
 
     /// Картинка — с тем фото, что открыто в галерее (если оно уже скачано), и ссылка. Не нарисовалась — одна ссылка.
     private func поделитьсяКартинкой(_ адрес: URL) {
-        let адреса = товар.фотоАдреса
-        let фото = адреса.indices.contains(страница) ? адреса[страница] : адреса.first
-        let картинка = ОтправкаКартинкой.картинка(товар, фото: фото, масштаб: масштабЭкрана)
-        ОтправкаКартинкой.поделиться(адрес: адрес, картинка: картинка)
+        ЛистПоделитьсяСайта.показать(товар, фото: страница)      // лист как у сайта (SiteShare.swift)
     }
 
     // MARK: - Загрузка

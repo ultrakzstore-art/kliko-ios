@@ -152,8 +152,8 @@ struct СтраницаОбъявленияСайта: View {
         if let картинкой = поделитьсяКартинкой {
             КнопкаНадФото(значок: "square.and.arrow.up", подпись: FeedText.т("share"), действие: картинкой)
                 .accessibilityHint(ShareCardText.т("hint"))
-        } else if let адрес = товар.адрес {
-            ShareLink(item: адрес) {
+        } else if товар.адрес != nil {
+            Button { ЛистПоделитьсяСайта.показать(товар) } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color.white)
