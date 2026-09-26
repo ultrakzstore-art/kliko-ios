@@ -32,7 +32,8 @@ module.exports = {
   turboWindow: int('TURBO_WINDOW', 10, 1),
   kaspiTurbo: !/^(0|off|no|false)$/i.test(process.env.KASPI_TURBO || 'on'),   // Kaspi по номеру (номера идут по порядку подачи)
   freshMs: int('FRESH_MIN', 30, 1) * 60_000,     // «новое» — подано не раньше N минут назад
-  trialDays: int('TRIAL_DAYS', 7, 0),            // тестовый доступ новичку, дней
+  // Тестовый доступ новичку, часов (по умолчанию сутки). Старая настройка TRIAL_DAYS — в днях.
+  trialHours: process.env.TRIAL_HOURS ? int('TRIAL_HOURS', 24, 0) : process.env.TRIAL_DAYS ? int('TRIAL_DAYS', 1, 0) * 24 : 24,
   paidSubs: int('PAID_SUBS', 20, 1),             // поисков у пользователя (тест и платный)
   // Цены за 7/14/30 дней по тарифам: отдельная площадка или «всё сразу» (комбо).
   // STARS_PRICES / KASPI_PRICES без суффикса — старые настройки, считаются ценой за OLX.

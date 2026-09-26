@@ -14,7 +14,7 @@ const PRODUCTS = ['OLX', 'KOLESA', 'KRISHA', 'KASPI', 'ALL'];
 // Значения по умолчанию — как в .env.example.
 const DEFAULTS = {
   ADMIN_ID: '',
-  TRIAL_DAYS: '7',
+  TRIAL_HOURS: '24',
   POLL_SEC: '2',
   PAID_SUBS: '20',
   FRESH_MIN: '30',
@@ -316,7 +316,7 @@ function db() {
   if (!dbHandle) {
     const { Db } = require('../src/db');
     dbHandle = new Db(path.join(app.getPath('userData'), 'watcher.db'));
-    dbHandle.trialMs = (parseInt(settings.env.TRIAL_DAYS, 10) || 7) * 86400_000;
+    dbHandle.trialMs = (parseInt(settings.env.TRIAL_HOURS, 10) || 24) * 3600_000;
   }
   return dbHandle;
 }

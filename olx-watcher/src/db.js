@@ -104,7 +104,7 @@ class Db {
       // Кто был до появления теста — получает тест от момента обновления, а не нулевой.
       this.db.prepare('UPDATE users SET trial_until = ?').run(Date.now() + 7 * DAY);
     }
-    this.trialMs = 7 * DAY;
+    this.trialMs = DAY;
   }
 
   get(k, fallback = null) {
@@ -118,7 +118,7 @@ class Db {
 
   // ---------- пользователи и доступ ----------
 
-  // Новый пользователь сразу получает тестовый доступ на trialMs (TRIAL_DAYS).
+  // Новый пользователь сразу получает тестовый доступ на trialMs (TRIAL_HOURS, по умолчанию сутки).
   touchUser(id, name = '', username = '') {
     const now = Date.now();
     this.db.prepare(`INSERT INTO users (id, name, username, created_at, trial_until) VALUES (?, ?, ?, ?, ?)

@@ -1,6 +1,6 @@
 // Телеграм-часть: пользователи, доступ (бесплатный и платный), оплата, карточки объявлений.
 //
-// Тестовый доступ новичку (TRIAL_DAYS) и платный (7/14/30 дней) работают одинаково: раз в
+// Тестовый доступ новичку (TRIAL_HOURS, по умолчанию сутки) и платный (7/14/30 дней) работают одинаково: раз в
 // POLL_SEC, турбо, до PAID_SUBS поисков — разница только в сроке. Без доступа — не проверяем.
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
@@ -631,11 +631,11 @@ function createBot({ token, db, config, getWatcher, log }) {
     const now = Date.now();
     for (const u of db.users()) {
       if (u.blocked) continue;
-      // Тест: за сутки до конца и когда кончился (если не оплатил).
+      // Тест: незадолго до конца (за четверть срока, не больше суток) и когда кончился.
       if (!db.isPaid(u, 'any', now) && u.trial_until) {
         const tl = u.trial_until - now;
         const tkey = `trial:${u.id}:${u.trial_until}`;
-        if (tl > 0 && tl < DAY && !db.get(`${tkey}:soon`)) {
+        if (tl > 0 && tl < Math.min(DAY, (db.trialMs || DAY) / 4) && !db.get(`${tkey}:soon`)) {
           db.set(`${tkey}:soon`, 1);
           await send(u.id, `🧪 Тестовый доступ заканчивается ${fmtDate(u.trial_until)}. Чтобы объявления продолжали приходить: /access`);
         } else if (tl <= 0 && tl > -7 * DAY && !db.get(`${tkey}:over`) && u.paid_until < now) {
