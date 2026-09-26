@@ -8,7 +8,7 @@
 #
 # ОДИН РАЗ В CODEMAGIC. Вход через GitHub помеченный аккаунт не пускает («This account is flagged, and therefore
 # cannot authorize a third party application»), поэтому репозиторий подключается ключом развёртывания:
-#   ключ — на Windows в PowerShell: ssh-keygen -t ed25519 -N '""' -f codemagic_kliko
+#   ключ — на Windows в PowerShell: ssh-keygen -t ed25519 -f $HOME\codemagic_kliko (пароль пустой: два раза Enter)
 #   Codemagic (вход по почте / GitLab / Bitbucket) → Add application → Other (Git URL):
 #     git@github.com:ultrakzstore-art/kliko-ios.git, SSH key — файл codemagic_kliko (закрытый);
 #   GitHub → kliko-ios → Settings → Deploy keys → Add deploy key: codemagic_kliko.pub (только чтение).
