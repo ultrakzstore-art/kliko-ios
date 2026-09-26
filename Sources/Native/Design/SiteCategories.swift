@@ -243,10 +243,15 @@ extension SiteSession {
               let данные = try? JSONSerialization.data(withJSONObject: разделы),
               let список = String(data: данные, encoding: .utf8) else { return [:] }
         /* Список разделов — JSON-литералом, а не склейкой строк: имя раздела не должно стать кодом страницы. */
-        let js = "(function(a){try{var F=(typeof MK_CFLAT!=='undefined')?MK_CFLAT:null;var r={};"
-            + "a.forEach(function(k){var n='';try{n=(typeof mkCatName==='function')?String(mkCatName(k)||''):'';}catch(e){}"
-            + "if(!n&&F&&F[k])n=String(F[k].name||'');if(n)r[k]=n;});return JSON.stringify(r);}catch(e){return '{}';}})("
-            + список + ")"
+        /* 🔴 mkCatName без раздела в MK_CFLAT (страница кабинета, раздел новее страницы) отдаёт tt("category") —
+           «Категория». Это не имя: владелец увидел его в крошках (TestFlight 26.09.2026). Такой ответ отбрасываем, и
+           крошки берут имя из снимка (ИменаРазделовСайта) или показывают корень. */
+        var js = "(function(a){try{var F=(typeof MK_CFLAT!=='undefined')?MK_CFLAT:null;var r={};"
+        js += "var fb='';try{fb=(typeof tt==='function')?String(tt('category')||''):'';}catch(e){}"
+        js += "a.forEach(function(k){var n='';if(F&&F[k])n=String(F[k].name||'');"
+        js += "if(!n){try{n=(typeof mkCatName==='function')?String(mkCatName(k)||''):'';}catch(e){}}"
+        js += "if(n&&n!==fb&&n!=='Категория')r[k]=n;});return JSON.stringify(r);}catch(e){return '{}';}})("
+        js += список + ")"
         guard let строка = try? await web.evaluateJavaScript(js) as? String,
               let ответ = строка.data(using: .utf8),
               let словарь = try? JSONSerialization.jsonObject(with: ответ) as? [String: String] else { return [:] }

@@ -168,12 +168,8 @@ struct ПанельСвязиСайта: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 10)
-        .background(Color.black.opacity(0.2))
-        .overlay(alignment: .leading) {
-            Color.white.opacity(0.12)
-                .frame(width: 1)
-                .accessibilityHidden(true)
-        }
+        /* Без своей подложки и черты: тёмный прямоугольник за кругами читался «квадратиком» на зелёной пилюле
+           (владелец 26.09.2026, TestFlight) — панель одна цельная, как у сайта, круги лежат прямо на ней. */
     }
 
     private func круг(_ канал: Канал) -> some View {

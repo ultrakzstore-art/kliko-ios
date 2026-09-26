@@ -110,6 +110,8 @@ struct Listing: Identifiable, Hashable {
     var жильё: [String: String] = [:]
     /// shop_accent «#RRGGBB» — фирменный цвет магазина: полоса сверху карточки ленты и цена (.mk-cbrand сайта).
     var акцентМагазина: UInt32? = nil
+    /// Страница авто и жилья (SiteListingKinds.swift): проверки, оплата, место — разбираются там же.
+    var поляВида = ПоляСтраницыВида()
 
     struct Характеристика: Hashable {
         let ключ: String
@@ -355,6 +357,7 @@ extension Listing: Decodable {
         let связь = try? c.decode(Связь.self, forKey: Ключ("contact"))
         звонок = телефон && (связь?.call?.ok?.да ?? false)
         whatsApp = телефон && (связь?.wa?.ok?.да ?? false)
+        поляВида = (try? ПоляСтраницыВида(from: decoder)) ?? ПоляСтраницыВида()
     }
 }
 

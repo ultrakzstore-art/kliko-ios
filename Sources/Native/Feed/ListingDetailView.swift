@@ -97,6 +97,8 @@ struct ListingDetailView: View {
             /* Этап 29: пилюля сайта «Связаться» / «Предложить цену» со звонком и WhatsApp вместо прежних кнопок; панель
                вкладок в это время прячет NativeTabsView — как у сайта, у страницы объявления своя нижняя панель. */
             .safeAreaInset(edge: .bottom, spacing: 0) { ПанельСвязиСайта(товар: товар, открыть: открыть) }
+            /* Смахнуть вниз от самого верха — закрыть, как лист (владелец 26.09.2026); панель едет вместе со страницей. */
+            .modifier(ЗакрытьСмахиваниемВниз())
     }
 
     /// «Поделиться» картинкой (этап 19) для страницы сайта; nil — ссылкой (рубильник выключен или адреса нет).
@@ -522,22 +524,50 @@ private struct ФотоИндекс: Identifiable {
     let id: Int
 }
 
-/// Фото на весь экран: листать, увеличивать двумя пальцами, закрыть.
-private struct ФотоНаВесьЭкран: View {
+/**
+ Фото на весь экран: листать, увеличивать двумя пальцами, закрыть «×» или смахнуть вниз (владелец 26.09.2026,
+ TestFlight: «смахнуть вниз не закрывает»).
+
+ Смахивание — своё: фото едет за пальцем, чёрный фон бледнеет и открывает страницу под ним (фон листа прозрачный);
+ отпустили дальше порога или резким броском — закрыть, иначе фото возвращается на место. Жест начинается, только
+ когда палец идёт в основном по вертикали и фото не увеличено: листание вбок (TabView .page) и увеличение двумя
+ пальцами остаются прежними. Используется и для «Схемы помещения» (SiteListingKinds.swift) — поэтому не private.
+ */
+struct ФотоНаВесьЭкран: View {
     let адреса: [URL]
     @State var начало: Int
     @Environment(\.dismiss) private var закрыть
+    /// Сдвиг фото по вертикали во время смахивания.
+    @State private var сдвиг: CGFloat = 0
+    /// Решено ли, что жест — смахивание (nil — ещё не решено, false — листание вбок, им не мешаем).
+    @State private var смахивание: Bool?
+    /// Текущее фото увеличено — смахивание выключено, чтобы не мешать увеличению.
+    @State private var увеличено = false
+
+    /// Явный init: окно открывают и из других файлов, а private @State прячет готовый.
+    init(адреса: [URL], начало: Int) {
+        self.адреса = адреса
+        _начало = State(initialValue: начало)
+    }
+
+    /// 0…1 — насколько фото уже утащили: по ней бледнеет фон и прячутся кнопки.
+    private var доля: CGFloat { min(abs(сдвиг) / 320, 1) }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .opacity(1 - доля * 0.85)
+                .ignoresSafeArea()
             TabView(selection: $начало) {
                 ForEach(Array(адреса.enumerated()), id: \.offset) { номер, адрес in
-                    УвеличиваемоеФото(адрес: адрес).tag(номер)
+                    УвеличиваемоеФото(адрес: адрес, увеличено: $увеличено).tag(номер)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: адреса.count > 1 ? .always : .never))
+            .tabViewStyle(.page(indexDisplayMode: адреса.count > 1 && сдвиг == 0 ? .always : .never))
             .ignoresSafeArea()
+            .offset(y: сдвиг)
+            .scaleEffect(1 - доля * 0.12)
+            .simultaneousGesture(смахнуть, including: увеличено ? .subviews : .all)
 
             Button { закрыть() } label: {
                 Image(systemName: "xmark")
@@ -548,13 +578,52 @@ private struct ФотоНаВесьЭкран: View {
             }
             .accessibilityLabel(FeedText.т("close"))
             .padding(16)
+            .opacity(1 - доля)
         }
         .statusBarHidden()
+        .presentationBackground(.clear)
+        .onChange(of: начало) { _, _ in увеличено = false }
+        .accessibilityAction(.escape) { закрыть() }
+    }
+
+    private var смахнуть: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { ход in
+                let вбок = abs(ход.translation.width)
+                let вниз = abs(ход.translation.height)
+                if смахивание == nil {
+                    /* Решаем один раз за жест: в основном по вертикали — смахиваем, иначе это листание. */
+                    смахивание = вниз > вбок * 1.4
+                }
+                if смахивание == true {
+                    сдвиг = ход.translation.height
+                }
+            }
+            .onEnded { ход in
+                defer { смахивание = nil }
+                guard смахивание == true else { return }
+                let бросок = ход.predictedEndTranslation.height - ход.translation.height
+                if abs(ход.translation.height) > 120 || abs(бросок) > 260 {
+                    let куда: CGFloat = ход.translation.height < 0 ? -900 : 900
+                    withAnimation(.easeIn(duration: 0.18)) { сдвиг = куда }
+                    /* Уезжает своей анимацией; без системной, иначе окно ещё раз поедет вниз. */
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 160_000_000)
+                        var без = Transaction()
+                        без.disablesAnimations = true
+                        withTransaction(без) { закрыть() }
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { сдвиг = 0 }
+                }
+            }
     }
 }
 
 private struct УвеличиваемоеФото: View {
     let адрес: URL
+    /// Увеличено ли это фото — окно по нему выключает смахивание.
+    @Binding var увеличено: Bool
     @State private var масштаб: CGFloat = 1
     @State private var опорный: CGFloat = 1
 
@@ -577,5 +646,14 @@ private struct УвеличиваемоеФото: View {
             опорный = масштаб
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: масштаб) { _, стало in
+            let больше = стало > 1.01
+            if увеличено != больше { увеличено = больше }
+        }
+        /* Ушли на соседнее фото — это снова целиком, как у сайта. */
+        .onDisappear {
+            масштаб = 1
+            опорный = 1
+        }
     }
 }
