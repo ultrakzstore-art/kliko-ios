@@ -27,6 +27,10 @@ extension View {
     }
 }
 
+/// Запас на полоску-хваталку сверху и дробные пункты: без него последняя строка текста могла уйти под кнопку.
+/// Вне типа: у обобщённых типов статических хранимых свойств не бывает.
+private let запасЛистаСКнопкой: CGFloat = 12
+
 struct ЛистСКнопкойВнизу<Низ: View>: ViewModifier {
     let фон: Color
     let низ: Низ
@@ -34,9 +38,6 @@ struct ЛистСКнопкойВнизу<Низ: View>: ViewModifier {
     @State private var высотаСодержимого: CGFloat = 0
     @State private var высотаНиза: CGFloat = 0
     @State private var отступСнизу: CGFloat = 0
-
-    /// Запас на полоску-хваталку сверху и дробные пункты: без него последняя строка текста могла уйти под кнопку.
-    private static let запас: CGFloat = 12
 
     func body(content: Content) -> some View {
         content
@@ -79,7 +80,7 @@ struct ЛистСКнопкойВнизу<Низ: View>: ViewModifier {
 
     private var набор: Set<PresentationDetent> {
         guard высотаСодержимого > 1 else { return [.large] }
-        let итог: CGFloat = (высотаСодержимого + высотаНиза + отступСнизу + Self.запас).rounded(.up)
+        let итог: CGFloat = (высотаСодержимого + высотаНиза + отступСнизу + запасЛистаСКнопкой).rounded(.up)
         return [.height(итог)]
     }
 }

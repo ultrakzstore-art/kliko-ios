@@ -700,7 +700,7 @@ struct ЛистРазделов: View {
             }
         } label: {
             HStack(spacing: 12) {
-                ЗначокРаздела(корень: справочники.корень(ключ))
+                ЗначокРазделаПодачи(корень: справочники.корень(ключ))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(справочники.имя(ключ))
                         .font(.system(size: 16, weight: .semibold))
@@ -741,7 +741,7 @@ struct ЛистРазделов: View {
             закрыть()
         } label: {
             HStack(spacing: 12) {
-                ЗначокРаздела(корень: справочники.корень(ключ))
+                ЗначокРазделаПодачи(корень: справочники.корень(ключ))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(справочники.имя(ключ))
                         .font(.system(size: 16, weight: .semibold))
@@ -769,7 +769,7 @@ struct ЛистРазделов: View {
 }
 
 /// Значок корня раздела в мятном квадрате.
-struct ЗначокРаздела: View {
+struct ЗначокРазделаПодачи: View {
     let корень: String
 
     init(корень: String) {
@@ -806,7 +806,7 @@ struct ЗначокРаздела: View {
 }
 
 /// Строка выбранного раздела в форме: значок, имя и путь; пусто — «Выберите категорию».
-struct СтрокаРаздела: View {
+struct СтрокаРазделаПодачи: View {
     let справочники: СправочникиПодачи
     let раздел: String
     let ошибка: Bool
@@ -825,7 +825,7 @@ struct СтрокаРаздела: View {
         let имя = справочники.имя(раздел)
         return Button(action: действие) {
             HStack(spacing: 12) {
-                ЗначокРаздела(корень: раздел.isEmpty ? "" : справочники.корень(раздел))
+                ЗначокРазделаПодачи(корень: раздел.isEmpty ? "" : справочники.корень(раздел))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(имя.isEmpty ? ПодачаText.т("cat_pick") : имя)
                         .font(.system(size: 16, weight: имя.isEmpty ? Font.Weight.regular : Font.Weight.semibold))
