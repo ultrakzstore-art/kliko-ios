@@ -1,7 +1,5 @@
 import SwiftUI
 import UIKit
-import AVFoundation
-import CoreVideo
 
 /**
  «ПОДЕЛИТЬСЯ» КАБИНЕТА — окно showSocialModal сайта (владелец 26.09.2026: «поделиться в кабинете — как на сайте»).
@@ -28,9 +26,9 @@ import CoreVideo
      (proGate("autopost"));
    · «Позже».
 
- Ролик: студии роликов сайта (модуль reel) в приложении нет — «Сделать видео и поделиться» собирает из постера «Для
- сторис» (у услуги — постер услуги) 5-секундный ролик 1080 × 1920 с медленным приближением (H.264, AVAssetWriter) и
- отдаёт его в системный лист (Reels, TikTok, Stories); подпись со ссылкой — в буфер.
+ Ролик: «Сделать видео и поделиться» открывает студию роликов (СтудияРоликов, Sources/Native/Reels) — нативную копию
+ модуля reel сайта (openReelForListing): стили, фото объявления, звук, запись 1080 × 1920 и отправка в Reels, Stories,
+ TikTok и автопостинг.
 
  🔴 ДЕНЬГИ. «Продвинуть объявление» и PRO для автопостинга — при Config.цифровыеПокупки окно App Store
  (ЛистУслугиApple), иначе страница кабинета сайта (ПереходыКабинета.сайт), как у «Моих объявлений».
@@ -70,7 +68,6 @@ struct ОкноПоделитьсяКабинета: View {
     @State private var соцсети: [String: СостояниеАвтопостинга]? = nil
     @State private var публикуется: String? = nil
     @State private var опубликованоВ: Set<String> = []
-    @State private var ролик = false
     @State private var появился = false
     @State private var круг = false
     @State private var знак = false
@@ -325,15 +322,11 @@ struct ОкноПоделитьсяКабинета: View {
 
     /// .soc-hero: градиент Instagram, значок камеры в полупрозрачном квадрате, стрелка.
     private var герой: some View {
-        Button { сделатьРолик() } label: {
+        Button { СтудияРоликов.показать(данные) } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    if ролик {
-                        ProgressView().tint(Color.white)
-                    } else {
-                        Image(systemName: "video")
-                            .font(.system(size: 17, weight: .semibold))
-                    }
+                    Image(systemName: "video")
+                        .font(.system(size: 17, weight: .semibold))
                 }
                 .frame(width: 34, height: 34)
                 .background(Color.white.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -356,7 +349,6 @@ struct ОкноПоделитьсяКабинета: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
-        .disabled(ролик)
         .accessibilityHint(т("hero_sub"))
     }
 
@@ -609,30 +601,6 @@ struct ОкноПоделитьсяКабинета: View {
         }
     }
 
-    /// Ролик 1080 × 1920 из постера «Для сторис» — в системный лист; подпись со ссылкой — в буфер.
-    private func сделатьРолик() {
-        guard !ролик else { return }
-        ролик = true
-        показатьТост(т("video_making"), секунд: 2.5)
-        Task { @MainActor in
-            if фото == nil { фото = await ПоделитьсяСайта.загрузить(данные.фото) }
-            var файл: URL? = nil
-            if let постер = ПоделитьсяСайта.постер(данные, фото: фото, высота: 1920) {
-                файл = await РоликПостера.сделать(постер)
-            }
-            ролик = false
-            guard let файл else {
-                ОткликСайта.предупреждение()
-                показатьТост(т("video_fail"), секунд: 3)
-                return
-            }
-            UIPasteboard.general.string = "\(подписьОтправки)\n\(адресКабинета.absoluteString)"
-            ОткликСайта.успех()
-            показатьТост(т("video_ready"), секунд: 3.5)
-            ПоделитьсяСайта.системныйЛист([файл])
-        }
-    }
-
     /// cabinet.php?action=social_status → {ok, instagram: {enabled, connected, username}, tiktok: {…}}. Сбой — обе
     /// кнопки серые «скоро», как renderSocialBtns(null) сайта.
     private func загрузитьСоцсети() async {
@@ -799,87 +767,6 @@ struct ЗнакОтправкиКабинета: Shape {
             путь.closeSubpath()
         }
         return путь
-    }
-}
-
-// MARK: - Ролик из постера
-
-/**
- Короткий ролик для Reels, TikTok и Stories: постер 1080 × 1920 медленно приближается (1,00 → 1,08, плавный ход) за
- 5 секунд, 30 кадров в секунду, H.264 в .mp4 во временной папке. Пишется вне главной нити.
- */
-enum РоликПостера {
-    static func сделать(_ картинка: UIImage) async -> URL? {
-        guard let кадр = картинка.cgImage else { return nil }
-        return await Task.detached(priority: .userInitiated) {
-            РоликПостера.записать(кадр)
-        }.value
-    }
-
-    private static func записать(_ кадр: CGImage) -> URL? {
-        let ширина = 1080
-        let высота = 1920
-        let кадров = 150
-        let адрес = FileManager.default.temporaryDirectory.appendingPathComponent("kliko-\(UUID().uuidString).mp4")
-        guard let писатель = try? AVAssetWriter(outputURL: адрес, fileType: .mp4) else { return nil }
-        let настройки: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: ширина,
-            AVVideoHeightKey: высота
-        ]
-        let вход = AVAssetWriterInput(mediaType: .video, outputSettings: настройки)
-        вход.expectsMediaDataInRealTime = false
-        let атрибуты: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: ширина,
-            kCVPixelBufferHeightKey as String: высота
-        ]
-        let адаптер = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: вход, sourcePixelBufferAttributes: атрибуты)
-        guard писатель.canAdd(вход) else { return nil }
-        писатель.add(вход)
-        guard писатель.startWriting() else { return nil }
-        писатель.startSession(atSourceTime: .zero)
-
-        let пространство = CGColorSpaceCreateDeviceRGB()
-        let раскладка = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        var целиком = true
-        for номер in 0..<кадров {
-            var ждали = 0
-            while !вход.isReadyForMoreMediaData && ждали < 2000 {
-                Thread.sleep(forTimeInterval: 0.005)
-                ждали += 1
-            }
-            guard let пул = адаптер.pixelBufferPool else { целиком = false; break }
-            var буфер: CVPixelBuffer? = nil
-            CVPixelBufferPoolCreatePixelBuffer(nil, пул, &буфер)
-            guard let буфер else { целиком = false; break }
-            CVPixelBufferLockBaseAddress(буфер, [])
-            if let контекст = CGContext(data: CVPixelBufferGetBaseAddress(буфер), width: ширина, height: высота,
-                                        bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(буфер),
-                                        space: пространство, bitmapInfo: раскладка) {
-                let доля = CGFloat(номер) / CGFloat(кадров - 1)
-                let ход = доля * доля * (3 - 2 * доля)
-                let масштаб = 1 + 0.08 * ход
-                let w = CGFloat(ширина) * масштаб
-                let h = CGFloat(высота) * масштаб
-                контекст.interpolationQuality = .high
-                контекст.draw(кадр, in: CGRect(x: (CGFloat(ширина) - w) / 2, y: (CGFloat(высота) - h) / 2, width: w, height: h))
-            }
-            CVPixelBufferUnlockBaseAddress(буфер, [])
-            if !адаптер.append(буфер, withPresentationTime: CMTime(value: CMTimeValue(номер), timescale: 30)) {
-                целиком = false
-                break
-            }
-        }
-        вход.markAsFinished()
-        let сигнал = DispatchSemaphore(value: 0)
-        писатель.finishWriting { сигнал.signal() }
-        сигнал.wait()
-        guard целиком, писатель.status == .completed else {
-            try? FileManager.default.removeItem(at: адрес)
-            return nil
-        }
-        return адрес
     }
 }
 

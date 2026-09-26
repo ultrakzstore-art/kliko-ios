@@ -248,7 +248,7 @@ final class РисовальщикРолика: @unchecked Sendable {
             х.к.setAlpha(CGFloat(К.выход(К.предел((u - 0.35) / 0.5))))
             залить(х, скруглённый(CGRect(x: 364, y: 1104, width: 352, height: 352), 30), UIColor.white)
             х.к.interpolationQuality = .none
-            qr.draw(in: CGRect(x: 390, y: 1130, width: 300, height: 300))
+            изображение(х, qr, CGRect(x: 390, y: 1130, width: 300, height: 300))
             х.к.restoreGState()
         }
         водянойЗнак(х)
@@ -321,7 +321,8 @@ final class РисовальщикРолика: @unchecked Sendable {
         let h = РисовальщикРолика.высота * z
         х.к.saveGState()
         х.к.setAlpha(CGFloat(альфа))
-        картинка.draw(in: CGRect(x: (РисовальщикРолика.ширина - w) / 2, y: (РисовальщикРолика.высота - h) / 2, width: w, height: h))
+        изображение(х, картинка, CGRect(x: (РисовальщикРолика.ширина - w) / 2, y: (РисовальщикРолика.высота - h) / 2,
+                                         width: w, height: h))
         х.к.restoreGState()
     }
 
@@ -360,7 +361,7 @@ final class РисовальщикРолика: @unchecked Sendable {
         х.к.saveGState()
         х.к.addPath(скруглённый(r, 34))
         х.к.clip()
-        картинка.draw(in: r)
+        изображение(х, картинка, r)
         х.к.restoreGState()
         обвести(х, скруглённый(r.insetBy(dx: 1.5, dy: 1.5), 32.5), К.белый(0.22), 3)
         х.к.restoreGState()
@@ -559,7 +560,7 @@ final class РисовальщикРолика: @unchecked Sendable {
         залить(х, скруглённый(CGRect(x: 808, y: f - 18, width: 236, height: 266), 22), UIColor.white)
         х.к.saveGState()
         х.к.interpolationQuality = .none
-        qr.draw(in: CGRect(x: 826, y: f, width: 200, height: 200))
+        изображение(х, qr, CGRect(x: 826, y: f, width: 200, height: 200))
         х.к.restoreGState()
         надпись(содержимое.подсказкаПостера, К.шрифт(содержимое.стиль.текст, "700", 22), К.цвет(0x0E1411), 926,
                 f + 208, поЦентру: true, база: .верх)
@@ -593,20 +594,19 @@ final class РисовальщикРолика: @unchecked Sendable {
         let рамка = CGRect(x: m + a + зазор, y: y - вНадписи / 2, width: шНадписи, height: вНадписи)
         if let надписьKliko { надписьKliko.draw(in: рамка) }
         if let надписьKz { надписьKz.draw(in: рамка) }
-        х.к.endTransparencyLayer()
-        х.к.restoreGState()
-
+        /* Маяк над «ı» — внутри того же слоя: затухание кадра (setAlpha снаружи) действует и на него. */
         let s = шНадписи / 296
         let центр = CGPoint(x: рамка.minX + 79 * s, y: рамка.minY + 15 * s)
         let маяк = К.цвет(0x25D366)
-        х.к.saveGState()
         х.к.setAlpha(0.55)
         х.к.setStrokeColor(маяк.cgColor)
         х.к.setLineWidth(2.4 * s)
         х.к.strokeEllipse(in: CGRect(x: центр.x - 10 * s, y: центр.y - 10 * s, width: 20 * s, height: 20 * s))
-        х.к.restoreGState()
+        х.к.setAlpha(1)
         х.к.setFillColor(маяк.cgColor)
         х.к.fillEllipse(in: CGRect(x: центр.x - 6.2 * s, y: центр.y - 6.2 * s, width: 12.4 * s, height: 12.4 * s))
+        х.к.endTransparencyLayer()
+        х.к.restoreGState()
         return всего
     }
 
@@ -654,6 +654,20 @@ final class РисовальщикРолика: @unchecked Sendable {
     }
 
     // MARK: Примитивы холста
+
+    /// Картинка через CGContext: UIImage.draw ставит свою непрозрачность 1 и затирает затухание кадра (setAlpha).
+    /// Контекст перевёрнут под UIKit — CGImage рисуем с обратным переворотом.
+    private func изображение(_ х: ХолстРолика, _ картинка: UIImage, _ r: CGRect) {
+        guard let растр = картинка.cgImage else {
+            картинка.draw(in: r)
+            return
+        }
+        х.к.saveGState()
+        х.к.translateBy(x: r.minX, y: r.maxY)
+        х.к.scaleBy(x: 1, y: -1)
+        х.к.draw(растр, in: CGRect(x: 0, y: 0, width: r.width, height: r.height))
+        х.к.restoreGState()
+    }
 
     private enum БазаТекста { case верх, середина, линия }
 
