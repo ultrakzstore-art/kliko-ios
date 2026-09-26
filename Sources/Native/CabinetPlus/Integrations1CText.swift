@@ -1,0 +1,223 @@
+import Foundation
+
+/**
+ ТЕКСТЫ «СОПОСТАВЛЕНИЯ ГРУПП 1С» И «ПРИМЕРОВ КОДА» ЭКРАНА ИНТЕГРАЦИЙ — на языке телефона (kk/ru/en/ar).
+
+ Русские — слово в слово с сайта: словарь js/i18n-cabinet-ru.js (c1_*, ig_back_*, ig_ping_*, ig_your_key, pq_cancel;
+ функции intg1cMapHTML, intg1cOpen, intg1cPick, intg1cSave, intg1cBackHTML, intgDocsHTML модуля
+ js/cabinet-business.min.js). Свои слова приложения — ключи с «app_»: «Не выгружать», охрана несохранённого, показ
+ скрытого ключа, заголовок блока примеров. Нет ключа здесь — берём у КабинетПлюсText (ig_copy, ig_copied_ok, retry…).
+ */
+enum Интеграции1СText {
+    static func т(_ ключ: String) -> String {
+        let словарь: [String: String]
+        switch КабинетПлюсText.язык {
+        case "kk": словарь = kk
+        case "en": словарь = en
+        case "ar": словарь = ar
+        default: словарь = ru
+        }
+        if let своё = словарь[ключ] ?? ru[ключ] { return своё }
+        return КабинетПлюсText.т(ключ)
+    }
+
+    // MARK: - Русский (сайт)
+
+    private static let ru: [String: String] = [
+        "c1_wait": "{n} ждут",
+        "c1_gap": "Товары несопоставленных групп не создаются — они ждут, пока вы укажете раздел. Ничего не теряется: следующий обмен заведёт их.",
+        "c1_set": "Задать разделы",
+        "c1_edit": "Изменить разделы",
+        "c1_only": "только несопоставленные",
+        "c1_guess": "Подставить подсказки",
+        "c1_pick": "выбрать раздел",
+        "c1_clear": "Убрать",
+        "c1_all": "Все группы сопоставлены.",
+        "c1_save": "Сохранить",
+        "c1_saving": "Сохраняем…",
+        "c1_find": "Найти раздел",
+        "c1_nores": "Ничего не нашлось",
+        "c1_guessed": "Подставлено по названию: {n} — проверьте и сохраните",
+        "c1_noguess": "Похожих разделов не нашлось",
+        "c1_saved": "Сохранено. Товары заведутся при следующем обмене с 1С",
+        "c1_savefail": "Не удалось сохранить",
+        "c1_group": "Группа 1С",
+        "c1_pick_aria": "Выбор раздела",
+        "pq_cancel": "Отмена",
+        "ig_back_h": "Обратный ход: номер документа к нам",
+        "ig_back_s": "Заказ уезжает в 1С сам, а вот номер вашего документа и отметка об оплате обратно не вернутся: типовая конфигурация про наш адрес не знает. Отдайте этот код своему специалисту 1С — он вызывается после проведения документа.",
+        "ig_back_n": "Код на встроенном языке 1С 8.3. Мы его не запускали — платформы 1С у нас нет; проверьте на тестовой базе перед боевой.",
+        "ig_back_i": "Что можно передать",
+        "ig_back_f1": "номер и дата вашего документа",
+        "ig_back_f2": "состав — только пока счёт не оплачен",
+        "ig_ping_h": "Проверить связь",
+        "ig_ping_s": "Ответ покажет, какие области выданы ключу. Список маршрутов и событий — {u}.",
+        "ig_your_key": "ВАШ_КЛЮЧ",
+        "app_code_h": "Примеры кода для 1С",
+        "app_skip": "Не выгружать",
+        "app_skip_s": "Товары группы не заводятся, пока не выбран раздел",
+        "app_suggest": "Подсказка: {n}",
+        "app_all_sections": "Все разделы",
+        "app_inside": "Подразделы",
+        "app_cats_fail": "Не удалось загрузить разделы",
+        "app_unsaved_t": "Сохранить изменения?",
+        "app_unsaved_s": "Разделы групп изменены, но ещё не сохранены.",
+        "app_discard": "Выйти без сохранения",
+        "app_stay": "Остаться",
+        "app_no_groups": "Групп пока нет",
+        "app_key_show": "Показать ключ",
+        "app_key_hide": "Скрыть ключ",
+        "app_key_used": "Подставлен ключ, выпущенный сейчас. Он скрыт — нажмите «Показать ключ».",
+        "app_key_none": "Вместо ВАШ_КЛЮЧ подставьте ключ из раздела «Ключи API»: целиком он показывается один раз, при выпуске.",
+    ]
+
+    // MARK: - Қазақша
+
+    private static let kk: [String: String] = [
+        "c1_wait": "{n} күтуде",
+        "c1_gap": "Сәйкестендірілмеген топтардың тауарлары жасалмайды — сіз бөлімді көрсеткенше күтеді. Ештеңе жоғалмайды: келесі алмасу оларды енгізеді.",
+        "c1_set": "Бөлімдерді беру",
+        "c1_edit": "Бөлімдерді өзгерту",
+        "c1_only": "тек сәйкестендірілмегендер",
+        "c1_guess": "Кеңестерді қою",
+        "c1_pick": "бөлімді таңдау",
+        "c1_clear": "Алып тастау",
+        "c1_all": "Барлық топтар сәйкестендірілді.",
+        "c1_save": "Сақтау",
+        "c1_saving": "Сақтап жатырмыз…",
+        "c1_find": "Бөлімді табу",
+        "c1_nores": "Ештеңе табылмады",
+        "c1_guessed": "Атауы бойынша қойылды: {n} — тексеріп, сақтаңыз",
+        "c1_noguess": "Ұқсас бөлімдер табылмады",
+        "c1_saved": "Сақталды. Тауарлар 1С-пен келесі алмасуда енгізіледі",
+        "c1_savefail": "Сақтау мүмкін болмады",
+        "c1_group": "1С тобы",
+        "c1_pick_aria": "Бөлімді таңдау",
+        "pq_cancel": "Бас тарту",
+        "ig_back_h": "Кері жол: құжат нөмірі бізге",
+        "ig_back_s": "Тапсырыс 1С-ке өзі кетеді, бірақ құжатыңыздың нөмірі мен төлем белгісі кері қайтпайды: типтік конфигурация біздің мекенжайды білмейді. Бұл кодты 1С маманыңызға беріңіз — ол құжат өткізілгеннен кейін шақырылады.",
+        "ig_back_n": "1С 8.3 кірістірілген тіліндегі код. Біз оны іске қосқан жоқпыз — бізде 1С платформасы жоқ; жұмыс базасынан бұрын сынақ базасында тексеріңіз.",
+        "ig_back_i": "Не жіберуге болады",
+        "ig_back_f1": "құжатыңыздың нөмірі мен күні",
+        "ig_back_f2": "құрамы — шот төленбегенше ғана",
+        "ig_ping_h": "Байланысты тексеру",
+        "ig_ping_s": "Жауап кілтке қандай аймақтар берілгенін көрсетеді. Маршруттар мен оқиғалар тізімі — {u}.",
+        "ig_your_key": "СІЗДІҢ_КІЛТ",
+        "app_code_h": "1С үшін код үлгілері",
+        "app_skip": "Жүктемеу",
+        "app_skip_s": "Бөлім таңдалмайынша топ тауарлары енгізілмейді",
+        "app_suggest": "Кеңес: {n}",
+        "app_all_sections": "Барлық бөлімдер",
+        "app_inside": "Ішкі бөлімдер",
+        "app_cats_fail": "Бөлімдерді жүктеу мүмкін болмады",
+        "app_unsaved_t": "Өзгерістерді сақтау керек пе?",
+        "app_unsaved_s": "Топтардың бөлімдері өзгертілді, бірақ әлі сақталмады.",
+        "app_discard": "Сақтамай шығу",
+        "app_stay": "Қалу",
+        "app_no_groups": "Әзірге топтар жоқ",
+        "app_key_show": "Кілтті көрсету",
+        "app_key_hide": "Кілтті жасыру",
+        "app_key_used": "Жаңа ғана шығарылған кілт қойылды. Ол жасырын — «Кілтті көрсету» түймесін басыңыз.",
+        "app_key_none": "СІЗДІҢ_КІЛТ орнына «API кілттері» бөліміндегі кілтті қойыңыз: толық түрде ол шығарылғанда бір рет көрсетіледі.",
+    ]
+
+    // MARK: - English
+
+    private static let en: [String: String] = [
+        "c1_wait": "{n} waiting",
+        "c1_gap": "Items from unmapped groups are not created — they wait until you choose a section. Nothing is lost: the next exchange will add them.",
+        "c1_set": "Set sections",
+        "c1_edit": "Edit sections",
+        "c1_only": "unmapped only",
+        "c1_guess": "Fill in suggestions",
+        "c1_pick": "choose a section",
+        "c1_clear": "Remove",
+        "c1_all": "All groups are mapped.",
+        "c1_save": "Save",
+        "c1_saving": "Saving…",
+        "c1_find": "Find a section",
+        "c1_nores": "Nothing found",
+        "c1_guessed": "Filled in by name: {n} — check and save",
+        "c1_noguess": "No similar sections found",
+        "c1_saved": "Saved. Items will be created at the next 1C exchange",
+        "c1_savefail": "Could not save",
+        "c1_group": "1C group",
+        "c1_pick_aria": "Choose a section",
+        "pq_cancel": "Cancel",
+        "ig_back_h": "The way back: document number to us",
+        "ig_back_s": "Orders go to 1C on their own, but your document number and the payment mark will not come back: the standard configuration does not know our address. Give this code to your 1C specialist — it is called after the document is posted.",
+        "ig_back_n": "Code in the 1C 8.3 built-in language. We have not run it — we do not have the 1C platform; test it on a test database before production.",
+        "ig_back_i": "What you can send",
+        "ig_back_f1": "your document number and date",
+        "ig_back_f2": "items — only while the invoice is unpaid",
+        "ig_ping_h": "Check the connection",
+        "ig_ping_s": "The response shows which scopes the key has. Routes and events — {u}.",
+        "ig_your_key": "YOUR_KEY",
+        "app_code_h": "Code samples for 1C",
+        "app_skip": "Do not upload",
+        "app_skip_s": "The group's items are not created until a section is chosen",
+        "app_suggest": "Suggestion: {n}",
+        "app_all_sections": "All sections",
+        "app_inside": "Subsections",
+        "app_cats_fail": "Could not load sections",
+        "app_unsaved_t": "Save changes?",
+        "app_unsaved_s": "Group sections have changed but are not saved yet.",
+        "app_discard": "Leave without saving",
+        "app_stay": "Stay",
+        "app_no_groups": "No groups yet",
+        "app_key_show": "Show key",
+        "app_key_hide": "Hide key",
+        "app_key_used": "The key you just issued is filled in. It is hidden — tap “Show key”.",
+        "app_key_none": "Replace YOUR_KEY with a key from “API keys”: the full key is shown only once, when it is issued.",
+    ]
+
+    // MARK: - العربية
+
+    private static let ar: [String: String] = [
+        "c1_wait": "{n} بانتظار",
+        "c1_gap": "لا تُنشأ منتجات المجموعات غير المطابقة — تنتظر حتى تحدد القسم. لا يضيع شيء: التبادل التالي سيضيفها.",
+        "c1_set": "تحديد الأقسام",
+        "c1_edit": "تعديل الأقسام",
+        "c1_only": "غير المطابقة فقط",
+        "c1_guess": "إدراج الاقتراحات",
+        "c1_pick": "اختر قسمًا",
+        "c1_clear": "إزالة",
+        "c1_all": "تمت مطابقة كل المجموعات.",
+        "c1_save": "حفظ",
+        "c1_saving": "جارٍ الحفظ…",
+        "c1_find": "ابحث عن قسم",
+        "c1_nores": "لم يُعثر على شيء",
+        "c1_guessed": "أُدرج حسب الاسم: {n} — تحقق واحفظ",
+        "c1_noguess": "لم يُعثر على أقسام مشابهة",
+        "c1_saved": "تم الحفظ. ستُنشأ المنتجات في التبادل التالي مع 1C",
+        "c1_savefail": "تعذّر الحفظ",
+        "c1_group": "مجموعة 1C",
+        "c1_pick_aria": "اختيار القسم",
+        "pq_cancel": "إلغاء",
+        "ig_back_h": "الاتجاه المعاكس: رقم المستند إلينا",
+        "ig_back_s": "يذهب الطلب إلى 1C تلقائيًا، لكن رقم مستندك وعلامة الدفع لن يعودا: الإعداد القياسي لا يعرف عنواننا. أعطِ هذا الكود لمختص 1C لديك — يُستدعى بعد ترحيل المستند.",
+        "ig_back_n": "كود بلغة 1C 8.3 المدمجة. لم نشغّله — ليست لدينا منصة 1C؛ جرّبه على قاعدة اختبار قبل قاعدة العمل.",
+        "ig_back_i": "ما يمكن إرساله",
+        "ig_back_f1": "رقم مستندك وتاريخه",
+        "ig_back_f2": "المحتوى — فقط ما دامت الفاتورة غير مدفوعة",
+        "ig_ping_h": "التحقق من الاتصال",
+        "ig_ping_s": "يُظهر الرد النطاقات الممنوحة للمفتاح. قائمة المسارات والأحداث — {u}.",
+        "ig_your_key": "YOUR_KEY",
+        "app_code_h": "أمثلة كود لـ 1C",
+        "app_skip": "عدم الرفع",
+        "app_skip_s": "لا تُنشأ منتجات المجموعة حتى يُختار قسم",
+        "app_suggest": "اقتراح: {n}",
+        "app_all_sections": "كل الأقسام",
+        "app_inside": "الأقسام الفرعية",
+        "app_cats_fail": "تعذّر تحميل الأقسام",
+        "app_unsaved_t": "حفظ التغييرات؟",
+        "app_unsaved_s": "تغيّرت أقسام المجموعات لكنها لم تُحفظ بعد.",
+        "app_discard": "الخروج دون حفظ",
+        "app_stay": "البقاء",
+        "app_no_groups": "لا توجد مجموعات بعد",
+        "app_key_show": "إظهار المفتاح",
+        "app_key_hide": "إخفاء المفتاح",
+        "app_key_used": "أُدرج المفتاح الذي أصدرته الآن. إنه مخفي — اضغط «إظهار المفتاح».",
+        "app_key_none": "استبدل YOUR_KEY بمفتاح من «مفاتيح API»: يُعرض المفتاح كاملًا مرة واحدة فقط عند إصداره.",
+    ]
+}

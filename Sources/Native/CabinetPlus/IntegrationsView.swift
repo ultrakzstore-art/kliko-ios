@@ -15,7 +15,8 @@ import UIKit
    · вебхуки: intg_hook_new {name, url, events[], kind: generic | bitrix24} → {hook{secret}} | {dropped[]},
      intg_hook_on {id}, intg_hook_del {id}, intg_hook_test → {note}, intg_b24_token {id, token};
    · 1С: адрес обмена <base>/1c, кто ведёт остатки — intg_1c_stock {master: 1c | site}, расхождения — intg_1c_diff {id,
-     action: accept | keep}. Сопоставление групп 1С с разделами (intg_1c_map) — сводкой: сколько групп сопоставлено.
+     action: accept | keep}. Сопоставление групп 1С с разделами — сводка и свой лист (ЛистСопоставления1С, intg_1c_map
+     {map}); примеры кода для 1С — ПримерыКода1С (Integrations1CMap.swift).
  */
 struct КлючИнтеграции: Identifiable, Equatable {
     let id: String
@@ -61,6 +62,11 @@ final class ИнтеграцииМодель: ObservableObject {
     @Published private(set) var последнийОбмен: [String: Any] = [:]
     @Published private(set) var групп = 0
     @Published private(set) var сопоставлено = 0
+    /// c1Keys сайта: группы листа сопоставления (по названию) и c1_map {код группы: slug}.
+    @Published private(set) var группы1С: [ГруппаОбмена1С] = []
+    @Published private(set) var карта1С: [String: String] = [:]
+    /// Ключ, выпущенный в этом окне, целиком — для примеров кода (скрыт, пока не нажали «Показать ключ»).
+    @Published private(set) var ключСеанса = ""
     @Published private(set) var журналы: [String: [String]] = [:]
     @Published var занято = false
     @Published private(set) var плашка: String? = nil
@@ -133,8 +139,21 @@ final class ИнтеграцииМодель: ObservableObject {
             последнийОбмен = (j["c1_last"] as? [String: Any]) ?? [:]
             let группы = (j["c1_groups"] as? [String: Any]) ?? [:]
             let карта = (j["c1_map"] as? [String: Any]) ?? [:]
-            групп = группы.count
-            сопоставлено = группы.keys.filter { !A.строка(карта[$0]).isEmpty }.count
+            let использованы = Set(Self.строки(j["c1_used"]))
+            var ключиГрупп = Array(группы.keys)
+            if !использованы.isEmpty {
+                let занятые = ключиГрупп.filter { использованы.contains($0) }
+                if !занятые.isEmpty { ключиГрупп = занятые }
+            }
+            группы1С = ключиГрупп.map { ГруппаОбмена1С(id: $0, имя: A.строка(группы[$0])) }
+                .sorted { $0.имя.localizedStandardCompare($1.имя) == .orderedAscending }
+            var новаяКарта: [String: String] = [:]
+            for (код, slug) in карта {
+                let значение = A.строка(slug)
+                if !значение.isEmpty { новаяКарта[код] = значение }
+            }
+            карта1С = новаяКарта
+            пересчитать1С()
             состояние = .готово
         } catch let с as ЗапросыКабинета.Сбой {
             if с.нуженВход {
@@ -173,7 +192,9 @@ final class ИнтеграцииМодель: ObservableObject {
             return
         }
         Task { await вызвать("intg_key_new", ["name": имя, "scopes": области], успех: nil) { j in
-            готово(A.строка(j["key"]))
+            let ключ = A.строка(j["key"])
+            if !ключ.isEmpty { self.ключСеанса = ключ }
+            готово(ключ)
         } }
     }
 
@@ -255,6 +276,18 @@ final class ИнтеграцииМодель: ObservableObject {
         }
     }
 
+    private func пересчитать1С() {
+        групп = группы1С.count
+        сопоставлено = группы1С.filter { !(карта1С[$0.id] ?? "").isEmpty }.count
+    }
+
+    /// intg1cSave прошёл: c1_map — черновик листа, сводка заново, тост c1_saved.
+    func картаСохранена(_ карта: [String: String]) {
+        карта1С = карта
+        пересчитать1С()
+        показать(Интеграции1СText.т("c1_saved"))
+    }
+
     func расхождение(_ р: РасхождениеОстатка, принять: Bool) {
         Task { await вызвать("intg_1c_diff", ["id": р.id, "action": принять ? "accept" : "keep"], успех: "c1_ddone") }
     }
@@ -279,6 +312,7 @@ struct ЭкранИнтеграций: View {
     @State private var удалить: ВебхукИнтеграции? = nil
     @State private var токены: [String: String] = [:]
     @State private var входОткрыт = false
+    @State private var сопоставление = false
 
     private func т(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
 
@@ -382,6 +416,7 @@ struct ЭкранИнтеграций: View {
                 ключи
                 вебхуки
                 обмен1С
+                ПримерыКода1С(база: модель.база, ключ: модель.ключСеанса) { модель.показать(т("ig_copied_ok")) }
             }
             .padding(12)
         }
@@ -534,6 +569,18 @@ struct ЭкранИнтеграций: View {
 
     private var обмен1С: some View {
         КарточкаБизнеса(т("ig_1c_h"), значок: "arrow.left.arrow.right.square") {
+            содержимое1С
+        }
+        .sheet(isPresented: $сопоставление) {
+            ЛистСопоставления1С(группы: модель.группы1С, карта: модель.карта1С) { карта in
+                модель.картаСохранена(карта)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var содержимое1С: some View {
+        Group {
             Text(т("ig_1c_s").replacingOccurrences(of: "{b}", with: т("ig_1c_node")))
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.текстВторой)
@@ -569,6 +616,24 @@ struct ЭкранИнтеграций: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+            if модель.групп > 0 {
+                let ждут = модель.групп - модель.сопоставлено
+                if ждут > 0 {
+                    Text(Интеграции1СText.т("c1_wait").replacingOccurrences(of: "{n}", with: String(ждут)))
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(КраскаОбъявлений.предупреждениеФон, in: Capsule())
+                    Text(Интеграции1СText.т("c1_gap"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                КнопкаБизнеса(подпись: Интеграции1СText.т(ждут > 0 ? "c1_set" : "c1_edit"), второстепенная: ждут == 0) {
+                    сопоставление = true
+                }
+            }
             Divider()
             Text(т("c1_mh"))
                 .font(.system(size: 13.5, weight: .bold))
