@@ -47,7 +47,13 @@ enum SiteSession {
 
     /// Выражение JS для CSRF-токена страницы: window._MKP_CSRF витрины, запасной — window.KlikoCsrf моста. typeof —
     /// чтобы страница без _MKP_CSRF (кабинет) не бросила ReferenceError, а взяла запасной.
-    static let jsТокена = "String((typeof _MKP_CSRF!=='undefined'&&_MKP_CSRF)?_MKP_CSRF:(window.KlikoCsrf||''))"
+    ///
+    /// Этап 40 (владелец 26.09.2026): и дальше — как советует карта кабинета (§0.2): const CSRF страницы кабинета (на
+    /// гостевой странице KlikoCsrf пустой, а токен входа лежит именно там; const верхнего уровня не свойство window, его
+    /// видно только по имени — отсюда typeof), последним — window.__UIP_CSRF (он есть и у гостя). Токен выдаётся на
+    /// сессию: на всех страницах одной сессии все эти значения равны, порядок нужен лишь там, где первых нет.
+    static let jsТокена = "String((typeof _MKP_CSRF!=='undefined'&&_MKP_CSRF)?_MKP_CSRF:(window.KlikoCsrf"
+        + "||((typeof CSRF!=='undefined'&&CSRF)?CSRF:'')||window.__UIP_CSRF||''))"
 
     /// CSRF-токен загруженной страницы (этап 35). Страница не загружена или токена нет — nil.
     @MainActor

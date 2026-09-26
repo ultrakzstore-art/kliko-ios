@@ -16,6 +16,17 @@ import UserNotifications
 
  Имени человека в шапке нет: какие поля лежат в window.KlikoUser, приложение не знает (исходников сайта под рукой нет),
  а чужое поле, показанное как имя, хуже честного «Вы вошли».
+
+ ЭТАП 40 (владелец 26.09.2026: «всё одно и то же, просто код разный», Config.нативныйВход). Теперь приложение знает
+ страницу кабинета (карта кабинета, снимок сайта), и две оговорки выше сняты:
+   · «Войти» открывает свой экран входа (ЭкранВхода) — те же запросы, что у гостевой страницы, изнутри WKWebView;
+   · «Выйти» — своя кнопка с вопросом: сначала GET /cabinet.php?logout=1&t=<токен> (сервер закрывает сессию и снимает
+     привязки уведомлений этого телефона, пока кука на месте), потом мост klikoLogout и ВыходНачисто — всё то же, что
+     делала дорога через сайт, поэтому довод «закрыла бы только половину» больше не действует;
+   · в шапке — имя из CAB_USER.name, как в шапке кабинета сайта;
+   · новая редакция соглашения (__TERMS_RENEW) — окно «Условия обновились» (ОкноСоглашения);
+   · сигнал /api/sess_alert.php («Вы вышли на этом устройстве», «Вход с нового устройства») — строкой сверху.
+ Рубильник выключен — всё как на этапе 39.
  */
 struct CabinetView: View {
     @ObservedObject private var мост = WebBridge.shared
@@ -45,12 +56,44 @@ struct CabinetView: View {
     @State private var ошибкаЗамка: String? = nil
     /// Этап 16: лист «Что нового» по строке в «О приложении».
     @State private var показатьНовое = false
+    /// Этап 40: что напечатала страница кабинета — вход, имя, токен, соглашение (КабинетСайта.состояние).
+    @State private var кабинет: КабинетСайта.Состояние? = nil
+    /// Этап 40: сигнал /api/sess_alert.php — сеанс завершён или вход с другого устройства.
+    @State private var сигнал: КабинетСайта.СигналСеанса? = nil
+    @State private var входОткрыт = false
+    @State private var спроситьВыход = false
+    @State private var выходим = false
+    @State private var ошибкаВыхода: String? = nil
+    /// Этап 40: короткая плашка внизу («Спасибо — новая редакция принята»), как toast сайта.
+    @State private var плашка: String? = nil
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
     }
 
     var body: some View {
+        основа
+            /* Этап 40: свой экран входа, окно новой редакции соглашения, вопрос перед выходом, плашка. */
+            .sheet(isPresented: $входОткрыт) {
+                ЭкранВхода(eGovВключён: кабинет?.eGovВключён ?? true, открыть: открыть, вошли: {
+                    Task { await послеВхода() }
+                })
+            }
+            .sheet(isPresented: соглашениеНаЭкране) {
+                ОкноСоглашения(редакция: кабинет?.редакция ?? "", пункты: кабинет?.чтоИзменилось ?? [],
+                               принято: { соглашениеПринято() }, выйти: { выйтиИзОкнаСоглашения() },
+                               нуженВход: { входИзОкнаСоглашения() })
+            }
+            .confirmationDialog(ВходText.т("logout_q"), isPresented: $спроситьВыход, titleVisibility: .visible) {
+                Button(ВходText.т("cab_logout"), role: .destructive) { выйти() }
+                Button(CabinetText.т("cancel"), role: .cancel) {}
+            } message: {
+                Text(ВходText.т("logout_msg"))
+            }
+            .overlay(alignment: .bottom) { плашкаВнизу }
+    }
+
+    private var основа: some View {
         список
         .listStyle(.insetGrouped)
         .navigationTitle(CabinetText.т("title"))
@@ -95,6 +138,12 @@ struct CabinetView: View {
 
     @ViewBuilder
     private var разделы: some View {
+        /* Этап 40: сеанс завершён или вход с другого устройства — первым делом, как окно сайта поверх кабинета. */
+        if Config.нативныйВход, let сигнал {
+            РазделСигналаСеанса(сигнал: сигнал, войти: { входОткрыт = true }, наСайт: {
+                if let u = Config.страницаСайта("cabinet.php") { открыть(u) }
+            })
+        }
         разделСайта
         разделБезопасности
         разделУведомлений
@@ -163,6 +212,8 @@ struct CabinetView: View {
     }
 
     private var заголовокШапки: String {
+        /* Этап 40: имя из CAB_USER.name — как шапка кабинета сайта. */
+        if вошёл == true, let имя = кабинет?.имя, !имя.isEmpty, кабинет?.вошёл == true { return имя }
         if let известно = вошёл { return CabinetText.т(известно ? "signed_in" : "signed_out") }
         return CabinetText.т(ждёмСайт ? "checking" : "unknown")
     }
@@ -177,7 +228,11 @@ struct CabinetView: View {
     private var разделСайта: some View {
         Section {
             if вошёл == false {
-                строкаСайта(CabinetText.т("login"), значок: "person.crop.circle.badge.plus", путь: "/cabinet.php")
+                if Config.нативныйВход {
+                    кнопкаВхода
+                } else {
+                    строкаСайта(CabinetText.т("login"), значок: "person.crop.circle.badge.plus", путь: "/cabinet.php")
+                }
             } else {
                 строкаСайта(CabinetText.т("open_cabinet"), значок: "person.text.rectangle", путь: "/cabinet.php")
                 строкаСайта(CabinetText.т("site_messages"), значок: "bubble.left.and.bubble.right",
@@ -187,6 +242,26 @@ struct CabinetView: View {
             Text(CabinetText.т("site"))
         } footer: {
             Text(CabinetText.т("site_footer"))
+        }
+    }
+
+    /// Этап 40: «Войти» — свой экран входа, без стрелки «наружу»: это экран приложения, а не страница сайта.
+    private var кнопкаВхода: some View {
+        Button {
+            входОткрыт = true
+        } label: {
+            HStack {
+                Label {
+                    Text(CabinetText.т("login")).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "person.crop.circle.badge.plus").foregroundStyle(Theme.green2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -377,8 +452,35 @@ struct CabinetView: View {
         (Bundle.main.object(forInfoDictionaryKey: ключ) as? String) ?? "—"
     }
 
-    /// Не кнопка выхода, а дорога к нему: выходят на сайте (см. шапку файла).
+    /// Не кнопка выхода, а дорога к нему: выходят на сайте (см. шапку файла). Этап 40: с Config.нативныйВход — своя кнопка.
+    @ViewBuilder
     private var разделВыхода: some View {
+        if Config.нативныйВход {
+            разделСвоегоВыхода
+        } else {
+            разделВыходаНаСайте
+        }
+    }
+
+    /// Этап 40: «Выйти из аккаунта» → вопрос → КабинетСайта.выйти. Нет связи — ничего не стёрто, причина под кнопкой.
+    private var разделСвоегоВыхода: some View {
+        Section {
+            Button(role: .destructive) {
+                спроситьВыход = true
+            } label: {
+                HStack {
+                    Label(CabinetText.т("logout_row"), systemImage: "rectangle.portrait.and.arrow.right")
+                    Spacer(minLength: 8)
+                    if выходим { ProgressView() }
+                }
+            }
+            .disabled(выходим)
+        } footer: {
+            Text(ошибкаВыхода ?? ВходText.т("logout_footer"))
+        }
+    }
+
+    private var разделВыходаНаСайте: some View {
         Section {
             Button {
                 if let u = Config.url("/cabinet.php") { открыть(u) }
@@ -399,9 +501,113 @@ struct CabinetView: View {
            каждом переходе хуже прошлого состояния, а выход сайт всё равно заканчивает загрузкой страницы с bye=1. */
         if let известно = сессия.вошёл { вошёл = известно }
         if мост.isLoaded { проверили = true }
+        /* Этап 40: страница кабинета — свежее страницы под слоем (та могла быть открыта до входа или выхода на другом
+           устройстве). Страница под слоем грузится — не ждём, остаётся прежнее. */
+        if Config.нативныйВход {
+            if let страница = try? await КабинетСайта.состояние(ждать: false) {
+                кабинет = страница
+                if let известно = страница.вошёл {
+                    вошёл = известно
+                    проверили = true
+                }
+            }
+            сигнал = await КабинетСайта.сигналСеанса()
+        }
         способВхода = замок.kind()          // код-пароль или Face ID могли настроить в Настройках, пока нас не было
         уведомления = await ДанныеТелефона.статусУведомлений()
         кэшБайт = ДанныеТелефона.кэшБайт
+    }
+}
+
+// MARK: - Этап 40: вход, выход, соглашение
+
+extension CabinetView {
+    /// Вошли своим экраном: страница под слоем перезагружается — ждём её и перечитываем кабинет.
+    func послеВхода() async {
+        сигнал = nil
+        ошибкаВыхода = nil
+        if let страница = try? await КабинетСайта.состояние() {
+            кабинет = страница
+            if let известно = страница.вошёл {
+                вошёл = известно
+                проверили = true
+            }
+        }
+    }
+
+    /// Нажали «Выйти» в вопросе. Один запрос за раз; не вышло — ничего не стёрто, причина под кнопкой.
+    func выйти() {
+        guard !выходим else { return }
+        выходим = true
+        ошибкаВыхода = nil
+        Task { @MainActor in
+            defer { выходим = false }
+            do {
+                try await КабинетСайта.выйти()
+                вошёл = false
+                кабинет = nil
+                сигнал = nil
+            } catch {
+                ошибкаВыхода = ЭкранВхода.текстСбоя(error)
+            }
+        }
+    }
+
+    /// Окно соглашения на экране, пока страница говорит __TERMS_RENEW и не открыт вход. Закрывается само — когда
+    /// соглашение принято или сессии больше нет; сдвинуть его нельзя (interactiveDismissDisabled).
+    var соглашениеНаЭкране: Binding<Bool> {
+        Binding(get: {
+            guard Config.нативныйВход, вошёл == true, !входОткрыт, !выходим, let страница = кабинет else { return false }
+            return страница.вошёл == true && страница.новоеСоглашение
+        }, set: { _ in })
+    }
+
+    func соглашениеПринято() {
+        кабинет?.новоеСоглашение = false
+        показатьПлашку(ВходText.т("terms_renew_done"))
+    }
+
+    /// «Выйти» в окне соглашения — тот же выход, что в кабинете (у сайта — klikoLogout).
+    func выйтиИзОкнаСоглашения() {
+        кабинет?.новоеСоглашение = false
+        выйти()
+    }
+
+    /// Сервер ответил auth: сессии нет — окно уходит, открывается вход.
+    func входИзОкнаСоглашения() {
+        кабинет = nil
+        вошёл = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            входОткрыт = true
+        }
+    }
+
+    func показатьПлашку(_ текст: String) {
+        withAnimation(.easeOut(duration: 0.2)) { плашка = текст }
+        UIAccessibility.post(notification: .announcement, argument: текст)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard плашка == текст else { return }
+            withAnimation(.easeIn(duration: 0.2)) { плашка = nil }
+        }
+    }
+
+    @ViewBuilder
+    var плашкаВнизу: some View {
+        if let текст = плашка {
+            Text(текст)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Theme.зелёный, in: Capsule())
+                .padding(.horizontal, 20)
+                .padding(.bottom, 96)
+                .transition(.opacity)
+                .accessibilityHidden(true)
+        }
     }
 }
 

@@ -71,10 +71,14 @@ final class NativeRouter: ObservableObject {
                   номер.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil else { return nil }
             return .объявление(id: номер)
         case "/cabinet.php":
+            /* Этап 40: адреса кабинета разбирает АдресаКабинета (все параметры §0.10 карты кабинета). */
+            if Config.адресаКабинета { return АдресаКабинета.цель(параметры) }
             guard Config.нативныйЧат, единственный("s") == "messages" else { return nil }
             return .сообщения
         default:
-            return nil
+            /* Этап 40: /cabinet и /kz/<язык>/cabinet(.php) — те же адреса кабинета. */
+            guard Config.адресаКабинета, АдресаКабинета.кабинет(части.path) else { return nil }
+            return АдресаКабинета.цель(параметры)
         }
     }
 }
