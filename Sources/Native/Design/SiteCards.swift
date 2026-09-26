@@ -925,10 +925,16 @@ struct БаннерПродажСайта: View {
 // MARK: - Подвал (.ulxsf)
 
 /**
- Подвал сайта под главной: о площадке, «Покупателям», «Продавцам», «Документы», реквизиты, копирайт и строка реестра —
- тёмно-зелёный (#0e2a1c) со скруглённым верхом и мятной кромкой, как html.mk-gtop .ulxsf. Ссылки — страницы сайта на
- языке приложения. 🔴 Без значков App Store и Google Play (у сайта на телефоне этот блок и так скрыт), без логотипов карт и
- строки об оплате (денег в приложении нет) и без строки сборки сайта.
+ Подвал сайта под главной и в конце ленты — footer.ulxsf главной как есть: «Kliko.kz» с подписью, логотипы карт и строка
+ об оплате (только сведения, не кнопки оплаты), «Покупателям», «Продавцам», «Документы», реквизиты, копирайт, строка о
+ марках и строка реестра. Цвета и размеры — css/marketplace.min.css и html.mk-gtop .ulxsf: фон #0e2a1c в обеих темах
+ (--hero-1 у сайта в тёмной теме тот же), скруглённый верх 22 с мятной кромкой, на телефоне — две колонки ссылок и
+ колонка бренда во всю ширину (@media max-width 760px: ссылки там не сворачиваются, поэтому и здесь без раскрывашек).
+ Текст — стилями Dynamic Type тех же кеглей (11 — caption2, 12 — caption, 13 — footnote); на крупных размерах колонки
+ встают одна под другую. На iPad — четыре колонки, как сайт от 760px.
+ 🔴 Вместо значков App Store и Google Play (человек уже в приложении) — строка «Kliko.kz для iOS · версия X (сборка N)» из
+ Bundle.main; строки сборки сайта нет. Ссылки на справку, правила, соглашение, оферту, конфиденциальность, оплату и тарифы
+ открываются своими окнами (НативныеОкна.перехватить), остальное — корневым «открыть»; почта и телефон — системой.
  */
 struct ПодвалСайта: View {
     let открыть: (URL) -> Void
@@ -936,6 +942,9 @@ struct ПодвалСайта: View {
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
     }
+
+    @Environment(\.dynamicTypeSize) private var размерТекста
+    @Environment(\.horizontalSizeClass) private var ширинаКласс
 
     private struct Ссылка: Identifiable {
         let ключ: String
@@ -950,48 +959,36 @@ struct ПодвалСайта: View {
     private static let документы = [Ссылка(ключ: "f_agreement", хвост: "soglashenie"), Ссылка(ключ: "f_offer", хвост: "oferta"),
                                     Ссылка(ключ: "f_privacy", хвост: "privacy")]
 
+    /// --hero-1 (#0e2a1c) — и в светлой, и в тёмной теме сайта.
     private static let фон = Color(uiColor: Theme.hex(0x0E2A1C))
+    /// Кромка html.mk-gtop .ulxsf: rgba(163,220,192,…).
     private static let мята = Color(uiColor: Theme.hex(0xA3DCC0))
+    /// .ulxsf-reg: var(--mut, #6b7a70) с прозрачностью .85.
+    private static let серыйРеестра = Color(uiColor: Theme.hex(0x6B7A70))
+
+    private static let почта = "support@kliko.kz"
+    private static let телефон = "+7 778 000 83 72"
+    private static let телефонАдрес = "tel:+77780008372"
+    private static let платёжка = "https://freedompay.kz"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Kliko.kz")
-                        .font(.system(.title2, weight: .heavy))
-                        .foregroundStyle(Color.white)
-                    Text(DesignText.т("f_about"))
-                        .font(.caption)
-                        .foregroundStyle(Color.white.opacity(0.62))
-                        .lineSpacing(3)
-                }
-                HStack(alignment: .top, spacing: 20) {
-                    колонка("f_buyers", Self.покупателям)
-                    колонка("f_sellers", Self.продавцам)
-                }
-                колонка("f_docs", Self.документы)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            верх
+                .padding(.horizontal, 16)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
             Rectangle()
                 .fill(Color.white.opacity(0.08))
                 .frame(height: 1)
-            VStack(alignment: .leading, spacing: 6) {
-                реквизиты
-                строкаСоСсылкой(DesignText.т("f_copy"), ссылка: DesignText.т("f_copy_link"), хвост: "soglashenie",
-                                после: ".")
-                строкаСоСсылкой(DesignText.т("f_tm"), ссылка: DesignText.т("f_more"), хвост: "soglashenie#tm", после: "")
-                Text(DesignText.т("f_reg"))
-                    .font(.caption2)
-                    .foregroundStyle(Color.white.opacity(0.45))
-                    .padding(.top, 2)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 30)
+                .accessibilityHidden(true)
+            низ
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: 1100, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.bottom, 30)
         .background {
             UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.шапка, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
                                    topTrailingRadius: Theme.Радиус.шапка, style: .continuous)
@@ -1002,71 +999,239 @@ struct ПодвалСайта: View {
                         .frame(height: 2)
                         .padding(.horizontal, Theme.Радиус.шапка)
                 }
+                .shadow(color: Color(red: 4 / 255, green: 34 / 255, blue: 20 / 255).opacity(0.55), radius: 15, x: 0, y: -2)
                 .accessibilityHidden(true)
         }
     }
 
-    /// Строка с подчёркнутой ссылкой на страницу сайта в конце — как .ulxsf-copy a; нажатие — страница сайта в той же
-    /// обёртке, а не в Safari.
-    private func строкаСоСсылкой(_ текст: String, ссылка: String, хвост: String, после: String) -> some View {
-        Button {
-            if let адрес = Config.страницаСайта(хвост) { открыть(адрес) }
-        } label: {
-            (Text(текст + " ") + Text(ссылка).underline().foregroundColor(Color.white.opacity(0.72)) + Text(после))
-                .font(.caption)
-                .foregroundStyle(Color.white.opacity(0.5))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+    // MARK: Верх: бренд и колонки (.ulxsf-in)
+
+    @ViewBuilder
+    private var верх: some View {
+        if размерТекста.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 24) {
+                бренд
+                колонка("f_buyers", Self.покупателям)
+                колонка("f_sellers", Self.продавцам)
+                колонка("f_docs", Self.документы)
+            }
+        } else if ширинаКласс == .regular {
+            HStack(alignment: .top, spacing: 36) {
+                бренд
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                колонка("f_buyers", Self.покупателям)
+                колонка("f_sellers", Self.продавцам)
+                колонка("f_docs", Self.документы)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 24) {
+                бренд
+                HStack(alignment: .top, spacing: 20) {
+                    колонка("f_buyers", Self.покупателям)
+                    колонка("f_sellers", Self.продавцам)
+                }
+                HStack(alignment: .top, spacing: 20) {
+                    колонка("f_docs", Self.документы)
+                    Color.clear
+                        .frame(height: 0)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
+                }
+            }
         }
-        .buttonStyle(.plain)
     }
 
+    /// .ulxsf-brandcol: «Kliko.kz» 21/800, подпись 12/500 .62, карты с пояснением и — вместо .ulxsf-apps — версия приложения.
+    private var бренд: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Kliko.kz")
+                .font(.system(.title2, weight: .heavy))
+                .tracking(-0.42)
+                .foregroundStyle(Color.white)
+                .accessibilityAddTraits(.isHeader)
+            Text(DesignText.т("f_about"))
+                .font(.system(.caption, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.62))
+                .lineSpacing(6)
+                .frame(maxWidth: 270, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+            оплата
+                .padding(.top, 16)
+                .padding(.bottom, 2)
+            Text(Self.версияПриложения)
+                .font(.caption2)
+                .foregroundStyle(Color.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 16)
+        }
+    }
+
+    /// «Kliko.kz для iOS · версия 1.9 (сборка 42)» — CFBundleShortVersionString и CFBundleVersion.
+    private static var версияПриложения: String {
+        let сведения = Bundle.main.infoDictionary ?? [:]
+        let версия = (сведения["CFBundleShortVersionString"] as? String) ?? "—"
+        let сборка = (сведения["CFBundleVersion"] as? String) ?? "—"
+        return String(format: DesignText.т("f_app"), версия, сборка)
+    }
+
+    /// .ulxsf-pay: белые плашки Visa и Mastercard (высота 29, скругление 6) и строка .ulxsf-pay-note 11 pt .6 — сведения,
+    /// а не кнопки; «ТОО «Freedom Pay»» ведёт на сайт платёжной организации (Safari), как ссылка сайта.
+    private var оплата: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                плашкаКарты {
+                    Text(verbatim: "VISA")
+                        .font(.system(size: 15, weight: .heavy).italic())
+                        .tracking(0.5)
+                        .foregroundStyle(Color(red: 20 / 255, green: 52 / 255, blue: 203 / 255))
+                        .fixedSize()
+                }
+                плашкаКарты {
+                    Canvas { контекст, размер in
+                        let k = размер.width / 40
+                        let r = 9.5 * k
+                        let красный = Path(ellipseIn: CGRect(x: (16 - 9.5) * k, y: (12.5 - 9.5) * k, width: 2 * r, height: 2 * r))
+                        let жёлтый = Path(ellipseIn: CGRect(x: (24 - 9.5) * k, y: (12.5 - 9.5) * k, width: 2 * r, height: 2 * r))
+                        контекст.fill(красный, with: .color(Color(red: 235 / 255, green: 0, blue: 27 / 255)))
+                        контекст.fill(жёлтый, with: .color(Color(red: 247 / 255, green: 158 / 255, blue: 27 / 255)))
+                        контекст.clip(to: красный)
+                        контекст.fill(жёлтый, with: .color(Color(red: 1, green: 95 / 255, blue: 0)))
+                    }
+                    .frame(width: 34, height: 21)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(DesignText.т("f_pay_cards"))
+            Button {
+                if let адрес = URL(string: Self.платёжка) { UIApplication.shared.open(адрес) }
+            } label: {
+                Text("\(DesignText.т("f_pay_secure")) · \(Text(DesignText.т("f_pay_psp")).foregroundStyle(Color.white.opacity(0.82))) · \(DesignText.т("f_pay_nostore"))")
+                    .font(.caption2)
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .lineSpacing(4)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеСайта())
+            .accessibilityAddTraits(.isLink)
+            .accessibilityHint(DesignText.т("f_pay_open"))
+        }
+    }
+
+    private func плашкаКарты<Логотип: View>(@ViewBuilder _ логотип: () -> Логотип) -> some View {
+        логотип()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(height: 29)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    /// .ulxsf-h 11/800 заглавными .5 с разрядкой .06em, под ним 14; ссылки .ulxsf-col a — 13 pt .82, по 12 сверху и снизу.
     private func колонка(_ заголовок: String, _ ссылки: [Ссылка]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(DesignText.т(заголовок).uppercased())
-                .font(.system(size: 11, weight: .heavy))
-                .tracking(0.6)
+                .font(.system(.caption2, weight: .heavy))
+                .tracking(0.66)
                 .foregroundStyle(Color.white.opacity(0.5))
-                .padding(.bottom, 6)
+                .padding(.bottom, 14)
                 .accessibilityAddTraits(.isHeader)
             ForEach(ссылки) { ссылка in
                 Button {
-                    if let адрес = Config.страницаСайта(ссылка.хвост) { открыть(адрес) }
+                    открытьСтраницу(ссылка.хвост)
                 } label: {
                     Text(DesignText.т(ссылка.ключ))
                         .font(.footnote)
                         .foregroundStyle(Color.white.opacity(0.82))
                         .multilineTextAlignment(.leading)
-                        .padding(.vertical, 10)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(НажатиеСайта())
+                .padding(.bottom, 1)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
+    // MARK: Низ: реквизиты, копирайт, реестр (.ulxsf-bottom)
+
+    private var низ: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            реквизиты
+            строкаСоСсылкой(DesignText.т("f_copy"), ссылка: DesignText.т("f_copy_link"), хвост: "soglashenie", после: ".")
+            строкаСоСсылкой(DesignText.т("f_tm"), ссылка: DesignText.т("f_more"), хвост: "soglashenie#tm", после: "")
+            Text(DesignText.т("f_reg"))
+                .font(.caption2)
+                .lineSpacing(5)
+                .foregroundStyle(Self.серыйРеестра.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// «ТОО «Клико.кз» · БИН … · адрес · почта · телефон · часы» — почта и телефон открываются системой.
+    /// .ulxsf-req 11 pt .6: «ТОО «Клико.кз» · БИН … · адрес · почта · телефон  часы» — почта и телефон подчёркнуты и
+    /// открываются системными «Почтой» и «Телефоном».
     private var реквизиты: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text([DesignText.т("f_company"), DesignText.т("f_bin"), DesignText.т("f_address")].joined(separator: " · "))
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
-                if let почта = URL(string: "mailto:support@kliko.kz") {
-                    Link("support@kliko.kz", destination: почта)
-                }
-                Text("·")
-                if let телефон = URL(string: "tel:+77780008372") {
-                    Link("+7 778 000 83 72", destination: телефон)
-                }
+                контакт(Self.почта, адрес: "mailto:" + Self.почта, подпись: DesignText.т("f_mail"))
+                Text(verbatim: "·")
+                    .accessibilityHidden(true)
+                контакт(Self.телефон, адрес: Self.телефонАдрес, подпись: DesignText.т("f_call"))
             }
             Text(DesignText.т("f_hours"))
                 .foregroundStyle(Color.white.opacity(0.55))
         }
-        .font(.caption)
+        .font(.caption2)
         .foregroundStyle(Color.white.opacity(0.6))
-        .tint(Color.white.opacity(0.72))
+    }
+
+    private func контакт(_ текст: String, адрес: String, подпись: String) -> some View {
+        Button {
+            if let ссылка = URL(string: адрес) { UIApplication.shared.open(ссылка) }
+        } label: {
+            Text(verbatim: текст)
+                .underline()
+                .lineLimit(1)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеСайта())
+        .accessibilityLabel(подпись + ": " + текст)
+    }
+
+    /// .ulxsf-copy 12 pt .5 с подчёркнутой ссылкой .72 в конце; ссылка — своим окном (соглашение), иначе страницей сайта.
+    private func строкаСоСсылкой(_ текст: String, ссылка: String, хвост: String, после: String) -> some View {
+        Button {
+            открытьСтраницу(хвост)
+        } label: {
+            Text("\(текст) \(Text(ссылка).underline().foregroundStyle(Color.white.opacity(0.72)))\(после)")
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.5))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеСайта())
+    }
+
+    /// Справка, правила, соглашение, оферта, конфиденциальность, оплата, тарифы — своим окном поверх; кабинет и прочее —
+    /// корневым «открыть» (там свои нативные экраны или страница сайта).
+    @MainActor
+    private func открытьСтраницу(_ хвост: String) {
+        guard let адрес = Config.страницаСайта(хвост) else { return }
+        if НативныеОкна.перехватить(адрес) { return }
+        открыть(адрес)
     }
 }
 
