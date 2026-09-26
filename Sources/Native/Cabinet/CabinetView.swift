@@ -27,6 +27,9 @@ import UserNotifications
    · новая редакция соглашения (__TERMS_RENEW) — окно «Условия обновились» (ОкноСоглашения);
    · сигнал /api/sess_alert.php («Вы вышли на этом устройстве», «Вход с нового устройства») — строкой сверху.
  Рубильник выключен — всё как на этапе 39.
+
+ ЭТАП 41 (Config.нативныеОбъявления): строка «Мои объявления» — свой экран списка объявлений (МоиОбъявленияЭкран) в стеке
+ этой вкладки; туда же ведёт ссылка /cabinet?go=items. «Открыть кабинет» остаётся — там всё, чего у приложения ещё нет.
  */
 struct CabinetView: View {
     @ObservedObject private var мост = WebBridge.shared
@@ -119,6 +122,13 @@ struct CabinetView: View {
             if стала == .active { Task { await освежить() } }
         }
         .sheet(isPresented: $показатьНовое) { ЭкранЧтоНового() }
+        /* Этап 41: экраны кабинета в его стеке — строка «Мои объявления» и ссылка ?go=items (NativeTabsView). */
+        .navigationDestination(for: КабинетЦель.self) { цель in
+            switch цель {
+            case .моиОбъявления:
+                МоиОбъявленияЭкран(открыть: открыть)
+            }
+        }
     }
 
     /// Разделы кабинета. Этап 30: в виде сайта верх — зелёная плашка (ШапкаКабинетаСайта), строки — на поверхности
@@ -234,6 +244,8 @@ struct CabinetView: View {
                     строкаСайта(CabinetText.т("login"), значок: "person.crop.circle.badge.plus", путь: "/cabinet.php")
                 }
             } else {
+                /* Этап 41: «Мои объявления» — свой экран (главный экран кабинета сайта), первым, как пункт меню сайта. */
+                if Config.нативныеОбъявления { строкаМоихОбъявлений }
                 строкаСайта(CabinetText.т("open_cabinet"), значок: "person.text.rectangle", путь: "/cabinet.php")
                 строкаСайта(CabinetText.т("site_messages"), значок: "bubble.left.and.bubble.right",
                             путь: "/cabinet.php?s=messages")
@@ -242,6 +254,17 @@ struct CabinetView: View {
             Text(CabinetText.т("site"))
         } footer: {
             Text(CabinetText.т("site_footer"))
+        }
+    }
+
+    /// Этап 41: строка «Мои объявления» — экран приложения, поэтому со стрелкой списка, а не «наружу».
+    private var строкаМоихОбъявлений: some View {
+        NavigationLink(value: КабинетЦель.моиОбъявления) {
+            Label {
+                Text(МоиОбъявленияText.т("title")).foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "square.stack.3d.up").foregroundStyle(Theme.green2)
+            }
         }
     }
 
@@ -609,6 +632,12 @@ extension CabinetView {
                 .accessibilityHidden(true)
         }
     }
+}
+
+/// Куда ведёт стек вкладки «Кабинет» (этап 41) — как ЧатЦель и ИзбранноеЦель у своих вкладок.
+enum КабинетЦель: Hashable {
+    /// «Мои объявления» (МоиОбъявленияЭкран).
+    case моиОбъявления
 }
 
 /// Строка «Очистить …» с подтверждением: стирается сразу и насовсем, поэтому сначала спрашиваем.

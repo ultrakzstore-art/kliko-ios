@@ -328,7 +328,8 @@ struct NativeTabsView: View {
             /* Этап 9: кабинет — нативный экран настроек со своим стеком. Рубильник выключен — как на этапе 4: пустая
                вкладка, нажатие открывает /cabinet.php (onChange ниже). */
             if Config.нативныйКабинет {
-                NavigationStack {
+                /* Этап 41: стек с путём и здесь — ссылка ?go=items кладёт в него «Мои объявления». */
+                NavigationStack(path: $путьКабинета) {
                     CabinetView(открыть: открыть)
                 }
                 .tabItem { Label(TabsText.т("cabinet"), systemImage: "person.crop.circle") }
@@ -380,6 +381,13 @@ struct NativeTabsView: View {
             путьЛенты = NavigationPath()
             вкладка = .лента
             найтиВЛенте = искомое
+        case .моиОбъявления:
+            /* Этап 41: ?go=items — вкладка «Кабинет» и «Мои объявления» поверх неё: «Назад» ведёт в кабинет. */
+            guard NativeRouter.доступна(.моиОбъявления) else { return }
+            var путь = NavigationPath()
+            путь.append(КабинетЦель.моиОбъявления)
+            путьКабинета = путь
+            вкладка = .кабинет
         }
     }
 
