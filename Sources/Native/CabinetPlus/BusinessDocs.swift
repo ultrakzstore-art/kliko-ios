@@ -424,6 +424,42 @@ enum ДокументыБизнеса {
                 подписи("Руководитель", п["director"] ?? "", "Главный бухгалтер", "", мп: "М.П.")].joined()
     }
 
+    // MARK: - Коммерческое предложение (kpPrintBranded, шаблон «Шапка»)
+
+    /// КП в PDF: шапка «Коммерческое предложение», кому и от кого, позиции запроса (если есть) и текст предложения
+    /// абзацами — как печатный бланк сайта (шаблон bar, акцент #16a34a).
+    static func кп(текст: String, кому: String, от: String, позиции: [(String, Int, Int)]) -> String {
+        let заголовок = "Коммерческое предложение"
+        var тело = шапка(заголовок, дата: "от " + экран(датаСегодня()), форма: "", бренд: от.isEmpty ? "Kliko.kz" : от)
+        if !кому.isEmpty {
+            тело += ["<div class=\"base\"><b>Кому:</b> ", экран(кому), "</div>"].joined()
+        }
+        if !позиции.isEmpty {
+            var строки = ""
+            var итого = 0
+            for (i, п) in позиции.enumerated() {
+                let сумма = п.1 * п.2
+                итого += сумма
+                строки += ["<tr><td class=\"c\">", String(i + 1), "</td><td>", экран(п.0), "</td><td class=\"r\">",
+                           String(п.1), "</td><td class=\"r\">", деньги(Double(п.2)), "</td><td class=\"r\">",
+                           деньги(Double(сумма)), " ₸</td></tr>"].joined()
+            }
+            тело += ["<table class=\"it\"><thead><tr><th class=\"c\">№</th><th>Наименование</th>",
+                     "<th class=\"r\">Кол-во</th><th class=\"r\">Цена</th><th class=\"r\">Сумма</th></tr></thead><tbody>",
+                     строки, "</tbody></table>", итоги([], главная: ("Итого", деньги(Double(итого)) + " ₸"))].joined()
+        }
+        let абзацы = текст.components(separatedBy: "\n").map { экран($0) }.joined(separator: "<br>")
+        тело += ["<div class=\"pre\">", абзацы, "</div>"].joined()
+        return страница(заголовок, тело)
+    }
+
+    private static func датаСегодня() -> String {
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "ru_RU")
+        ф.dateFormat = "dd.MM.yyyy"
+        return ф.string(from: Date())
+    }
+
     // MARK: - Сумма прописью (_cmpNum2Words)
 
     static func прописью(_ сумма: Int) -> String {
