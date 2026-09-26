@@ -117,6 +117,13 @@ final class DealActivityManager {
         }
     }
 
+    /// Этап 43 (владелец 26.09.2026): нативная карточка сделки закрывает плашку только своей сделки. Сайт шлёт end() без
+    /// номера (карта кабинета §4.21), и завершённая сделка в карточке закрыла бы плашку другой, живой сделки.
+    func завершить(сделку dealId: String) async {
+        guard activeDealId == dealId else { return }
+        await end()
+    }
+
     func end() async {
         let closing = activeDealId
         tokenTask?.cancel(); tokenTask = nil

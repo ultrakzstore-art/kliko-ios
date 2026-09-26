@@ -30,6 +30,9 @@ import UserNotifications
 
  ЭТАП 41 (Config.нативныеОбъявления): строка «Мои объявления» — свой экран списка объявлений (МоиОбъявленияЭкран) в стеке
  этой вкладки; туда же ведёт ссылка /cabinet?go=items. «Открыть кабинет» остаётся — там всё, чего у приложения ещё нет.
+
+ ЭТАП 43 (Config.нативныеСделки): строка «Мои сделки» со значком — список сделок (МоиСделкиЭкран) и карточка сделки
+ (ЭкранСделки) в том же стеке; туда же ведут ссылки ?go=deals, ?s=deals и ?deal=<id>.
  */
 struct CabinetView: View {
     @ObservedObject private var мост = WebBridge.shared
@@ -38,6 +41,8 @@ struct CabinetView: View {
     /// Этап 35: избранное вошедшего сверено с аккаунтом — оно живёт на сайте, и «Очистить» на телефоне не к месту.
     @ObservedObject private var синхронИзбранного = СинхронИзбранного.shared
     @ObservedObject private var недавние = RecentStore.shared
+    /// Этап 43: значок у строки «Мои сделки».
+    @ObservedObject private var сделки = СделкиМодель.shared
     @Environment(\.scenePhase) private var фаза
 
     /// Открыть страницу сайта в веб-обёртке — так же, как из остальных вкладок.
@@ -127,8 +132,14 @@ struct CabinetView: View {
             switch цель {
             case .моиОбъявления:
                 МоиОбъявленияЭкран(открыть: открыть)
+            case .сделки:
+                МоиСделкиЭкран(открыть: открыть)
+            case .сделка(let номер):
+                ЭкранСделки(id: номер, открыть: открыть)
             }
         }
+        /* Этап 43: «Связь с продавцом / покупателем» из карточки сделки — переписка приложения в этом же стеке. */
+        .чатМаршруты(открыть: открыть)
     }
 
     /// Разделы кабинета. Этап 30: в виде сайта верх — зелёная плашка (ШапкаКабинетаСайта), строки — на поверхности
@@ -246,6 +257,8 @@ struct CabinetView: View {
             } else {
                 /* Этап 41: «Мои объявления» — свой экран (главный экран кабинета сайта), первым, как пункт меню сайта. */
                 if Config.нативныеОбъявления { строкаМоихОбъявлений }
+                /* Этап 43: «Мои сделки» — свой экран (#deals-screen сайта), сразу за объявлениями. */
+                if Config.нативныеСделки { строкаМоихСделок }
                 строкаСайта(CabinetText.т("open_cabinet"), значок: "person.text.rectangle", путь: "/cabinet.php")
                 строкаСайта(CabinetText.т("site_messages"), значок: "bubble.left.and.bubble.right",
                             путь: "/cabinet.php?s=messages")
@@ -264,6 +277,30 @@ struct CabinetView: View {
                 Text(МоиОбъявленияText.т("title")).foregroundStyle(.primary)
             } icon: {
                 Image(systemName: "square.stack.3d.up").foregroundStyle(Theme.green2)
+            }
+        }
+    }
+
+    /// Этап 43: строка «Мои сделки» — со значком, сколько сделок ждут человека (спор или «получено — подтвердите»), как
+    /// точка у пункта меню сайта (loadDealsBadge).
+    private var строкаМоихСделок: some View {
+        NavigationLink(value: КабинетЦель.сделки) {
+            HStack {
+                Label {
+                    Text(СделкиText.т("deals_title")).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "checkmark.shield").foregroundStyle(Theme.green2)
+                }
+                Spacer(minLength: 8)
+                if сделки.ждут > 0 {
+                    Text(сделки.ждут > 99 ? "99+" : String(сделки.ждут))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Theme.непрочитано, in: Capsule())
+                        .accessibilityLabel(String(format: СделкиText.т("a11y_badge"), сделки.ждут))
+                }
             }
         }
     }
@@ -536,6 +573,8 @@ struct CabinetView: View {
             }
             сигнал = await КабинетСайта.сигналСеанса()
         }
+        /* Этап 43: значок «Мои сделки» — только вошедшему (my_deals&role=both, только чтение). */
+        if Config.нативныеСделки && вошёл == true { await сделки.обновитьЗначок() }
         способВхода = замок.kind()          // код-пароль или Face ID могли настроить в Настройках, пока нас не было
         уведомления = await ДанныеТелефона.статусУведомлений()
         кэшБайт = ДанныеТелефона.кэшБайт
@@ -638,6 +677,10 @@ extension CabinetView {
 enum КабинетЦель: Hashable {
     /// «Мои объявления» (МоиОбъявленияЭкран).
     case моиОбъявления
+    /// «Мои сделки» (МоиСделкиЭкран, этап 43).
+    case сделки
+    /// Карточка сделки по номеру (ЭкранСделки, этап 43).
+    case сделка(String)
 }
 
 /// Строка «Очистить …» с подтверждением: стирается сразу и насовсем, поэтому сначала спрашиваем.
