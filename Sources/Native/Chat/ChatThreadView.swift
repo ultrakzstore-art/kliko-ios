@@ -405,7 +405,7 @@ struct ChatThreadView: View {
             новыхНиже += модель.сообщения.suffix(max(0, стало - было)).filter { !$0.моё && !$0.системное }.count
             return
         }
-        withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+        withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
     }
 
     /// Поле ввода получило фокус — вниз, когда клавиатура доедет и лента уже сжата: раньше прокручивать нечего, сжатие
@@ -419,9 +419,9 @@ struct ChatThreadView: View {
             try? await Task.sleep(nanoseconds: 450_000_000)
             клавиатураЕдет = false
             if полеВФокусе {
-                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+                withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
             } else if !низВиден {
-                withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
+                withAnimation(ДвижениеСайта.появление) { кнопкаВниз = true }
             }
         }
     }
@@ -429,7 +429,7 @@ struct ChatThreadView: View {
     /// Этап 17: кнопка «вниз» нажата.
     private func вниз(_ прокрутка: ScrollViewProxy) {
         новыхНиже = 0
-        withAnimation(.easeOut(duration: 0.25)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+        withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
     }
 
     /// Этап 17: низ вернулся — кнопку прячем, число сбрасываем. Пропал — кнопка через 0,3 с, если он не вернулся:
@@ -438,12 +438,12 @@ struct ChatThreadView: View {
         guard Config.удобныйЧат else { return }
         if низВиден {
             новыхНиже = 0
-            if кнопкаВниз { withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = false } }
+            if кнопкаВниз { withAnimation(ДвижениеСайта.появление) { кнопкаВниз = false } }
             return
         }
         try? await Task.sleep(nanoseconds: 300_000_000)
         guard !Task.isCancelled, !низВиден, !клавиатураЕдет else { return }
-        withAnimation(.easeOut(duration: 0.2)) { кнопкаВниз = true }
+        withAnimation(ДвижениеСайта.появление) { кнопкаВниз = true }
     }
 
     /// Строка переписки: служебное уведомление — по центру без облака, остальное — облаком своей стороны.
@@ -498,12 +498,12 @@ struct ChatThreadView: View {
                         Color(.tertiarySystemFill)
                     }
                     .frame(width: 200, height: 200)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 } else if Config.удобныйЧат && с.копируемое {
                     /* Этап 17: «Копировать» меню долгого нажатия вместо выделения текста — оба висят на долгом
                        нажатии и мешали бы друг другу. */
                     облако(с)
-                        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
                         .contextMenu {
                             Button {
                                 ЧатБуфер.скопировать(с.текст)
@@ -549,7 +549,7 @@ struct ChatThreadView: View {
             .foregroundStyle(с.моё ? Color.white : Color.primary)
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(с.моё ? Theme.green : Color(.secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
     }
 
     @ViewBuilder
@@ -599,7 +599,7 @@ struct ChatThreadView: View {
                         .lineLimit(1...5)
                         .focused($полеВФокусе)
                         .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
                     Button { Task { await модель.отправить() } } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 32))
@@ -621,7 +621,7 @@ struct ChatThreadView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
                     .foregroundStyle(.white)
-                    .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Theme.green, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 16)

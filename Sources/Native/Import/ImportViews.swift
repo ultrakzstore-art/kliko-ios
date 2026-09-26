@@ -149,7 +149,7 @@ private struct ВводИмпорта: View {
                         хорошо: Bool) -> some View {
         let выбран = модель.способ == способ
         return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(ДвижениеСайта.смена) {
                 модель.способ = способ
                 модель.заметка = nil
             }
@@ -309,7 +309,7 @@ private struct ВводИмпорта: View {
                     .fixedSize(horizontal: false, vertical: true)
                 ЦифроваяПокупка(подпись: БизнесText.т("cab_get_pro"), путь: "cabinet.php", открыть: открыть)
                 КнопкаБизнеса(подпись: т("pro_alt"), второстепенная: true) {
-                    withAnimation { модель.способ = .ссылка }
+                    withAnimation(ДвижениеСайта.смена) { модель.способ = .ссылка }
                 }
             }
         }
@@ -540,7 +540,7 @@ private struct ХодИмпорта: View {
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                    .animation(.easeOut(duration: 0.25), value: модель.найдено.count)
+                    .animation(ДвижениеСайта.вставкаСписка, value: модель.найдено.count)
                 }
                 if let пауза = модель.пауза {
                     КнопкаБизнеса(подпись: пауза) { модель.продолжитьПосле() }
@@ -647,13 +647,14 @@ private struct ПроверкаИмпорта: View {
                     модель.опубликовать()
                 } label: {
                     HStack(spacing: 6) {
-                        if модель.публикуем != nil { ProgressView().tint(Color.white) }
+                        if модель.публикуем != nil { SiteSpinner.белый }
                         Text(подписьКнопки)
                             .font(.system(size: 15, weight: .bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                         if модель.публикуем == nil {
                             Image(systemName: "arrow.right")
+                                .flipsForRightToLeftLayoutDirection(true)
                                 .font(.system(size: 14, weight: .bold))
                                 .accessibilityHidden(true)
                         }

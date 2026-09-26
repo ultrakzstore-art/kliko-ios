@@ -628,6 +628,6 @@ struct СлойИзбранногоССайтом<Содержимое: View>: V
                     .id(сообщение.id)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: синхрон.сообщение?.id)
+        .animation(ДвижениеСайта.смена, value: синхрон.сообщение?.id)
     }
 }

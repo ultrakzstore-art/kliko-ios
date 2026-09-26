@@ -208,7 +208,7 @@ struct ЛистНачалаРаботы: View {
                     .scrollContentBackground(.hidden)
             }
         } else {
-            ProgressView()
+            SiteSpinner()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task { await модель.загрузить() }
         }

@@ -834,12 +834,12 @@ final class ПодачаМодель: ObservableObject {
     func показать(_ текст: String) {
         let чистый = текст.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !чистый.isEmpty else { return }
-        withAnimation(.easeOut(duration: 0.2)) { плашка = чистый }
+        withAnimation(ДвижениеСайта.появление) { плашка = чистый }
         UIAccessibility.post(notification: .announcement, argument: чистый)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 3_200_000_000)
             guard self.плашка == чистый else { return }
-            withAnimation(.easeIn(duration: 0.2)) { self.плашка = nil }
+            withAnimation(ДвижениеСайта.уход) { self.плашка = nil }
         }
     }
 

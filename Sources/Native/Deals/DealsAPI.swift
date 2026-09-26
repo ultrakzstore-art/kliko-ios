@@ -686,7 +686,7 @@ enum СделкиФормат {
     }
 
     /// «12 345 ₸».
-    static func тенге(_ n: Int) -> String { деньги(n) + " ₸" }
+    static func тенге(_ n: Int) -> String { (деньги(n) + " ₸").слеваНаправо }
 
     static func дробь(_ n: Double) -> String {
         let ф = NumberFormatter()

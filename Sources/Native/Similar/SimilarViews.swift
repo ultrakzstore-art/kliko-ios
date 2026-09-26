@@ -107,9 +107,9 @@ private struct КарточкаПохожего: View {
         }
         .frame(width: Self.ширина, alignment: .leading)
         .background(сайт ? Theme.поверхность : Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .modifier(ТеньПохожего(сайт: сайт))
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(товар.голос)          // этап 11: одной фразой, как карточка ленты; фото — украшение
     }
@@ -146,6 +146,6 @@ private struct ЗаготовкаПохожего: View {
         }
         .frame(width: КарточкаПохожего.ширина, alignment: .leading)
         .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
     }
 }

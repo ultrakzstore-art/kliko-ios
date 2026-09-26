@@ -80,7 +80,7 @@ struct ЗакрытьСмахиваниемВниз: ViewModifier {
                 guard смахивание == true else { return }
                 let бросок = касание.predictedEndTranslation.height - касание.translation.height
                 if сдвиг > 130 || (сдвиг > 20 && бросок > 280) {
-                    withAnimation(.easeIn(duration: 0.2)) { ход += 1_200 }
+                    withAnimation(ДвижениеСайта.уход) { ход += 1_200 }
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 190_000_000)
                         var без = Transaction()
@@ -88,7 +88,7 @@ struct ЗакрытьСмахиваниемВниз: ViewModifier {
                         withTransaction(без) { закрыть() }
                     }
                 } else {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) { ход = 0 }
+                    withAnimation(ДвижениеСайта.возврат) { ход = 0 }
                 }
             }
     }

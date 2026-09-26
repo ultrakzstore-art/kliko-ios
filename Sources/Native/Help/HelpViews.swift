@@ -297,7 +297,7 @@ struct ЭкранСтраницыСайта: View {
         switch загрузка.состояние {
         case .идёт:
             VStack(spacing: 12) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)
@@ -359,7 +359,7 @@ struct ЭкранСтраницыСайта: View {
                 guard let цель else { return }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    withAnimation(.easeInOut(duration: 0.3)) { прокрутка.scrollTo(цель, anchor: .top) }
+                    withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo(цель, anchor: .top) }
                     прокрутить = nil
                 }
             }
@@ -525,7 +525,7 @@ struct ВопросСтатьи: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(ДвижениеСайта.смена) {
                     if открыт { раскрытые.remove(блок.id) } else { раскрытые.insert(блок.id) }
                 }
             } label: {

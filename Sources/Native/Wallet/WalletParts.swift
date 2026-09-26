@@ -233,7 +233,7 @@ struct СтрокаОперации: View {
                     } label: {
                         HStack(spacing: 4) {
                             if чекГрузится {
-                                ProgressView().controlSize(.mini)
+                                SiteSpinner.крошечный
                             } else {
                                 Image(systemName: "doc.text")
                                     .accessibilityHidden(true)
@@ -382,7 +382,7 @@ struct БлокЗаморожено: View {
                            действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
             HStack(spacing: 4) {
-                if занята { ProgressView().controlSize(.mini) }
+                if занята { SiteSpinner.крошечный }
                 Text(подпись)
                     .font(.system(size: 12, weight: .bold))
                 if наСайт {
@@ -642,8 +642,7 @@ struct ОкноИтогаКошелька: View {
     private var значок: some View {
         switch вид {
         case .ждём:
-            ProgressView()
-                .controlSize(.large)
+            SiteSpinner.крупный
                 .frame(width: 56, height: 56)
         case .хорошо:
             Image(systemName: "checkmark")

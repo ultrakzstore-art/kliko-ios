@@ -265,7 +265,7 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
 
     /// «10 000 ₸» — fmt() сайта: разряды неразрывным пробелом.
     static func тенге(_ n: Int) -> String {
-        DesignText.число(n) + "\u{00A0}₸"
+        (DesignText.число(n) + "\u{00A0}₸").слеваНаправо
     }
 
     /// _afRange сайта: «от A», «до B» или «A–B»; нет ни одной границы — nil.

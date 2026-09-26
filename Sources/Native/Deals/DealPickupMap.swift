@@ -115,7 +115,7 @@ struct ЛистТочкиСделки: View {
                         сохранить()
                     } label: {
                         HStack(spacing: 8) {
-                            if сохраняем { ProgressView().tint(.white) }
+                            if сохраняем { SiteSpinner.белый }
                             Text(сохраняем ? т("saving") : т("save"))
                         }
                         .font(.system(size: 16, weight: .bold))
@@ -351,7 +351,7 @@ struct ЛистТочкиСделки: View {
         координата = к
         найдено = []
         if сдвинуть {
-            withAnimation(.easeInOut(duration: 0.35)) {
+            withAnimation(ДвижениеСайта.камера) {
                 камера = .region(MKCoordinateRegion(center: к, latitudinalMeters: 500, longitudinalMeters: 500))
             }
         }

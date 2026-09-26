@@ -348,7 +348,7 @@ struct ПредпросмотрРезюме: View {
                 ДокументРезюме(запись: запись, шаблон: ШаблонРезюме.по(шаблон))
                     .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
                     .padding(14)
-                    .animation(.easeInOut(duration: 0.25), value: шаблон)
+                    .animation(ДвижениеСайта.смена, value: шаблон)
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .navigationTitle(ШаблонРезюме.по(шаблон).название)

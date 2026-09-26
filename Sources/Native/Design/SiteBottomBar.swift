@@ -42,6 +42,10 @@ struct НижняяПанельСайта: View {
     /// Пилюля выбранного пункта переезжает между пунктами (matchedGeometryEffect).
     @Namespace private var пилюля
     @Environment(\.accessibilityReduceMotion) private var безДвижения
+    /// VoiceOver: панель не прячется при прокрутке — иначе пункты пропадали бы из-под пальца, читающего экран.
+    @Environment(\.accessibilityVoiceOverEnabled) private var чтецЭкрана
+    /// Прокрутили корень вкладки вниз — панель уезжает за низ экрана, вверх — возвращается (13-bottombar.min.js).
+    @ObservedObject private var поПрокрутке = ПанельПоПрокрутке.shared
     /// Отклик под пальцем — счётчик нажатий, а не выбранный пункт: повторное нажатие (к началу стека) тоже отзывается.
     @State private var нажатий = 0
 
@@ -67,10 +71,26 @@ struct НижняяПанельСайта: View {
             .padding(.bottom, Self.высота - Self.высотаКапсулы)
             .frame(maxWidth: .infinity)
             .frame(height: Self.высота, alignment: .bottom)
-            .animation(безДвижения ? nil : .spring(response: 0.36, dampingFraction: 0.82), value: выбран)
-            .sensoryFeedback(.selection, trigger: нажатий)
+            .animation(безДвижения ? nil : ДвижениеСайта.вкладка, value: выбран)
+            .откликВыбора(нажатий)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(DesignText.т("nav"))
+            /* Уехала — .ulx-bbar.ulx-bb-hide { transform: translateY(calc(100% + 4px)) }: вниз на свою высоту и ещё на
+               домашнюю полосу (панель стоит над ней), transition transform .25s ease. «Уменьшение движения» — гаснет
+               на месте. Место под панелью у корня вкладки не меняется — как у сайта, прокрутка не прыгает. */
+            .offset(y: спрятана && !безДвижения ? Self.высота + 44 : 0)
+            .opacity(спрятана && безДвижения ? 0 : 1)
+            .allowsHitTesting(!спрятана)
+            .accessibilityHidden(спрятана)
+            .animation(безДвижения ? ДвижениеСайта.затухание : ДвижениеСайта.панель, value: спрятана)
+            /* Сменили вкладку или панель снова на экране (закрыли экран поверх корня, ушла клавиатура) — она видна. */
+            .onAppear { поПрокрутке.сбросить() }
+            .onChange(of: выбран) { _, _ in поПрокрутке.сбросить() }
+    }
+
+    /// Панель уехала при прокрутке вниз; с VoiceOver — никогда.
+    private var спрятана: Bool {
+        поПрокрутке.скрыта && !чтецЭкрана
     }
 
     private var ряд: some View {
@@ -262,12 +282,12 @@ struct ФонПанелиСайта: View {
 
 /// Нажатие пункта панели — .ulx-bb-item:active { transform: scale(.92) }.
 struct НажатиеПанелиСайта: ButtonStyle {
-    var сжатие: CGFloat = 0.92
+    var сжатие: CGFloat = ДвижениеСайта.сжатиеПанели
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? сжатие : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(ДвижениеСайта.нажатие, value: configuration.isPressed)
     }
 }
 

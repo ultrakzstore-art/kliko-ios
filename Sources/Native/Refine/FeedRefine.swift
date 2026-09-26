@@ -206,7 +206,7 @@ struct ПолосаУточнения: View {
             .accessibilityLabel(RefineText.т("reset_a11y"))
         }
         .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 4)
-        .background(Theme.green2.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Theme.green2.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .padding(.horizontal, 16)
     }
 }

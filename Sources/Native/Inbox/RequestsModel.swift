@@ -252,12 +252,12 @@ final class ЗаявкиМодель: ObservableObject {
     }
 
     func показатьПлашку(_ текст: String) {
-        withAnimation(.easeOut(duration: 0.2)) { плашка = текст }
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_600_000_000)
             guard let self, self.плашка == текст else { return }
-            withAnimation(.easeIn(duration: 0.2)) { self.плашка = nil }
+            withAnimation(ДвижениеСайта.уход) { self.плашка = nil }
         }
     }
 

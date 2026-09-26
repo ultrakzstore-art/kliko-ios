@@ -944,6 +944,6 @@ struct СлойПодписокССайтом<Содержимое: View>: View 
                     .id(сообщение.id)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: синхрон.сообщение?.id)
+        .animation(ДвижениеСайта.смена, value: синхрон.сообщение?.id)
     }
 }

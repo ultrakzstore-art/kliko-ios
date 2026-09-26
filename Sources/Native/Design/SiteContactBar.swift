@@ -178,8 +178,7 @@ struct ПанельСвязиСайта: View {
         } label: {
             ZStack {
                 if ждём == канал {
-                    ProgressView()
-                        .tint(Color.white)
+                    SiteSpinner.белый
                 } else if канал == .звонок {
                     Image(systemName: "phone")
                         .font(.system(size: 18, weight: .medium))

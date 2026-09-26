@@ -782,7 +782,7 @@ final class ИмпортМодель: ObservableObject {
     }
 
     private func ход(_ доля: Double, _ подпись: String) {
-        withAnimation(.easeOut(duration: 0.25)) { прогресс = max(прогресс, min(1, доля)) }
+        withAnimation(ДвижениеСайта.прогресс) { прогресс = max(прогресс, min(1, доля)) }
         подписьХода = подпись
     }
 

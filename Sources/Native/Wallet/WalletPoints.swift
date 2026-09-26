@@ -70,7 +70,7 @@ struct ЭкранБаллов: View {
                        действие: { Task { await загрузить() } })
         } else {
             VStack(spacing: 12) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)

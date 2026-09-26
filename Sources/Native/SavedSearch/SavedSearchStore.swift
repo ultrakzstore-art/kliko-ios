@@ -203,6 +203,8 @@ final class SavedSearchStore: ObservableObject {
     /// («root_<раздел>»); нет — nil, и в названии поиска будет ключ.
     private static func имяРаздела(_ ключ: String) -> String? {
         guard !ключ.isEmpty else { return nil }
+        /* Справочник сайта на языке приложения (cats-<язык>.js) знает и подразделы, и язык, выбранный в этот запуск. */
+        if let имя = ЗагрузкаКаталогаПоиска.имя(ключ) { return имя }
         if let строка = FeedStore.разделыНаЗапуске.first(where: { $0.k == ключ }) { return строка.название }
         let корень = ListingPageText.т("root_" + ключ)
         return корень == "root_" + ключ ? nil : корень

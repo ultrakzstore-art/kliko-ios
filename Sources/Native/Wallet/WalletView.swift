@@ -79,7 +79,7 @@ struct ЭкранКошелька: View {
         case .нет, .идёт:
             if кошелёк.сведения == nil {
                 VStack(spacing: 12) {
-                    ProgressView()
+                    SiteSpinner()
                     Text(т("loading"))
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.текстВторой)

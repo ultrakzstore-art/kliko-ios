@@ -203,6 +203,7 @@ struct ChatListView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
+                    .панельСайтаПоПрокрутке()
                 }
             }
         }
@@ -310,7 +311,7 @@ struct ChatListView: View {
                    вылезали за край экрана и на имя. Обрезка шла по размеру самой картинки после scaledToFill, а не по
                    ячейке 48×48; .frame у Group ниже не режет. Сначала рамка, потом обрезка. */
                 .frame(width: 48, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             } else {
                 Circle()
                     .fill(Theme.mint)

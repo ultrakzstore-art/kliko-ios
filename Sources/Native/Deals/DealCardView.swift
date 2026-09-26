@@ -131,7 +131,7 @@ struct ЭкранСделки: View {
                        действие: { Task { await модель.загрузить() } })
         } else {
             VStack(spacing: 12) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)
@@ -582,6 +582,7 @@ struct КонтактыСделки: View {
                             Label(т(п.роль == "seller" ? "hov_prof_seller" : "hov_prof_buyer"), systemImage: "person.crop.circle")
                             Spacer(minLength: 4)
                             Image(systemName: "chevron.right")
+                                .flipsForRightToLeftLayoutDirection(true)
                                 .accessibilityHidden(true)
                         }
                         .font(.system(size: 14, weight: .semibold))

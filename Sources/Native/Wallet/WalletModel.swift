@@ -287,12 +287,12 @@ final class КошелёкМодель: ObservableObject {
     // MARK: - Плашка
 
     func показать(_ текст: String) {
-        withAnimation(.easeOut(duration: 0.2)) { плашка = текст }
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_800_000_000)
             guard self.плашка == текст else { return }
-            withAnimation(.easeIn(duration: 0.2)) { self.плашка = nil }
+            withAnimation(ДвижениеСайта.уход) { self.плашка = nil }
         }
     }
 

@@ -519,10 +519,10 @@ struct РасположениеСайта: View {
     private var кнопкаСкопировать: some View {
         Button {
             UIPasteboard.general.string = полныйАдрес
-            withAnimation(.easeOut(duration: 0.15)) { скопировано = true }
+            withAnimation(ДвижениеСайта.выбор) { скопировано = true }
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_800_000_000)
-                withAnimation(.easeOut(duration: 0.15)) { скопировано = false }
+                withAnimation(ДвижениеСайта.выбор) { скопировано = false }
             }
         } label: {
             Label(тМеста(скопировано ? "copied" : "copy_addr"),
@@ -836,7 +836,7 @@ private struct ПереключательНаправления: View {
 
     private func кнопка(_ текст: String, выбрана: Bool, _ действие: @escaping () -> Void) -> some View {
         Button {
-            withAnimation(.easeOut(duration: 0.16)) { действие() }
+            withAnimation(ДвижениеСайта.выбор) { действие() }
         } label: {
             Text(текст)
                 .font(.system(size: 14, weight: .bold))
@@ -1329,7 +1329,7 @@ struct КартаОбъявленияНаВесьЭкран: View {
                     return
                 }
                 моя = координата
-                withAnimation(.easeInOut(duration: 0.4)) { камера = .automatic }
+                withAnimation(ДвижениеСайта.камера) { камера = .automatic }
             }
         }
     }

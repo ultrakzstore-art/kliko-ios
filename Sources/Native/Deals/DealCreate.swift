@@ -383,7 +383,7 @@ struct ОкноНовойСделки: View {
     private var содержимое: some View {
         switch модель.этап {
         case .загрузка:
-            ProgressView()
+            SiteSpinner()
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
         case .ошибка(let текст):
@@ -449,7 +449,7 @@ struct ПодтверждениеНовойСделки: View {
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Theme.зелёный)
                         .frame(width: 28, height: 28)
-                        .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
                         .accessibilityHidden(true)
                     ТекстСделки.сЖирным(т("sd_" + приставка + String(n)))
                         .font(.system(size: 14))
@@ -577,7 +577,7 @@ struct ОкноЗаказаУслуги: View {
     private var содержимое: some View {
         switch модель.этап {
         case .загрузка:
-            ProgressView()
+            SiteSpinner()
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
         case .ошибка(let текст):

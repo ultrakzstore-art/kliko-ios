@@ -160,7 +160,7 @@ struct ЭкранСравнения: View {
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 .accessibilityHidden(true)
             Text(товар.title)
                 .font(.footnote.weight(.semibold))

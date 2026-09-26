@@ -301,7 +301,7 @@ struct ЭкранВакансий: View {
     private var содержимое: some View {
         if вакансии.isEmpty && грузим {
             HStack(spacing: 10) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
@@ -346,7 +346,7 @@ struct ЭкранВакансий: View {
                 }
             }
             if грузим {
-                ProgressView()
+                SiteSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
             }
@@ -472,7 +472,7 @@ struct ЛистВакансии: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
                     } else {
-                        ProgressView()
+                        SiteSpinner()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
                     }
@@ -543,7 +543,7 @@ struct ЛистВакансии: View {
             откликнуться(в)
         } label: {
             HStack(spacing: 8) {
-                if шлём { ProgressView().tint(.white) }
+                if шлём { SiteSpinner.белый }
                 Text(т(в.резюме ? "write" : "apply"))
             }
             .font(.system(size: 16, weight: .bold))

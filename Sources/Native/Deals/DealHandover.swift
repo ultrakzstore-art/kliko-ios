@@ -167,6 +167,7 @@ struct БлокПередачи: View {
                 }
                 Spacer(minLength: 4)
                 Image(systemName: наСайт ? "arrow.up.right.square" : "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
@@ -642,7 +643,7 @@ struct БлокПеревозчика: View {
             }
         } else {
             HStack(spacing: 8) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("car_pts_load"))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)

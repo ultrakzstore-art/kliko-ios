@@ -120,7 +120,7 @@ struct ШапкаПрофиля: View {
                 }
                 if грузится {
                     Color.black.opacity(0.35)
-                    ProgressView().tint(Color.white)
+                    SiteSpinner.белый
                 }
             }
             .frame(width: 52, height: 52)
@@ -257,6 +257,7 @@ struct СтрокаНастройки: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
@@ -327,6 +328,7 @@ struct СтрокаВерификации: View {
                             .background(КраскаОбъявлений.плохоФон, in: Capsule())
                     }
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
@@ -376,6 +378,7 @@ struct РазделПриложения: View {
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
@@ -411,6 +414,7 @@ struct РазделУдаленияАккаунта: View {
                     Label(тН("cabset_del"), systemImage: "trash")
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
@@ -494,7 +498,7 @@ struct ЛистОкнаНастроек: View {
                     форма(п)
                 } else {
                     VStack(spacing: 10) {
-                        ProgressView()
+                        SiteSpinner()
                         Text(тН("loading")).foregroundStyle(Theme.текстВторой)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -577,7 +581,7 @@ struct ОкноПрименения: View {
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
             if этап == .идёт {
-                ProgressView()
+                SiteSpinner()
                     .padding(.vertical, 6)
             } else {
                 Text(пояснение)

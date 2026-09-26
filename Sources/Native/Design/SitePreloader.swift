@@ -109,45 +109,6 @@ final class ЗаставкаЗапуска: ObservableObject {
     }
 }
 
-// MARK: - Спиннер .mk-spin сайта
-
-/**
- Колесо сайта: круг с обводкой и цветным верхом (border + border-top-color), крутится равномерно. По умолчанию — .mk-spin
- из marketplace.min.css (.mk-loading): 20×20, обводка 2,5 — --mk-line (#e3ece7 / белый 10 %), верх --mk-green
- (#0f5132 / #22a05b), оборот 0,7 с. У сайта для него нет правила reduced-motion — крутится всегда.
- */
-struct SiteSpinner: View {
-    var размер: CGFloat = 20
-    var толщина: CGFloat = 2.5
-    var дорожка: Color = Theme.линия
-    var верх: Color = Theme.зелёный
-    var период: Double = 0.7
-    /// Стоит на месте (прелоадер при «Уменьшении движения»).
-    var стоит: Bool = false
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: стоит)) { шкала in
-            let t = шкала.date.timeIntervalSinceReferenceDate
-            let угол = стоит ? 0 : t.truncatingRemainder(dividingBy: период) / период * 360
-            ZStack {
-                Circle()
-                    .strokeBorder(дорожка, lineWidth: толщина)
-                /* border-top у круга — четверть от 225° до 315° (от левой верхней диагонали до правой). У Circle путь
-                   начинается справа и идёт по часовой: это доли 0,625…0,875. */
-                Circle()
-                    .inset(by: толщина / 2)
-                    .trim(from: 0.625, to: 0.875)
-                    .stroke(верх, lineWidth: толщина)
-            }
-            .rotationEffect(.degrees(угол))
-        }
-        .frame(width: размер, height: размер)
-        /* Как ProgressView: VoiceOver называет его «Загрузка…»; своя подпись снаружи (.accessibilityLabel) её заменяет. */
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ПодсказкиПрелоадера.загрузка)
-    }
-}
-
 // MARK: - Значок brand_logo_icon() — viewBox 48×48
 
 private struct ЗначокПрелоадера: View {

@@ -64,12 +64,12 @@ struct ЦенаКарточкиСайта: Hashable {
 
     /// «14,5 млн ₸».
     static func сумма(_ n: Double) -> String {
-        коротко(n) + "\u{00A0}₸"
+        (коротко(n) + "\u{00A0}₸").слеваНаправо
     }
 
     /// Полная сумма — mkMoney сайта («476 250 ₸»): у «Вы смотрели».
     static func полная(_ n: Double) -> String {
-        (целое.string(from: NSNumber(value: n.rounded())) ?? String(Int(n))) + "\u{00A0}₸"
+        ((целое.string(from: NSNumber(value: n.rounded())) ?? String(Int(n))) + "\u{00A0}₸").слеваНаправо
     }
 
     /// Как toLocaleString("ru-RU") сайта: разряды неразрывным пробелом, дробь запятой.
@@ -488,35 +488,6 @@ struct МеткаТопГлавной: View {
                                       radius: 4, x: 0, y: 3)),
                     in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
         .accessibilityHidden(true)
-    }
-}
-
-/// Мерцающая заготовка — .mh-sk, .mh-skc, .mh-tile-n:empty: заливка линией, прозрачность от 0,6 до 1 по часам.
-struct МерцаниеСайта: View {
-    let радиус: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var безДвижения
-
-    init(радиус: CGFloat) {
-        self.радиус = радиус
-    }
-
-    var body: some View {
-        Group {
-            if безДвижения {
-                фигура(0.8)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 20, paused: false)) { контекст in
-                    фигура(0.8 + 0.2 * cos(контекст.date.timeIntervalSinceReferenceDate * 2 * Double.pi / 1.4))
-                }
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private func фигура(_ прозрачность: Double) -> some View {
-        RoundedRectangle(cornerRadius: радиус, style: .continuous)
-            .fill(Theme.линия)
-            .opacity(прозрачность)
     }
 }
 
@@ -1126,7 +1097,7 @@ struct ПодвалСайта: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(height: 29)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(Color.white, in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
     }
 
     /// .ulxsf-h 11/800 заглавными .5 с разрядкой .06em, под ним 14; ссылки .ulxsf-col a — 13 pt .82, по 12 сверху и снизу.
@@ -1369,9 +1340,7 @@ struct ПлашкаЗагрузкиЛенты: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(Theme.зелёный2)
+            SiteSpinner(размер: 16, толщина: 2, верх: Theme.зелёный2)
             Text(DesignText.т(медленно ? "fl_slow" : (ещё ? "fl_more" : "fl_loading")))
                 .font(.system(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.текст)
@@ -1399,7 +1368,7 @@ struct ПлашкаЗагрузкиЛенты: View {
         .compositingGroup()
         .shadow(color: Color(red: 15 / 255, green: 40 / 255, blue: 25 / 255).opacity(0.25), radius: 14, x: 0, y: 10)
         .onAppear {
-            withAnimation(.easeOut(duration: 3)) { доля = 0.45 }
+            withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 3))) { доля = 0.45 }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.updatesFrequently)

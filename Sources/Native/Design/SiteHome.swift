@@ -664,7 +664,7 @@ struct БаннерГлавной: View {
                 try? await Task.sleep(nanoseconds: 6_000_000_000)
                 if Task.isCancelled { break }
                 if !безДвижения && слайды.count > 1 && Date() >= держатьДо && открытый == nil {
-                    withAnimation(.easeInOut(duration: 0.45)) { номер = (номер + 1) % слайды.count }
+                    withAnimation(ДвижениеСайта.слайд) { номер = (номер + 1) % слайды.count }
                 }
             }
         }
@@ -714,6 +714,7 @@ struct БаннерГлавной: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                         Image(systemName: "chevron.right")
+                            .flipsForRightToLeftLayoutDirection(true)
                             .font(.system(size: 10, weight: .heavy))
                     }
                     .font(.system(size: 12, weight: .heavy))
@@ -739,7 +740,7 @@ struct БаннерГлавной: View {
         HStack(spacing: 6) {
             ForEach(Array(слайды.enumerated()), id: \.element.id) { индекс, слайд in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.3)) { номер = индекс }
+                    withAnimation(ДвижениеСайта.слайд) { номер = индекс }
                     держатьДо = Date().addingTimeInterval(12)
                 } label: {
                     Capsule()
@@ -1101,6 +1102,7 @@ struct РядГлавной<Карточка: View>: View {
                 HStack(spacing: 2) {
                     Text(DesignText.т("row_all"))
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.system(size: 13, weight: .bold))
                 }
                 .font(.system(.subheadline, weight: .bold))
@@ -1124,6 +1126,7 @@ struct РядГлавной<Карточка: View>: View {
         Button(action: всё) {
             VStack(spacing: 8) {
                 Image(systemName: "arrow.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color.white)
                     .frame(width: 44, height: 44)
@@ -1201,6 +1204,6 @@ struct НажатиеСайта: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(ДвижениеСайта.нажатие, value: configuration.isPressed)
     }
 }

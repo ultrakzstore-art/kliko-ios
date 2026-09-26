@@ -60,7 +60,7 @@ struct КнопкаПодпискиНаПродавца: View {
             надпись
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-        .animation(.easeOut(duration: 0.15), value: подписан)
+        .animation(ДвижениеСайта.выбор, value: подписан)
         .accessibilityLabel(SubsText.т(подписан ? "subscribed" : "follow_seller"))
         .accessibilityHint(подписан ? SubsText.т("unfollow") : "")
         .accessibilityAddTraits(подписан ? .isSelected : [])
@@ -127,6 +127,7 @@ struct РазделПодписокНаПродавцов: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)

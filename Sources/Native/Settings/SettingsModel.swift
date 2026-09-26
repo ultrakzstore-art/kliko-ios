@@ -120,12 +120,12 @@ final class НастройкиМодель: ObservableObject {
     }
 
     func показать(_ текст: String) {
-        withAnimation(.easeOut(duration: 0.2)) { плашка = текст }
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard плашка == текст else { return }
-            withAnimation(.easeIn(duration: 0.2)) { плашка = nil }
+            withAnimation(ДвижениеСайта.уход) { плашка = nil }
         }
     }
 

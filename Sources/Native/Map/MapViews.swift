@@ -303,7 +303,7 @@ struct ЭкранКарты: View {
         let цель = ГеометрияКарты.область(центр: выбранный.координата, зум: ГеометрияКарты.порогЗума + 2,
                                           размер: модель.размер)
         модель.выбратьГород(выбранный.город, цель: цель)
-        withAnimation(.easeInOut(duration: 0.45)) { позиция = .region(цель) }
+        withAnimation(ДвижениеСайта.камера) { позиция = .region(цель) }
     }
 
     /// Кружок ценников — как у markercluster: на два шага ближе, к его середине.
@@ -311,7 +311,7 @@ struct ЭкранКарты: View {
         let сейчас = ГеометрияКарты.зум(модель.область, ширина: модель.размер.width)
         let новыйЗум = min(ГеометрияКарты.наибольшийЗум, max(сейчас, ГеометрияКарты.порогЗума) + 2)
         let цель = ГеометрияКарты.область(центр: знак.координата, зум: новыйЗум, размер: модель.размер)
-        withAnimation(.easeInOut(duration: 0.4)) { позиция = .region(цель) }
+        withAnimation(ДвижениеСайта.камера) { позиция = .region(цель) }
     }
 
     /// Объявление поверх карты. Ценник без названия — это только номер: открываем заготовкой, как ссылку (этап 8), и
@@ -336,16 +336,16 @@ struct ЭкранКарты: View {
             }
             моё = МоёМестоНаКарте(широта: точка.latitude, долгота: точка.longitude)
             let цель = MKCoordinateRegion(center: точка, latitudinalMeters: 2000, longitudinalMeters: 2000)
-            withAnimation(.easeInOut(duration: 0.45)) { позиция = .region(цель) }
+            withAnimation(ДвижениеСайта.камера) { позиция = .region(цель) }
         }
     }
 
     private func показатьПлашку(_ текст: String) {
-        withAnimation(.easeInOut(duration: 0.2)) { плашка = текст }
+        withAnimation(ДвижениеСайта.появление) { плашка = текст }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             if плашка == текст {
-                withAnimation(.easeInOut(duration: 0.2)) { плашка = nil }
+                withAnimation(ДвижениеСайта.уход) { плашка = nil }
             }
         }
     }
@@ -405,12 +405,12 @@ enum ПодписиКарты {
     static func цена(_ товар: Listing) -> String {
         guard let p = тенге(товар) else { return MapText.т("negotiable") }
         if p >= 1_000_000 {
-            return десятые(p, делитель: 100_000) + "\u{00A0}" + MapText.т("mln") + "\u{00A0}₸"
+            return (десятые(p, делитель: 100_000) + "\u{00A0}" + MapText.т("mln") + "\u{00A0}₸").слеваНаправо
         }
         if p >= 10_000 {
-            return String(Int((Double(p) / 1_000).rounded())) + "\u{00A0}" + MapText.т("thous") + "\u{00A0}₸"
+            return (String(Int((Double(p) / 1_000).rounded())) + "\u{00A0}" + MapText.т("thous") + "\u{00A0}₸").слеваНаправо
         }
-        return DesignText.число(p) + "\u{00A0}₸"
+        return (DesignText.число(p) + "\u{00A0}₸").слеваНаправо
     }
 
     /// Расстояние от центра карты: «350 м», «1.2 км»; у сайта — только до 9999 км.
@@ -453,9 +453,7 @@ private struct ВерхКарты: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if занята {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(Color.white)
+                SiteSpinner.мелкийБелый
             }
             if let подпись = счёт {
                 Text(подпись)
@@ -665,8 +663,7 @@ private struct КнопкаРядом: View {
         Button(action: действие) {
             ZStack {
                 if ищем {
-                    ProgressView()
-                        .controlSize(.small)
+                    SiteSpinner.мелкий
                 } else {
                     Image(systemName: "location.fill")
                         .font(.system(size: 17, weight: .semibold))
@@ -737,8 +734,7 @@ private struct ПлашкаНеудачиКарты: View {
 private struct ПлашкаЗагрузкиКарты: View {
     var body: some View {
         ОбёрткаПлашкиКарты {
-            ProgressView()
-                .controlSize(.small)
+            SiteSpinner.мелкий
             Text(MapText.т("loading"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
@@ -774,7 +770,7 @@ private struct ПустоКарты: View {
     var body: some View {
         VStack(spacing: 10) {
             if крутилка {
-                ProgressView()
+                SiteSpinner()
             }
             Text(текст)
                 .font(.system(size: 13))
@@ -814,6 +810,7 @@ private struct КарточкаГородаКарты: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
             }

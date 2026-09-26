@@ -511,9 +511,7 @@ struct ЛистФильтров: View {
             Text(FilterText.т("show"))
                 .font(.system(size: 15, weight: .bold))
             if модель.грузим {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(Color.white)
+                SiteSpinner.мелкийБелый
             } else if let найдено = модель.всего {
                 Text(DesignText.число(найдено))
                     .font(.system(size: 15, weight: .bold))

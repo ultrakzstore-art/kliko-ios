@@ -149,8 +149,7 @@ struct ЗанятоДеньгиВид: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.06)
-            ProgressView()
-                .controlSize(.large)
+            SiteSpinner.крупный
                 .padding(18)
                 .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         }

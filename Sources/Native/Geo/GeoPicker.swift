@@ -171,7 +171,7 @@ struct ЛистГорода: View {
     }
 
     private func переключить(_ ключ: String) {
-        withAnimation(безДвижения ? nil : Animation.easeInOut(duration: 0.2)) {
+        withAnimation(безДвижения ? nil : ДвижениеСайта.смена) {
             раскрыто.formSymmetricDifference([ключ])
         }
     }
@@ -403,8 +403,7 @@ private struct СтрокаОпределения: View {
                 .fill(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный], startPoint: .topLeading,
                                      endPoint: .bottomTrailing))
             if определяем {
-                ProgressView()
-                    .tint(Color.white)
+                SiteSpinner.белый
             } else {
                 Image(systemName: "location.fill")
                     .font(.system(size: 16, weight: .semibold))

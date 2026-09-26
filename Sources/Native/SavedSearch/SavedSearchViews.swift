@@ -68,6 +68,7 @@ struct РазделСохранённыхПоисков: View {
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right")
+                .flipsForRightToLeftLayoutDirection(true)
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)

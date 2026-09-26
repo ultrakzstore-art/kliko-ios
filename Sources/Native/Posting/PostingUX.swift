@@ -21,9 +21,9 @@ import UniformTypeIdentifiers
 extension ПодачаМодель {
     /// Проверка не прошла: строка под полем, VoiceOver читает её сразу, телефон слегка вздрагивает.
     func пометить(_ поле: String, _ текст: String) {
-        withAnimation(.easeOut(duration: 0.15)) { ошибкиПолей[поле] = текст }
+        withAnimation(ДвижениеСайта.выбор) { ошибкиПолей[поле] = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        ОткликСайта.предупреждение()
     }
 
     func ошибка(_ поле: String) -> String? { ошибкиПолей[поле] }
@@ -42,7 +42,7 @@ extension ПодачаМодель {
         if ф.работает != было.работает || ф.состояние != было.состояние { снять.append("works") }
         if ф.бренд != было.бренд || ф.модель != было.модель { снять.append("auto") }
         guard снять.contains(where: { ошибкиПолей[$0] != nil }) else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
+        withAnimation(ДвижениеСайта.выбор) {
             for ключ in снять { ошибкиПолей.removeValue(forKey: ключ) }
         }
     }
@@ -54,7 +54,7 @@ extension ПодачаМодель {
         var новые = плитки
         let плитка = новые.remove(at: откуда)
         новые.insert(плитка, at: куда)
-        withAnimation(.easeInOut(duration: 0.2)) { плитки = новые }
+        withAnimation(ДвижениеСайта.вставкаСписка) { плитки = новые }
     }
 
     /// Для VoiceOver: сдвинуть фото на одно место влево или вправо.
@@ -390,7 +390,7 @@ struct ВыборСегментом: View {
             } else {
                 значение = в.ключ
             }
-            UISelectionFeedbackGenerator().selectionChanged()
+            ОткликСайта.выбор()
         } label: {
             Text(в.подпись)
                 .font(.system(size: 14, weight: выбран ? Font.Weight.bold : Font.Weight.semibold))
@@ -540,6 +540,7 @@ struct КнопкаНазадПодачи: View {
         Button(action: действие) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 14, weight: .bold))
                     .accessibilityHidden(true)
                 Text(ПодачаText.т("back"))
@@ -660,14 +661,15 @@ struct ЛистРазделов: View {
     private var крошки: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                Button(т("cat_all")) { withAnimation { путь = [] } }
+                Button(т("cat_all")) { withAnimation(ДвижениеСайта.шаг) { путь = [] } }
                 ForEach(Array(путь.enumerated()), id: \.offset) { номер, ключ in
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Theme.текстВторой)
                         .accessibilityHidden(true)
                     Button(справочники.имя(ключ)) {
-                        withAnimation { путь = Array(путь.prefix(номер + 1)) }
+                        withAnimation(ДвижениеСайта.шаг) { путь = Array(путь.prefix(номер + 1)) }
                     }
                     .disabled(номер == путь.count - 1)
                 }
@@ -715,7 +717,7 @@ struct ЛистРазделов: View {
                 выбрать(ключ)
                 закрыть()
             } else {
-                withAnimation { путь.append(ключ) }
+                withAnimation(ДвижениеСайта.шаг) { путь.append(ключ) }
             }
         } label: {
             HStack(spacing: 12) {
@@ -740,6 +742,7 @@ struct ЛистРазделов: View {
                 }
                 if !дети.isEmpty {
                     Image(systemName: "chevron.right")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.текстВторой)
                         .accessibilityHidden(true)
@@ -859,6 +862,7 @@ struct СтрокаРазделаПодачи: View {
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
@@ -942,9 +946,8 @@ struct КольцоЗагрузки: View {
                     .trim(from: 0, to: этап >= 1 ? 0.7 : 0.3)
                     .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.5), value: этап)
-                ProgressView()
-                    .tint(Color.white)
+                    .animation(ДвижениеСайта.мягко(.easeInOut(duration: 0.5)), value: этап)
+                SiteSpinner.белый
                     .scaleEffect(0.6)
             }
             .frame(width: 34, height: 34)

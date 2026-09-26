@@ -55,19 +55,19 @@ struct ШагиПодачи: View {
                 guard let ключ else { return }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    withAnimation(.easeOut(duration: 0.25)) { прокрутка.scrollTo(ключ, anchor: .center) }
+                    withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo(ключ, anchor: .center) }
                 }
             }
             .onChange(of: модель.шаг) { _, _ in
                 фокус = nil
-                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("верх", anchor: .top) }
+                withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("верх", anchor: .top) }
             }
             .onChange(of: модель.ошибкиПолей) { было, стало in
                 /* Новая ошибка — показать её поле (после перехода на нужный шаг). */
                 guard let ключ = стало.keys.first(where: { было[$0] == nil }) else { return }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 300_000_000)
-                    withAnimation(.easeOut(duration: 0.25)) { прокрутка.scrollTo(ключ, anchor: .center) }
+                    withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo(ключ, anchor: .center) }
                 }
             }
         }
@@ -99,7 +99,7 @@ struct ШагиПодачи: View {
             .accessibilityAddTraits(.isHeader)
             ProgressView(value: Double(н.номер), total: Double(н.всего))
                 .tint(Theme.зелёныйЯркий)
-                .animation(.easeInOut(duration: 0.25), value: н.номер)
+                .animation(ДвижениеСайта.шаг, value: н.номер)
                 .accessibilityHidden(true)
             if модель.правка { полосаПравки }
         }

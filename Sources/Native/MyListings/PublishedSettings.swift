@@ -189,7 +189,7 @@ struct ЛистНастроекОбъявления: View {
                         сохранить()
                     } label: {
                         HStack(spacing: 8) {
-                            if сохраняем { ProgressView().tint(.white) }
+                            if сохраняем { SiteSpinner.белый }
                             Text(сохраняем ? т("saving") : т("save_btn"))
                         }
                         .font(.system(size: 16, weight: .bold))

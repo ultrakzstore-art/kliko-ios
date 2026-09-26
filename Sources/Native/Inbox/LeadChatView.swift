@@ -35,8 +35,7 @@ struct ЭкранЛида: View {
     var body: some View {
         VStack(spacing: 0) {
             if !модель.загружено {
-                ProgressView()
-                    .tint(Theme.акцент)
+                SiteSpinner.цвета(Theme.акцент)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let ошибка = модель.ошибка {
                 ПустоСайта(значок: "exclamationmark.bubble", заголовок: ошибка, кнопка: ChatText.т("retry"),
@@ -293,7 +292,7 @@ struct ЭкранЛида: View {
                                 .foregroundStyle(Theme.текстВторой)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Theme.пузырьЧужой, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .background(Theme.пузырьЧужой, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                                 .accessibilityLabel(т("typing"))
                             Spacer(minLength: 48)
                         }
@@ -306,7 +305,7 @@ struct ЭкранЛида: View {
             .background(Theme.фонСтраницы)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: модель.сообщения.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+                withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
             }
             .onChange(of: полеВФокусе) { _, вФокусе in
                 if вФокусе { прокрутка.scrollTo("низ", anchor: .bottom) }
@@ -528,7 +527,7 @@ struct ФотоЛида: View {
                     Theme.поверхность2
                 }
                 .frame(width: 200, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(ChatText.т("photo"))

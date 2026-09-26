@@ -150,7 +150,7 @@ struct FeedPreview: View {
 
     private var строкаВнизу: some View {
         HStack(spacing: 9) {
-            ProgressView().scaleEffect(0.7)
+            SiteSpinner.мелкий
             Text(ждём == nil ? снимок.слово(\.loading, "Загружаем свежее")
                              : снимок.слово(\.opening, "Открываем объявление"))
                 .font(.system(size: 13, weight: .semibold))
@@ -184,6 +184,6 @@ struct FeedPreview: View {
         ф.groupingSeparator = "\u{00A0}"          // неразрывный пробел: цена не переносится посреди числа
         ф.maximumFractionDigits = 0
         let число = ф.string(from: NSNumber(value: p)) ?? String(Int(p))
-        return число + "\u{00A0}₸"
+        return (число + "\u{00A0}₸").слеваНаправо
     }
 }

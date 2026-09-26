@@ -319,7 +319,7 @@ struct СлойДействийСПродавцом<Содержимое: View>:
                     .id(сообщение.id)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: действия.сообщение?.id)
+        .animation(ДвижениеСайта.смена, value: действия.сообщение?.id)
     }
 }
 
@@ -358,7 +358,7 @@ struct ПлашкиВЛистеПродавца: View {
         .frame(maxWidth: 520)
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .animation(.easeInOut(duration: 0.22), value: действия.сообщение?.id)
-        .animation(.easeInOut(duration: 0.22), value: подписки.сообщение?.id)
+        .animation(ДвижениеСайта.смена, value: действия.сообщение?.id)
+        .animation(ДвижениеСайта.смена, value: подписки.сообщение?.id)
     }
 }

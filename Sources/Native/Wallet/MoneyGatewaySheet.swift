@@ -114,7 +114,7 @@ struct ЛистШлюза: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if состояние.грузится && !состояние.сбой {
-                        ProgressView()
+                        SiteSpinner()
                             .accessibilityLabel(ТекстШлюза.т("loading"))
                     }
                 }

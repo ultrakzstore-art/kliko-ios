@@ -334,8 +334,7 @@ private struct ШапкаОтзывов: View {
         switch состояние {
         case .загрузка:
             HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
+                SiteSpinner.мелкий
                 Text(SellerText.т("loading"))
             }
         case .ошибка:

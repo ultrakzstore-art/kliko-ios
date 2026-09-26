@@ -278,6 +278,7 @@ private struct ШагКартыВывода: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.left")
+                        .flipsForRightToLeftLayoutDirection(true)
                         .accessibilityHidden(true)
                     Text(КошелёкText.т("wd_sum_is", n: КошелёкФормат.тенге(модель.число)))
                         .fontWeight(.bold)

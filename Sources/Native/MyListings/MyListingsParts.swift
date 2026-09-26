@@ -111,7 +111,7 @@ struct ОкноМоихОбъявлений: View {
                 .foregroundStyle(Theme.текстВторой)
             ProgressView(value: Double(min(100, max(0, процент))), total: 100)
                 .tint(Theme.зелёный2)
-                .animation(.easeOut(duration: 0.4), value: процент)
+                .animation(ДвижениеСайта.прогресс, value: процент)
             Text(String(процент) + "%")
                 .font(.system(size: 13, weight: .bold))
                 .monospacedDigit()

@@ -508,7 +508,7 @@ struct ФормаКатегорий: View {
             Section {
                 if грузится {
                     HStack(spacing: 10) {
-                        ProgressView()
+                        SiteSpinner()
                         Text(тН("loading")).foregroundStyle(Theme.текстВторой)
                     }
                 }

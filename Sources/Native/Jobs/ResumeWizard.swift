@@ -137,7 +137,7 @@ struct МастерРезюме: View {
             чистая.вид = новый
             запись = чистая
             шаг = 0
-            withAnimation { вид = новый }
+            withAnimation(ДвижениеСайта.шаг) { вид = новый }
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: значок)
@@ -156,6 +156,7 @@ struct МастерРезюме: View {
                 }
                 Spacer(minLength: 6)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
@@ -285,7 +286,7 @@ struct МастерРезюме: View {
             КнопкаБизнеса(подпись: т("jw_ai_go"), занято: ииИдёт) { собратьИИ() }
             Button(т("jw_ai_skip")) {
                 сообщение = nil
-                withAnimation { шаг = 1 }
+                withAnimation(ДвижениеСайта.шаг) { шаг = 1 }
             }
             .font(.system(size: 15, weight: .semibold))
             .frame(maxWidth: .infinity)
@@ -311,7 +312,7 @@ struct МастерРезюме: View {
             if !итог.about.isEmpty { запись.оСебе = итог.about }
             if !итог.skills.isEmpty { запись.навыки = итог.skills.map { НавыкРезюме(название: $0, уровень: "") } }
             if запись.должность.isEmpty { запись.должность = роль }
-            withAnimation { шаг = 1 }
+            withAnimation(ДвижениеСайта.шаг) { шаг = 1 }
             показать(т("jw_ai_ok"), хорошо: true)
         }
     }
@@ -345,7 +346,7 @@ struct МастерРезюме: View {
                         if let картинка = фаза.image {
                             картинка.resizable().scaledToFill()
                         } else {
-                            ProgressView()
+                            SiteSpinner()
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -361,7 +362,7 @@ struct МастерРезюме: View {
                 if фотоГрузится {
                     Color.black.opacity(0.3)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                    ProgressView().tint(Color.white)
+                    SiteSpinner.белый
                 }
             }
             .frame(width: 96, height: 128)
@@ -624,9 +625,9 @@ struct МастерРезюме: View {
             Button {
                 сообщение = nil
                 if шаг > 0 {
-                    withAnimation { шаг -= 1 }
+                    withAnimation(ДвижениеСайта.шаг) { шаг -= 1 }
                 } else if номер == nil {
-                    withAnimation { вид = nil }
+                    withAnimation(ДвижениеСайта.шаг) { вид = nil }
                 } else {
                     закрыть()
                 }
@@ -643,11 +644,12 @@ struct МастерРезюме: View {
                 дальше()
             } label: {
                 HStack(spacing: 6) {
-                    if сохраняем { ProgressView().tint(Color.white) }
+                    if сохраняем { SiteSpinner.белый }
                     Text(последний ? (номер == nil ? т("publish") : т("save")) : т("next"))
                         .font(.system(size: 15, weight: .bold))
                     if !последний {
                         Image(systemName: "chevron.right")
+                            .flipsForRightToLeftLayoutDirection(true)
                             .font(.system(size: 13, weight: .bold))
                             .accessibilityHidden(true)
                     }
@@ -670,7 +672,7 @@ struct МастерРезюме: View {
         сообщение = nil
         нужнаВерификация = false
         if !последний {
-            withAnimation { шаг += 1 }
+            withAnimation(ДвижениеСайта.шаг) { шаг += 1 }
             return
         }
         сохранить()
@@ -703,7 +705,7 @@ struct МастерРезюме: View {
     }
 
     private func показать(_ текст: String, хорошо: Bool) {
-        withAnimation {
+        withAnimation(ДвижениеСайта.появление) {
             сообщение = текст
             self.хорошо = хорошо
         }

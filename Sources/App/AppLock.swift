@@ -200,7 +200,7 @@ struct LockView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 15)
                             .foregroundStyle(.white)
-                            .background(Theme.green2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(Theme.green2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .padding(.bottom, 12)

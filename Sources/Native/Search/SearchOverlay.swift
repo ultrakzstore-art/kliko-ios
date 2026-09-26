@@ -98,7 +98,7 @@ struct ПоискКакНаСайте: ViewModifier {
                         .allowsHitTesting(false)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: фото.плашка)
+            .animation(ДвижениеСайта.смена, value: фото.плашка)
     }
 
     /// Экран поиска появляется и уходит без выезда снизу — у сайта он просто проявляется (.mk-sov.open, 0,18 с).
@@ -177,7 +177,7 @@ struct ЭкранПоискаСайта: View {
         .opacity(появился ? 1 : 0)
         .offset(y: появился ? 0 : -6)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.18)) { появился = true }
+            withAnimation(ДвижениеСайта.появление) { появился = true }
         }
         .task {
             /* Как setTimeout(…focus, 70) у сайта: поле получает фокус, когда экран уже на месте. */

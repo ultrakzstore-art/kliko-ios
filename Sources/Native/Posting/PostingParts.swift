@@ -462,8 +462,7 @@ struct КнопкаПодачи: View {
         Button(action: действие) {
             HStack(spacing: 8) {
                 if занято {
-                    ProgressView()
-                        .tint(Color.white)
+                    SiteSpinner.белый
                 }
                 Text(текст)
                     .font(.system(size: 16, weight: .bold))

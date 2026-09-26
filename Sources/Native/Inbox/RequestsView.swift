@@ -326,7 +326,7 @@ struct КарточкаЗаявки: View {
                         Theme.поверхность2
                     }
                     .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
                     .accessibilityHidden(true)
                 } else {
                     Image(systemName: "shippingbox")
@@ -345,6 +345,7 @@ struct КарточкаЗаявки: View {
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)

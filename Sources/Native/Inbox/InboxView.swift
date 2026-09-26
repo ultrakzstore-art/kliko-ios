@@ -79,8 +79,7 @@ struct ИнбоксЭкран: View {
     @ViewBuilder
     private var содержимое: some View {
         if !модель.загружено {
-            ProgressView()
-                .tint(Theme.акцент)
+            SiteSpinner.цвета(Theme.акцент)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if модель.нуженВход {
             ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),

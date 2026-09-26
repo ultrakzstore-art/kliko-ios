@@ -94,7 +94,7 @@ struct ЛистУстройств: View {
                        действие: { Task { await загрузить() } })
         } else {
             VStack(spacing: 10) {
-                ProgressView()
+                SiteSpinner()
                 Text(тН("loading")).foregroundStyle(Theme.текстВторой)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

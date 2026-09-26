@@ -140,7 +140,7 @@ struct ЭкранВитриныПродавца: View {
         switch состояние {
         case .загрузка:
             HStack(spacing: 10) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)

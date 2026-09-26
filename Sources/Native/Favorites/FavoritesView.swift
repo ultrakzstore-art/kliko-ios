@@ -76,9 +76,10 @@ struct FavoritesView: View {
                     }
                     .padding(.top, 12)
                     .padding(.bottom, 24)
+                    .панельСайтаПоПрокрутке()
                 }
                 .modifier(ОбновлениеИзбранногоССайта())
-                .animation(.easeInOut(duration: 0.2), value: избранное.номера)
+                .animation(ДвижениеСайта.вставкаСписка, value: избранное.номера)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -235,7 +236,7 @@ struct FavoritesView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .foregroundStyle(.white)
-                    .background(Theme.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Theme.green, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(!можноСравнить)
@@ -305,7 +306,7 @@ struct КнопкаИзбранного: View {
             }
         }
         .accessibilityLabel(FavoritesText.т(сохранено ? "remove" : "add"))
-        .sensoryFeedback(.selection, trigger: сохранено)
+        .откликВыбора(сохранено)
     }
 
     private var сердце: some View {

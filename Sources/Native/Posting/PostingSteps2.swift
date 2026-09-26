@@ -123,7 +123,7 @@ struct ШагЦена: View {
         let выбран = модель.ценаЧислом == цена && цена > 0
         return Button {
             модель.форма.цена = String(цена)
-            UISelectionFeedbackGenerator().selectionChanged()
+            ОткликСайта.выбор()
         } label: {
             VStack(spacing: 2) {
                 Text(подпись)
@@ -730,7 +730,7 @@ struct ШагПроверка: View {
                                 .foregroundStyle(Theme.текст)
                             Spacer()
                             if модель.проверяемТоп == пакет.id {
-                                ProgressView()
+                                SiteSpinner()
                             } else {
                                 Text(ПодачаМодель.деньги(модель.страница.ценаСоСкидкой(пакет.цена)) + " ₸")
                                     .font(.system(size: 14, weight: .heavy))

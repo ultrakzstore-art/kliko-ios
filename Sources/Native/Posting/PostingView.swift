@@ -106,7 +106,7 @@ struct ЭкранПодачи: View {
         switch модель.экран {
         case .загрузка:
             VStack(spacing: 12) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)
@@ -322,7 +322,7 @@ struct СтартПодачи: View {
                     Button {
                         назад()
                     } label: {
-                        Label(т("back"), systemImage: "chevron.left")
+                        Label(т("back"), systemImage: "chevron.backward")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Theme.акцент)
                     }
@@ -367,6 +367,7 @@ struct СтартПодачи: View {
                             }
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
+                                .flipsForRightToLeftLayoutDirection(true)
                                 .foregroundStyle(Theme.текстВторой)
                                 .accessibilityHidden(true)
                         }
@@ -588,7 +589,7 @@ struct ОкноРаспознавания: View {
             Color.black.opacity(0.45).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    ProgressView()
+                    SiteSpinner()
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ПодачаText.т(шаг >= 4 ? "airec_done_t" : "airec_t_light"))
                             .font(.system(size: 17, weight: .heavy))

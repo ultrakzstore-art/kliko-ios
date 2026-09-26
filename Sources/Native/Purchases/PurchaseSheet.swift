@@ -163,7 +163,7 @@ struct ЭкранПокупкиApple: View {
                     }
                 }
             } else {
-                ProgressView()
+                SiteSpinner()
                     .frame(maxWidth: .infinity)
             }
         }
@@ -200,7 +200,7 @@ struct ЭкранПокупкиApple: View {
         let видимые = строки.filter { покупки.товары[$0.товар.id] != nil }
         if !покупки.загружено {
             HStack(spacing: 10) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("price_loading"))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)

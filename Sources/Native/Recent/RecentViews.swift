@@ -69,7 +69,7 @@ private struct МаленькаяКарточка: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             Text(ListingCard.цена(товар))
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(.primary)

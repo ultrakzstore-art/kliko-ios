@@ -567,11 +567,11 @@ private struct ИдётРаспознавание: View {
                 .frame(height: 56)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .offset(y: бег ? 192 : -56)
-                .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: false), value: бег)
+                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)), value: бег)
             УголкиРамки()
                 .padding(10)
                 .opacity(бег ? 0.65 : 1)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: бег)
+                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)), value: бег)
         }
         .frame(width: 192, height: 192)
         .background(Theme.поверхность2)
@@ -591,7 +591,7 @@ private struct ИдётРаспознавание: View {
                                      endPoint: .trailing))
                 .frame(width: место.size.width * 0.4)
                 .offset(x: бег ? место.size.width : -место.size.width * 0.4)
-                .animation(.easeInOut(duration: 1.15).repeatForever(autoreverses: false), value: бег)
+                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 1.15).repeatForever(autoreverses: false)), value: бег)
         }
         .frame(height: 6)
         .background(Theme.поверхность2)

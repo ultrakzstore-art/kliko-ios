@@ -157,7 +157,7 @@ struct УведомлениеЧатаСайта: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
     }

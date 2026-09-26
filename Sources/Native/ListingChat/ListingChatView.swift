@@ -151,7 +151,7 @@ struct ЭкранЧатаОбъявления: View {
     }
 
     private func вниз(_ прокрутка: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+        withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
     }
 
     // MARK: - Низ
@@ -240,7 +240,7 @@ struct ЭкранЧатаОбъявления: View {
                     .id(сообщение.id)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: модель.плашка?.id)
+        .animation(ДвижениеСайта.смена, value: модель.плашка?.id)
     }
 
     // MARK: - Переходы на сайт
@@ -641,7 +641,7 @@ struct ОблакоЧатаОбъявления: View {
                     Theme.поверхность2
                 }
                 .frame(width: 200, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             } else {
                 Text(текст)
                     .font(.system(size: 16))
@@ -710,7 +710,7 @@ struct СтрокаСлужебнаяЧата: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(хорошая ? Theme.мята : Theme.поверхность2,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -778,7 +778,7 @@ struct ТочкиПечатиЧата: View {
             Spacer(minLength: 48)
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) { шаг = true }
+            withAnimation(ДвижениеСайта.мягко(.easeInOut(duration: 0.6).repeatForever(autoreverses: true))) { шаг = true }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ListingChatText.т("typing"))
@@ -1201,8 +1201,7 @@ struct ПолосаБлокировкиЧата: View {
                             .font(.system(size: 15, weight: .bold))
                             .opacity(ждём ? 0 : 1)
                         if ждём {
-                            ProgressView()
-                                .tint(Theme.текст)
+                            SiteSpinner.цвета(Theme.текст)
                         }
                     }
                     .foregroundStyle(Theme.текст)

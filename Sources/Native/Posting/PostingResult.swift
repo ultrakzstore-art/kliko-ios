@@ -197,7 +197,7 @@ struct ЭкранПослеПодачи: View {
                     .strokeBorder(Theme.топРамка, lineWidth: 1.5)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.9).delay(0.1)) { полосы = true }
+                withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.9).delay(0.1))) { полосы = true }
             }
         }
     }
@@ -301,7 +301,7 @@ struct ЭкранПослеПодачи: View {
 
     private func скопировать(_ ссылка: URL) {
         UIPasteboard.general.string = текстОтправки + "\n" + ссылка.absoluteString
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        ОткликСайта.успех()
         скопировано = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)

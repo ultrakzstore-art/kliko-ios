@@ -217,6 +217,7 @@ struct ЛистУведомлений: View {
                     .accessibilityHidden(true)
             } else if переход {
                 Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.текстВторой)
                     .padding(.top, 3)
@@ -376,7 +377,7 @@ struct ЭкранОбращения: View {
             .scrollDismissesKeyboard(.interactively)
             .onAppear { прокрутка.scrollTo("низ", anchor: .bottom) }
             .onChange(of: о.сообщения.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.2)) { прокрутка.scrollTo("низ", anchor: .bottom) }
+                withAnimation(ДвижениеСайта.прокрутка) { прокрутка.scrollTo("низ", anchor: .bottom) }
             }
         }
     }
@@ -397,10 +398,10 @@ struct ЭкранОбращения: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(моё ? Theme.пузырьМой : Theme.поверхность,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
                 if !моё {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.линия, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous).strokeBorder(Theme.линия, lineWidth: 1)
                 }
             }
             if !моё { Spacer(minLength: 48) }

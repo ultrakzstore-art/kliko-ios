@@ -243,7 +243,7 @@ struct ГалереяСайта: View {
         }
         .padding(.horizontal, 10)
         .frame(width: ширина)
-        .animation(.easeOut(duration: 0.2), value: страница)
+        .animation(ДвижениеСайта.слайд, value: страница)
     }
 
     /// .mk-gcond: «Б/У» оранжевым (#b8620c), «Новое» — зелёным; «Аренда» — синим градиентом.
@@ -317,8 +317,7 @@ private struct СлайдФото: View {
                     .foregroundStyle(Color.white.opacity(0.35))
                     .frame(maxHeight: .infinity)
             } else {
-                ProgressView()
-                    .tint(Color.white)
+                SiteSpinner.белый
                     .frame(maxHeight: .infinity)
             }
         }
@@ -682,6 +681,7 @@ struct КрошкиСайта: View {
     /// Корень раздела названием из текстов приложения; неизвестный корень — nil, крошки нет.
     private var имяКорня: (ключ: String, имя: String)? {
         let корень = РазделыСайта.корень(раздел)
+        if let своё = ЗагрузкаКаталогаПоиска.имя(корень) { return (корень, своё) }
         let имя = ListingPageText.т("root_" + корень)
         return имя.hasPrefix("root_") ? nil : (корень, имя)
     }
