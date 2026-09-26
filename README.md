@@ -79,7 +79,8 @@
 | 43 ✅ | «Мои сделки» своим экраном: вкладки «Я продавец» / «Я покупатель» (`my_deals`), значок у строки кабинета (`role=both`), карточка сделки (`deal`) с мастером шагов, живым обновлением (`deal_wait` по `sig` и запасной опрос раз в 15 с) и Live Activity; передача (`set_handover`, `set_track`, `courier_called`, маршрут и такси через Яндекс Go и 2ГИС, пункты `car_points` и `car_order` перевозчика), спор (`dispute`) и доказательства (`upload_evidence`), «Подтвердить условия» / «Отклонить заявку» услуги (`accept_terms`), оценка после сделки (`update_review`), `warranty_ask`, «Деньги и документы», история, чек; ссылки `?go=deals`, `?s=deals`, `?deal=<id>`; всё, что двигает деньги, — страницей сделки сайта (`Config.деньгиСделок`) | `Sources/Native/Deals/` |
 | 44 ✅ | Деньги сделок своими окнами — только за `Config.деньгиСделок` (`false`; выключен — кнопки открывают страницу сделки сайта): оплата (`points` → «Применить баллы?» / «Заморозить средства?» → ход → `pay`, `need_otp` → окно eGov `otp_step_create` / `otp_step_check`, `pay_card` → страница банка в листе приложения → возврат `?topup=ok\|fail&deal=` → `pay.php?action=confirm` до 5 раз), отмена (`cancel`, сбор 1 000 ₸ после отправки), приёмка (`buyer_confirm`), «Работа выполнена» (`seller_confirm`), взаимное решение спора, код продавца (`pin_enter`), возврат товара (`cancel {accept_fault}` + `clocal_return_confirm`), курьер Яндекса (`ship_quote` → `ship_add` / `ship_add_card`, `ship_drop`), создание (`?start_deal=`, `?start_service=` → `widget_data` → `create`), коды из ссылок (`?meet=`, `?parcel=` → `meet_scan` / `parcel_open`); денежный POST — ровно один раз по нажатию | `Sources/Native/Deals/DealMoney*.swift`, `DealCreate.swift` |
 | 45 ✅ | Сообщения кабинета своими экранами (`Config.нативныеСообщенияКабинета`): единый инбокс «Чат» — `dm.php?action=list&me_id=` + `chat.php?action=leads` + `buyer_chats` со склейкой lead > buyer > dm, вкладки «Все / Покупатели / Аренда / Обмен», поиск (и `chat.php?action=search`), «⋯» строки — `chat_pin` (до 5), `api/chat_hide.php` `hide` / `restore` / `purge` (после вопроса), число раз в 12 с; чат по лиду (`seller_chat` + long-poll `wait=1&since=`, `seller_join`, `seller_reply`, `typing`, `presence_event`, `set_label`, `subs.php block/unblock`, `request_unblock`, `report.php`, `offer_accept`, `offer_counter`; `offer_decline` — только за `Config.деньгиСделок`); «Заявки рядом» (`my_requests`, `request_action` respond / report / accept / confirm) и «Сделка состоялась?» (`my_pending_feedback` → `request_feedback`); колокольчик (записи со страницы кабинета, `mark_notif_read`); обращение в поддержку `?ticket=` (`sup_my_get`, `sup_my_reply`), «Запросить данные» (`support.php?action=create`), «Справочный центр»; переписка dm.php — `me_id`, `tid`, карточка заявки, «Прочитано / Отправлено», служебные по полям карты (§6.4.10) | `Sources/Native/Inbox/*`, `ChatModels.swift`, `ChatAPI.swift` |
-| 46+ | Профиль, безопасность, настройки, кошелёк… | — |
+| 46 ✅ | Настройки и профиль разделами вкладки «Кабинет» (`Config.нативныеНастройки`): карточка профиля сайта (фото — `upload_photo` + `set_avatar`, имя, «Проверенный продавец», номер), «Аккаунт» — `change_password`, `change_phone` → `set_contacts`, `/cabinet.php?action=set_phone_policy`, `save_pref_chat`, статус верификации (пройти — страницей `?go=verify`); «Объявления» — `save_pref_cats`, `save_pref_geo` + `save_pref_ship`, `save_pref_hours`, `save_pref_redact`; «Продажи и оплата» — `save_pref_escrow`, `save_pref_pay`, `save_pref_reserve`; «Применить к объявлениям?» — `apply_pref_field`; «Устройства и входы» — `sec_devices`, `sec_end`, `sec_set`; мастер «Начало работы» — `save_onboard`; «Язык» — `save_pref_lang`; тема в аккаунт — `/api/ui_prefs.php` целиком; ссылка `?open=password`. Удаление аккаунта и выключение eGov-входа — страницей сайта | `Sources/Native/Settings/*`, `CabinetView.swift`, `AppearanceViews.swift` |
+| 47+ | Кошелёк, выплаты, платные услуги… | — |
 
 Как устроен этап 1:
 
@@ -644,6 +645,22 @@
   `АдресаКабинета` → `NativeRouter.Цель.заявки` / `.обращение`. Не перенесено (страница сайта): медиа, геолокация и
   быстрые ответы в лид-чате, карточки аренды и обмена в dm.php, рабочее место мастера, подписки, аренды, обмены,
   доставки. Выход стирает инбокс, заявки и номер (`ВыходНачисто`).
+- Настройки и профиль (этап 46) — по карте кабинета (§1.4, §1.5, §6.2, §8.8) и коду сайта (`cabSettings`,
+  `openChangePassword`, `openChangePhone` + `ppSave`, `avatarUpload`, `cabPrefChat` / `Cats` / `Geo` / `Hours` /
+  `Redact` / `Escrow` / `Pay` / `Reserve`, `cabApplyPrefAsk` → `cabApplyRun`, `cabSecDevices`, `cabWizStart`,
+  `cabLangSet`, `cabSetTheme` → `_uipPost`). Отдельного API профиля у сайта нет: `ПрофильКабинета.разобрать` читает
+  `CAB_USER`, `CAB_PREF_*`, `PAY_CFG`, `LANG_OPTS`, `__UIP_ACC` и карточку hero из той же страницы кабинета, что вкладка
+  уже качает (разбор вне главного потока, `НастройкиМодель`). Лист «Настройки» — не отдельный экран, а разделы
+  «Кабинета» рядом с прежними настройками телефона (Face ID, уведомления, данные, тема этапов 9 и 15); каждое окно —
+  форма без своей навигации, поэтому те же формы идут шагами мастера «Начало работы» (с «Далее»). Запись — только по
+  нажатию, через `МоиОбъявленияAPI.отправить` (токен со страницы, на `csrf` — один повтор); тела — как у сайта, в том
+  числе его порядок у номера (`need_confirm` / `need_verify` — WhatsApp и Telegram не сохраняются) и `ui_prefs` целиком
+  (нет объекта в аккаунте — не шлём, чтобы не стереть чужие поля). Отличия от сайта: включение входа только через eGov
+  спрашивает подтверждение (выключить можно лишь с eGov — это страница сайта); точка на карте в «Регионе и адресе»
+  только показывается и уходит прежней; выбор языка сохраняется в аккаунте, а экраны приложения остаются на языке
+  iPhone. Верификация и удаление аккаунта — страницами сайта. Ссылка `?open=password` → `NativeRouter.Цель.пароль`.
+  Заодно исправлено повторное объявление `уведомления` в `CabinetView` (этап 45 → `записиКолокольчика`). Выход стирает
+  профиль и закрывает окна (`ВыходНачисто`).
 - Каждый пуш в ветку собирается под симулятор (`.github/workflows/ios-check.yml`) — без подписи
   и секретов, чтобы ошибки компиляции были видны сразу.
 

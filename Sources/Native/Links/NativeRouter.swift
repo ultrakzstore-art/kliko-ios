@@ -44,6 +44,8 @@ final class NativeRouter: ObservableObject {
         case заявки
         /// Переписка по обращению в поддержку — /cabinet.php?ticket=<id> (этап 45).
         case обращение(id: String)
+        /// Окно «Сменить пароль» поверх кабинета — /cabinet?open=password (этап 46; ссылка окна «Это были вы?»).
+        case пароль
     }
 
     /// Включён ли экран цели своим рубильником. Нет — вход снаружи идёт сайтом (WebBridge.открытьЭкран).
@@ -58,6 +60,7 @@ final class NativeRouter: ObservableObject {
         case .подача, .правка: return Config.нативнаяПодача
         case .сделки, .сделка: return Config.нативныеСделки && Config.нативныйКабинет
         case .заявки, .обращение: return Config.нативныеСообщенияКабинета && Config.нативныйКабинет
+        case .пароль: return Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
         }
     }
 

@@ -24,7 +24,10 @@ import Foundation
                                                                 кошелёк (47), страница сайта;
    · ?meet=, ?parcel=                                         — коды передачи: этап 44 за тем же рубильником, иначе сайт;
    · ?go=wallet                                               — кошелёк (47);
-   · ?go=verify, ?go=egov, ?open=password                     — профиль и верификация (46);
+   · ?open=password                                           — окно пароля своим экраном (этап 46,
+                                                                Config.нативныеНастройки);
+   · ?go=verify, ?go=egov                                     — верификация: eGov живёт на странице — сайт (46);
+   · ?s=appear                                                — полный экран оформления сайта (скины, шрифты) — сайт;
    · ?s=requests, ?go=requests                                — «Заявки рядом» своим экраном (этап 45,
                                                                 Config.нативныеСообщенияКабинета);
    · ?ticket=<id>                                             — переписка по обращению своим экраном (этап 45);
@@ -59,6 +62,11 @@ enum АдресаКабинета {
             /* Этап 45: ?s=requests и ?go=requests — «Заявки рядом» (у сайта оба ведут в showRequests). */
             if значение == "requests" && Config.нативныеСообщенияКабинета && Config.нативныйКабинет { return .заявки }
             return nil
+        case "open":
+            /* Этап 46: ?open=password — openChangePassword сайта: окно пароля поверх кабинета. */
+            guard значение == "password", Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
+            else { return nil }
+            return .пароль
         case "ticket":
             /* Этап 45: ?ticket=<id> — openTicket(id) сайта. Номер — буквы, цифры, дефис, подчёркивание. */
             let номер = (п.value ?? "").trimmingCharacters(in: .whitespaces)
