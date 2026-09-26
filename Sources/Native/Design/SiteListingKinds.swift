@@ -21,10 +21,10 @@ import MapKit
      (_capIco: год — календарь, пробег — спидометр, двигатель — молния, коробка — руль, топливо — капля);
    · «Способы оплаты» mkPayBlock (payment: рассрочка/кредит) — расчёт платежа в месяц по срокам, как у сайта;
      🔴 только расчёт: «Оформить покупку» ведёт в оплату, а деньги в приложении выключены (Config.деньгиСделок);
-   · «Расположение» mkLocationBlock — город и район, адрес, «Открыть в 2ГИС →» и карта с меткой (lat/lon).
+   · «Расположение» mkLocationBlock — у сайта оно у всех разделов, поэтому живёт отдельно: SiteListingLocation.swift.
 
  Цены «за м²» и «млн» на странице объявления сайт не пишет (mkPriceHTML(t, true) — полное число через fmt), поэтому
- и здесь их нет. Кнопки маршрута и курьера из «Расположения» ведут в такси и доставку — их пока нет.
+ и здесь их нет.
  */
 
 // MARK: - Вид страницы (mkCheckKind)
@@ -1354,95 +1354,4 @@ private struct СтрокаОплаты: View {
 
 // MARK: - Расположение (mkLocationBlock)
 
-struct РасположениеСайта: View {
-    let товар: Listing
-
-    private var поля: ПоляСтраницыВида { товар.поляВида }
-
-    /// «Астана, Есильский район».
-    private var место: String {
-        var части: [String] = []
-        if !товар.city.isEmpty { части.append(товар.city) }
-        if let район = товар.районНазвание ?? поля.район { части.append(район) }
-        return части.joined(separator: ", ")
-    }
-
-    private var точка: CLLocationCoordinate2D? {
-        guard let ш = поля.широта, let д = поля.долгота, abs(ш) <= 90, abs(д) <= 180 else { return nil }
-        return CLLocationCoordinate2D(latitude: ш, longitude: д)
-    }
-
-    /// Показывать ли блок: как у сайта — нет ни места, ни точки — нет и блока.
-    static func есть(_ товар: Listing) -> Bool {
-        !товар.city.isEmpty || товар.районНазвание != nil || товар.поляВида.район != nil
-            || (товар.поляВида.широта != nil && товар.поляВида.долгота != nil)
-    }
-
-    /// 2ГИС: с точкой — geo/<lon>,<lat>, без — поиск по месту.
-    private var адрес2ГИС: URL? {
-        if let т = точка {
-            return URL(string: "https://2gis.kz/geo/\(т.longitude)%2C\(т.latitude)")
-        }
-        let допустимые = CharacterSet(charactersIn:
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~")
-        guard !место.isEmpty, let запрос = место.addingPercentEncoding(withAllowedCharacters: допустимые) else {
-            return nil
-        }
-        return URL(string: "https://2gis.kz/search/" + запрос)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ПодзаголовокСайта(значок: "mappin.and.ellipse", текст: тВида("sec_location"))
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(место.isEmpty ? тВида("sec_location") : место)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let адрес = адрес2ГИС {
-                    Link(destination: адрес) {
-                        Text(тВида("open_2gis"))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.зелёный2)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            if let улица = поля.адрес {
-                Text(улица)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let т = точка {
-                КартаМестаСайта(точка: т, название: товар.title)
-            }
-        }
-        .padding(.top, 14)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Theme.линия)
-                .frame(height: 1)
-                .accessibilityHidden(true)
-        }
-    }
-}
-
-/// .mk-map: карта с меткой, масштаб 14 у сайта; листается на месте, а не уводит страницу.
-private struct КартаМестаСайта: View {
-    let точка: CLLocationCoordinate2D
-    let название: String
-
-    var body: some View {
-        let место = MKCoordinateRegion(center: точка, latitudinalMeters: 1600, longitudinalMeters: 1600)
-        Map(initialPosition: MapCameraPosition.region(место), interactionModes: [.pan, .zoom]) {
-            Marker(название, coordinate: точка)
-                .tint(Theme.зелёный2)
-        }
-        .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous).strokeBorder(Theme.линия, lineWidth: 1)
-        }
-    }
-}
+// Блок «Расположение» с картой, маршрутом и курьером — у всех разделов, в SiteListingLocation.swift.
