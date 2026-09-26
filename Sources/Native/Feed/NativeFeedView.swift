@@ -652,11 +652,10 @@ struct NativeFeedView: View {
         }
     }
 
-    /// Ряд раздела (.mh-row): у «Работы» — вакансии (mhCardJob, их открывает сайт), у прочих — карточки по виду раздела
-    /// (mhCardFor). Ширина карточки — (ширина − 32 − 20) / 2,2, как .mh-rs.
+    /// Ряд раздела (.mh-row): у «Работы» — вакансии (mhCardJob, их открывает сайт), у прочих — та же карточка витрины,
+    /// что в ленте (ListingCard). Ширина карточки — (ширина − 32 − 20) / 2,2, как .mh-rs.
     private func рядГлавной(_ ряд: ПодборкиГлавной.Ряд, чётный: Bool) -> some View {
         let раздел = ряд.раздел
-        let вид = ВидКарточкиГлавной(ряда: раздел.ключ)
         return РядГлавной(раздел: раздел, название: названиеРаздела(раздел),
                           показано: раздел.вакансии ? ряд.вакансии.count : ряд.товары.count,
                           всего: ряд.всего, чётный: чётный,
@@ -671,20 +670,20 @@ struct NativeFeedView: View {
                 }
             } else {
                 ForEach(ряд.товары) { товар in
-                    карточкаГлавнойСоСсылкой(товар, вид: вид, краска: раздел.краска)
+                    карточкаГлавнойСоСсылкой(товар)
                         .containerRelativeFrame(.horizontal) { длина, _ in ШиринаКарточкиРяда.для(длина) }
                 }
             }
         }
     }
 
-    /// «VIP-объявления» (этап 34, .mh-vipg): сетка в две колонки с зазором 10, карточки по виду своего раздела, цена
-    /// первой строкой и золотая рамка у всех; ведут туда же, куда карточки рядов.
+    /// «VIP-объявления» (этап 34, .mh-vipg): сетка ленты (ListingCard.сетка), карточки витрины с золотой
+    /// рамкой и подложкой у всех; ведут туда же, куда карточки рядов.
     @ViewBuilder
     private var блокВИП: some View {
         if !подборки.вип.isEmpty {
             БлокВИП(товары: подборки.вип, колонки: колонкиВИП) { товар in
-                карточкаГлавнойСоСсылкой(товар, вид: ВидКарточкиГлавной(товара: товар), вип: true, краска: 0x1D7D4A)
+                карточкаГлавнойСоСсылкой(товар, вип: true)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -692,11 +691,8 @@ struct NativeFeedView: View {
         }
     }
 
-    /// .mh-vipg: две колонки (шире окно — больше), при крупном тексте для доступности — одна.
-    private var колонкиВИП: [GridItem] {
-        if размерТекста.isAccessibilitySize { return [GridItem(.flexible(), spacing: 10, alignment: .top)] }
-        return [GridItem(.adaptive(minimum: 150), spacing: 10, alignment: .top)]
-    }
+    /// VIP-сетка — те же колонки и зазор, что у сетки ленты (владелец 26.09.2026: карточки одинаковые везде).
+    private var колонкиВИП: [GridItem] { ListingCard.сетка(размерТекста) }
 
     /// .mh-busy сайта (этап 34): пока главная обновляется поверх уже показанной, ряды и VIP притушены до 55 %.
     private var притушитьПодборки: Double {
@@ -748,11 +744,12 @@ struct NativeFeedView: View {
     }
 
     /// Карточка ряда или VIP — туда же, куда карточка сетки: в две колонки справа, иначе нативная карточка или страница
-    /// сайта. Сердце — слоем снаружи, как .mh-fav поверх ссылки .mh-c.
-    private func карточкаГлавнойСоСсылкой(_ товар: Listing, вид: ВидКарточкиГлавной, вип: Bool = false,
-                                          краска: UInt32) -> some View {
-        let подраздел = вид == .техника ? товар.категория.flatMap { подборки.подразделы[$0] } : nil
-        let карточка = КарточкаГлавной(товар: товар, вид: вид, вип: вип, краска: краска, подраздел: подраздел)
+    /// сайта. Сердце и «Поделиться» — слоями снаружи, как в сетке ленты.
+    /// Владелец 26.09.2026 («стили съехали — одинаковые должны быть, разница только оплаченная или не оплаченная»): та же
+    /// карточка витрины (ListingCard, mkVitCardHTML), что в ленте, а не карточки mhCardFor по виду раздела — у них был
+    /// свой порядок строк, подраздел сырым ключом («Laptops») и «дата · город» вместо «состояние · город».
+    private func карточкаГлавнойСоСсылкой(_ товар: Listing, вип: Bool = false) -> some View {
+        let карточка = ListingCard(товар: товар, вип: вип)
         return Group {
             if двеКолонки {
                 Button { выбрать(товар) } label: { карточка }
@@ -765,6 +762,7 @@ struct NativeFeedView: View {
         }
         .buttonStyle(НажатиеСайта())
         .сердечкоИзбранного(товар)
+        .поделитьсяНаКарточке(товар)
     }
 
     /// .mh-fail: подборки не пришли — строка с «Повторить».
@@ -1392,67 +1390,10 @@ struct ListingCard: View {
         return [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: зазор, alignment: .top)]
     }
 
+    /// Одна карточка на всё (владелец 26.09.2026): карточка витрины сайта. Прежняя карточка этапов 1–23 убрана, чтобы в
+    /// одной сетке не оказалось двух видов; ТОП и VIP отличаются только золотом (рамка, метка, подложка).
     var body: some View {
-        /* Этап 26: вид карточки сайта (.mh-c / .vx-c). Выключен — прежняя карточка этапов 1–23. */
-        if Config.дизайнКакНаСайте {
-            карточкаСайта
-        } else {
-            карточкаПрежняя
-        }
-    }
-
-    private var карточкаПрежняя: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                Color(.tertiarySystemGroupedBackground)
-                    .aspectRatio(4 / 3, contentMode: .fit)
-                    .overlay {
-                        /* Проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — см. FeedImages.swift. */
-                        КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 520 : 260) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 22))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .clipped()
-
-                HStack(spacing: 6) {
-                    if товар.isTop { метка(FeedText.т("top"), Theme.green2) }
-                    if товар.isNew { метка(FeedText.т("new"), Theme.green) }
-                }
-                .padding(8)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(Self.цена(товар))
-                    .font(.system(.callout, weight: .heavy))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                /* Две строки места под название и при коротком — чтобы карточки в ряду были одной высоты; 34 pt — эти
-                   две строки при обычном размере текста. В одну колонку (крупный текст) ровнять не с кем. */
-                Text(товар.title)
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
-                    .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: !крупныйТекст)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-                Text(товар.city.isEmpty ? " " : товар.city)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 9)
-            .padding(.bottom, 11)
-        }
-        .вВысотуРядаСетки()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(товар.голос)
+        карточкаСайта
     }
 
     private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
@@ -1672,7 +1613,7 @@ struct ListingCard: View {
             }
             Spacer(minLength: 0)
             HStack(spacing: 4) {
-                if !место.isEmpty {
+                if !товар.city.isEmpty {        // булавка — только у города; без города дата, как у сайта
                     Image(systemName: "mappin")
                         .font(.system(size: кегль(10), weight: .semibold))
                 }
@@ -1721,14 +1662,6 @@ struct ListingCard: View {
         if золотая { return Color(red: 176 / 255, green: 132 / 255, blue: 24 / 255).opacity(0.28) }
         if схема == .dark { return Color.black.opacity(0.4) }
         return Color(red: 15 / 255, green: 81 / 255, blue: 50 / 255).opacity(0.16)
-    }
-
-    private func метка(_ текст: String, _ фон: Color) -> some View {
-        Text(текст)
-            .font(.system(.caption2, weight: .heavy))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 7).padding(.vertical, 3)
-            .background(фон, in: Capsule())
     }
 
     /// «14 900 000 ₸», аренда «5 000 ₸/сут», без цены — «Договорная» или «Цена по запросу».
