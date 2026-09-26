@@ -490,7 +490,9 @@ async function deployToServer({ host, port, username, password }) {
     const who = await exec('id -u', true);
     if (who.text.trim() !== '0') throw new Error('Нужен пользователь root (или с правами root). Войдите как root.');
     if ((await exec('command -v systemctl >/dev/null && echo yes', true)).text.trim() !== 'yes') throw new Error('На сервере нет systemd — нужен обычный Linux (Ubuntu / Debian).');
-    const hadDb = (await exec(`test -f ${REMOTE_DIR}/data/watcher.db && echo yes`, true)).text.trim() === 'yes';
+    // База на сервере «своя» только после удачной установки (есть служба). Иначе — это остаток
+    // прошлой неудачной попытки, и свежая с ПК важнее.
+    const hadDb = (await exec(`test -f ${REMOTE_DIR}/data/watcher.db && test -f /etc/systemd/system/olx-watcher.service && echo yes`, true)).text.trim() === 'yes';
 
     // Один токен — одна копия: бот на ПК останавливаем до запуска на сервере.
     if (bot.child) { out('Останавливаю бота на этом компьютере…\n'); await stopBot(); }
@@ -513,7 +515,14 @@ async function deployToServer({ host, port, username, password }) {
       });
     });
     out(`Загружаю бота (${files.length} файлов) в ${REMOTE_DIR}…\n`);
-    for (const f of files) await put(`${REMOTE_DIR}/${f}`, fs.readFileSync(path.join(APP_ROOT, f)));
+    // Сборка для Windows может хранить текстовые файлы с переносами CRLF — Linux их не понимает
+    // («set: pipefail\r: invalid option»). Текст отправляем с переносами LF.
+    const TEXT = /\.(sh|service|js|json|example|md|txt)$/;
+    for (const f of files) {
+      let data = fs.readFileSync(path.join(APP_ROOT, f));
+      if (TEXT.test(f)) data = Buffer.from(data.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+      await put(`${REMOTE_DIR}/${f}`, data);
+    }
     await put(`${REMOTE_DIR}/.env`, envFileText(token));
     out('Настройки (токен, цены, реквизиты) записаны.\n');
 
@@ -527,7 +536,7 @@ async function deployToServer({ host, port, username, password }) {
     }
 
     out('\nУстанавливаю и запускаю (1–3 минуты)…\n');
-    const r = await exec(`cd ${REMOTE_DIR} && bash deploy/install.sh 2>&1`);
+    const r = await exec(`cd ${REMOTE_DIR} && sed -i 's/\\r$//' deploy/*.sh deploy/*.service && bash deploy/install.sh 2>&1`);
     const active = (await exec('systemctl is-active olx-watcher', true)).text.trim() === 'active';
     if (r.code !== 0 || !active) throw new Error('Бот на сервере не запустился — смотрите строки выше.');
 
