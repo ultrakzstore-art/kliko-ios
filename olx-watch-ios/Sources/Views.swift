@@ -184,7 +184,7 @@ struct AdRow: View {
                 HStack(spacing: 6) {
                     if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).font(.headline) }
                     Spacer(minLength: 0)
-                    Text("\(ad.postedDate, style: .relative) назад").font(.caption).foregroundStyle(.secondary)
+                    postedLabel(ad).font(.caption).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 6) {
                     if !ad.city.isEmpty { Text(verbatim: ad.city).font(.caption).foregroundStyle(.secondary) }
@@ -322,7 +322,7 @@ struct LinkRow: View {
                 HStack(spacing: 4) {
                     if !ad.priceText.isEmpty { Text(verbatim: ad.priceText).fontWeight(.semibold) }
                     if !ad.city.isEmpty { Text(verbatim: "· \(ad.city)") }
-                    Text("· \(ad.postedDate, style: .relative) назад")
+                    Text("· ") + postedLabel(ad)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1079,4 +1079,11 @@ struct WhySection: View {
             Text("Вставьте номер или ссылку на объявление — приложение покажет, видело ли его и почему не прислало. Хранит историю по последним 4000 номерам, пока приложение открыто.")
         }
     }
+}
+
+/// Когда подано. Время подачи не нашлось на странице (бывает у Kolesa, Krisha) — честно «найдено в
+/// ЧЧ:ММ», а не «подано 0 секунд назад» по времени, когда его нашло приложение.
+func postedLabel(_ ad: Ad) -> Text {
+    if let created = ad.createdAt { return Text("\(created, style: .relative) назад") }
+    return Text("найдено в \(ad.foundAt.formatted(date: .omitted, time: .shortened))")
 }

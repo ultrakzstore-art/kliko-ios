@@ -55,6 +55,24 @@ async function deepProbe(id) {
   console.log('\nЕсли объявление на модерации видит только один из способов — пришлите этот вывод.');
 }
 
+// Даты карточки: что на экране рядом со словами «опубликовано / сегодня / вчера», какие поля с
+// датой есть в коде страницы и что взял бот. По этому видно, откуда брать точное время подачи.
+function printDates(html, took) {
+  const tz = { timeZone: 'Asia/Almaty' };
+  const text = html.replace(/\\"/g, '"');
+  const found = [...text.matchAll(/["']?\b([A-Za-z_]{2,40})["']?\s*[:=]\s*["']?(\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|1[5-9]\d{8}(?:\d{3})?)["']?/g)]
+    .map((m) => `${m[1]} = ${m[2]}${/^\d+$/.test(m[2]) ? ` (${new Date(Number(m[2]) * (m[2].length === 10 ? 1000 : 1)).toLocaleString('ru-RU', tz)})` : ''}`);
+  const screen = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ');
+  const near = [...screen.matchAll(/(опубликован|размещен|подано|добавлен|сегодня|вчера|\d{1,2}\s+(?:январ|феврал|март|апрел|ма[яй]|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-я]*|\d{2}\.\d{2}\.20\d{2})/gi)]
+    .slice(0, 6).map((m) => screen.slice(Math.max(0, m.index - 30), m.index + 40).trim());
+  const at = took ?? postedFromCode(html);
+  console.log(`\nДата на экране: ${near.length ? '' : 'не видна'}`);
+  [...new Set(near)].forEach((x) => console.log(`  …${x}…`));
+  console.log(`Даты в коде страницы: ${found.length ? '' : 'нет'}`);
+  [...new Set(found)].slice(0, 12).forEach((f) => console.log(`  ${f}`));
+  console.log(`Время подачи, как понял бот: ${at ? new Date(at).toLocaleString('ru-RU', tz) + ' (по Алматы)' : 'не нашлось'}`);
+}
+
 // «kaspi watch» — 5 минут: витрина Kaspi раз в 5 с (каждое новое — с временем подачи, платное /
 // поднятое помечаем) и номера за самым большим (⚡ — номера идут по порядку подачи). Итог: сколько
 // новых, за сколько после подачи видно, сколько поймано по номеру.
@@ -230,15 +248,7 @@ async function kaspiProbe(id) {
   try {
     const html = await getHtml(`https://obyavleniya.kaspi.kz/a/${id}/`);
     if (html) {
-      const text = html.replace(/\\"/g, '"');
-      const found = [...text.matchAll(/["']?\b([A-Za-z_]{2,40})["']?\s*:\s*"?(\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?|1[5-9]\d{8}(?:\d{3})?)"?/g)]
-        .map((m) => `${m[1]} = ${m[2]}`);
-      const onPage = (/(\d{2}\.\d{2}\.20\d{2})(?:[^\d]{1,5}(\d{1,2}:\d{2}))?/.exec(html.replace(/<[^>]+>/g, ' ')) || []).slice(1).filter(Boolean).join(' ');
-      const at = postedFromCode(html);
-      console.log(`\nДата на экране: ${onPage || 'не видна'}`);
-      console.log(`Даты в коде страницы: ${found.length ? '' : 'нет'}`);
-      [...new Set(found)].slice(0, 10).forEach((f) => console.log(`  ${f}`));
-      console.log(`Точное время подачи: ${at ? new Date(at).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' }) + ' (по Алматы)' : 'в коде не нашлось'}`);
+      printDates(html);
     }
   } catch (e) {
     console.log(`\nДаты: ошибка ${e.message}`);
@@ -288,6 +298,7 @@ async function kaspiProbe(id) {
         seen.add(snip);
         console.log(`  …${snip}…`);
       }
+      printDates(html, d.createdAt);
       const ld = [...html.matchAll(/"@type"\s*:\s*"([A-Za-z]+)"/g)].map((m) => m[1]);
       if (ld.length) console.log(`\nРазметка страницы: ${[...new Set(ld)].join(', ')}`);
     } catch (e) {
