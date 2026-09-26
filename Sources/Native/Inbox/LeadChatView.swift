@@ -25,8 +25,8 @@ struct ЭкранЛида: View {
     @Environment(\.scenePhase) private var фаза
     @Environment(\.openURL) private var открытьСсылку
 
-    init(номер: String, имя: String, открыть: @escaping (URL) -> Void) {
-        _модель = StateObject(wrappedValue: ЛидМодель(номер: номер, имя: имя))
+    init(номер: String, имя: String, покупатель: String = "", открыть: @escaping (URL) -> Void) {
+        _модель = StateObject(wrappedValue: ЛидМодель(номер: номер, имя: имя, покупатель: покупатель))
         self.открыть = открыть
     }
 
@@ -85,7 +85,23 @@ struct ЭкранЛида: View {
 
     // MARK: - Шапка
 
+    /// Имя в шапке — витрина покупателя (seller.php?id= сайта, «Профиль покупателя»), когда его номер известен: из
+    /// строки инбокса или buyer_id ответа seller_chat. Номера нет — шапка не нажимается.
+    @ViewBuilder
     private var заголовок: some View {
+        if let номер = модель.витринаПокупателя {
+            Button {
+                ОкноПродавца.открыть(id: номер, имя: модель.имя)
+            } label: {
+                надпись.contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+        } else {
+            надпись
+        }
+    }
+
+    private var надпись: some View {
         VStack(spacing: 1) {
             Text(модель.имя)
                 .font(.system(size: 16, weight: .heavy))

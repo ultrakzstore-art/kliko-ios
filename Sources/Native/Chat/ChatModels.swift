@@ -38,6 +38,32 @@ extension KeyedDecodingContainer where K == ЧатКлюч {
         if let s = try? decode(String.self, forKey: k), let d = Double(s) { return d }
         return 0
     }
+    /**
+     Номер собеседника для шапки переписки (его витрина). У ключей с окончанием _id — строка или число; у peer и other —
+     объект {id} (peer ответа open, openDM сайта: p.peer.id) или число. Строку под peer и other не берём: там могло бы
+     оказаться имя. Пусто или собеседник удалён (gone) — nil.
+     */
+    func номерСобеседника(_ ключ: String) -> String? {
+        let k = ЧатКлюч(ключ)
+        var номер = ""
+        if ключ.hasSuffix("_id") {
+            номер = строка(ключ) ?? ""
+        } else if let i = try? decode(Int.self, forKey: k) {
+            номер = String(i)
+        } else if let вложенный = try? nestedContainer(keyedBy: ЧатКлюч.self, forKey: k) {
+            if вложенный.да("gone") { return nil }
+            номер = вложенный.строка("id") ?? вложенный.строка("user_id") ?? ""
+        }
+        номер = номер.trimmingCharacters(in: .whitespacesAndNewlines)
+        return номер.isEmpty || номер == "0" ? nil : номер
+    }
+
+    /// Собеседник удалён: peer.gone объекта или peer_gone рядом.
+    func собеседникУшёл(_ ключ: String) -> Bool {
+        if да(ключ + "_gone") { return true }
+        guard let вложенный = try? nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч(ключ)) else { return false }
+        return вложенный.да("gone")
+    }
     func да(_ ключ: String) -> Bool {
         let k = ЧатКлюч(ключ)
         if let b = try? decode(Bool.self, forKey: k) { return b }
@@ -205,6 +231,11 @@ struct ЧатПереписка: Decodable {
     let сообщения: [ЧатСообщение]
     /// Этап 45: thread.peer_read_at — когда собеседник прочитал переписку («✓✓ Прочитано» под последним моим, §6.4.8 i).
     let прочиталДо: String
+    /// Номер собеседника, если dm.php его прислал: thread.peer_id / peer{id} / other; peer{id} ответа open кладёт сюда
+    /// ЧатОтвет. Пусто — не прислал: шапка переписки тогда не ведёт на витрину.
+    var собеседникID: String
+    /// Собеседник удалён (peer.gone / peer_gone) — витрины у него нет.
+    var собеседникУшёл: Bool
 
     private struct Любое: Decodable {
         let значение: ЧатСообщение?
@@ -226,6 +257,9 @@ struct ЧатПереписка: Decodable {
         }
         сообщения = лента
         прочиталДо = c.строка("peer_read_at") ?? ""
+        собеседникID = c.номерСобеседника("peer_id") ?? c.номерСобеседника("peer")
+            ?? c.номерСобеседника("other_id") ?? c.номерСобеседника("other") ?? ""
+        собеседникУшёл = c.собеседникУшёл("peer")
     }
 }
 
@@ -265,6 +299,16 @@ struct ЧатОтвет: Decodable {
         if найдена == nil {
             let вКорне = ЧатПереписка.ключиЛенты.contains { c.contains(ЧатКлюч($0)) }
             if вКорне { найдена = try? ЧатПереписка(from: decoder) }
+        }
+        /* Собеседник из корня ответа: open отдаёт peer{id, name, gone} рядом с thread (openDM сайта берёт p.peer.id).
+           Он главнее того, что лежит в самой переписке. */
+        if найдена != nil {
+            if c.собеседникУшёл("peer") {
+                найдена?.собеседникУшёл = true
+            } else if let номер = c.номерСобеседника("peer") ?? c.номерСобеседника("peer_id")
+                        ?? c.номерСобеседника("other") {
+                найдена?.собеседникID = номер
+            }
         }
         переписка = найдена
         if c.contains(ЧатКлюч("ok")) {

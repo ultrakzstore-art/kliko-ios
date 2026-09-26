@@ -420,7 +420,7 @@ struct СтрокаИнбокса: Identifiable, Equatable {
     var метка: String = ""
     /// status лида: ai | hot_lead | seller_active | closed.
     var статусЛида: String = ""
-    /// peer_id (dm, buyer).
+    /// peer_id (dm, buyer); у лида — buyer_id, если список его прислал (шапка чата ведёт на витрину собеседника).
     var собеседник: String = ""
     var собеседникУдалён: Bool = false
     /// meta.img / meta.catIcon / meta.catName / meta.catColor (_msgAv, _msgSubline) — уже после общей карты сайта
@@ -550,6 +550,10 @@ struct СтрокаИнбокса: Identifiable, Equatable {
         видыИзОтвета = Self.виды(t["kinds"])
         виды = видыИзОтвета ?? []
         метка = З.строка(t["label"])
+        /* _msgRowLead сайта номер покупателя не читает; пришёл в строке — берём, нет — его пришлёт seller_chat
+           (buyer_id, _lcmApply). */
+        let покупательID = З.строка(t["buyer_id"])
+        собеседник = покупательID.isEmpty ? З.строка(t["peer_id"]) : покупательID
         let последнее = З.строка(t["last_msg"])
         превью = последнее.isEmpty ? подпись : последнее
         разобратьМета(t["meta"])
@@ -619,7 +623,7 @@ struct СтрокаИнбокса: Identifiable, Equatable {
     var цель: ЧатЦель {
         switch источник {
         case .lead:
-            return .лид(номер: номер, имя: имя)
+            return .лид(номер: номер, имя: имя, покупатель: собеседник)
         case .dm:
             return .переписка(номер: номер, собеседник: собеседник, имя: имя, объявление: объявлениеID)
         case .buyer:

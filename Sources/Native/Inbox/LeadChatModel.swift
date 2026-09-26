@@ -76,9 +76,16 @@ final class ЛидМодель: ObservableObject {
     private var последнийНабор = Date.distantPast
     private var поколение = 0
 
-    init(номер: String, имя: String) {
+    init(номер: String, имя: String, покупатель: String = "") {
         self.номер = номер
         self.имя = имя.isEmpty ? ИнбоксText.т("buyer") : имя
+        self.покупатель = покупатель
+    }
+
+    /// Номер покупателя для шапки — его витрина (ОкноПродавца); негодный или пустой — nil, шапка не нажимается.
+    var витринаПокупателя: String? {
+        let номер = покупатель.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ВитринаПродавцаAPI.годный(номер) ? номер : nil
     }
 
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
@@ -189,7 +196,11 @@ final class ЛидМодель: ObservableObject {
             if let был = онлайнБыл, был != онлайн { отправитьПрисутствие(онлайн ? "back" : "left") }
             онлайнБыл = онлайн
         }
-        if j["buyer_id"] != nil { покупатель = З.строка(j["buyer_id"]) }
+        /* Пустой buyer_id известный номер (из строки инбокса) не стирает. */
+        if j["buyer_id"] != nil {
+            let номер = З.строка(j["buyer_id"])
+            if !номер.isEmpty { покупатель = номер }
+        }
         if j["blocked"] != nil {
             заблокирован = З.да(j["blocked"])
             мнойЗаблокирован = З.да(j["blocked_by_me"])
