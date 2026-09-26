@@ -117,12 +117,13 @@ struct ЛистПредложенияЦены: View {
             .padding(.horizontal, 20)
             .padding(.top, 22)
             .padding(.bottom, 20)
+            .мерилоЛиста()
         }
         .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         .presentationBackground(Theme.поверхность)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .листПоВысоте()
         .onChange(of: своя) { _, _ in
             /* mkOfferAmt: своя сумма двигает ползунок — на сколько процентов она ниже цены продавца (0…35). */
             let сумма = свояСумма

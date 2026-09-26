@@ -21,7 +21,7 @@ import UIKit
  Пароль — чувствительные данные (§1.9): никуда не сохраняется сам, только по нажатию «Сохранить и продолжить» — в
  системном листе «Поделиться», как у сайта.
 
- «или войдите через»: eGov и Apple — страницами сайта (callback Apple в файлах сайта не виден, §1.2.6); Telegram сайт
+ «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — страницей сайта (callback Apple в файлах сайта не виден, §1.2.6); Telegram сайт
  скрыл по правилу App Store 4.8 — его нет и здесь.
  */
 struct ЭкранВхода: View {
@@ -229,7 +229,7 @@ struct ЭкранВхода: View {
 
     // MARK: - Вход через сервисы
 
-    /// «или войдите через»: eGov и Apple — страницами сайта; ниже — согласие и примечание о номере, как у сайта.
+    /// «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — страницей сайта; ниже — согласие и примечание о номере, как у сайта.
     private var способы: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -245,7 +245,7 @@ struct ЭкранВхода: View {
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
             КнопкаСервиса(подпись: т("auth_via_egov"), значок: "checkmark.shield", тёмная: false) {
-                наСайт(Config.страницаСайта("cabinet.php?egov=1"))
+                eGov("cabinet.php?egov=1")
             }
             КнопкаСервиса(подпись: т("auth_via_apple"), значок: "apple.logo", тёмная: true) {
                 наСайт(Config.url("/apple_auth.php?action=start"))
@@ -276,7 +276,7 @@ struct ЭкранВхода: View {
             Button(т("reg_confirm_ok")) { отправитьРегистрацию() }
             Button(т("reg_confirm_edit"), role: .cancel) { фокус = .номерРег }
         case .номерЗанят, .иинЗанят:
-            Button(т("reg_recover_egov")) { наСайт(Config.страницаСайта("cabinet.php?egov=1")) }
+            Button(т("reg_recover_egov")) { eGov("cabinet.php?egov=1") }
             Button(т("reg_recover_pass")) {
                 телефон = номерРег
                 открытьФормы(.вход)
@@ -287,7 +287,7 @@ struct ЭкранВхода: View {
             Button(т("close"), role: .cancel) {}
         case .восстановление:
             if eGovВключён {
-                Button(т("reg_recover_egov")) { наСайт(Config.страницаСайта("cabinet.php?egov=1")) }
+                Button(т("reg_recover_egov")) { eGov("cabinet.php?egov=1") }
             } else {
                 Button(т("rec_support")) { наСайт(Config.url("/support.php?topic=access")) }
             }
@@ -301,7 +301,7 @@ struct ЭкранВхода: View {
     private func выбратьРоль(_ роль: String) {
         Task { await КабинетСайта.запомнитьРоль(роль) }
         if роль == "seller" {
-            наСайт(Config.страницаСайта("cabinet.php?egov=1"))
+            eGov("cabinet.php?egov=1")
             return
         }
         guard Config.нативнаяРегистрация else {
@@ -365,7 +365,7 @@ struct ЭкранВхода: View {
                     вошли()
                     закрыть()
                 case .нуженEgov:
-                    наСайт(Config.страницаСайта("cabinet.php?egov_confirm=1"))
+                    eGov("cabinet.php?egov_confirm=1")
                 case .удалён(let причина):
                     окно = .удалён(причина: причина)
                 case .ошибка(let текст):
@@ -443,6 +443,20 @@ struct ЭкранВхода: View {
         guard let адрес else { return }
         закрыть()
         открыть(адрес)
+    }
+
+    /// TestFlight 1.10: eGov — листом поверх этого экрана (ОкноEgov), а не вкладкой сайта; удача — как вход паролем.
+    private func eGov(_ хвост: String) {
+        guard ОкноEgov.включено else {
+            наСайт(Config.страницаСайта(хвост))
+            return
+        }
+        let вошлиСюда = вошли
+        let закрытьЛист = закрыть
+        ОкноEgov.открыть(Config.страницаСайта(хвост)) {
+            вошлиСюда()
+            закрытьЛист()
+        }
     }
 
     // MARK: - Помощники

@@ -46,6 +46,8 @@ struct NativeTabsView: View {
     @Environment(\.horizontalSizeClass) private var ширинаОкна
     @ObservedObject private var замок = AppLock.shared
     @Environment(\.scenePhase) private var фаза
+    /// TestFlight 1.10: общее состояние входа — вошёл или вышел человек, чат и заявки перечитываются сразу.
+    @ObservedObject private var сессия = СессияПриложения.shared
     /// Лента на главной или в разделе — подпись первой кнопки панели сайта (этап 27).
     @ObservedObject private var вид = ВидСайта.shared
     /// Клавиатура на экране — панель сайта (этап 27) под ней прячется.
@@ -102,6 +104,14 @@ struct NativeTabsView: View {
         }
         /* Холодный старт по пушу или ссылке: цель пришла раньше, чем вкладки появились. */
         .onAppear { принятьСсылку() }
+        /* TestFlight 1.10: человек сменился (вход, выход, другой аккаунт) — экраны гостя «Войдите» и число
+           непрочитанных перечитываются, не дожидаясь следующего показа. Возврат в приложение — сверка входа. */
+        .onChange(of: сессия.смена) { _, _ in
+            Task { await послеСменыЧеловека() }
+        }
+        .onChange(of: фаза) { _, стала in
+            if стала == .active { СессияПриложения.shared.запросить() }
+        }
         /* Этап 42: мастер подачи на весь экран — как #add-screen сайта, без панели и вкладок под ним. */
         .fullScreenCover(item: $подача.цель) { цель in
             ЭкранПодачи(цель: цель, открыть: открыть)
@@ -470,6 +480,14 @@ struct NativeTabsView: View {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
             поискЛенты = true
+        }
+    }
+
+    /// TestFlight 1.10: после входа или выхода — список чатов (и инбокс кабинета) и «Заявки рядом».
+    private func послеСменыЧеловека() async {
+        if Config.нативныйЧат { await чаты.загрузить() }
+        if Config.нативныеСообщенияКабинета && сессия.вошёл == true && ЗаявкиМодель.shared.нуженВход {
+            await ЗаявкиМодель.shared.загрузить(ждать: false)
         }
     }
 

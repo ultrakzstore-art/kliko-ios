@@ -626,12 +626,13 @@ struct ЛистДоверия: View {
                 .padding(.top, 6)
             }
             .padding(20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         /* Этап 31: лист целиком на поверхности сайта — иначе в тёмной теме по краям видна системная подложка. */
         .presentationBackground(Theme.поверхность)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .листПоВысоте()
     }
 }
 

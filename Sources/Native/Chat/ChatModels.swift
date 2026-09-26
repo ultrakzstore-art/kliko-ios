@@ -211,18 +211,34 @@ struct ЧатПереписка: Decodable {
         init(from decoder: Decoder) throws { значение = try? ЧатСообщение(from: decoder) }
     }
 
+    /// Ключи ленты: messages у dm.php (§6.4.10); items и msgs — запасные, если сервер назовёт иначе.
+    static let ключиЛенты = ["messages", "items", "msgs"]
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
-        id = c.строка("id") ?? c.строка("tid") ?? ""
-        сообщения = ((try? c.decode([Любое].self, forKey: ЧатКлюч("messages"))) ?? []).compactMap(\.значение)
+        id = c.строка("id") ?? c.строка("tid") ?? c.строка("thread_id") ?? ""
+        var лента: [ЧатСообщение] = []
+        for ключ in Self.ключиЛенты {
+            if let список = try? c.decode([Любое].self, forKey: ЧатКлюч(ключ)) {
+                лента = список.compactMap(\.значение)
+                break
+            }
+        }
+        сообщения = лента
         прочиталДо = c.строка("peer_read_at") ?? ""
     }
 }
 
-/// Ответ dm.php: ok, error, blocked и одно из — threads (list) или thread (open/poll/send).
+/**
+ Ответ dm.php: ok, error, msg, blocked и одно из — threads (list) или thread (open/poll/send).
+ Терпимый разбор (TestFlight 1.10): ok числом или строкой; нет ok, но есть переписка — это ответ, а не отказ; переписка
+ под thread, под chat или лентой прямо в корне ({ok:true, messages:[…]}); error "blocked" — блокировка, как у openDM.
+ */
 struct ЧатОтвет: Decodable {
     let ok: Bool
     let ошибка: String?
+    /// msg — человеческий текст отказа («Общение недоступно…»), его сайт показывает вместо кода.
+    let сообщение: String?
     let заблокирован: Bool
     let диалоги: [ЧатДиалог]
     let переписка: ЧатПереписка?
@@ -234,11 +250,28 @@ struct ЧатОтвет: Decodable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
-        ok = c.да("ok")
-        ошибка = c.строка("error")
-        заблокирован = c.да("blocked")
+        let код = c.строка("error")
+        ошибка = код
+        сообщение = c.строка("msg") ?? c.строка("message")
+        заблокирован = c.да("blocked") || код == "blocked"
         диалоги = ((try? c.decode([ЛюбойДиалог].self, forKey: ЧатКлюч("threads"))) ?? []).compactMap(\.значение)
-        переписка = try? c.decode(ЧатПереписка.self, forKey: ЧатКлюч("thread"))
+        var найдена: ЧатПереписка? = nil
+        for ключ in ["thread", "chat"] {
+            if let п = try? c.decode(ЧатПереписка.self, forKey: ЧатКлюч(ключ)) {
+                найдена = п
+                break
+            }
+        }
+        if найдена == nil {
+            let вКорне = ЧатПереписка.ключиЛенты.contains { c.contains(ЧатКлюч($0)) }
+            if вКорне { найдена = try? ЧатПереписка(from: decoder) }
+        }
+        переписка = найдена
+        if c.contains(ЧатКлюч("ok")) {
+            ok = c.да("ok")
+        } else {
+            ok = (код ?? "").isEmpty && (найдена != nil || c.contains(ЧатКлюч("threads")))
+        }
     }
 }
 

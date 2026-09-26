@@ -15,6 +15,8 @@ import WebKit
 @MainActor
 enum ВыходНачисто {
     static func стереть() {
+        /* TestFlight 1.10: сначала — общее состояние входа: витрина, кабинет и чат сразу видят гостя. */
+        СессияПриложения.shared.вышел()
         /* Всё, что сайт хранил на телефоне: куки, localStorage, IndexedDB, Cache Storage, сервис-воркеры, кэш.
            Сервер уже снял привязки уведомлений этой сессии и погасил её — остатков не будет ни там, ни здесь. */
         WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),

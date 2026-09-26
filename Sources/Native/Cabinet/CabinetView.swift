@@ -64,6 +64,8 @@ struct CabinetView: View {
     @ObservedObject private var заявки = ЗаявкиМодель.shared
     /// Этап 46: профиль и настройки со страницы кабинета, окна настроек.
     @ObservedObject private var настройки = НастройкиМодель.shared
+    /// TestFlight 1.10: общее состояние входа — вход или выход на сайте, в другой вкладке или с витрины видны и здесь.
+    @ObservedObject private var сессия = СессияПриложения.shared
     @Environment(\.scenePhase) private var фаза
 
     /// Открыть страницу сайта в веб-обёртке — так же, как из остальных вкладок.
@@ -204,6 +206,7 @@ struct CabinetView: View {
         .onChange(of: фаза) { _, стала in
             if стала == .active { Task { await освежить() } }
         }
+        .onChange(of: сессия.смена) { _, _ in сменаЧеловека() }
         .sheet(isPresented: $показатьНовое) { ЭкранЧтоНового() }
         /* Этап 41: экраны кабинета в его стеке — строка «Мои объявления» и ссылка ?go=items (NativeTabsView). */
         .navigationDestination(for: КабинетЦель.self) { цель in
@@ -822,6 +825,23 @@ extension CabinetView {
                 проверили = true
             }
         }
+    }
+
+    /// TestFlight 1.10: человек сменился (вошёл, вышел, другой аккаунт) — где бы это ни случилось. Выход — сразу гость;
+    /// вход — перечитать кабинет, если он ещё не знает.
+    func сменаЧеловека() {
+        guard let известно = сессия.вошёл else { return }
+        if !известно {
+            guard вошёл != false else { return }
+            вошёл = false
+            кабинет = nil
+            сигнал = nil
+            записиКолокольчика = []
+            return
+        }
+        let тотЖе = вошёл == true && (сессия.id.isEmpty || кабинет?.uid == сессия.id)
+        guard !тотЖе else { return }
+        Task { await освежить() }
     }
 
     /// Нажали «Выйти» в вопросе. Один запрос за раз; не вышло — ничего не стёрто, причина под кнопкой.

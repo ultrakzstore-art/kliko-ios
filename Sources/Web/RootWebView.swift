@@ -45,10 +45,16 @@ struct RootWebView: View {
                 Group {
                     /* Этап 4: лента — первая из нижних вкладок (NativeTabsView). */
                     if Config.нижниеВкладки {
-                        NativeTabsView(открыть: { адрес in bridge.pendingURL = адрес },
+                        /* TestFlight 1.10: eGov (?egov=1, ?egov_confirm=1, ?go=verify, ?go=egov) — листом поверх
+                           экрана, где его нажали (ОкноEgov), а не вкладкой сайта. */
+                        NativeTabsView(открыть: { адрес in
+                                           if !ОкноEgov.перехватить(адрес) { bridge.pendingURL = адрес }
+                                       },
                                        открытьСайт: { bridge.открытьСайтВместоЛенты() })
                     } else {
-                        NativeFeedView(открыть: { адрес in bridge.pendingURL = адрес },
+                        NativeFeedView(открыть: { адрес in
+                                           if !ОкноEgov.перехватить(адрес) { bridge.pendingURL = адрес }
+                                       },
                                        открытьСайт: { bridge.открытьСайтВместоЛенты() })
                     }
                 }

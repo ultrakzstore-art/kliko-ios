@@ -823,7 +823,9 @@ struct ЛистСлайдаГлавной: View {
             .padding(.horizontal, 16)
             .padding(.top, 20)
             .padding(.bottom, 20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .overlay(alignment: .topTrailing) {
             Button(action: закрыть) {
                 Image(systemName: "xmark")
@@ -838,8 +840,7 @@ struct ЛистСлайдаГлавной: View {
             .accessibilityLabel(DesignText.т("close"))
         }
         .background(Theme.поверхность)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .листПоВысоте()
     }
 
     /// .hp-hd: квадрат 56 со значком (140°: краска → краска 68 % к почти чёрному), заголовок 21/800, подзаголовок серым.

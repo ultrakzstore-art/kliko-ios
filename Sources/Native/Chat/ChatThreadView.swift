@@ -106,7 +106,7 @@ final class ChatThreadModel: ObservableObject {
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled, !tid.isEmpty else { continue }
-            if let снимок = try? await ChatAPI.переписка(tid) { применить(снимок.0, снимок.заблокирован) }
+            if let снимок = try? await ChatAPI.переписка(tid, ждать: false) { применить(снимок.0, снимок.заблокирован) }
         }
     }
 
@@ -219,6 +219,10 @@ struct ChatThreadView: View {
             } else if модель.ошибка != nil && модель.сообщения.isEmpty {
                 ContentUnavailableView {
                     Label(ChatText.т("failed"), systemImage: "exclamationmark.bubble")
+                } description: {
+                    /* TestFlight 1.10: что ответил сайт («Собеседник не найден…», «Ошибка источника запроса»), а не
+                       только общий заголовок. Нет текста — пустое место. */
+                    Text(ChatAPI.текст(модель.ошибка) ?? "")
                 } actions: {
                     Button(ChatText.т("retry")) { Task { await модель.начать() } }
                     Button(ChatText.т("open_site")) { if let u = ChatThreadModel.адресПереписки { открыть(u) } }

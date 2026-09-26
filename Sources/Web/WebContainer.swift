@@ -596,6 +596,8 @@ struct WebContainer: UIViewRepresentable {
                 lastLive = nil
                 wipeAfterLogout = true
                 Task { await DealActivityManager.shared.end() }
+                /* TestFlight 1.10: витрина и кабинет — сразу гость, не дожидаясь ответа сервера. */
+                Task { @MainActor in СессияПриложения.shared.вышел() }
                 return
             }
             // Верх страницы тёмный или светлый → стиль строки состояния (KlikoHostingController через WebBridge).
@@ -723,6 +725,9 @@ struct WebContainer: UIViewRepresentable {
                 Task { @MainActor in ВыборГорода.shared.страницаЗагрузилась() }
             }
             if let t = bridge.apnsToken { registerPush(token: t, on: webView) }
+            /* TestFlight 1.10: вход, выход, eGov и кабинет на странице — общее состояние входа сверяется (с отсрочкой). */
+            let адресСтраницы = webView.url
+            Task { @MainActor in СессияПриложения.shared.страницаЗагрузилась(адресСтраницы) }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

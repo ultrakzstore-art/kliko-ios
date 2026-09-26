@@ -3,9 +3,8 @@ import Foundation
 /**
  ЗАПРОСЫ ЧАТА: /dm.php поверх веб-сессии.
 
- list, poll — GET: только читают. open, send — POST: создают диалог и пишут сообщение, и потому несут CSRF-токен
- страницы — заголовком X-Kliko-Csrf и полем csrf, так же как регистрация пушей (WebContainer.registerPush). Без
- токена сайт отвечает {ok:false, error:'csrf'}, и молча считать это «отправлено» нельзя.
+ list, poll — GET: только читают. open, send — POST: создают диалог и пишут сообщение. До TestFlight 1.10 они несли
+ CSRF-токен страницы; сайт его в dm.php не шлёт (карта кабинета §6.4.8, §6.10) — теперь и приложение не шлёт.
 
  Этап 35 (владелец 25.09.2026): токен — общим геттером SiteSession (SiteSession.jsТокена внутри состояние()):
  window._MKP_CSRF, запасной — window.KlikoCsrf, как у избранного и у звонка с WhatsApp. «Вошёл» там теперь честный
@@ -21,107 +20,142 @@ import Foundation
  🔴 КОНТРАКТ ИЗ ИЮЛЯ. dm.php в июле принимал bearer-токен приложения; сейчас приложение живёт на куках веб-сессии,
  как сама страница. Что dm.php отвечает на куки так же, проверено не было (кода сайта нет под рукой): отправка
  потому включается рубильником Config.нативныйЧатОтправка, а до проверки ответ пишется на сайте.
+
+ ПОЧЕМУ ПЕРЕПИСКА НЕ ОТКРЫВАЛАСЬ (владелец, TestFlight 1.10: «ОЛЕГ Н.» — «Не удалось загрузить переписку»). Инбокс
+ этапа 45 читает dm.php?action=list через КабинетСайта.вызвать — fetch из страницы сайта: путь /kz/<язык>/dm.php,
+ настоящие Origin и Referer. А сама переписка шла отсюда URLSession-ом на корневой https://kliko.kz/dm.php, без Origin
+ и Referer, с полем csrf, которого сайт не шлёт. open — POST, и dm.php проверяет источник: ответ {ok:false,
+ error:"origin"} («Ошибка источника запроса», CAB @1238058) → Ошибка.отказ → «Не удалось загрузить переписку» на любой
+ строке инбокса с собеседником. Теперь транспорт — тот же, что у инбокса и у openDM сайта (карта кабинета §6.4.8):
+ fetch("dm.php") из страницы под слоем, open/send — POST JSON {action, me_id, …} без csrf, poll/list — GET с me_id.
+ Отказ сайта показывается его же словами (peer, no_peer, origin, blocked → msg); в DEBUG в консоль — код ответа и
+ начало тела.
  */
+@MainActor
 enum ChatAPI {
     enum Ошибка: Error, Equatable {
         case сеть
         case нуженВход
         case статус(Int)
         case разбор
+        /// Код отказа сайта (error) или его текст (msg).
         case отказ(String)
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData    // переписка всегда свежая
-        return URLSession(configuration: c)
-    }()
-
-    private static var адрес: URL { Config.apiBase.appendingPathComponent("dm.php") }
+    /// Относительный путь, как fetch("dm.php") кабинета: КабинетСайта.вызвать сам ставит /kz/<язык>/.
+    private static let путь = "dm.php"
 
     // MARK: - Чтение
 
     static func диалоги() async throws -> [ЧатДиалог] {
-        try await получить([URLQueryItem(name: "action", value: "list")]).диалоги
+        let я = await ИнбоксAPI.номерБыстро()
+        var хвост = путь + "?action=list"
+        if !я.isEmpty { хвост += "&me_id=" + ИнбоксAPI.вАдрес(я) }
+        return try await выполнить(хвост, метод: "GET", тело: nil, ждать: false).диалоги
     }
 
-    /// Снимок переписки; сервер заодно помечает её прочитанной.
-    static func переписка(_ tid: String) async throws -> (ЧатПереписка?, заблокирован: Bool) {
-        let ответ = try await получить([URLQueryItem(name: "action", value: "poll"), URLQueryItem(name: "tid", value: tid)])
+    /// Снимок переписки; сервер заодно помечает её прочитанной (dm.php?action=poll&tid=&me_id=, CAB @1274385).
+    /// ждать = false — фоновый опрос: страницу под слоем не ждёт и не уводит на сайт, если она сейчас не там.
+    static func переписка(_ tid: String, ждать: Bool = true) async throws -> (ЧатПереписка?, заблокирован: Bool) {
+        let я = await ИнбоксAPI.номерБыстро()
+        var хвост = путь + "?action=poll&tid=" + ИнбоксAPI.вАдрес(tid)
+        if !я.isEmpty { хвост += "&me_id=" + ИнбоксAPI.вАдрес(я) }
+        let ответ = try await выполнить(хвост, метод: "GET", тело: nil, ждать: ждать)
         return (ответ.переписка, ответ.заблокирован)
     }
 
     // MARK: - Запись
 
-    /// Открыть (или создать) диалог с собеседником, при необходимости — по объявлению.
+    /// Открыть (или создать) диалог с собеседником — openDM сайта: {action:"open", me_id, peer_id, listing_id, tid}.
     static func открыть(собеседник: String, объявление: String,
                         номер: String = "") async throws -> (ЧатПереписка?, заблокирован: Bool) {
-        var поля: [String: Any] = ["action": "open", "peer_id": собеседник]
-        if !объявление.isEmpty { поля["listing_id"] = объявление }
-        /* Этап 45: tid — номер известной переписки (строка инбокса), как openDM сайта. */
-        if !номер.isEmpty { поля["tid"] = номер }
-        let ответ = try await отправить(поля)
+        let поля: [String: Any] = ["action": "open", "peer_id": собеседник, "listing_id": объявление, "tid": номер]
+        let ответ = try await записать(поля)
         return (ответ.переписка, ответ.заблокирован)
     }
 
+    /// dmSend сайта: {action:"send", me_id, thread_id, text}.
     static func написать(tid: String, текст: String) async throws -> ЧатПереписка? {
-        try await отправить(["action": "send", "thread_id": tid, "text": текст]).переписка
+        try await записать(["action": "send", "thread_id": tid, "text": текст]).переписка
     }
+
+    // MARK: - Текст отказа
+
+    /**
+     Что сказать человеку под «Не удалось загрузить переписку»: тексты openDM сайта по коду error, текст сервера (msg или
+     error, если это не короткий латинский код) как есть; иначе nil — только общий заголовок.
+     */
+    static func текст(_ ошибка: Ошибка?) -> String? {
+        guard let ошибка else { return nil }
+        switch ошибка {
+        case .отказ(let причина):
+            let чистая = причина.trimmingCharacters(in: .whitespacesAndNewlines)
+            if чистая.isEmpty { return nil }
+            if let известная = текстыОтказа[чистая] { return известная }
+            if чистая.range(of: "^[a-z][a-z0-9_ ]{1,20}$", options: .regularExpression) != nil { return nil }
+            return чистая
+        case .статус(let код):
+            return "HTTP \(код)"
+        case .сеть, .нуженВход, .разбор:
+            return nil
+        }
+    }
+
+    /// Словарь openDM сайта (CAB @1238058) — сайт показывает их по-русски на всех языках.
+    private static let текстыОтказа: [String: String] = [
+        "auth": "Войдите заново",
+        "peer": "Собеседник не указан",
+        "no_peer": "Собеседник не найден (аккаунт мог быть удалён)",
+        "origin": "Ошибка источника запроса",
+        "blocked": "Общение недоступно — один из вас заблокировал другого.",
+        "access": "Нет доступа к этой переписке",
+        "not_found": "Переписка не найдена"
+    ]
 
     // MARK: - Транспорт
 
-    private static func получить(_ поля: [URLQueryItem]) async throws -> ЧатОтвет {
-        var ч = URLComponents(url: адрес, resolvingAgainstBaseURL: false)!
-        var всеПоля = поля
-        /* Этап 45: me_id — как dm.php?action=list&me_id= и poll&tid=&me_id= сайта. */
-        let я = await ИнбоксAPI.номерБыстро()
-        if !я.isEmpty { всеПоля.append(URLQueryItem(name: "me_id", value: я)) }
-        ч.queryItems = всеПоля
-        var запрос = URLRequest(url: ч.url!)
-        запрос.httpShouldHandleCookies = false
-        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
-        return try await выполнить(запрос)
-    }
-
-    private static func отправить(_ поля: [String: Any]) async throws -> ЧатОтвет {
-        let состояние = await SiteSession.состояние()
-        if состояние.вошёл == false { throw Ошибка.нуженВход }
-        guard let csrf = состояние.csrf else { throw Ошибка.нуженВход }
-
+    /// POST JSON, как у сайта: без csrf, с me_id. Гость — «нужен вход», dm.php не трогаем.
+    private static func записать(_ поля: [String: Any]) async throws -> ЧатОтвет {
+        if await SiteSession.состояние().вошёл == false { throw Ошибка.нуженВход }
         var тело = поля
-        тело["csrf"] = csrf
-        /* Этап 45: me_id — полем тела, как open / send / set_label сайта. */
-        let я = await ИнбоксAPI.номерБыстро()
+        let я = await ИнбоксAPI.мойНомер(ждать: true)
         if !я.isEmpty { тело["me_id"] = я }
-        var запрос = URLRequest(url: адрес)
-        запрос.httpMethod = "POST"
-        запрос.httpShouldHandleCookies = false
-        запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        запрос.setValue(csrf, forHTTPHeaderField: "X-Kliko-Csrf")
-        for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
-        запрос.httpBody = try? JSONSerialization.data(withJSONObject: тело)
-        return try await выполнить(запрос)
+        return try await выполнить(путь, метод: "POST", тело: тело, ждать: true)
     }
 
-    private static func выполнить(_ запрос: URLRequest) async throws -> ЧатОтвет {
-        let данные: Data
-        let ответ: URLResponse
-        do { (данные, ответ) = try await сессия.data(for: запрос) } catch { throw Ошибка.сеть }
-        let код = (ответ as? HTTPURLResponse)?.statusCode ?? 200
+    private static func выполнить(_ хвост: String, метод: String, тело: [String: Any]?,
+                                  ждать: Bool) async throws -> ЧатОтвет {
+        let ответ: КабинетСайта.Ответ
+        do {
+            ответ = try await КабинетСайта.вызвать(хвост, метод: метод, тело: тело, ждать: ждать)
+        } catch {
+            #if DEBUG
+            print("ChatAPI \(метод) \(хвост): сбой транспорта \(error)")
+            #endif
+            throw Ошибка.сеть
+        }
+        let код = ответ.код
+        #if DEBUG
+        if !(200..<300).contains(код) || !ответ.текст.contains("\"ok\":true") {
+            let начало = String(ответ.текст.prefix(300))
+            print("ChatAPI \(метод) \(хвост): HTTP \(код), тело: \(начало)")
+        }
+        #endif
         if код == 401 || код == 403 { throw Ошибка.нуженВход }
-        /* JSON разбираем и при 4xx: сайт объясняет отказ полем error («no_peer», «csrf», «auth»), а не кодом. */
+        /* JSON разбираем и при 4xx: сайт объясняет отказ полем error («no_peer», «origin», «auth»), а не кодом. */
+        let данные = Data(ответ.текст.utf8)
         guard let разобранный = try? JSONDecoder().decode(ЧатОтвет.self, from: данные) else {
             if !(200..<300).contains(код) { throw Ошибка.статус(код) }
             throw Ошибка.разбор
         }
         if !разобранный.ok {
             let причина = разобранный.ошибка ?? ""
-            if ["auth", "login", "unauthorized", "no_auth", "csrf"].contains(причина) { throw Ошибка.нуженВход }
-            if !разобранный.заблокирован { throw Ошибка.отказ(причина) }
+            if ["auth", "login", "unauthorized", "no_auth"].contains(причина) { throw Ошибка.нуженВход }
+            if !разобранный.заблокирован {
+                /* Человеческий текст сайта (msg) важнее кода; нет его — код, который текст() переведёт. */
+                let сообщение = разобранный.сообщение ?? ""
+                throw Ошибка.отказ(сообщение.isEmpty ? причина : сообщение)
+            }
         }
         return разобранный
     }
