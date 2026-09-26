@@ -38,6 +38,13 @@
   .feat > *, .plans > *, .vip > *, .roi > *, .final > *, .dcard > * { min-width: 0; }
   h1, h2, h3, p, li, span, b { overflow-wrap: break-word; }
   svg.i { width: 1em; height: 1em; vertical-align: -.15em; flex: none; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* Старый Safari (iOS 14 и раньше) без aspect-ratio: пропорции телефона и фото — через отступ. */
+  @supports not (aspect-ratio: 1 / 1) {
+    .device { height: 0; padding: 0 0 210.5% !important; }
+    .photo { height: 0; padding-bottom: 75%; }
+    .item .photo { padding-bottom: 50%; }
+  }
   body {
     background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--body);
     padding-inline: 20px; -webkit-font-smoothing: antialiased;
@@ -82,12 +89,14 @@
 
   /* Telegram-чат */
   /* Телефон: рамка iPhone и тёмный Telegram внутри */
-  .device { justify-self: end; width: 100%; max-width: 380px; aspect-ratio: 380 / 800; border-radius: 56px; padding: 11px;
+  .device { position: relative; justify-self: end; width: 100%; max-width: 380px; aspect-ratio: 380 / 800; border-radius: 56px; padding: 11px;
     background: linear-gradient(145deg, #3b4148, #15181c 40%, #2a2f35); box-shadow: var(--shadow), inset 0 0 0 1.5px #555c64, inset 0 0 0 4px #0b0d10; position: relative; }
   .device::before { content: ""; position: absolute; left: -3px; top: 150px; width: 3px; height: 60px; border-radius: 2px 0 0 2px; background: #2c3137; box-shadow: 0 80px 0 #2c3137; }
   .device::after { content: ""; position: absolute; right: -3px; top: 190px; width: 3px; height: 90px; border-radius: 0 2px 2px 0; background: #2c3137; }
-  .screen { height: 100%; border-radius: 46px; overflow: hidden; background: #0e1621; display: flex; flex-direction: column; position: relative; font-size: 13.5px; line-height: 1.4; color: #f5f7fa; }
-  .island { position: absolute; top: 11px; left: 50%; translate: -50% 0; width: 100px; height: 30px; border-radius: 20px; background: #000; z-index: 3; }
+  /* Экран — абсолютно внутри рамки: Safari не считает height:100% в блоке с aspect-ratio; маска
+     и своя «плоскость» — чтобы анимированные сообщения не вылезали за скруглённые углы в Safari. */
+  .screen { position: absolute !important; inset: 11px; border-radius: 46px; overflow: hidden; isolation: isolate; -webkit-mask-image: -webkit-radial-gradient(white, black); transform: translateZ(0); background: #0e1621; display: flex; flex-direction: column; position: relative; font-size: 13.5px; line-height: 1.4; color: #f5f7fa; }
+  .island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 100px; height: 30px; border-radius: 20px; background: #000; z-index: 3; }
   .status { display: flex; justify-content: space-between; align-items: center; padding: 16px 28px 6px 34px; font: 600 15px var(--body); background: #17212b; }
   .status .icons { display: flex; gap: 6px; align-items: center; }
   .status svg { height: 12px; fill: #f5f7fa; }
@@ -148,7 +157,7 @@
   .scale { display: flex; justify-content: space-between; margin-left: 228px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
   .wins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .wins div { background: rgba(14,22,33,.6); border-radius: 16px; padding: 18px; display: grid; gap: 6px; box-shadow: inset 0 0 0 1px var(--line); }
-  .wins b { font-size: clamp(20px, 3vw, 32px); overflow-wrap: anywhere; line-height: 1; color: var(--accent); font-weight: 800; }
+  .wins b { font-size: clamp(20px, 3vw, 32px); overflow-wrap: anywhere; word-break: break-word; line-height: 1; color: var(--accent); font-weight: 800; }
   .wins span { color: var(--ink-2); font-size: 14.5px; line-height: 1.4; }
   .race-note { font-size: 13.5px; color: var(--muted); }
   @keyframes pulse { 50% { box-shadow: 0 0 34px rgba(46,166,255,1); } }
@@ -237,6 +246,8 @@
   /* ---------- вопросы ---------- */
   .faq { display: grid; gap: 10px; max-width: 820px; }
   details { background: var(--surface); border-radius: 14px; padding: 4px 20px; box-shadow: inset 0 0 0 1px var(--line); }
+  summary::-webkit-details-marker { display: none; }
+  summary::marker { content: ''; }
   summary { cursor: pointer; font-weight: 700; padding-block: 16px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
   summary::after { content: "+"; font: 700 20px/1 var(--mono); color: var(--accent); }
   details[open] summary::after { content: "−"; }
