@@ -74,7 +74,7 @@ struct ШагиПодачи: View {
             Text(т("ver_bar_s"))
                 .font(.system(size: 13))
                 .fixedSize(horizontal: false, vertical: true)
-            Button(т("ver_bar_go")) { открытьСайт("cabinet.php?go=verify") }
+            Button(т("ver_bar_go")) { ВерификацияПоверх.показать() }
                 .font(.system(size: 14, weight: .bold))
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.зелёный)

@@ -566,7 +566,8 @@ struct КонтактыСделки: View {
                 каналы
                 if let адрес = Config.страницаСайта("seller.php?id=" + СделкиAPI.вАдрес(п.id)) {
                     Button {
-                        открыть(адрес)
+                        /* Витрина собеседника — своим экраном поверх сделки; номер не годится — страница сайта. */
+                        if !ОкноПродавца.открыть(id: п.id, имя: п.имя) { открыть(адрес) }
                     } label: {
                         HStack {
                             Label(т(п.роль == "seller" ? "hov_prof_seller" : "hov_prof_buyer"), systemImage: "person.crop.circle")

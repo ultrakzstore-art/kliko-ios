@@ -68,7 +68,16 @@ final class ОкнаПриложения: ObservableObject {
         Task { @MainActor in
             if задержка > 0 { try? await Task.sleep(nanoseconds: задержка) }
             if Self.занятоОкном {
-                if let запасной { WebBridge.shared.pendingURL = запасной }
+                /* Уже открыт лист или полноэкранное окно: вход и «Стать продавцом» — поверх него из верхнего
+                   контроллера (OverlayWindows.swift), прочее — запасная страница сайта, как было. */
+                switch новое {
+                case .вход:
+                    ВходПоверх.показать()
+                case .верификация:
+                    ВерификацияПоверх.показать()
+                case .удалениеАккаунта, .поддержка:
+                    if let запасной { WebBridge.shared.pendingURL = запасной }
+                }
                 return
             }
             self.окно = новое

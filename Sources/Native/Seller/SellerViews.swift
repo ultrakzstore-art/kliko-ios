@@ -68,10 +68,19 @@ struct БлокПродавца: View {
         }
     }
 
-    /// Карточка .mk-msc: с отзывами — кнопка со стрелкой, иначе — как на этапе 36.
+    /// Карточка .mk-msc: у сайта по умолчанию (MK_SELLER_PAGE) — ссылка на страницу продавца seller.php; здесь — своя
+    /// витрина продавца поверх объявления (ОкноПродавца). Номер негодный — отзывы, как на этапе 37.
     @ViewBuilder
     private var карточка: some View {
-        if Config.продавецОтзывы {
+        if ВитринаПродавцаAPI.годный(продавецID) {
+            Button {
+                ОкноПродавца.открыть(id: продавецID, имя: имя)
+            } label: {
+                КарточкаПродавцаСайта(товар: товар, подписчики: подписчики, стрелка: true)
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            .accessibilityHint(StorefrontText.т("all_goods"))
+        } else if Config.продавецОтзывы {
             Button {
                 лист = .отзывы
             } label: {
@@ -203,6 +212,8 @@ struct ЛистОтзывовПродавца: View {
     let продавецID: String
     let имя: String
     let свой: Bool
+    /// «Профиль» — витрина продавца; из самой витрины его нет.
+    let профиль: Bool
     @ObservedObject private var действия = ДействияСПродавцом.shared
     @State private var состояние: Состояние = .загрузка
     @Environment(\.dismiss) private var закрыть
@@ -213,10 +224,11 @@ struct ЛистОтзывовПродавца: View {
         case готово(ОтзывыПродавца.Сводка)
     }
 
-    init(продавецID: String, имя: String, свой: Bool) {
+    init(продавецID: String, имя: String, свой: Bool, профиль: Bool = true) {
         self.продавецID = продавецID
         self.имя = имя
         self.свой = свой
+        self.профиль = профиль
     }
 
     var body: some View {
@@ -263,10 +275,10 @@ struct ЛистОтзывовПродавца: View {
     /// «Профиль» и «Закрыть» (.mksr-x: на всю ширину, 44, без фона, серым).
     private var низ: some View {
         VStack(spacing: 4) {
-            if let адрес = СинхронПодписок.страницаПродавца(продавецID) {
+            if профиль && ВитринаПродавцаAPI.годный(продавецID) {
                 Button {
                     закрыть()
-                    WebBridge.shared.pendingURL = адрес
+                    ОкноПродавца.открыть(id: продавецID, имя: имя)
                 } label: {
                     HStack(spacing: 6) {
                         Text(SellerText.т("profile"))

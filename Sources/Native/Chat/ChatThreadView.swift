@@ -35,7 +35,8 @@ final class ChatThreadModel: ObservableObject {
     }
 
     private(set) var tid: String
-    private let собеседник: String
+    /// Номер собеседника, если диалог открыт по нему (шапка ведёт на его витрину — ОкноПродавца).
+    let собеседник: String
     private let объявление: String
     /// Этап 45: номер переписки для open (строка инбокса: tid диалога или chat_id покупки) — сайт открывает строку
     /// через open с tid, а не сразу опросом.
@@ -212,7 +213,7 @@ struct ChatThreadView: View {
                 } description: {
                     Text(ChatText.т("login_sub"))
                 } actions: {
-                    Button(ChatText.т("login_btn")) { if let u = Config.url("/cabinet.php") { открыть(u) } }
+                    Button(ChatText.т("login_btn")) { ВходПоверх.показать { Task { await модель.начать() } } }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.green)
                 }
@@ -285,7 +286,18 @@ struct ChatThreadView: View {
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
             .accessibilityLabel(ListingPageText.т("back"))
-            ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+            if ВитринаПродавцаAPI.годный(модель.собеседник) {
+                /* Имя собеседника — его витрина (seller.php сайта), своим экраном поверх переписки. */
+                Button {
+                    ОкноПродавца.открыть(id: модель.собеседник, имя: заголовок)
+                } label: {
+                    ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+            } else {
+                ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+            }
             Spacer(minLength: 0)
         }
         .padding(.leading, 8)
