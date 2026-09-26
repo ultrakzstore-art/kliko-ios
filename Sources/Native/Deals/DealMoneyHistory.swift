@@ -5,7 +5,8 @@ import UIKit
  КАРТОЧКА СДЕЛКИ — «ДЕНЬГИ И ДОКУМЕНТЫ», «ИСТОРИЯ СДЕЛКИ», ЧЕК (этап 43, владелец 26.09.2026).
 
  Только показ, как свёрнутые блоки dmFold сайта и окно showReceipt. Документы (договор и акт аренды, акт работ,
- гарантийный талон) — ссылки /escrow.php?action=…&id=, их открывает страница сайта; «Попросить продавца подписать» —
+ гарантийный талон) — ссылки /escrow.php?action=…&id=: их ловит ПереходыКабинета и показывает своим окном PDF с
+ «Поделиться» и «Печать» (CabinetPlus/DocumentViewer.swift); «Попросить продавца подписать» —
  warranty_ask, своё. Чек рисуется из той же сделки, «Распечатать» — системная печать (printReceipt сайта открывает окно
  печати браузера).
  */
@@ -206,7 +207,7 @@ struct ДеньгиИДокументы: View {
                         .foregroundStyle(КраскаОбъявлений.хорошоТекст)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "arrow.up.right.square")
+                Image(systemName: "doc.viewfinder")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)

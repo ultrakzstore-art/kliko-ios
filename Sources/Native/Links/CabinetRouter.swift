@@ -48,6 +48,12 @@ import Foundation
    · ?egov=1, ?egov_confirm=1, ?after=, ?return=, ?bye=1      — только экран гостя (eGov живёт на странице);
    · ?share=, ?social=, ?logout=                              — страница сайта (приём файлов, соцсети, выход с токеном).
  Адрес без параметров — тоже сайт: вошедшему нужен полный кабинет (объявления, сделки, кошелёк), а его нативного ещё нет.
+
+ «КАБИНЕТ ПОЛНОСТЬЮ SWIFTUI» (владелец): адрес без параметров — корень вкладки «Кабинет» (.кабинет); ?s=deliveries,
+ ?s=rentals, ?s=exchanges, ?go=deliveries, ?go=exchanges — свои экраны доставок, аренд и обменов; ?s=company — «Счета»;
+ ?s=founder — «Акции»; ?s=subs — вкладка «Избранное»; ?s=appear — корень «Кабинета». Сайтом остаются только eGov
+ (?egov=, ?go=verify — окно ОкноEgov), покупки ТОП/PRO (?promote=, ?go=promote — Config.цифровыеПокупки) и деньги за
+ своими рубильниками.
  */
 enum АдресаКабинета {
     /// Путь — страница кабинета.
@@ -59,6 +65,8 @@ enum АдресаКабинета {
     static func цель(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
         if let деньги = цельДенег(параметры) { return деньги }
         if let кошелёк = цельКошелька(параметры) { return кошелёк }
+        /* «Кабинет полностью SwiftUI»: адрес кабинета без параметров — корень вкладки «Кабинет», а не кабинет сайта. */
+        if параметры.isEmpty { return Config.нативныйКабинет ? .кабинет : nil }
         guard параметры.count == 1, let п = параметры.first else { return nil }
         let значение = (п.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         switch п.name {
@@ -77,6 +85,8 @@ enum АдресаКабинета {
             /* Этап 47: ?go=wallet — экран кошелька; ?s=points — «Баллы» (showPoints модуля deals). */
             if п.name == "go" && значение == "wallet" && Config.нативныйКошелёк && Config.нативныйКабинет { return .кошелёк }
             if п.name == "s" && значение == "points" && Config.нативныйКошелёк && Config.нативныйКабинет { return .баллы }
+            /* Разделы меню кабинета сайта (cabRoute), у которых теперь свои экраны в стеке вкладки «Кабинет». */
+            if let раздел = разделМеню(значение, имя: п.name) { return раздел }
             return nil
         case "open":
             /* Этап 46: ?open=password — openChangePassword сайта: окно пароля поверх кабинета. */
@@ -103,6 +113,26 @@ enum АдресаКабинета {
             return .правка(id: номер)
         default:
             return nil
+        }
+    }
+
+    /**
+     Разделы меню кабинета сайта: ?s=deliveries | rentals | exchanges | subs | company | founder | appear и ?go=deliveries |
+     exchanges (карта §6.1.1–6.1.2). Доставки, аренды и обмены — свои экраны (CabinetPlus), «Подписки» — вкладка
+     «Избранное» (избранное, поиски и продавцы — там и в «Кабинете»), «Счета» — ЭкранКомпании, «Акции» — клуб, «Оформление»
+     — корень «Кабинета» (тема и язык — его разделы).
+     */
+    private static func разделМеню(_ значение: String, имя: String) -> NativeRouter.Цель? {
+        guard Config.нативныйКабинет else { return nil }
+        switch (имя, значение) {
+        case (_, "deliveries"): return .разделКабинета(.доставки)
+        case (_, "exchanges"): return .разделКабинета(.обмены)
+        case ("s", "rentals"): return .разделКабинета(.аренды)
+        case ("s", "subs"): return Config.избранное ? .избранное : nil
+        case ("s", "company"): return Config.нативныйБизнес ? .разделКабинета(.компания) : nil
+        case ("s", "founder"): return Config.нативныйБизнес ? .разделКабинета(.клуб) : nil
+        case ("s", "appear"), ("s", "home"): return .кабинет
+        default: return nil
         }
     }
 

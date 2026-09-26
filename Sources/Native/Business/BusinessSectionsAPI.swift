@@ -24,8 +24,8 @@ import Foundation
    · kp_decline {csrf, kp_id};
    · shop_sections_list {csrf} / shop_sections_save {csrf, sections[{id, name}]} (shopSecLoad / shopSecSave).
  Денег здесь нет: «Оплата пришла» — отметка продавца о безналичной оплате счёта B2B, а не платёж в приложении.
- Печать документов (счёт, накладная, акт, счёт-фактура, КП в PDF), печать и подпись с eGov, прайс-лист, налоговый модуль
- и интеграции — страницей кабинета сайта.
+ Печать документов (счёт, накладная, акт, договор, доверенность) — свой PDF (CabinetPlus/BusinessDocs.swift); прайс-лист,
+ налоги и интеграции — свои экраны (CabinetPlus); печать и подпись с eGov — «Печать и подпись» (CabinetPlus/SealView.swift).
  */
 @MainActor
 enum БизнесРазделыAPI {
@@ -397,6 +397,8 @@ struct ПолученныйДокумент: Equatable, Identifiable {
     let дата: String
     let сумма: Int
     let продавец: String
+    /// Документ целиком — для своего PDF (invPrint сайта).
+    let данные: ДанныеДокумента
 
     init(_ j: [String: Any], номер порядковый: Int) {
         typealias A = МоиОбъявленияAPI
@@ -408,6 +410,7 @@ struct ПолученныйДокумент: Equatable, Identifiable {
         let компания = (j["company"] as? [String: Any]) ?? [:]
         let имя = A.строка(компания["name"])
         продавец = имя.isEmpty ? A.строка(j["seller_name"]) : имя
+        данные = ДанныеДокумента(полученный: j)
     }
 }
 

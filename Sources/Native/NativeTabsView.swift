@@ -532,6 +532,18 @@ struct NativeTabsView: View {
             путь.append(КабинетЦель.баллы)
             путьКабинета = путь
             вкладка = .кабинет
+        case .кабинет:
+            /* /cabinet.php без параметров — свой кабинет, к корню его стека. */
+            guard NativeRouter.доступна(.кабинет) else { return }
+            путьКабинета = NavigationPath()
+            вкладка = .кабинет
+        case .разделКабинета(let цель):
+            /* Разделы меню кабинета сайта (?s=deliveries, ?s=rentals, ?s=company, …) — поверх корня «Кабинета». */
+            guard NativeRouter.доступна(.разделКабинета(цель)) else { return }
+            var путь = NavigationPath()
+            путь.append(цель)
+            путьКабинета = путь
+            вкладка = .кабинет
         }
     }
 

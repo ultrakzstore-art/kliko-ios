@@ -148,9 +148,14 @@ struct ЭкранКомпании: View {
             строкаЭкрана(т("biz_kp"), значок: "doc.richtext") { ЭкранКП(открыть: открыть) }
             строкаЭкрана(т("biz_analytics"), значок: "chart.bar") { ЭкранАналитики(открыть: открыть) }
             строкаЭкрана(т("biz_sections"), значок: "square.grid.2x2") { ЭкранРазделовМагазина(открыть: открыть) }
-            строкаСайта(т("biz_seal"), значок: "signature", путь: "cabinet.php?s=company")
-            строкаСайта(т("biz_pricelist"), значок: "list.bullet.rectangle", путь: "cabinet.php?s=company")
-            строкаСайта(т("biz_integrations"), значок: "arrow.triangle.branch", путь: "cabinet.php")
+            /* «Кабинет полностью SwiftUI»: печать и подпись, прайс-лист, налоги, интеграции и прайс по ссылке — свои экраны. */
+            строкаЭкрана(т("biz_seal"), значок: "signature") { ЭкранПечатиИПодписи(открыть: открыть) }
+            строкаЭкрана(т("biz_pricelist"), значок: "list.bullet.rectangle") { ЭкранПрайсЛиста(открыть: открыть) }
+            строкаЭкрана(КабинетПлюсText.т("tax_title"), значок: "percent") { ЭкранНалогов(открыть: открыть) }
+            строкаЭкрана(т("biz_integrations"), значок: "arrow.triangle.branch") { ЭкранИнтеграций(открыть: открыть) }
+            строкаЭкрана(КабинетПлюсText.т("feed_title"), значок: "arrow.triangle.2.circlepath") {
+                ЭкранПрайсаПоСсылке(открыть: открыть)
+            }
         }
     }
 
@@ -406,7 +411,6 @@ private struct ЗаказыБизнеса: View {
                 .fixedSize(horizontal: false, vertical: true)
             раздел(т("b2b_orders_in"), заказы: продаю, пусто: т("b2b_no_incoming"))
             раздел(т("b2b_orders_out"), заказы: покупаю, пусто: т("b2b_no_mine"))
-            КнопкаСайтаБизнеса(подпись: т("on_site"), главная: false, действие: наСайт)
         }
     }
 
@@ -424,6 +428,7 @@ private struct ЗаказыБизнеса: View {
             } else {
                 ForEach(заказы) { заказ in
                     СтрокаЗаказаB2B(заказ: заказ)
+                    КнопкиДокументовЗаказа(заказ: заказ)
                 }
             }
         } else {

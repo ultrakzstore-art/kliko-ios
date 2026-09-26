@@ -414,6 +414,8 @@ struct ЗаказB2B: Equatable, Identifiable {
     let до: String
     /// _b2bKind: goods · services · mixed — у услуг после оплаты сразу «Завершить», без «Отгрузить» (этап 50).
     let вид: String
+    /// Заказ как пришёл — для документов (счёт, накладная, акт, договор; ДанныеДокумента, CabinetPlus/BusinessDocs.swift).
+    let сырое: [String: Any]
 
     static func == (a: ЗаказB2B, b: ЗаказB2B) -> Bool {
         a.id == b.id && a.статус == b.статус && a.сумма == b.сумма && a.до == b.до
@@ -441,6 +443,7 @@ struct ЗаказB2B: Equatable, Identifiable {
         до = A.строка(j["valid_until"])
         let к = A.строка(j["kind"])
         вид = (к == "services" || к == "mixed") ? к : "goods"
+        сырое = j
     }
 }
 
