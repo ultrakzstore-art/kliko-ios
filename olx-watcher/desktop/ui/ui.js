@@ -124,9 +124,9 @@ $('btn-save').addEventListener('click', async () => {
   const env = {};
   document.querySelectorAll('[data-env]').forEach((el) => { env[el.dataset.env] = el.value; });
   const bad = [...document.querySelectorAll('[data-env^="STARS_PRICES"],[data-env^="KASPI_PRICES"]')]
-    .filter((el) => el.value.trim() && el.value.split(',').filter((x) => parseInt(x.replace(/\s/g, ''), 10) > 0).length !== 3);
+    .filter((el) => el.value.trim() && ![3, 4].includes(el.value.split(',').filter((x) => parseInt(x.replace(/\s/g, ''), 10) > 0).length));
   if (bad.length) {
-    $('save-msg').textContent = 'Цены — три числа через запятую (7, 14 и 30 дней) или пусто';
+    $('save-msg').textContent = 'Цены — четыре числа через запятую (24 часа, 7, 14, 30 дней), три (без суток) или пусто';
     bad[0].focus();
     return;
   }

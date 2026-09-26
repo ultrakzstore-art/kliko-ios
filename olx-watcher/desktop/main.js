@@ -26,17 +26,18 @@ const DEFAULTS = {
   CARD_SECTIONS: 'specs,description,seller',
   WATERMARK: 'auto',
   KASPI_DETAILS: 'Перевод на Kaspi по номеру +7 7XX XXX XX XX (Имя Ф.)',
-  STARS_PRICES_OLX: '100,180,300',
-  STARS_PRICES_KOLESA: '100,180,300',
-  STARS_PRICES_KRISHA: '100,180,300',
-  STARS_PRICES_KASPI: '60,100,180',
-  STARS_PRICES_ALL: '250,450,800',
-  STARS_PRICES_VIP: '5000,9000,15000',   // VIP-рубрика — ×50 от OLX
-  KASPI_PRICES_OLX: '1500,2500,4500',
-  KASPI_PRICES_KOLESA: '1500,2500,4500',
-  KASPI_PRICES_KRISHA: '1500,2500,4500',
-  KASPI_PRICES_KASPI: '900,1500,2700',
-  KASPI_PRICES_ALL: '4000,7000,12000',
+  // Цены: 24 часа, 7, 14, 30 дней.
+  STARS_PRICES_OLX: '20,100,180,300',
+  STARS_PRICES_KOLESA: '20,100,180,300',
+  STARS_PRICES_KRISHA: '20,100,180,300',
+  STARS_PRICES_KASPI: '20,80,150,250',
+  STARS_PRICES_ALL: '50,250,450,800',
+  STARS_PRICES_VIP: '5000,9000,15000',   // VIP-рубрика — без суток
+  KASPI_PRICES_OLX: '500,2990,4990,8990',
+  KASPI_PRICES_KOLESA: '500,2990,4990,8990',
+  KASPI_PRICES_KRISHA: '500,2990,4990,8990',
+  KASPI_PRICES_KASPI: '500,1990,3990,6990',
+  KASPI_PRICES_ALL: '990,4990,8990,14990',
   KASPI_PRICES_VIP: '75000,125000,225000',
 };
 const KEYS = Object.keys(DEFAULTS);
@@ -50,12 +51,28 @@ const hiddenStart = process.argv.includes('--hidden');
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 let settings = { env: { ...DEFAULTS }, tokenEnc: '', tokenPlain: '', autoStart: true, openAtLogin: false };
 
+// Цена тарифа «24 часа» для тех, у кого цены сохранены ещё без него.
+const DAY_PRICE = {
+  STARS_PRICES_OLX: 20, STARS_PRICES_KOLESA: 20, STARS_PRICES_KRISHA: 20, STARS_PRICES_KASPI: 20, STARS_PRICES_ALL: 50,
+  KASPI_PRICES_OLX: 500, KASPI_PRICES_KOLESA: 500, KASPI_PRICES_KRISHA: 500, KASPI_PRICES_KASPI: 500, KASPI_PRICES_ALL: 990,
+};
+
 function loadSettings() {
   try {
     const saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
     settings = { ...settings, ...saved, env: { ...DEFAULTS, ...(saved.env || {}) } };
+    // Появился тариф на 24 часа: к сохранённым ценам из трёх чисел один раз дописываем цену суток.
+    if (!settings.dayPlan) {
+      for (const [k, day] of Object.entries(DAY_PRICE)) {
+        const list = String(settings.env[k] || '').split(',').map((x) => x.trim()).filter(Boolean);
+        if (list.length === 3) settings.env[k] = [day, ...list].join(',');
+      }
+      settings.dayPlan = true;
+      try { saveSettings(); } catch { /* сохраним при следующем «Сохранить» */ }
+    }
   } catch { /* первый запуск */ }
 }
+
 
 function saveSettings() {
   fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });

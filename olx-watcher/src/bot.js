@@ -13,7 +13,9 @@ const sources = require('./sources');
 const { registerWizard } = require('./wizard');
 const { DAY } = require('./db');
 
-const PLANS = [7, 14, 30];
+const PLANS = [1, 7, 14, 30];   // 1 — сутки (24 часа)
+const planName = (d) => (d === 1 ? '24 часа' : `${d} дней`);
+const planShort = (d) => (d === 1 ? '24 ч' : `${d} дн`);
 
 // Тарифы: отдельная площадка или «всё сразу». Комбо открывает все площадки на срок.
 const PRODUCTS = [
@@ -46,7 +48,7 @@ function createBot({ token, db, config, getWatcher, log }) {
 
   function planText(userId) {
     const u = db.user(userId);
-    const paidLine = 'После теста — продлить на 7, 14 или 30 дней: /access';
+    const paidLine = 'После теста — подключить на 24 часа, 7, 14 или 30 дней: /access';
     const paid = db.accessList(userId);
     const mine = db.locks().filter((l) => l.user_id === userId);
     const vipLines = mine.length ? `\n${mine.map((l) => `👑 VIP «${esc(vip.lockLabel(l))}» — до ${fmtDate(l.until)}`).join('\n')}` : '';
@@ -88,7 +90,11 @@ function createBot({ token, db, config, getWatcher, log }) {
     .text('➕ Новый поиск', 'w:new').text('📋 Мои поиски', 'list').row()
     .text('💎 Доступ', 'access');
 
-  const priceOf = (product, method, days) => config.prices[product]?.[method]?.[PLANS.indexOf(days)] ?? null;
+  // Цены: [24 ч, 7, 14, 30]; список из трёх — без суток.
+  const priceOf = (product, method, days) => {
+    const list = config.prices[product]?.[method];
+    return (list?.length === 3 ? [null, ...list] : list)?.[PLANS.indexOf(days)] ?? null;
+  };
   const sellable = () => PRODUCTS.filter((p) => config.prices[p.key]?.stars || (config.prices[p.key]?.kaspi && config.kaspiDetails));
 
   async function showAccess(ctx) {
@@ -108,8 +114,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     for (const d of PLANS) {
       const stars = priceOf(p.key, 'stars', d);
       const kaspi = config.kaspiDetails ? priceOf(p.key, 'kaspi', d) : null;
-      if (stars) kb.text(`⭐ ${d} дн — ${stars}`, `stars:${p.key}:${d}`);
-      if (kaspi) kb.text(`💳 ${d} дн — ${fmt(kaspi)} ₸`, `kaspi:${p.key}:${d}`);
+      if (stars) kb.text(`⭐ ${planShort(d)} — ${stars}`, `stars:${p.key}:${d}`);
+      if (kaspi) kb.text(`💳 ${planShort(d)} — ${fmt(kaspi)} ₸`, `kaspi:${p.key}:${d}`);
       kb.row();
     }
     const what = p.key === 'all' ? 'все площадки: ' + sources.ALL.map((x) => x.title).join(', ') : sources.get(p.key).title;
@@ -200,8 +206,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     for (const d of PLANS) {
       const stars = priceOf('vip', 'stars', d);
       const kaspi = config.kaspiDetails ? priceOf('vip', 'kaspi', d) : null;
-      if (stars) kb.text(`⭐ ${d} дн — ${fmt(stars)}`, `vs:${ctx.match[1]}:${ctx.match[2]}:${d}`);
-      if (kaspi) kb.text(`💳 ${d} дн — ${fmt(kaspi)} ₸`, `vk:${ctx.match[1]}:${ctx.match[2]}:${d}`);
+      if (stars) kb.text(`⭐ ${planShort(d)} — ${fmt(stars)}`, `vs:${ctx.match[1]}:${ctx.match[2]}:${d}`);
+      if (kaspi) kb.text(`💳 ${planShort(d)} — ${fmt(kaspi)} ₸`, `vk:${ctx.match[1]}:${ctx.match[2]}:${d}`);
       kb.row();
     }
     await ctx.editMessageText(
@@ -216,7 +222,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const g = vip.grant(db, userId, r.path, c.slug, days);
     if (g.ok) {
       await send(userId, `👑 Готово! VIP-рубрика «${g.label}» — ваша до ${fmtDate(g.until)}. Объявления из неё получаете только вы; поиск по ней уже в /list.`);
-      await tellAdmin(`👑 VIP куплен: ${userId} — ${g.label}, ${days} дн, до ${fmtDate(g.until)}.`);
+      await tellAdmin(`👑 VIP куплен: ${userId} — ${g.label}, ${planShort(days)}, до ${fmtDate(g.until)}.`);
     }
     return g;
   }
@@ -230,8 +236,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     const amount = priceOf('vip', 'stars', days);
     if (!r || !c || !amount) return;
     try {
-      await ctx.replyWithInvoice(`VIP: ${vipLabel(r, c)}`.slice(0, 32), `Объявления из рубрики «${r.name}» в городе ${c.name} — только вам, ${days} дней.`,
-        `vip:${ri}:${ci}:${days}:${ctx.from.id}`, 'XTR', [{ label: `${days} дней`, amount }]);
+      await ctx.replyWithInvoice(`VIP: ${vipLabel(r, c)}`.slice(0, 32), `Объявления из рубрики «${r.name}» в городе ${c.name} — только вам, ${planName(days)}.`,
+        `vip:${ri}:${ci}:${days}:${ctx.from.id}`, 'XTR', [{ label: planName(days), amount }]);
     } catch (e) {
       log(`счёт VIP Stars: ${e.message}`);
       await ctx.reply(`Telegram не принял счёт на ${fmt(amount)} Stars${config.kaspiDetails && priceOf('vip', 'kaspi', days) ? ' — оплатите через Kaspi (💳)' : ''}. Или напишите владельцу бота.`);
@@ -247,7 +253,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const amount = priceOf('vip', 'kaspi', days);
     if (!r || !c || !amount || !config.kaspiDetails) return;
     await ctx.reply(
-      `💳 <b>Kaspi — VIP «${esc(vipLabel(r, c))}», ${days} дней, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
+      `💳 <b>Kaspi — VIP «${esc(vipLabel(r, c))}», ${planName(days)}, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
       `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — рубрика закрепится после проверки.`,
       { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `vkp:${ri}:${ci}:${days}`) },
     );
@@ -264,8 +270,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.answerCallbackQuery('Заявка отправлена');
     await ctx.editMessageReplyMarkup().catch(() => {});
     await ctx.reply('Заявка принята. Как только владелец увидит перевод, рубрика закрепится — пришлю сообщение.');
-    await tellAdmin(`💳 Kaspi VIP: ${who(ctx.from)} — «${vipLabel(r, c)}», ${days} дн, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
-      new InlineKeyboard().text(`✅ Закрепить на ${days} дн`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
+    await tellAdmin(`💳 Kaspi VIP: ${who(ctx.from)} — «${vipLabel(r, c)}», ${planShort(days)}, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
+      new InlineKeyboard().text(`✅ Закрепить на ${planShort(days)}`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
   });
 
   // ---------- оплата: Telegram Stars ----------
@@ -277,16 +283,16 @@ function createBot({ token, db, config, getWatcher, log }) {
     const amount = p && priceOf(p.key, 'stars', days);
     if (!amount) return;
     await ctx.replyWithInvoice(
-      `${p.title.replace(/^\S+\s/, '')} на ${days} дней`,
+      `${p.title.replace(/^\S+\s/, '')} на ${planName(days)}`,
       `⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.`,
       `stars:${p.key}:${days}:${ctx.from.id}`,
       'XTR',
-      [{ label: `${days} дней`, amount }],
+      [{ label: planName(days), amount }],
     );
   });
 
-  const PAYLOAD_RE = /^stars:(olx|kolesa|krisha|kaspi|all):(7|14|30):\d+$/;
-  const VIP_RE = /^vip:(\d+):(\d+):(7|14|30):\d+$/;
+  const PAYLOAD_RE = /^stars:(olx|kolesa|krisha|kaspi|all):(1|7|14|30):\d+$/;
+  const VIP_RE = /^vip:(\d+):(\d+):(1|7|14|30):\d+$/;
 
   bot.on('pre_checkout_query', async (ctx) => {
     const payload = ctx.preCheckoutQuery.invoice_payload;
@@ -329,7 +335,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     db.addPayment({ userId: ctx.from.id, method: 'stars', product: p.key, days, amount: pay.total_amount, status: 'paid', chargeId: pay.telegram_payment_charge_id });
     log(`оплата Stars: ${ctx.from.id} ${p.key} +${days} дн`);
     await ctx.reply(`Спасибо! 💎 ${p.title} — до ${fmtDate(until)}.`);
-    await tellAdmin(`⭐ Оплата Stars: ${who(ctx.from)} — ${p.title}, ${days} дн, ${pay.total_amount} Stars.`);
+    await tellAdmin(`⭐ Оплата Stars: ${who(ctx.from)} — ${p.title}, ${planShort(days)}, ${pay.total_amount} Stars.`);
   });
 
   // ---------- оплата: Kaspi (перевод + подтверждение) ----------
@@ -341,7 +347,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     const amount = p && priceOf(p.key, 'kaspi', days);
     if (!amount || !config.kaspiDetails) return;
     await ctx.reply(
-      `💳 <b>Kaspi — ${esc(p.title)}, ${days} дней, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
+      `💳 <b>Kaspi — ${esc(p.title)}, ${planName(days)}, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
       `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — доступ включится после проверки.`,
       { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `kpaid:${p.key}:${days}`) },
     );
@@ -356,8 +362,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.answerCallbackQuery('Заявка отправлена');
     await ctx.editMessageReplyMarkup().catch(() => {});
     await ctx.reply('Заявка принята. Как только владелец увидит перевод, доступ включится — пришлю сообщение.');
-    await tellAdmin(`💳 Kaspi: ${who(ctx.from)} — ${p.title}, ${days} дн, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
-      new InlineKeyboard().text(`✅ Дать ${days} дн`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
+    await tellAdmin(`💳 Kaspi: ${who(ctx.from)} — ${p.title}, ${planShort(days)}, ${fmt(amount)} ₸. Комментарий к переводу: ${ctx.from.id}`,
+      new InlineKeyboard().text(`✅ Дать ${planShort(days)}`, `approve:${pay.id}`).text('✖️ Нет перевода', `reject:${pay.id}`));
   });
 
   bot.callbackQuery(/^(approve|reject):(\d+)$/, async (ctx) => {

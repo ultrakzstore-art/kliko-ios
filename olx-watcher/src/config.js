@@ -10,14 +10,16 @@ function int(name, def, min) {
 // «100,180,350» → [100, 180, 350] (цены на 7/14/30 дней); пусто или не три числа — способ выключен.
 // VIP-рубрика (эксклюзив OLX): цены не заданы — в 50 раз дороже тарифа OLX.
 function vipPrices(all) {
-  const x50 = (list) => (list ? list.map((v) => v * 50) : null);
+  const x50 = (list) => (list ? list.map((v, i) => (i && v ? v * 50 : null)) : null);   // VIP на сутки не продаём
   all.vip = { stars: all.vip.stars || x50(all.olx.stars), kaspi: all.vip.kaspi || x50(all.olx.kaspi) };
   return all;
 }
 
+// Цены: «24 ч, 7, 14, 30 дней» (четыре числа) или «7, 14, 30» (три — без тарифа на сутки).
+// Внутри всегда четыре места: [24 ч, 7 дн, 14 дн, 30 дн], нет тарифа — null.
 function prices(name) {
   const list = String(process.env[name] || '').split(',').map((s) => parseInt(s.replace(/\s/g, ''), 10)).filter((n) => n > 0);
-  return list.length === 3 ? list : null;
+  return list.length === 4 ? list : list.length === 3 ? [null, ...list] : null;
 }
 
 module.exports = {
