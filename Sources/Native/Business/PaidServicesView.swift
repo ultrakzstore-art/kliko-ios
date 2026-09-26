@@ -323,6 +323,13 @@ private struct БлокСлотов: View {
 
     private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
 
+    /// Окно «Стать продавцом» (ЛистВерификации); сама проверка eGov — страницей сайта из него.
+    @MainActor
+    private func пройтиВерификацию() {
+        let u = Config.страницаСайта("cabinet?go=verify")
+        if !ОкнаПриложения.shared.показать(.верификация, запасной: u), let u { открыть(u) }
+    }
+
     var body: some View {
         КарточкаБизнеса(т("upg_slots_title"), значок: "square.stack.3d.up") {
             if let слоты {
@@ -342,9 +349,7 @@ private struct БлокСлотов: View {
                     строкаТарифа(тариф, слоты)
                 }
                 if !с.верифицирован {
-                    КнопкаСайтаБизнеса(подпись: т("upg_verify_bonus"), главная: false) {
-                        if let u = Config.страницаСайта("cabinet?go=verify") { открыть(u) }
-                    }
+                    КнопкаСайтаБизнеса(подпись: т("upg_verify_bonus"), главная: false) { пройтиВерификацию() }
                 }
                 ЦифроваяПокупка(подпись: т("upg_choose"), путь: "cabinet?go=items", открыть: открыть)
             } else {

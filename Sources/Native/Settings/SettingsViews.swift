@@ -325,8 +325,8 @@ struct СтрокаВерификации: View {
                             .padding(.vertical, 3)
                             .background(КраскаОбъявлений.плохоФон, in: Capsule())
                     }
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.footnote)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
@@ -335,15 +335,19 @@ struct СтрокаВерификации: View {
     }
 }
 
-/// requestVerification сайта: BIO_ON выключен — «временно недоступно»; иначе страница /kz/<язык>/cabinet?go=verify.
+/// requestVerification сайта: BIO_ON выключен — «временно недоступно»; иначе окно «Стать продавцом» (verPromo сайта,
+/// ЛистВерификации) — и уже из него страница /kz/<язык>/cabinet?go=verify (eGov живёт там). Слоя окон нет — страница
+/// сразу, как раньше. задержка — вызывающий лист или алерт ещё уезжает.
 @MainActor
 enum НастройкиВерификация {
-    static func открыть(профиль: ПрофильКабинета?, открыть: (URL) -> Void) {
+    static func открыть(профиль: ПрофильКабинета?, открыть: (URL) -> Void, задержка: UInt64 = 0) {
         if let п = профиль, !п.eGovВкл {
             НастройкиМодель.shared.показать(тН("ver_off"))
             return
         }
-        if let адрес = Config.страницаСайта("cabinet?go=verify") { открыть(адрес) }
+        let адрес = Config.страницаСайта("cabinet?go=verify")
+        if ОкнаПриложения.shared.показать(.верификация, задержка: задержка, запасной: адрес) { return }
+        if let адрес { открыть(адрес) }
     }
 }
 
@@ -391,26 +395,26 @@ struct РазделПриложения: View {
     }
 }
 
-/// «Удалить аккаунт» — только страницей сайта (account_delete_* не вызываются, карта §1.5.7, §8.8).
+/// «Удалить аккаунт» — свой лист шагов acctDelOpen сайта (ЛистУдаленияАккаунта, карта §1.5.7): account_delete_send и
+/// account_delete_confirm; подтверждение eGov — страницей сайта. Слоя окон нет — кабинет сайта, как раньше.
 struct РазделУдаленияАккаунта: View {
     let открыть: (URL) -> Void
 
     var body: some View {
         Section {
             Button(role: .destructive) {
-                if let адрес = Config.страницаСайта("cabinet.php") { открыть(адрес) }
+                let сайт = Config.страницаСайта("cabinet.php")
+                if !ОкнаПриложения.shared.показать(.удалениеАккаунта, запасной: сайт), let адрес = сайт { открыть(адрес) }
             } label: {
                 HStack {
                     Label(тН("cabset_del"), systemImage: "trash")
                     Spacer(minLength: 8)
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.footnote)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
             }
-        } footer: {
-            Text(тН("del_footer"))
         }
     }
 }
@@ -440,7 +444,7 @@ struct НастройкиКабинета: ViewModifier {
             }
             .alert(тН("ph_changed_t"), isPresented: $модель.номерЖдётВерификации) {
                 Button(тН("ph_go")) {
-                    НастройкиВерификация.открыть(профиль: модель.профиль, открыть: открыть)
+                    НастройкиВерификация.открыть(профиль: модель.профиль, открыть: открыть, задержка: 450_000_000)
                 }
                 Button(тН("later"), role: .cancel) {}
             } message: {

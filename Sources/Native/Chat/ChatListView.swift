@@ -161,7 +161,7 @@ struct ChatListView: View {
             } else if модель.ошибка == .нуженВход {
                 ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),
                            подпись: ChatText.т("login_sub"), кнопка: ChatText.т("login_btn"),
-                           действие: { if let u = Config.url("/cabinet.php") { открыть(u) } })
+                           действие: { войти() })
             } else if модель.ошибка != nil && модель.диалоги.isEmpty {
                 ПустоСайта(значок: "exclamationmark.bubble", заголовок: ChatText.т("failed"),
                            кнопка: ChatText.т("retry"), действие: { Task { await модель.загрузить() } },
@@ -208,7 +208,7 @@ struct ChatListView: View {
                 } description: {
                     Text(ChatText.т("login_sub"))
                 } actions: {
-                    Button(ChatText.т("login_btn")) { if let u = Config.url("/cabinet.php") { открыть(u) } }
+                    Button(ChatText.т("login_btn")) { войти() }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.green)
                 }
@@ -234,6 +234,13 @@ struct ChatListView: View {
         .refreshable { await модель.загрузить() }
         /* Возвращаемся из переписки — непрочитанные в списке должны погаснуть: перечитываем при каждом показе. */
         .task { await модель.загрузить() }
+    }
+
+    /// Свой экран входа листом поверх вкладок (ОкнаПриложения); слоя окон нет — страница входа сайта, как раньше.
+    private func войти() {
+        let адрес = Config.url("/cabinet.php")
+        if ОкнаПриложения.shared.показать(.вход, запасной: адрес) { return }
+        if let адрес { открыть(адрес) }
     }
 
     private func строка(_ д: ЧатДиалог) -> some View {

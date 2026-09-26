@@ -234,7 +234,13 @@ struct ЭкранЛида: View {
         .background(КраскаОбъявлений.предупреждениеФон)
     }
 
-    /// #lcm-verify-bar: «Покупатель хочет купить безопасно» — «Пройти верификацию» (страница сайта ?go=verify).
+    /// «Пройти верификацию» — окно «Стать продавцом» (ЛистВерификации); сама проверка eGov — страницей сайта из него.
+    private func пройтиВерификацию() {
+        let адрес = Config.страницаСайта("cabinet?go=verify")
+        if !ОкнаПриложения.shared.показать(.верификация, запасной: адрес), let адрес { открыть(адрес) }
+    }
+
+    /// #lcm-verify-bar: «Покупатель хочет купить безопасно» — «Пройти верификацию» (окно «Стать продавцом»).
     private var полосаВерификации: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
@@ -247,7 +253,7 @@ struct ЭкранЛида: View {
             }
             Spacer(minLength: 4)
             Button {
-                if let адрес = Config.страницаСайта("cabinet?go=verify") { открыть(адрес) }
+                пройтиВерификацию()
             } label: {
                 Text(т("verify_go"))
                     .font(.system(size: 12, weight: .bold))

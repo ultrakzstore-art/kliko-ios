@@ -235,6 +235,17 @@ struct CabinetView: View {
         }
         /* Этап 43: «Связь с продавцом / покупателем» из карточки сделки — переписка приложения в этом же стеке. */
         .чатМаршруты(открыть: открыть)
+        /* «Смотреть» в «Моих объявлениях» — своя карточка объявления в этом же стеке, а не страница сайта; похожие из
+           неё ложатся сюда же. */
+        .navigationDestination(for: Listing.self) { товар in
+            ListingDetailView(товар: товар, открыть: открыть)
+        }
+        /* Аккаунт удалён своим листом (ОкнаПриложения) — вошедшего больше нет. */
+        .onReceive(NotificationCenter.default.publisher(for: ОкнаПриложения.аккаунтУдалён)) { _ in
+            вошёл = false
+            кабинет = nil
+            сигнал = nil
+        }
     }
 
     /// Разделы кабинета. Этап 30: в виде сайта верх — зелёная плашка (ШапкаКабинетаСайта), строки — на поверхности
@@ -407,13 +418,38 @@ struct CabinetView: View {
                     строкаСайта(ИнбоксText.т("cab_help"), значок: "questionmark.circle", путь: справка)
                 }
                 строкаСайта(CabinetText.т("open_cabinet"), значок: "person.text.rectangle", путь: "/cabinet.php")
-                строкаСайта(CabinetText.т("site_messages"), значок: "bubble.left.and.bubble.right",
-                            путь: "/cabinet.php?s=messages")
+                /* «Сообщения на сайте» — при своей переписке это вкладка «Сообщения», а не страница сайта. */
+                if Config.нативныйЧат {
+                    строкаСообщений
+                } else {
+                    строкаСайта(CabinetText.т("site_messages"), значок: "bubble.left.and.bubble.right",
+                                путь: "/cabinet.php?s=messages")
+                }
             }
         } header: {
             Text(CabinetText.т("site"))
         } footer: {
             Text(CabinetText.т("site_footer"))
+        }
+    }
+
+    /// «Сообщения» — вкладка приложения (единый инбокс этапа 45): тот же вход, что у пуша ?s=messages.
+    private var строкаСообщений: some View {
+        Button {
+            WebBridge.shared.открытьЭкран(.сообщения, запасной: Config.url("/cabinet.php?s=messages"))
+        } label: {
+            HStack {
+                Label {
+                    Text(TabsText.т("messages")).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(Theme.green2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
     }
 

@@ -293,10 +293,13 @@ final class СинхронИзбранного: ObservableObject {
         }
     }
 
-    /// Нажали «Войти» в сообщении — страница входа сайта (APP_L + "/cabinet.php") в той же обёртке.
+    /// Нажали «Войти» в сообщении — свой экран входа листом поверх вкладок (ОкнаПриложения); слоя окон нет или занято
+    /// другим окном — страница входа сайта (APP_L + "/cabinet.php") в той же обёртке.
     func войти() {
         сообщение = nil
-        if let адрес = Config.страницаСайта("cabinet.php") { WebBridge.shared.pendingURL = адрес }
+        let адрес = Config.страницаСайта("cabinet.php")
+        if ОкнаПриложения.shared.показать(.вход, запасной: адрес) { return }
+        if let адрес { WebBridge.shared.pendingURL = адрес }
     }
 
     /// Выход из аккаунта (WebContainer, bye=1): флаг слияния — как ulx_fav_migrated в стёртом localStorage сайта:

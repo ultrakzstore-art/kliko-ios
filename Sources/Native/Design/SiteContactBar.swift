@@ -63,12 +63,17 @@ struct ПанельСвязиСайта: View {
         .alert(окно?.заголовок ?? "", isPresented: Binding(get: { окно != nil }, set: { if !$0 { окно = nil } }),
                presenting: окно) { о in
             if о.регистрация, let вход = Config.url("/cabinet.php") {
-                Button(ListingPageText.т("reg")) { открыть(вход) }
+                Button(ListingPageText.т("reg")) { зарегистрироваться(вход) }
             }
             Button(ListingPageText.т(о.регистрация ? "later" : "ok"), role: .cancel) {}
         } message: { о in
             Text(о.текст)
         }
+    }
+
+    /// Свой экран входа и регистрации листом поверх вкладок, когда алерт уедет; слоя окон нет — страница сайта.
+    private func зарегистрироваться(_ вход: URL) {
+        if !ОкнаПриложения.shared.показать(.вход, задержка: 400_000_000, запасной: вход) { открыть(вход) }
     }
 
     // MARK: - Главная часть
