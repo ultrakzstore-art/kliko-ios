@@ -27,7 +27,7 @@ struct КарточкаПодачи<Содержимое: View>: View {
             if let заголовок {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(заголовок)
-                        .font(.system(size: 17, weight: .heavy))
+                        .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(Theme.текст)
                         .accessibilityAddTraits(.isHeader)
                     if let подпись {
@@ -82,50 +82,75 @@ struct ПодписьПоля: View {
     }
 }
 
-/// Поле ввода .inp.
+/// Поле ввода .inp: ошибка — красная кромка, единица («км», «м²») — серым справа, фокус — от панели над клавиатурой.
 struct ПолеПодачи: View {
     let подсказка: String
     @Binding var текст: String
     let клавиатура: UIKeyboardType
     let заглавные: TextInputAutocapitalization
     let заблокировано: Bool
+    let фокус: FocusState<String?>.Binding?
+    let ключ: String?
+    let ошибка: Bool
+    let единица: String
 
     init(_ подсказка: String, текст: Binding<String>, клавиатура: UIKeyboardType = .default,
-         заглавные: TextInputAutocapitalization = .sentences, заблокировано: Bool = false) {
+         заглавные: TextInputAutocapitalization = .sentences, заблокировано: Bool = false,
+         фокус: FocusState<String?>.Binding? = nil, ключ: String? = nil, ошибка: Bool = false, единица: String = "") {
         self.подсказка = подсказка
         self._текст = текст
         self.клавиатура = клавиатура
         self.заглавные = заглавные
         self.заблокировано = заблокировано
+        self.фокус = фокус
+        self.ключ = ключ
+        self.ошибка = ошибка
+        self.единица = единица
     }
 
     var body: some View {
-        TextField(подсказка, text: $текст)
-            .font(.system(size: 16))
-            .keyboardType(клавиатура)
-            .textInputAutocapitalization(заглавные)
-            .disabled(заблокировано)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 46)
-            .background(заблокировано ? Theme.поверхность2 : Theme.поверхность,
-                        in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+        HStack(spacing: 6) {
+            TextField(подсказка, text: $текст)
+                .font(.system(size: 16))
+                .keyboardType(клавиатура)
+                .textInputAutocapitalization(заглавные)
+                .disabled(заблокировано)
+                .modifier(ФокусПоля(фокус: фокус, ключ: ключ))
+            if !единица.isEmpty {
+                Text(единица)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .accessibilityHidden(true)
             }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 46)
+        .background(заблокировано ? Theme.поверхность2 : Theme.поверхность,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
+        }
     }
 }
 
-/// Многострочное поле (textarea описания) с подсказкой внутри.
+/// Многострочное поле (textarea описания) с подсказкой внутри; ошибка — красная кромка.
 struct ТекстПодачи: View {
     let подсказка: String
     @Binding var текст: String
     let предел: Int
+    let фокус: FocusState<String?>.Binding?
+    let ключ: String?
+    let ошибка: Bool
 
-    init(_ подсказка: String, текст: Binding<String>, предел: Int = 5000) {
+    init(_ подсказка: String, текст: Binding<String>, предел: Int = 5000,
+         фокус: FocusState<String?>.Binding? = nil, ключ: String? = nil, ошибка: Bool = false) {
         self.подсказка = подсказка
         self._текст = текст
         self.предел = предел
+        self.фокус = фокус
+        self.ключ = ключ
+        self.ошибка = ошибка
     }
 
     var body: some View {
@@ -145,11 +170,12 @@ struct ТекстПодачи: View {
                 .padding(.vertical, 4)
                 .frame(minHeight: 130)
                 .accessibilityLabel(подсказка)
+                .modifier(ФокусПоля(фокус: фокус, ключ: ключ))
         }
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1.5)
+                .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
         }
     }
 
@@ -275,14 +301,17 @@ struct СписокВыбора: Identifiable {
     let своё: String?
     /// Подпись «не указано» (сбросить); nil — без неё.
     let сброс: String?
+    /// Открыть сразу строкой «впишите вручную» (пункт «Другое (вписать)…» из меню).
+    let пишу: Bool
     let выбрано: (String) -> Void
 
-    init(заголовок: String, варианты: [ВариантПоля], своё: String? = nil, сброс: String? = nil,
+    init(заголовок: String, варианты: [ВариантПоля], своё: String? = nil, сброс: String? = nil, пишу: Bool = false,
          выбрано: @escaping (String) -> Void) {
         self.заголовок = заголовок
         self.варианты = варианты
         self.своё = своё
         self.сброс = сброс
+        self.пишу = пишу
         self.выбрано = выбрано
     }
 }
@@ -296,6 +325,7 @@ struct ЛистВыбора: View {
 
     init(список: СписокВыбора) {
         self.список = список
+        _пишу = State(initialValue: список.пишу)
     }
 
     var body: some View {

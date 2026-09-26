@@ -173,6 +173,9 @@ struct ПлиткаФото: Identifiable, Equatable {
     var грузится: Bool
     var ошибка: String?
 
+    /// Ход загрузки для кольца на плитке: 0 — сжимаем и ставим знак, 1 — отправляем на сервер.
+    var этап: Int = 0
+
     var готова: Bool { !url.isEmpty }
 }
 
@@ -302,6 +305,12 @@ final class ПодачаМодель: ObservableObject {
     @Published var войти = false
     /// Плашки сайта после подачи («ТОП подключён…») — покажет «Мои объявления», куда ведёт итог.
     var плашкаПосле = ""
+    /// Проверки шагов — строкой под своим полем, а не окном: ключ поля (title, category, desc, price, hours, city,
+    /// works, auto) → текст сайта. Исправил поле — строка уходит сама (снятьОшибки).
+    @Published var ошибкиПолей: [String: String] = [:]
+    /// Правка: форма и фото, как пришли из my_items, — по ним шаги с изменениями помечаются точкой.
+    var исходнаяФорма: ФормаПодачи? = nil
+    var исходныеФото: [String] = []
 
     /// Правка: запись my_items как есть — всё, чего мастер не показывает (опт, вариации, раздел магазина, скрытие
     /// номеров, метки кадров), уходит в edit_item тем же, что было: иначе сохранение стёрло бы это.
@@ -534,13 +543,13 @@ final class ПодачаМодель: ObservableObject {
     func далее() {
         switch шаг {
         case .данные:
-            if let ошибка = ошибкаДанных() {
-                показать(ошибка)
+            if let ошибка = ошибкаДанныхПоля() {
+                пометить(ошибка.поле, ошибка.текст)
                 return
             }
         case .цена:
             if let ошибка = ошибкаЦены() {
-                показать(ошибка)
+                пометить("price", ошибка)
                 return
             }
         default:
@@ -570,11 +579,16 @@ final class ПодачаМодель: ObservableObject {
     }
 
     func ошибкаДанных() -> String? {
+        ошибкаДанныхПоля()?.текст
+    }
+
+    /// Та же проверка addStepNext, с ключом поля — строка встаёт под ним.
+    func ошибкаДанныхПоля() -> (поле: String, текст: String)? {
         if форма.название.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && режим != .авто {
-            return т("need_title")
+            return ("title", т("need_title"))
         }
-        if форма.раздел.isEmpty { return т("need_cat") }
-        if форма.описание.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 { return т("need_desc") }
+        if форма.раздел.isEmpty { return ("category", т("need_cat")) }
+        if форма.описание.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 { return ("desc", т("need_desc")) }
         return nil
     }
 
@@ -628,6 +642,7 @@ final class ПодачаМодель: ObservableObject {
     // MARK: - Производные поля (мастер авто и недвижимости)
 
     private func формаИзменилась(было: ФормаПодачи) {
+        if !ошибкиПолей.isEmpty { снятьОшибки(было: было) }
         guard !заполняем else { return }
         if режим == .авто {
             let название = составитьНазваниеАвто()
@@ -941,6 +956,8 @@ final class ПодачаМодель: ObservableObject {
         топВПравке = A.да(з["top"]) && ПодачаМодель.вБудущем(топДо)
         автоНазвание = ф.название
         автоОписание = ф.описание
+        исходнаяФорма = ф
+        исходныеФото = адреса
         заполняем = false
     }
 

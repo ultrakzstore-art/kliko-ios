@@ -3,33 +3,40 @@ import UIKit
 
 /**
  ПОДАЧА — ШАГИ «ЦЕНА И СОСТОЯНИЕ», «АДРЕС», «ДОПОЛНИТЕЛЬНО», «ПРОВЕРКА» И ОКНО «ПРОВЕРЬТЕ ПЕРЕД ПУБЛИКАЦИЕЙ», ЭТАП 42
- (владелец 26.09.2026: «всё одно и то же, просто код разный»).
+ (владелец 26.09.2026: «всё одно и то же, просто код разный») + TestFlight 1.10 («понятнее и проще»).
 
- «Цена и состояние» — #add-card-price: состояние с подписями раздела, «Ваша цена» (у услуг — «необязательно» и
- «Договорная»), «Торг», подсказка «Срочно / Рынок / Высокая» (price_stats или оценка Kliko AI), аренда (посуточно /
- помесячно, залог, мин. срок, комплект, «Продаю тоже»), обмен или бартер, склад магазина. «Адрес» — #add-card-where:
- режим работы или время для связи, область → район → город, адрес. «Дополнительно» — рассрочка и кредит, доставка,
- знаки доверия (уходят после подачи). «Проверка» и окно перед публикацией — showPublishConfirm модуля compose:
- карточка как её увидят покупатели, «Вещь работает?», «Гарант-сделка» с причинами блокировки, ТОП (🔴 деньги —
- только Config.цифровыеПокупки), «Этого уже ждут».
+ «Цена и состояние» — #add-card-price: состояние сегментом с подписями раздела, большое поле «Ваша цена» с «₸» и
+ разрядами (у услуг — «необязательно» и «Договорная»), «Торг», подсказка «Срочно / Рынок / Высокая» (price_stats или
+ оценка Kliko AI), аренда (посуточно / помесячно, залог, мин. срок, комплект, «Продаю тоже»), обмен или бартер, склад
+ магазина. «Адрес» — #add-card-where: режим работы или время для связи, область → район → город, адрес.
+ «Дополнительно» — рассрочка и кредит, доставка, знаки доверия (уходят после подачи). «Проверка» — карточка, как её
+ покажет витрина, разделы с «Изменить», «Вещь работает?», «Гарант-сделка» с причинами блокировки, «Этого уже ждут»;
+ окно перед публикацией — showPublishConfirm модуля compose. ТОП (🔴 деньги) — только при Config.цифровыеПокупки: без
+ него платного продвижения в мастере нет вовсе.
  */
 
 // MARK: - Цена и состояние
 
 struct ШагЦена: View {
     @ObservedObject var модель: ПодачаМодель
+    let фокус: FocusState<String?>.Binding
 
-    init(модель: ПодачаМодель) {
+    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding) {
         self.модель = модель
+        self.фокус = фокус
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            КарточкаПодачи(т("step_price")) {
-                if модель.состояниеВидно { состояние }
-                if модель.правка && модель.нужнаИсправность { БлокИсправности(модель: модель) }
+        VStack(alignment: .leading, spacing: 14) {
+            if модель.состояниеВидно || (модель.правка && модель.нужнаИсправность) {
+                КарточкаПодачи(т("form_condition")) {
+                    if модель.состояниеВидно { состояние }
+                    if модель.правка && модель.нужнаИсправность { БлокИсправности(модель: модель) }
+                }
+            }
+            КарточкаПодачи(т("card_price")) {
                 цена
                 if let подсказка = модель.подсказкаЦены { якоря(подсказка) }
                 if let рынок = модель.рынок {
@@ -48,7 +55,8 @@ struct ШагЦена: View {
                 КарточкаПодачи {
                     VStack(alignment: .leading, spacing: 6) {
                         ПодписьПоля(т("form_in_stock"))
-                        ПолеПодачи(т("form_stock_ph"), текст: цифры($модель.форма.склад, 6), клавиатура: .numberPad)
+                        ПолеПодачи(т("form_stock_ph"), текст: цифры($модель.форма.склад, 6), клавиатура: .numberPad,
+                                   фокус: фокус, ключ: "stock")
                     }
                 }
             }
@@ -58,26 +66,21 @@ struct ШагЦена: View {
     /// updateCondUI: «Б/У / Новый», у недвижимости «Вторичный рынок / Новостройка», у транспорта «С пробегом / Без пробега».
     private var состояние: some View {
         let подписи = модель.подписиСостояния
-        return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("form_condition"))
-            HStack(spacing: 8) {
-                ЧипПодачи(подписи.б, выбран: модель.форма.состояние == "used") { модель.форма.состояние = "used" }
-                ЧипПодачи(подписи.н, выбран: модель.форма.состояние == "new") { модель.форма.состояние = "new" }
-            }
-        }
+        return ВыборСегментом([ВариантПоля(ключ: "used", подпись: подписи.б), ВариантПоля(ключ: "new", подпись: подписи.н)],
+                              значение: $модель.форма.состояние)
     }
 
     private var цена: some View {
         let услуга = модель.услугаИлиРабота
-        return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("form_your_price") + " ₸", необязательно: услуга)
-            ПолеПодачи("0", текст: ценаСвязь, клавиатура: .numberPad, заблокировано: услуга && модель.форма.торг)
-            ПереключательПодачи(т(услуга ? "price_negotiable" : "form_bargain"), включено: торгСвязь)
-            if услуга && модель.ценаЧислом == 0 {
-                Text(т("form_no_price_hint"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-            }
+        let ошибка = модель.форма.аренда ? nil : модель.ошибка("price")
+        return VStack(alignment: .leading, spacing: 8) {
+            ПодписьПоля(т("form_your_price"), обязательно: !услуга && !модель.форма.аренда, необязательно: услуга)
+            ПолеЦены(текст: ценаСвязь, заблокировано: услуга && модель.форма.торг, ошибка: ошибка != nil,
+                     фокус: фокус, ключ: "price")
+            СтрокаОшибки(ошибка)
+            if услуга && модель.ценаЧислом == 0 { ПодсказкаПоля(т("form_no_price_hint")) }
+            ПереключательПодачи(т(услуга ? "price_negotiable" : "form_bargain"),
+                                подпись: т(услуга ? "negot_sub" : "bargain_sub"), включено: торгСвязь)
         }
     }
 
@@ -117,8 +120,10 @@ struct ШагЦена: View {
     }
 
     private func якорь(_ подпись: String, _ цена: Int) -> some View {
-        Button {
+        let выбран = модель.ценаЧислом == цена && цена > 0
+        return Button {
             модель.форма.цена = String(цена)
+            UISelectionFeedbackGenerator().selectionChanged()
         } label: {
             VStack(spacing: 2) {
                 Text(подпись)
@@ -126,63 +131,78 @@ struct ШагЦена: View {
                     .foregroundStyle(Theme.текстВторой)
                 Text(ПодачаМодель.деньги(цена) + " ₸")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.текст)
+                    .foregroundStyle(выбран ? Theme.акцент : Theme.текст)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(выбран ? Theme.оттенокАкцента : Theme.поверхность2,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                    .strokeBorder(выбран ? Theme.акцент : Color.clear, lineWidth: 1.5)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(выбран ? .isSelected : [])
     }
 
     /// Блок аренды (#f-rent-block, setRentPeriod).
     private var аренда: some View {
         let недвижимость = модель.режим == .недвижимость
         let помесячно = модель.форма.период == "month"
-        return КарточкаПодачи {
+        let ошибка = модель.форма.аренда ? модель.ошибка("price") : nil
+        return КарточкаПодачи(недвижимость ? т("card_rent") : nil) {
             if !недвижимость {
                 ПереключательПодачи(т("form_for_rent"), включено: $модель.форма.аренда)
             }
             if модель.форма.аренда {
                 if !недвижимость {
-                    HStack(spacing: 8) {
-                        ЧипПодачи(т("form_daily"), выбран: !помесячно) { сменитьПериод("day") }
-                        ЧипПодачи(т("form_monthly"), выбран: помесячно) { сменитьПериод("month") }
-                    }
+                    ВыборСегментом([ВариантПоля(ключ: "day", подпись: т("form_daily")),
+                                    ВариантПоля(ключ: "month", подпись: т("form_monthly"))],
+                                   значение: период)
                 }
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 6) {
-                        ПодписьПоля(т(помесячно ? "rent_price_month" : "form_price_per_day"))
-                        ПолеПодачи(помесячно ? "150 000" : "5 000", текст: цифры($модель.форма.ставка, 12),
-                                   клавиатура: .numberPad)
+                        ПодписьПоля(т(помесячно ? "rent_price_month" : "form_price_per_day"), обязательно: true)
+                        ПолеПодачи(помесячно ? "150 000" : "5 000", текст: деньгиСвязь($модель.форма.ставка),
+                                   клавиатура: .numberPad, фокус: фокус, ключ: "rate", ошибка: ошибка != nil)
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         ПодписьПоля(т("form_deposit_field"))
-                        ПолеПодачи("50 000", текст: цифры($модель.форма.залог, 12), клавиатура: .numberPad)
+                        ПолеПодачи("50 000", текст: деньгиСвязь($модель.форма.залог), клавиатура: .numberPad,
+                                   фокус: фокус, ключ: "deposit")
                     }
                 }
+                СтрокаОшибки(ошибка)
                 VStack(alignment: .leading, spacing: 6) {
                     ПодписьПоля(т("form_min_rent"))
-                    ПотокЧипов(зазор: 8) {
-                        ForEach(срокиАренды, id: \.self) { срок in
-                            ЧипПодачи(срок.подпись, выбран: модель.форма.минСрок == срок.ключ) {
-                                модель.форма.минСрок = срок.ключ
-                            }
-                        }
-                    }
+                    МенюВыбора(срокиАренды, значение: $модель.форма.минСрок, подсказка: т("form_min_rent"))
                 }
                 if !недвижимость {
                     VStack(alignment: .leading, spacing: 6) {
-                        ПодписьПоля(т("rent_kit"))
-                        ПолеПодачи(т("rent_kit_ph"), текст: комплект)
+                        ПодписьПоля(т("rent_kit"), необязательно: true)
+                        ПолеПодачи(т("rent_kit_short"), текст: комплект, фокус: фокус, ключ: "kit")
+                        ПодсказкаПоля(т("rent_kit_ph"))
                     }
                     ПереключательПодачи(т("also_sell"), подпись: т("also_sell_s"), включено: $модель.форма.тожеПродаю)
                 }
-                ЗаметкаПодачи(т("form_rent_note"), тон: .инфо, значок: "info.circle")
+                ПодсказкаПоля(т("form_rent_note"))
             }
         }
+    }
+
+    private var период: Binding<String> {
+        let м = модель
+        return Binding(get: { м.форма.период == "month" ? "month" : "day" }, set: { новое in
+            guard !новое.isEmpty else { return }
+            var ф = м.форма
+            ф.период = новое
+            let допустимые = новое == "month" ? ["1", "2", "3", "6", "12"] : ["1", "2", "3", "7", "14", "30"]
+            if !допустимые.contains(ф.минСрок) { ф.минСрок = "1" }
+            м.форма = ф
+        })
     }
 
     /// Варианты «Мин. срок аренды» — у суток и у месяцев свои (setRentPeriod).
@@ -197,15 +217,6 @@ struct ШагЦена: View {
                 ВариантПоля(ключ: "14", подпись: т("form_2week")), ВариантПоля(ключ: "30", подпись: т("form_1month"))]
     }
 
-    /// Смена периода: мин. срок, которого нет в новом списке, — первый вариант (как у сайта).
-    private func сменитьПериод(_ период: String) {
-        var ф = модель.форма
-        ф.период = период
-        let допустимые = период == "month" ? ["1", "2", "3", "6", "12"] : ["1", "2", "3", "7", "14", "30"]
-        if !допустимые.contains(ф.минСрок) { ф.минСрок = "1" }
-        модель.форма = ф
-    }
-
     /// rent_kit — не длиннее 200.
     private var комплект: Binding<String> {
         let связь = $модель.форма.комплект
@@ -215,6 +226,17 @@ struct ШагЦена: View {
     private func цифры(_ связь: Binding<String>, _ предел: Int) -> Binding<String> {
         Binding(get: { связь.wrappedValue }, set: { новое in
             связь.wrappedValue = ПодачаМодель.цифры(новое, предел: предел)
+        })
+    }
+
+    /// Ставка и залог — как цена: на экране с пробелами между тысячами, в форме только цифры (не больше 12).
+    private func деньгиСвязь(_ связь: Binding<String>) -> Binding<String> {
+        Binding(get: {
+            let число = Int(связь.wrappedValue) ?? 0
+            return число > 0 ? ПодачаМодель.деньги(число) : ""
+        }, set: { новое in
+            let цифры = ПодачаМодель.цифры(новое)
+            if цифры != связь.wrappedValue { связь.wrappedValue = цифры }
         })
     }
 }
@@ -230,11 +252,12 @@ struct БлокИсправности: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ПодписьПоля(ПодачаText.т("wrk_q"), обязательно: true)
-            HStack(spacing: 8) {
-                ЧипПодачи(ПодачаText.т("wrk_yes"), выбран: модель.форма.работает == "ok") { модель.форма.работает = "ok" }
-                ЧипПодачи(ПодачаText.т("wrk_no"), выбран: модель.форма.работает == "bad") { модель.форма.работает = "bad" }
-            }
+            ВыборСегментом([ВариантПоля(ключ: "ok", подпись: ПодачаText.т("wrk_yes")),
+                            ВариантПоля(ключ: "bad", подпись: ПодачаText.т("wrk_no"))],
+                           значение: $модель.форма.работает)
+            СтрокаОшибки(модель.ошибка("works"))
         }
+        .id("works")
     }
 }
 
@@ -242,11 +265,13 @@ struct БлокИсправности: View {
 
 struct ШагАдрес: View {
     @ObservedObject var модель: ПодачаМодель
+    let фокус: FocusState<String?>.Binding
     @State private var список: СписокВыбора? = nil
     @State private var свой = false
 
-    init(модель: ПодачаМодель) {
+    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding) {
         self.модель = модель
+        self.фокус = фокус
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
@@ -260,9 +285,9 @@ struct ШагАдрес: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            часы
+        VStack(alignment: .leading, spacing: 14) {
             место
+            часы
         }
         .sheet(item: $список) { с in
             ЛистВыбора(список: с)
@@ -287,6 +312,7 @@ struct ШагАдрес: View {
 
     private var часы: some View {
         let услуга = модель.услугаИлиРабота
+        let ошибка = модель.ошибка("hours")
         return КарточкаПодачи(т(услуга ? "hours_work_title" : "hours_call_title") + (услуга ? " *" : ""),
                               подпись: т(услуга ? "hours_work_sub" : "hours_call_sub")) {
             ПотокЧипов(зазор: 8) {
@@ -317,7 +343,9 @@ struct ШагАдрес: View {
                     выборВремени(т("hours_to"), $модель.форма.часыДо)
                 }
             }
+            СтрокаОшибки(ошибка)
         }
+        .id("hours")
     }
 
     private func выбран(_ п: Часы) -> Bool {
@@ -369,58 +397,78 @@ struct ШагАдрес: View {
     private var место: some View {
         let регион = модель.справочники.регионы.first(where: { $0.id == модель.форма.регион })
         let город = регион?.город ?? false
+        let ошибка = модель.ошибка("city")
         return КарточкаПодачи(т("form_location")) {
-            СтрокаВыбора(регион?.имя ?? "", подсказка: т("form_region_ph")) {
-                let м = модель
-                список = СписокВыбора(заголовок: т("form_region_ph"),
-                                      варианты: м.справочники.регионы.map { ВариантПоля(ключ: $0.id, подпись: $0.имя) }) { ключ in
-                    м.выбратьРегион(ключ)
+            VStack(alignment: .leading, spacing: 6) {
+                ПодписьПоля(т("form_region_ph"), обязательно: true)
+                СтрокаВыбора(регион?.имя ?? "", подсказка: т("form_region_ph")) {
+                    выбратьРегион()
                 }
             }
             if let регион, !регион.районы.isEmpty {
                 СтрокаВыбора(регион.районы.first(where: { $0.id == модель.форма.район })?.имя ?? "",
                              подсказка: т(город ? "district_city_ph" : "form_district_ph")) {
-                    let м = модель
-                    список = СписокВыбора(заголовок: т(город ? "district_city_ph" : "form_district_ph"),
-                                          варианты: регион.районы.map { ВариантПоля(ключ: $0.id, подпись: $0.имя) },
-                                          сброс: т("spec_unset")) { ключ in
-                        м.выбратьРайон(ключ)
-                    }
+                    выбратьРайон(регион, город: город)
                 }
             }
-            if город {
-                ПолеПодачи(т("form_city_ph"), текст: Binding.constant(регион?.имя ?? ""), заблокировано: true)
-            } else {
-                let города = городаСписка(регион)
-                if города.isEmpty {
-                    ПолеПодачи(т("form_city_ph"), текст: городСвязь, заглавные: .words)
+            VStack(alignment: .leading, spacing: 6) {
+                if город {
+                    ПолеПодачи(т("form_city_ph"), текст: Binding.constant(регион?.имя ?? ""), заблокировано: true)
+                        .id("city")
+                } else if модель.городВводом {
+                    ПолеПодачи(т("form_city_ph"), текст: городСвязь, заглавные: .words, фокус: фокус, ключ: "city",
+                               ошибка: ошибка != nil)
                 } else {
                     СтрокаВыбора(модель.форма.город, подсказка: т("form_city_ph")) {
-                        let м = модель
-                        список = СписокВыбора(заголовок: т("form_city_ph"),
-                                              варианты: города.map { ВариантПоля(ключ: $0, подпись: $0) },
-                                              своё: т("spec_other_write")) { имя in
-                            м.выбратьГород(имя)
+                        выбратьГород(регион)
+                    }
+                    .overlay {
+                        if ошибка != nil {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                                .strokeBorder(Theme.ценаСкидка, lineWidth: 2)
+                                .allowsHitTesting(false)
                         }
                     }
+                    .id("city")
                 }
+                СтрокаОшибки(ошибка)
             }
-            ПолеПодачи(т("form_address_ph"), текст: адресСвязь)
-            Text(т("form_addr_hint"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                ПодписьПоля(т("address_label"), необязательно: true)
+                ПолеПодачи(т("form_address_ph"), текст: адресСвязь, фокус: фокус, ключ: "address")
+                ПодсказкаПоля(т("form_addr_hint"))
+            }
         }
     }
 
-    private func городаСписка(_ регион: РегионКЗ?) -> [String] {
-        guard let регион else { return [] }
-        if !модель.форма.район.isEmpty, let район = регион.районы.first(where: { $0.id == модель.форма.район }) {
-            return район.города
+    private func выбратьРегион() {
+        let м = модель
+        фокус.wrappedValue = nil
+        список = СписокВыбора(заголовок: т("form_region_ph"),
+                              варианты: м.справочники.регионы.map { ВариантПоля(ключ: $0.id, подпись: $0.имя) }) { ключ in
+            м.выбратьРегион(ключ)
         }
-        var все: [String] = []
-        for район in регион.районы { все.append(contentsOf: район.города) }
-        return все
+    }
+
+    private func выбратьРайон(_ регион: РегионКЗ, город: Bool) {
+        let м = модель
+        фокус.wrappedValue = nil
+        список = СписокВыбора(заголовок: т(город ? "district_city_ph" : "form_district_ph"),
+                              варианты: регион.районы.map { ВариантПоля(ключ: $0.id, подпись: $0.имя) },
+                              сброс: т("spec_unset")) { ключ in
+            м.выбратьРайон(ключ)
+        }
+    }
+
+    private func выбратьГород(_ регион: РегионКЗ?) {
+        let м = модель
+        фокус.wrappedValue = nil
+        let города = м.городаСписка(регион)
+        список = СписокВыбора(заголовок: т("form_city_ph"),
+                              варианты: города.map { ВариантПоля(ключ: $0, подпись: $0) },
+                              своё: т("spec_other_write")) { имя in
+            м.выбратьГород(имя)
+        }
     }
 
     private var городСвязь: Binding<String> {
@@ -484,10 +532,12 @@ extension ПодачаМодель {
 
 struct ШагДополнительно: View {
     @ObservedObject var модель: ПодачаМодель
+    let фокус: FocusState<String?>.Binding
     let открытьСайт: (String) -> Void
 
-    init(модель: ПодачаМодель, открытьСайт: @escaping (String) -> Void) {
+    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding, открытьСайт: @escaping (String) -> Void) {
         self.модель = модель
+        self.фокус = фокус
         self.открытьСайт = открытьСайт
     }
 
@@ -497,8 +547,7 @@ struct ШагДополнительно: View {
     private static let сроки: [Int] = [0, 3, 7, 14, 30, 60, 90, 180, 270, 365]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ЗаметкаПодачи(т("form_additional_note"), тон: .серый, значок: "slider.horizontal.3")
+        VStack(alignment: .leading, spacing: 14) {
             if модель.правка {
                 /* У опубликованного сайт сохраняет эти настройки сразу своими окнами (openPayment / openDelivery /
                    openTrust) — отдельно от edit_item. Здесь — своё окно тех же полей (MyListings/PublishedSettings.swift). */
@@ -508,6 +557,7 @@ struct ШагДополнительно: View {
                     }
                 }
             } else {
+                ПодсказкаПоля(т("extra_sub"))
                 if модель.строкиДополнительно.contains("pay") { оплата }
                 if модель.строкиДополнительно.contains("del") { доставка }
                 if модель.строкиДополнительно.contains("trust") { доверие }
@@ -526,13 +576,8 @@ struct ШагДополнительно: View {
         КарточкаПодачи(т("del_settings")) {
             ПереключательПодачи(т("del_free_ship"), подпись: т("del_free_note"), включено: бесплатно)
             VStack(alignment: .leading, spacing: 6) {
-                ПодписьПоля(т("del_approx_time"))
-                HStack(spacing: 8) {
-                    ПолеПодачи(т("del_days_ph"), текст: дни)
-                    Text(т("del_days_unit"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                }
+                ПодписьПоля(т("del_approx_time"), необязательно: true)
+                ПолеПодачи(т("del_days_ph"), текст: дни, фокус: фокус, ключ: "deldays", единица: т("del_days_unit"))
             }
         }
     }
@@ -562,24 +607,15 @@ struct ШагДополнительно: View {
         let срочные = знаки.filter { $0.срок }
         let флажки = знаки.filter { !$0.срок }
         let предел = модель.страница.pro ? 365 : 7
+        let срокиДней: [Int] = Self.сроки.filter { $0 <= предел }
+        let варианты: [ВариантПоля] = срокиДней.map { ВариантПоля(ключ: String($0), подпись: ШагДополнительно.срокГарантии($0)) }
         return КарточкаПодачи(т("wr_title"), подпись: т("wr_note")) {
             if let срок = срочные.first {
                 VStack(alignment: .leading, spacing: 6) {
                     ПодписьПоля(срок.подпись)
-                    ПотокЧипов(зазор: 8) {
-                        ForEach(Self.сроки.filter { $0 <= предел }, id: \.self) { дни in
-                            ЧипПодачи(ШагДополнительно.срокГарантии(дни), выбран: модель.форма.гарантияДней == дни) {
-                                var ф = модель.форма
-                                ф.гарантияДней = дни
-                                ф.доверияЗадано = true
-                                модель.форма = ф
-                            }
-                        }
-                    }
+                    МенюВыбора(варианты, значение: срокСвязь, подсказка: т("wr_none"))
                     if !модель.страница.pro {
-                        Text(т("wr_pro_note"))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.текстВторой)
+                        ПодсказкаПоля(т("wr_pro_note"))
                     }
                 }
             }
@@ -590,6 +626,17 @@ struct ШагДополнительно: View {
                 }
             }
         }
+    }
+
+    /// Срок гарантии в днях строкой для меню: «0» — «Нет».
+    private var срокСвязь: Binding<String> {
+        let м = модель
+        return Binding(get: { String(м.форма.гарантияДней) }, set: { новое in
+            var ф = м.форма
+            ф.гарантияДней = Int(новое) ?? 0
+            ф.доверияЗадано = true
+            м.форма = ф
+        })
     }
 
     private func флаг(_ ключ: String) -> Binding<Bool> {
@@ -628,16 +675,23 @@ struct ШагПроверка: View {
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            КарточкаПодачи(т("pc_title"), подпись: т("pc_sub")) {
-                ПревьюПодачи(модель: модель)
-                if !модель.правка && модель.нужнаИсправность { БлокИсправности(модель: модель) }
-                БлокГаранта(модель: модель)
-                if модель.режим == .услуга {
-                    ЗаметкаПодачи(т("pc_svc_note"), тон: .инфо, значок: "info.circle")
-                }
-                ЗаметкаПодачи(т("pc_mod_note"), тон: .серый, значок: "shield")
+        VStack(alignment: .leading, spacing: 14) {
+            КарточкаПодачи(т("pc_sub")) {
+                КарточкаВитриныПодачи(модель: модель)
             }
+            КарточкаПодачи(т("rv_sections")) {
+                РазделыПроверки(модель: модель)
+            }
+            if (!модель.правка && модель.нужнаИсправность) || модель.запретГаранта != "hide" {
+                КарточкаПодачи(т("rv_deal")) {
+                    if !модель.правка && модель.нужнаИсправность { БлокИсправности(модель: модель) }
+                    БлокГаранта(модель: модель)
+                }
+            }
+            if модель.режим == .услуга {
+                ЗаметкаПодачи(т("pc_svc_note"), тон: .инфо, значок: "info.circle")
+            }
+            ЗаметкаПодачи(т("pc_mod_note"), тон: .серый, значок: "shield")
             if !модель.правка { топ }
             if модель.ждут > 0 {
                 ЗаметкаПодачи(т("reach_n").replacingOccurrences(of: "{n}", with: String(модель.ждут)), тон: .хорошо,
@@ -646,7 +700,7 @@ struct ШагПроверка: View {
         }
     }
 
-    /// ТОП при подаче. 🔴 Деньги: без Config.цифровыеПокупки — только сведения и текст сайта, покупки нет.
+    /// ТОП при подаче. 🔴 Деньги: без Config.цифровыеПокупки платного продвижения в мастере нет вовсе.
     @ViewBuilder
     private var топ: some View {
         if let выбран = модель.форма.топ {
@@ -654,7 +708,7 @@ struct ШагПроверка: View {
                            подпись: String(format: т("top_bar_s"), ПодачаМодель.деньги(выбран.цена))) {
                 КнопкаПодачиВторая(т("top_remove")) { модель.убратьТоп() }
             }
-        } else if !модель.страница.пакеты.isEmpty {
+        } else if Config.цифровыеПокупки && !модель.страница.пакеты.isEmpty {
             КарточкаПодачи(т("pups_badge") + " · " + т("pups_h"),
                            подпись: String(format: т("pups_sub"), модель.лимитФото)) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -664,39 +718,35 @@ struct ШагПроверка: View {
                 }
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.текст)
-                if Config.цифровыеПокупки {
-                    ForEach(модель.страница.пакеты.filter { $0.днейТоп > 0 }) { пакет in
-                        Button {
-                            модель.выбратьТоп(пакет)
-                        } label: {
-                            HStack {
-                                Text(пакет.подпись)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Theme.текст)
-                                Spacer()
-                                if модель.проверяемТоп == пакет.id {
-                                    ProgressView()
-                                } else {
-                                    Text(ПодачаМодель.деньги(модель.страница.ценаСоСкидкой(пакет.цена)) + " ₸")
-                                        .font(.system(size: 14, weight: .heavy))
-                                        .foregroundStyle(Theme.золото)
-                                }
+                ForEach(модель.страница.пакеты.filter { $0.днейТоп > 0 }) { пакет in
+                    Button {
+                        модель.выбратьТоп(пакет)
+                    } label: {
+                        HStack {
+                            Text(пакет.подпись)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Theme.текст)
+                            Spacer()
+                            if модель.проверяемТоп == пакет.id {
+                                ProgressView()
+                            } else {
+                                Text(ПодачаМодель.деньги(модель.страница.ценаСоСкидкой(пакет.цена)) + " ₸")
+                                    .font(.system(size: 14, weight: .heavy))
+                                    .foregroundStyle(Theme.золото)
                             }
-                            .padding(12)
-                            .background(Theme.топФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!модель.проверяемТоп.isEmpty)
+                        .padding(12)
+                        .background(Theme.топФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                     }
-                } else {
-                    ЗаметкаПодачи(т("no_digital"), тон: .серый, значок: "lock")
+                    .buttonStyle(.plain)
+                    .disabled(!модель.проверяемТоп.isEmpty)
                 }
             }
         }
     }
 }
 
-/// Карточка «Так объявление увидят покупатели» (showPublishConfirm): фото, название, цена, чипы, описание.
+/// «Так объявление увидят покупатели» (showPublishConfirm): карточка витрины и начало описания.
 struct ПревьюПодачи: View {
     @ObservedObject var модель: ПодачаМодель
 
@@ -704,110 +754,17 @@ struct ПревьюПодачи: View {
         self.модель = модель
     }
 
-    private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            фото
-            VStack(alignment: .leading, spacing: 8) {
-                Text(модель.форма.название.isEmpty ? "—" : модель.форма.название)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                цена
-                ПотокЧипов(зазор: 6) {
-                    ForEach(чипы, id: \.self) { чип in
-                        Text(чип)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.текст)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Theme.поверхность2, in: Capsule())
-                    }
-                }
-                let описание = модель.форма.описание.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !описание.isEmpty {
-                    Text(описание)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(5)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
-        }
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private var фото: some View {
-        let первая = модель.плитки.first(where: { $0.готова })
-        Group {
-            if let превью = первая?.превью {
-                Color.clear.overlay { Image(uiImage: превью).resizable().scaledToFill() }
-            } else if let адрес = первая.flatMap({ Config.url($0.url) }) {
-                Color.clear.overlay {
-                    AsyncImage(url: адрес) { фаза in
-                        if let изображение = фаза.image {
-                            изображение.resizable().scaledToFill()
-                        } else {
-                            Theme.поверхность2
-                        }
-                    }
-                }
-            } else {
-                ZStack {
-                    Theme.поверхность2
-                    Image(systemName: "photo")
-                        .font(.system(size: 36))
-                        .foregroundStyle(Theme.текстВторой)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            КарточкаВитриныПодачи(модель: модель)
+            let описание = модель.форма.описание.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !описание.isEmpty {
+                Text(описание)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(4)
             }
         }
-        .frame(height: первая == nil ? 120 : 190)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.md, topTrailingRadius: Theme.Радиус.md,
-                                          style: .continuous))
-    }
-
-    @ViewBuilder
-    private var цена: some View {
-        if модель.режим == .услуга {
-            Label(т("pc_no_price"), systemImage: "checkmark.shield")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(КраскаОбъявлений.хорошоТекст)
-        } else {
-            let число = модель.форма.аренда && модель.ценаЧислом == 0 ? модель.ставкаЧислом : модель.ценаЧислом
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(число > 0 ? ПодачаМодель.деньги(число) + " ₸" : (модель.форма.торг ? т("price_negotiable") : "—"))
-                    .font(.system(size: 22, weight: .heavy))
-                    .foregroundStyle(КраскаОбъявлений.хорошоТекст)
-                if число > 0 && модель.форма.торг {
-                    Text("· " + т("torg_small"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.текстВторой)
-                }
-            }
-        }
-    }
-
-    /// Чипы: раздел, город, состояние (не у услуг и недвижимости), «N фото».
-    private var чипы: [String] {
-        var итог: [String] = []
-        let раздел = модель.справочники.имя(модель.форма.раздел)
-        if !раздел.isEmpty { итог.append(раздел) }
-        let город = модель.форма.город.trimmingCharacters(in: .whitespaces)
-        if !город.isEmpty { итог.append("📍 " + город) }
-        if модель.режим != .услуга && модель.режим != .недвижимость && модель.состояниеВидно {
-            итог.append(модель.форма.состояние == "new" ? т("pc_new") : т("cond_used"))
-        }
-        итог.append(String(format: т("pc_photos"), модель.готовыеФото.count))
-        return итог
     }
 }
 
@@ -849,7 +806,7 @@ struct БлокГаранта: View {
                         ЗаметкаПодачи(т("pc_esc_verify"), тон: .внимание)
                     }
                 } else {
-                    ЗаметкаПодачи(т("pc_esc_off"), тон: .серый)
+                    ПодсказкаПоля(т("pc_esc_off"))
                 }
             }
         }
@@ -889,13 +846,15 @@ struct ОкноПроверкиПодачи: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(т("pc_sub"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
+                VStack(alignment: .leading, spacing: 14) {
+                    ПодсказкаПоля(т("pc_sub"))
                     ПревьюПодачи(модель: модель)
-                    if модель.нужнаИсправность { БлокИсправности(модель: модель) }
-                    БлокГаранта(модель: модель)
+                    if модель.нужнаИсправность || модель.запретГаранта != "hide" {
+                        КарточкаПодачи {
+                            if модель.нужнаИсправность { БлокИсправности(модель: модель) }
+                            БлокГаранта(модель: модель)
+                        }
+                    }
                     if модель.режим == .услуга {
                         ЗаметкаПодачи(т("pc_svc_note"), тон: .инфо, значок: "info.circle")
                     }
@@ -908,13 +867,14 @@ struct ОкноПроверкиПодачи: View {
                 .padding(16)
             }
             .background(Theme.фонСтраницы)
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 10) {
                     КнопкаПодачиВторая(т("pc_back")) { закрыть() }
                     КнопкаПодачи(т("pc_publish"), занято: модель.отправляем) { модель.опубликовать() }
                 }
-                .padding(12)
-                .background(Theme.поверхность)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Theme.поверхность.ignoresSafeArea(edges: .bottom))
             }
             .navigationTitle(т("pc_title"))
             .navigationBarTitleDisplayMode(.inline)

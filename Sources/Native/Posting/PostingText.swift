@@ -259,7 +259,25 @@ enum ПодачаText {
         "limit_more": "Расширить лимит", "verify_plus5": "Пройти верификацию (+5)",
         "edit_saved": "Изменения сохранены", "edit_manual": "Сохранено! Изменения отправлены на проверку модератором",
         "edit_redacting": "Сохранено. Скрываем номера на фото — объявление выйдет на витрину, когда всё скрыто",
-        "edit_rej_d": "Не соответствует требованиям площадки"
+        "edit_rej_d": "Не соответствует требованиям площадки",
+        // мастер «понятнее и проще» (TestFlight 1.10)
+        "step_of": "Шаг %d из %d", "save": "Сохранить", "edited": "изменено",
+        "cover": "Обложка", "make_cover": "Сделать обложкой",
+        "add_photo_big": "Добавить фото", "add_photo_sub": "Первое фото станет обложкой. Можно выбрать сразу несколько",
+        "add_photo_short": "Добавить", "photo_count": "%d из %d фото",
+        "photo_order_hint": "первое — обложка, порядок меняйте перетаскиванием",
+        "ph_stage_prep": "Сжимаем…", "ph_stage_up": "Загружаем…",
+        "photo_left": "Сдвинуть влево", "photo_right": "Сдвинуть вправо",
+        "cat_pick": "Выберите категорию", "cat_search": "Поиск категории", "cat_all": "Все категории",
+        "cat_take": "Выбрать «%@»", "cat_empty": "Ничего не нашлось",
+        "desc_min": "Не короче 10 символов", "kb_prev": "Предыдущее поле", "kb_next": "Следующее поле",
+        "card_what": "Что продаёте", "card_what_service": "Какая услуга",
+        "specs_sub": "Необязательно — но с ними объявление находят в фильтрах",
+        "rw_params": "Параметры объекта", "aw_params": "Год, пробег, двигатель", "card_price": "Цена",
+        "bargain_sub": "Покупатель сможет предложить свою цену", "negot_sub": "Стоимость обсудите с клиентом в чате",
+        "card_rent": "Аренда", "rent_kit_short": "Например: зарядка, чехол, 2 насадки", "address_label": "Адрес",
+        "extra_sub": "Всё здесь необязательно — применится сразу после публикации, изменить можно в «Моих объявлениях».",
+        "rv_sections": "Всё ли верно?", "rv_deal": "Сделка", "rv_empty": "Не заполнено"
     ]
 
     private static let kk: [String: String] = [
@@ -468,7 +486,25 @@ enum ПодачаText {
         "limit_more": "Лимитті кеңейту", "verify_plus5": "Верификациядан өту (+5)",
         "edit_saved": "Өзгерістер сақталды", "edit_manual": "Сақталды! Өзгерістер модератордың тексеруіне жіберілді",
         "edit_redacting": "Сақталды. Фотодағы нөмірлерді жасырып жатырмыз — бәрі жасырылғанда хабарландыру витринаға шығады",
-        "edit_rej_d": "Алаң талаптарына сәйкес емес"
+        "edit_rej_d": "Алаң талаптарына сәйкес емес",
+        // шебер «түсініктірек әрі қарапайым»
+        "step_of": "%d/%d-қадам", "save": "Сақтау", "edited": "өзгертілді",
+        "cover": "Мұқаба", "make_cover": "Мұқаба ету",
+        "add_photo_big": "Фото қосу", "add_photo_sub": "Бірінші фото мұқаба болады. Бірден бірнешеуін таңдауға болады",
+        "add_photo_short": "Қосу", "photo_count": "%d / %d фото",
+        "photo_order_hint": "біріншісі — мұқаба, ретін сүйреп өзгертіңіз",
+        "ph_stage_prep": "Сығып жатырмыз…", "ph_stage_up": "Жүктеп жатырмыз…",
+        "photo_left": "Солға жылжыту", "photo_right": "Оңға жылжыту",
+        "cat_pick": "Санатты таңдаңыз", "cat_search": "Санатты іздеу", "cat_all": "Барлық санаттар",
+        "cat_take": "«%@» таңдау", "cat_empty": "Ештеңе табылмады",
+        "desc_min": "Кемінде 10 таңба", "kb_prev": "Алдыңғы өріс", "kb_next": "Келесі өріс",
+        "card_what": "Не сатасыз", "card_what_service": "Қандай қызмет",
+        "specs_sub": "Міндетті емес — бірақ олармен хабарландыру сүзгілерде табылады",
+        "rw_params": "Нысан параметрлері", "aw_params": "Жылы, жүрісі, қозғалтқышы", "card_price": "Баға",
+        "bargain_sub": "Сатып алушы өз бағасын ұсына алады", "negot_sub": "Құнын клиентпен чатта келісесіз",
+        "card_rent": "Жалға беру", "rent_kit_short": "Мысалы: зарядтағыш, қап, 2 саптама", "address_label": "Мекенжай",
+        "extra_sub": "Мұндағының бәрі міндетті емес — жарияланған соң бірден қолданылады, «Хабарландыруларымда» өзгертуге болады.",
+        "rv_sections": "Бәрі дұрыс па?", "rv_deal": "Мәміле", "rv_empty": "Толтырылмаған"
     ]
 
     private static let en: [String: String] = [
@@ -677,7 +713,25 @@ enum ПодачаText {
         "limit_more": "Raise the limit", "verify_plus5": "Verify (+5)",
         "edit_saved": "Changes saved", "edit_manual": "Saved! Changes sent to a moderator for review",
         "edit_redacting": "Saved. We're hiding numbers in the photos — the listing goes live once everything is hidden",
-        "edit_rej_d": "Doesn't meet the marketplace requirements"
+        "edit_rej_d": "Doesn't meet the marketplace requirements",
+        // simpler, clearer wizard
+        "step_of": "Step %d of %d", "save": "Save", "edited": "edited",
+        "cover": "Cover", "make_cover": "Make cover",
+        "add_photo_big": "Add photos", "add_photo_sub": "The first photo becomes the cover. You can pick several at once",
+        "add_photo_short": "Add", "photo_count": "%d of %d photos",
+        "photo_order_hint": "the first is the cover, drag to reorder",
+        "ph_stage_prep": "Compressing…", "ph_stage_up": "Uploading…",
+        "photo_left": "Move left", "photo_right": "Move right",
+        "cat_pick": "Choose a category", "cat_search": "Search categories", "cat_all": "All categories",
+        "cat_take": "Choose “%@”", "cat_empty": "Nothing found",
+        "desc_min": "At least 10 characters", "kb_prev": "Previous field", "kb_next": "Next field",
+        "card_what": "What are you selling", "card_what_service": "What service",
+        "specs_sub": "Optional — but they help buyers find the listing in filters",
+        "rw_params": "Property details", "aw_params": "Year, mileage, engine", "card_price": "Price",
+        "bargain_sub": "Buyers can offer their own price", "negot_sub": "Agree on the price with the client in chat",
+        "card_rent": "Rent", "rent_kit_short": "E.g. charger, case, 2 attachments", "address_label": "Address",
+        "extra_sub": "Everything here is optional — it applies right after publishing and can be changed in “My listings”.",
+        "rv_sections": "Is everything right?", "rv_deal": "Deal", "rv_empty": "Not filled in"
     ]
 
     private static let ar: [String: String] = [
@@ -886,6 +940,24 @@ enum ПодачаText {
         "limit_more": "رفع الحد", "verify_plus5": "التحقق (+5)",
         "edit_saved": "حُفظت التغييرات", "edit_manual": "حُفظ! أُرسلت التغييرات لمراجعة المشرف",
         "edit_redacting": "حُفظ. نخفي الأرقام في الصور — سيظهر الإعلان في الواجهة عند إخفائها كلها",
-        "edit_rej_d": "لا يطابق متطلبات المنصة"
+        "edit_rej_d": "لا يطابق متطلبات المنصة",
+        // معالج أوضح وأبسط
+        "step_of": "الخطوة %d من %d", "save": "حفظ", "edited": "معدّل",
+        "cover": "الغلاف", "make_cover": "اجعلها الغلاف",
+        "add_photo_big": "أضف صورًا", "add_photo_sub": "الصورة الأولى تصبح الغلاف. يمكنك اختيار عدة صور معًا",
+        "add_photo_short": "إضافة", "photo_count": "%d من %d صور",
+        "photo_order_hint": "الأولى هي الغلاف، اسحب لتغيير الترتيب",
+        "ph_stage_prep": "نضغط…", "ph_stage_up": "نرفع…",
+        "photo_left": "تحريك لليسار", "photo_right": "تحريك لليمين",
+        "cat_pick": "اختر الفئة", "cat_search": "ابحث عن فئة", "cat_all": "كل الفئات",
+        "cat_take": "اختر «%@»", "cat_empty": "لا نتائج",
+        "desc_min": "10 أحرف على الأقل", "kb_prev": "الحقل السابق", "kb_next": "الحقل التالي",
+        "card_what": "ماذا تبيع", "card_what_service": "ما الخدمة",
+        "specs_sub": "اختياري — لكنه يساعد على إيجاد الإعلان في الفلاتر",
+        "rw_params": "تفاصيل العقار", "aw_params": "السنة والمسافة والمحرك", "card_price": "السعر",
+        "bargain_sub": "يمكن للمشتري اقتراح سعره", "negot_sub": "اتفق على السعر مع العميل في الدردشة",
+        "card_rent": "الإيجار", "rent_kit_short": "مثلًا: شاحن، غطاء، ملحقان", "address_label": "العنوان",
+        "extra_sub": "كل ما هنا اختياري — يُطبق فور النشر ويمكن تغييره في «إعلاناتي».",
+        "rv_sections": "هل كل شيء صحيح؟", "rv_deal": "الصفقة", "rv_empty": "غير معبأ"
     ]
 }

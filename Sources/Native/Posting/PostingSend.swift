@@ -106,6 +106,7 @@ extension ПодачаМодель {
         guard let место = плитки.firstIndex(where: { $0.id == id }), let картинка = плитки[место].картинка else { return }
         плитки[место].грузится = true
         плитки[место].ошибка = nil
+        плитки[место].этап = 1
         let основное = ОбработкаФото.dataURL(картинка)
         let мини = плитки[место].миниатюра.map { $0.isEmpty ? "" : ОбработкаФото.dataURL($0) } ?? ""
         var код = 0
@@ -473,45 +474,45 @@ extension ПодачаМодель {
     func выставить() {
         if форма.название.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if режим == .авто {
-                показать(т("need_auto"))
+                пометить("auto", т("need_auto"))
                 шаг = .характеристики
             } else {
-                показать(т("need_title"))
+                пометить("title", т("need_title"))
                 шаг = .данные
             }
             return
         }
         if форма.описание.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 {
-            показать(т("need_desc"))
+            пометить("desc", т("need_desc"))
             шаг = .данные
             return
         }
         if let ошибка = ошибкаЦены() {
-            показать(ошибка)
+            пометить("price", ошибка)
             шаг = .цена
             return
         }
         guard проверитьГород() else { return }
         if let ошибка = ошибкаЧасов() {
-            показать(ошибка)
+            пометить("hours", ошибка)
             шаг = .адрес
             return
         }
         подтверждение = true
     }
 
-    /// geoRequire: «Не хватает города» — «Указать» ведёт на шаг «Адрес».
+    /// geoRequire: «Не хватает города» — тот же текст сайта строкой под полем города, мастер сам ведёт на «Адрес».
     private func проверитьГород() -> Bool {
         guard форма.город.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return true }
-        вопрос = ВопросПодачи(заголовок: т("geo_need_t"), текст: т("form_geo_required"), да: т("geo_need_go"),
-                              нет: т("later"), действие: { [weak self] in self?.шаг = .адрес })
+        пометить("city", т("form_geo_required"))
+        шаг = .адрес
         return false
     }
 
     /// pcPublish: «Вещь работает?» обязателен; фото ещё грузятся — «секунду» (sniCheckThenSubmit).
     func опубликовать() {
         if нужнаИсправность && форма.работает.isEmpty {
-            показать(т("wrk_need_t"))
+            пометить("works", т("wrk_need_s"))
             return
         }
         if фотоГрузятся {
@@ -770,18 +771,18 @@ extension ПодачаМодель {
     func сохранить() {
         guard !отправляем else { return }
         if let ошибка = ошибкаЦены() {
-            показать(ошибка)
+            пометить("price", ошибка)
             шаг = .цена
             return
         }
         guard проверитьГород() else { return }
         if нужнаИсправность && форма.работает.isEmpty {
-            сообщение = СообщениеПодачи(заголовок: т("wrk_need_t"), текст: т("wrk_need_s"))
+            пометить("works", т("wrk_need_s"))
             шаг = .цена
             return
         }
         if let ошибка = ошибкаЧасов() {
-            показать(ошибка)
+            пометить("hours", ошибка)
             шаг = .адрес
             return
         }
