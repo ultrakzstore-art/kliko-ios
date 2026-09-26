@@ -12,6 +12,13 @@ import Foundation
 /// отправки хуже, чем отсутствие плашки: это уже не информация, а дезинформация.
 /// Поэтому активность запрашивается с pushType:.token, её токен уезжает на сервер, и
 /// дальше этапы приходят пушем (inc/deal_live.php → apns_send_live).
+///
+/// ИЗОЛЯЦИЯ. Весь класс на главном акторе: activity / activeDealId / tokenTask / очередь меняются только там.
+/// Прежде handle запускал безымянные Task на глобальном исполнителе, и карточка сделки, дёргающая его на каждое
+/// изменение состояния, гоняла эти поля из нескольких потоков сразу. Теперь вызовы только ставят команду в очередь,
+/// а исполняет её один рабочий Task: в полёте не больше одного обращения к ActivityKit, пачка обновлений за
+/// окно «тишины» сливается в последнее, одинаковое состояние не отправляется вовсе.
+@MainActor
 final class DealActivityManager {
     static let shared = DealActivityManager()
 
@@ -21,12 +28,66 @@ final class DealActivityManager {
     /// присылает новый в тот же поток, и старый перестаёт работать молча.
     private var tokenTask: Task<Void, Never>?
 
+    /// Команда очереди. update несёт данные моста; end с номером закрывает только эту сделку, без номера — любую.
+    private enum Команда {
+        case update([String: Any])
+        case end(String?)
+    }
+    /// Ждущие команды по порядку. Подряд идущие update сливаются в последний (он полнее и новее).
+    private var очередь: [Команда] = []
+    /// Единственный исполнитель очереди; nil — очередь пуста и никто не работает.
+    private var исполнитель: Task<Void, Never>?
+    /// Окно «тишины» перед исполнением: пачка перерисовок карточки за это время уходит одним обновлением.
+    private let тишинаНс: UInt64 = 250_000_000
+
     /// Точка входа из JS-моста: {action:'start'|'update'|'end', deal:{…}}.
     func handle(_ body: [String: Any]) {
         let action = (body["action"] as? String ?? "").lowercased()
+        if action == "end" { поставить(.end(nil)); return }
         let d = body["deal"] as? [String: Any] ?? [:]
-        if action == "end" { Task { await end() }; return }
-        Task { await startOrUpdate(d) }
+        поставить(.update(d))
+    }
+
+    /// Этап 43 (владелец 26.09.2026): нативная карточка сделки закрывает плашку только своей сделки. Сайт шлёт end() без
+    /// номера (карта кабинета §4.21), и завершённая сделка в карточке закрыла бы плашку другой, живой сделки.
+    /// Номер сверяется в момент исполнения: к тому времени ждущий update мог уже поднять плашку этой сделки.
+    func завершить(сделку dealId: String) {
+        поставить(.end(dealId))
+    }
+
+    /// Закрыть текущую плашку (выход из аккаунта, end() сайта).
+    func end() {
+        поставить(.end(nil))
+    }
+
+    private func поставить(_ к: Команда) {
+        if case .update = к, let последняя = очередь.last, case .update = последняя {
+            очередь[очередь.count - 1] = к
+        } else {
+            очередь.append(к)
+        }
+        guard исполнитель == nil else { return }
+        // Task из метода главного актора наследует его: и сон, и разбор очереди идут на главном акторе.
+        исполнитель = Task {
+            try? await Task.sleep(nanoseconds: self.тишинаНс)
+            await self.разобратьОчередь()
+        }
+    }
+
+    /// Исполняет команды строго по одной. Пока идёт await к ActivityKit, новые вызовы только пополняют очередь
+    /// (исполнитель не nil — второго не будет), и цикл подберёт их следующим проходом.
+    private func разобратьОчередь() async {
+        while !очередь.isEmpty {
+            let к = очередь.removeFirst()
+            switch к {
+            case .update(let d):
+                await startOrUpdate(d)
+            case .end(let номер):
+                if let номер, activeDealId != номер { continue }
+                await закрыть()
+            }
+        }
+        исполнитель = nil
     }
 
     /// Состояние из моста страницы. Сайт присылает и курьера (phase/etaAt/courier) — то же состояние,
@@ -73,13 +134,14 @@ final class DealActivityManager {
 
         let cs = contentState(d)
 
-        // Та же сделка уже показывается → просто обновляем.
+        // Та же сделка уже показывается → просто обновляем; то же самое состояние не отправляем вовсе.
         if let a = activity, activeDealId == dealId {
+            if a.content.state == cs { return }
             await a.update(ActivityContent(state: cs, staleDate: nil))
             return
         }
         // Другая сделка (или нет активной) → закрываем старую, стартуем новую.
-        if activity != nil { await end() }
+        if activity != nil { await закрыть() }
 
         let attrs = DealActivityAttributes(
             dealId: dealId,
@@ -105,39 +167,33 @@ final class DealActivityManager {
     /// Токен активности → в веб-сессию → api/push_register.php (kind=live).
     /// Отдаём через WebBridge, а не шлём отсюда: запрос должен уйти С COOKIE ВЕБ-СЕССИИ
     /// и с CSRF-токеном страницы, а они есть только внутри WKWebView.
+    /// Задача одна на активность: прежнюю отменяем до старта новой. Создана на главном акторе и наследует его.
     private func observeToken(of a: Activity<DealActivityAttributes>, dealId: String) {
         tokenTask?.cancel()
         tokenTask = Task {
             for await data in a.pushTokenUpdates {
+                if Task.isCancelled { break }
                 let hex = data.map { String(format: "%02x", $0) }.joined()
-                await MainActor.run {
-                    WebBridge.shared.liveToken = LiveToken(deal: dealId, token: hex, drop: false)
-                }
+                WebBridge.shared.liveToken = LiveToken(deal: dealId, token: hex, drop: false)
             }
         }
     }
 
-    /// Этап 43 (владелец 26.09.2026): нативная карточка сделки закрывает плашку только своей сделки. Сайт шлёт end() без
-    /// номера (карта кабинета §4.21), и завершённая сделка в карточке закрыла бы плашку другой, живой сделки.
-    func завершить(сделку dealId: String) async {
-        guard activeDealId == dealId else { return }
-        await end()
-    }
-
-    func end() async {
+    /// Закрыть плашку. Зовётся только из очереди, так что с обновлением той же активности не пересекается.
+    private func закрыть() async {
         let closing = activeDealId
+        let a = activity
         tokenTask?.cancel(); tokenTask = nil
-        if let a = activity {
-            await a.end(nil, dismissalPolicy: .immediate)
-        }
+        // Поля обнуляем до await: состояние менеджера сразу честное, даже пока система закрывает плашку.
         activity = nil
         activeDealId = nil
+        if let a {
+            await a.end(nil, dismissalPolicy: .immediate)
+        }
         // Сообщаем серверу, что адресата больше нет: иначе он будет слать пуши в
         // закрытую активность до первой ошибки от Apple, а до неё могут пройти сутки.
         if let did = closing {
-            await MainActor.run {
-                WebBridge.shared.liveToken = LiveToken(deal: did, token: "", drop: true)
-            }
+            WebBridge.shared.liveToken = LiveToken(deal: did, token: "", drop: true)
         }
     }
 }

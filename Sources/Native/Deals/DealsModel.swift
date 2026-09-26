@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import SwiftUI
 import UIKit
 
@@ -487,7 +488,8 @@ final class КарточкаСделкиМодель: ObservableObject {
 
     /**
      dealUploadEvidence: {note, image}. У сайта image — dataURL файла без сжатия; с iPhone это HEIC в десятки мегабайт,
-     поэтому здесь — JPEG в полном размере, качество 0.9: тот же вид поля, сервер принимает JPEG.
+     поэтому здесь — JPEG как у фото спора того же окна (fileToB64(файл, 1600, .75) сайта): большая сторона ≤1600,
+     качество 0.75. Полный кадр 48 Мп в память не декодируется (СнимокСделки), для модератора 1600 достаточно.
      */
     func отправитьДоказательство() {
         let заметка = доказательство.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -503,7 +505,7 @@ final class КарточкаСделкиМодель: ObservableObject {
             var картинка = ""
             if let фото {
                 картинка = await Task.detached(priority: .userInitiated) { () -> String in
-                    СнимокСделки.dataURL(фото, сторона: 0, качество: 0.9) ?? ""
+                    СнимокСделки.dataURL(фото, сторона: 1600, качество: 0.75) ?? ""
                 }.value
             }
             do {
@@ -769,25 +771,48 @@ enum ОтслеживаниеСделки {
 
 enum СнимокСделки {
     /**
-     dataURL «data:image/jpeg;base64,…» на белом фоне (fileToB64 сайта заливает фон белым). сторона 0 — без уменьшения.
-     Не прочиталось — nil.
+     dataURL «data:image/jpeg;base64,…» на белом фоне (fileToB64 сайта заливает фон белым). сторона — предел большей
+     стороны в пикселях, 0 — без уменьшения. Не прочиталось — nil.
+
+     Снимок декодируется сразу уменьшенным (ImageIO, миниатюра с пределом стороны): полный кадр в память не
+     разворачивается. Прежний путь через UIImage(data:) и перерисовку держал весь кадр 48 Мп — около 200 МБ.
+     Поворот камеры (EXIF) ImageIO применяет сам (CreateThumbnailWithTransform).
      */
     static func dataURL(_ данные: Data, сторона: CGFloat, качество: CGFloat) -> String? {
-        guard let исходная = UIImage(data: данные) else { return nil }
-        let размер = исходная.size
-        guard размер.width > 0, размер.height > 0 else { return nil }
-        var масштаб: CGFloat = 1
-        if сторона > 0 { масштаб = min(1, сторона / max(размер.width, размер.height)) }
-        let новый = CGSize(width: (размер.width * масштаб).rounded(), height: (размер.height * масштаб).rounded())
-        let формат = UIGraphicsImageRendererFormat()
-        формат.scale = 1
-        формат.opaque = true
-        let рисунок = UIGraphicsImageRenderer(size: новый, format: формат).image { к in
-            UIColor.white.setFill()
-            к.fill(CGRect(origin: .zero, size: новый))
-            исходная.draw(in: CGRect(origin: .zero, size: новый))
+        autoreleasepool { () -> String? in
+            let опцииИсточника = [kCGImageSourceShouldCache: false] as CFDictionary
+            guard let источник = CGImageSourceCreateWithData(данные as CFData, опцииИсточника),
+                  CGImageSourceGetCount(источник) > 0 else { return nil }
+            let предел: Int
+            if сторона > 0 {
+                предел = Int(сторона.rounded())
+            } else {
+                // Без уменьшения: предел — собственная большая сторона кадра (из заголовка, без декодирования).
+                let свойства = CGImageSourceCopyPropertiesAtIndex(источник, 0, nil) as? [CFString: Any] ?? [:]
+                let ш = (свойства[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0
+                let в = (свойства[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
+                предел = max(ш, в)
+            }
+            guard предел > 0 else { return nil }
+            let опцииМиниатюры = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: предел
+            ] as CFDictionary
+            guard let кадр = CGImageSourceCreateThumbnailAtIndex(источник, 0, опцииМиниатюры) else { return nil }
+            let размер = CGSize(width: кадр.width, height: кадр.height)
+            guard размер.width > 0, размер.height > 0 else { return nil }
+            let формат = UIGraphicsImageRendererFormat()
+            формат.scale = 1
+            формат.opaque = true
+            let рисунок = UIGraphicsImageRenderer(size: размер, format: формат).image { к in
+                UIColor.white.setFill()
+                к.fill(CGRect(origin: .zero, size: размер))
+                UIImage(cgImage: кадр).draw(in: CGRect(origin: .zero, size: размер))
+            }
+            guard let jpeg = рисунок.jpegData(compressionQuality: качество) else { return nil }
+            return "data:image/jpeg;base64," + jpeg.base64EncodedString()
         }
-        guard let jpeg = рисунок.jpegData(compressionQuality: качество) else { return nil }
-        return "data:image/jpeg;base64," + jpeg.base64EncodedString()
     }
 }

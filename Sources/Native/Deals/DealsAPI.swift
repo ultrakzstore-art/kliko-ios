@@ -886,7 +886,7 @@ enum ЖиваяСделка {
         guard Config.нативныеСделки else { return }
         if с.конечная {
             let номер = с.id
-            Task { await DealActivityManager.shared.завершить(сделку: номер) }
+            DealActivityManager.shared.завершить(сделку: номер)
             return
         }
         let название = с.название.isEmpty ? СделкиText.т("deal_word") : с.название

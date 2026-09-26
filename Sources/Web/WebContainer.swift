@@ -595,7 +595,7 @@ struct WebContainer: UIViewRepresentable {
                 lastToken = nil
                 lastLive = nil
                 wipeAfterLogout = true
-                Task { await DealActivityManager.shared.end() }
+                Task { @MainActor in DealActivityManager.shared.end() }
                 /* TestFlight 1.10: витрина и кабинет — сразу гость, не дожидаясь ответа сервера. */
                 Task { @MainActor in СессияПриложения.shared.вышел() }
                 return
@@ -628,7 +628,8 @@ struct WebContainer: UIViewRepresentable {
                 return
             }
             guard message.name == "klikoLive", let body = message.body as? [String: Any] else { return }
-            DealActivityManager.shared.handle(body)
+            // Менеджер плашки на главном акторе, а метод делегата WebKit в этом классе не изолирован.
+            Task { @MainActor in DealActivityManager.shared.handle(body) }
         }
 
         /// Ответ моста klikoLock в страницу: window.__klikoLock(id, данные). О биометрии страница знает только тип и «включено».
