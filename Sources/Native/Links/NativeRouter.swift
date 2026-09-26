@@ -32,6 +32,10 @@ final class NativeRouter: ObservableObject {
         case найти(ИскомоеЛенты)
         /// «Мои объявления» во вкладке «Кабинет» — /cabinet?go=items (этап 41).
         case моиОбъявления
+        /// Мастер подачи поверх вкладок — /cabinet?go=add (этап 42).
+        case подача
+        /// Правка объявления тем же мастером — /cabinet.php?edit=<id> (этап 42).
+        case правка(id: String)
     }
 
     /// Включён ли экран цели своим рубильником. Нет — вход снаружи идёт сайтом (WebBridge.открытьЭкран).
@@ -43,6 +47,7 @@ final class NativeRouter: ObservableObject {
         case .избранное:  return Config.избранное
         case .найти:      return true
         case .моиОбъявления: return Config.нативныеОбъявления && Config.нативныйКабинет
+        case .подача, .правка: return Config.нативнаяПодача
         }
     }
 

@@ -101,6 +101,121 @@ enum КабинетСайта {
         return разобрать(ответ.текст)
     }
 
+    /**
+     Этап 42: та же страница кабинета, но и её текст целиком. Мастеру подачи нужны значения, которые сервер печатает
+     только в неё (CAB_PREF_GEO, CAB_PREF_HOURS, TRUST_SETS, PROMO_CFG, MK_ESCROW_MIN, адреса js/cats-<язык>.js и
+     js/cab-refs.js, карта §0.7). Второй раз страницу ради них не качаем.
+     */
+    static func страницаКабинета() async throws -> (состояние: Состояние, html: String) {
+        let ответ = try await запрос(путь("cabinet.php"), ждать: true)
+        guard ответ.код > 0, ответ.код < 500 else { throw Сбой.сеть }
+        return (разобрать(ответ.текст), ответ.текст)
+    }
+
+    // MARK: - Этап 42: загрузка фото объявления (upload_photo, карта §2.4.3)
+
+    /// Итог загрузки: HTTP-код последней попытки и ответ сервера. Все три попытки без ответа — json с ok:false.
+    struct ОтветЗагрузки {
+        let код: Int
+        let json: [String: Any]
+    }
+
+    /**
+     uploadImageSmart сайта: три попытки подряд, пока одна не вернёт ok (или prohibited / foreign): multipart с imgb64
+     (dataURL), multipart с файлом photo.jpg, JSON {csrf, image_b64}. После удачи первой — миниатюра тем же адресом
+     (multipart imgb64 + thumb_for = имя файла из url), ответ миниатюры не нужен, как у сайта. Картинка и токен идут
+     аргументами скрипта, а не текстом: ни байт фото, ни токен не станут кодом. Путь — /kz/<язык>/cabinet.php (§0.3).
+     */
+    static func загрузитьФото(картинка: String, миниатюра: String, токен: String) async throws -> ОтветЗагрузки {
+        let web = try await страницаСайта(ждать: true)
+        let аргументы: [String: Any] = ["p": путь("cabinet.php?action=upload_photo"), "c": токен, "d": картинка,
+                                        "th": миниатюра]
+        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
+            web.callAsyncJavaScript(скриптЗагрузки, arguments: аргументы, in: nil, in: .defaultClient) { итог in
+                switch итог {
+                case .success(let значение):
+                    продолжение.resume(returning: (значение as? String) ?? "")
+                case .failure(let ошибка):
+                    продолжение.resume(throwing: ошибка)
+                }
+            }
+        }
+        guard let данные = сырой.data(using: .utf8),
+              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+            throw Сбой.приложение
+        }
+        let код = (объект["s"] as? NSNumber)?.intValue ?? 0
+        let ответ = (объект["o"] as? [String: Any]) ?? ["ok": false, "error": ""]
+        return ОтветЗагрузки(код: код, json: ответ)
+    }
+
+    /// Тело скрипта загрузки: p — путь, c — токен, d — dataURL фото, th — dataURL миниатюры (пусто — без неё).
+    private static let скриптЗагрузки = """
+    let code = 0, err = '';
+    const opts = (body, json) => {
+      const o = {method: 'POST', body: body, credentials: 'same-origin', cache: 'no-store'};
+      if (json) { o.headers = {'Content-Type': 'application/json'}; }
+      return o;
+    };
+    const read = async (r) => { try { return JSON.parse(await r.text()); } catch (e) { return null; } };
+    const toBlob = (du) => {
+      const i = du.indexOf(',');
+      const head = du.slice(5, i);
+      const type = head.split(';')[0] || 'image/jpeg';
+      const s = atob(du.slice(i + 1));
+      const a = new Uint8Array(s.length);
+      for (let k = 0; k < s.length; k++) { a[k] = s.charCodeAt(k); }
+      return new Blob([a], {type: type});
+    };
+    try {
+      const f = new FormData();
+      f.append('csrf', c);
+      f.append('imgb64', d);
+      const r = await fetch(p, opts(f, false));
+      code = r.status;
+      if (r.ok) {
+        const o = await read(r);
+        if (o && o.ok && o.url && th) {
+          try {
+            const n = String(o.url).split('/').pop();
+            if (n) {
+              const g = new FormData();
+              g.append('csrf', c);
+              g.append('imgb64', th);
+              g.append('thumb_for', n);
+              await fetch(p, opts(g, false));
+            }
+          } catch (e) {}
+        }
+        if (o && (o.ok || o.prohibited || o.foreign)) { return JSON.stringify({s: code, o: o}); }
+        if (o && o.error) { err = String(o.error); }
+      }
+    } catch (e) {}
+    try {
+      const f = new FormData();
+      f.append('csrf', c);
+      const b = toBlob(d);
+      f.append('photo', b, b.type === 'image/webp' ? 'photo.webp' : 'photo.jpg');
+      const r = await fetch(p, opts(f, false));
+      code = r.status;
+      if (r.ok) {
+        const o = await read(r);
+        if (o && (o.ok || o.prohibited || o.foreign)) { return JSON.stringify({s: code, o: o}); }
+        if (o && o.error) { err = String(o.error); }
+      }
+    } catch (e) {}
+    try {
+      const r = await fetch(p, opts(JSON.stringify({csrf: c, image_b64: d}), true));
+      code = r.status;
+      if (r.ok) {
+        const o = await read(r);
+        if (o && (o.ok || o.prohibited)) { return JSON.stringify({s: code, o: o}); }
+        if (o && o.error) { err = String(o.error); }
+      }
+    } catch (e) {}
+    return JSON.stringify({s: code, o: {ok: false, error: err}});
+    """
+
     // MARK: - Вход (§1.2.1)
 
     enum ИтогВхода: Equatable {

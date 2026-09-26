@@ -367,6 +367,19 @@ final class МоиОбъявленияМодель: ObservableObject {
         }
     }
 
+    /**
+     Этап 42: edit_item ответил «ok» без итога (не silent, не manual, не approved/rejected) — то же окно «Kliko AI
+     проверяет объявление» и тот же опрос item_status (раз в 2 с, до 20 раз), что сайт показывает после правки
+     (showModerationProgress). Сохранение уже прошло — это только чтение.
+     */
+    func проверитьПослеПравки(_ id: String) {
+        guard !id.isEmpty else { return }
+        окно = .проверка(шаг: т("mod_init"), процент: 0)
+        запуститьШаги()
+        let моё = поколение
+        Task { @MainActor in await self.опросить(id, моё: моё) }
+    }
+
     private func ошибкаАктивации(_ j: [String: Any], id: String) {
         typealias A = МоиОбъявленияAPI
         if A.нетСессии(j) {
