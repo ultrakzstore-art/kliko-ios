@@ -21,9 +21,12 @@ function registerWizard(bot, { db, log, canAdd }) {
   });
   const st = () => als.getStore();
 
-  const fresh = () => ({ step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, ksub: null, city: null, words: '', priceFrom: null, priceTo: null, seller: 'all', url: '' });
+  const fresh = () => ({ hist: [], step: 'source', source: 'olx', stack: [], options: cats.TOP, kcat: null, ksub: null, city: null, words: '', priceFrom: null, priceTo: null, seller: 'all', url: '' });
   const src = () => sources.get(st().w.source);
   const current = () => st().w.stack[st().w.stack.length - 1] || null;
+  // История шагов для «⬅️ Назад»: каждый шаг записывает себя, «Назад» возвращает на предыдущий.
+  const enter = (name) => { const h = st().w.hist || (st().w.hist = []); if (h[h.length - 1] !== name) h.push(name); st().w.step = name; };
+  const backRow = (kb) => kb.row().text('⬅️ Назад', 'w:prev').text('✖️ Отмена', 'w:cancel');
   // Рубрики «деревом» (сколько угодно уровней): OLX — с сайта, Kaspi — с сайта или из встроенного списка.
   const tree = () => st().w.source === 'olx' || !!src().wizard?.children;
   const childrenOf = (path) => (st().w.source === 'olx' ? cats.children(path) : src().wizard.children(path));
@@ -38,7 +41,7 @@ function registerWizard(bot, { db, log, canAdd }) {
   }
 
   async function stepCategory(ctx, edit = true) {
-    st().w.step = 'cat';
+    enter('cat');
     const cur = current();
     const kb = new InlineKeyboard();
     if (cur) kb.text(`✅ Вся «${cur.name}»`, 'w:ok').row();
@@ -46,7 +49,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     kb.row();
     if (cur) kb.text('⬅️ Назад', 'w:back');
     if (st().w.source === 'olx') kb.text('Без рубрики — только по словам', 'w:any').row();
-    else kb.text('⬅️ Площадка', 'w:restart');
+    kb.text('⬅️ Площадка', 'w:restart');
     kb.text('✖️ Отмена', 'w:cancel');
     const path = st().w.stack.map((s) => s.name).join(' › ');
     const head = st().w.source === 'olx' ? 'Новый поиск' : `Новый поиск · ${esc(src().title)}`;
@@ -54,22 +57,25 @@ function registerWizard(bot, { db, log, canAdd }) {
   }
 
   async function stepCity(ctx) {
-    st().w.step = 'city';
+    enter('city');
     const kb = new InlineKeyboard().text('🇰🇿 Весь Казахстан', 'w:city:-').row();
     cats.CITIES.forEach((c, i) => { kb.text(c.name, `w:city:${i}`); if (i % 3 === 2) kb.row(); });
+    backRow(kb);
     await show(ctx, `<b>Новый поиск</b>\nРубрика: ${esc(label())}\nГород:`, kb);
   }
 
   async function stepWords(ctx) {
-    st().w.step = 'words';
+    enter('words');
     const kb = new InlineKeyboard();
     if (current() || st().w.kcat) kb.text('Пропустить', 'w:skipwords');
+    backRow(kb);
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nКлючевые слова? Напишите, например: <i>iphone 13</i>, <i>hp 250</i>, <i>зимние шины r16</i>.${current() || st().w.kcat ? '\nИли «Пропустить» — все объявления рубрики.' : ''}`, kb);
   }
 
   async function stepPrice(ctx) {
-    st().w.step = 'price';
+    enter('price');
     const kb = new InlineKeyboard().text('Любая цена', 'w:skipprice');
+    backRow(kb);
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nЦена? Напишите: <i>до 300000</i>, <i>от 100000 до 250000</i>, <i>300к</i>.`, kb);
   }
 
@@ -77,21 +83,23 @@ function registerWizard(bot, { db, log, canAdd }) {
   async function stepSeller(ctx) {
     if (st().w.source === 'krisha' || st().w.source === 'kolesa') {
       // Krisha: фильтр das[who]=1 в ссылке. Kolesa: без автосалонов и дилеров.
-      st().w.step = 'seller';
+      enter('seller');
       const kolesa = st().w.source === 'kolesa';
       const kb = new InlineKeyboard().text('👥 Все', 'w:owner:all').text(kolesa ? '🚗 Только от хозяев' : '🏠 Только от хозяев', 'w:owner:1');
+      backRow(kb);
       return show(ctx, `<b>Новый поиск · ${kolesa ? 'Kolesa' : 'Krisha'}</b>\n${summary()}\n\nОт кого?`, kb);
     }
     if (st().w.source !== 'olx') return stepConfirm(ctx);
-    st().w.step = 'seller';
+    enter('seller');
     const kb = new InlineKeyboard().text('👥 Все', 'w:seller:all').row()
       .text('👤 Только частные', 'w:seller:private').text('🏪 Только бизнес', 'w:seller:business');
+    backRow(kb);
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\nОт кого присылать?`, kb);
   }
 
   // Пробный запрос к OLX: показываем, что реально найдётся по этой ссылке, до сохранения.
   async function stepConfirm(ctx) {
-    st().w.step = 'confirm';
+    enter('confirm');
     const w = st().w;
     w.url = w.source === 'olx'
       ? cats.buildSearchUrl({ path: current()?.path, city: w.city?.slug, words: w.words, priceFrom: w.priceFrom, priceTo: w.priceTo })
@@ -106,7 +114,8 @@ function registerWizard(bot, { db, log, canAdd }) {
     } catch (e) {
       preview = `⚠ ${esc(src().title)} не открыл такой поиск (${esc(e.message)}). Попробуйте другой город или рубрику — или сохраните всё равно.`;
     }
-    const kb = new InlineKeyboard().text('✅ Сохранить', 'w:save').text('↩️ Заново', 'w:restart').row().url(`Открыть на ${src().title}`, w.url);
+    const kb = new InlineKeyboard().text('✅ Сохранить', 'w:save').row().url(`Открыть на ${src().title}`, w.url).row()
+      .text('⬅️ Назад', 'w:prev').text('↩️ Заново', 'w:restart').text('✖️ Отмена', 'w:cancel');
     await show(ctx, `<b>Новый поиск</b>\n${summary()}\n\n${preview}`, kb);
   }
 
@@ -141,7 +150,7 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // Шаг 0 — площадка.
   async function stepSource(ctx, edit = true) {
-    st().w.step = 'source';
+    enter('source');
     const kb = new InlineKeyboard();
     sources.ALL.forEach((x, i) => { kb.text(`${x.emoji} ${x.title}`, `w:src:${x.key}`); if (i % 2 === 1) kb.row(); });
     kb.row().text('✖️ Отмена', 'w:cancel');
@@ -150,7 +159,7 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // Kolesa и Krisha: рубрика из короткого списка, дальше город и цена.
   async function stepKCategory(ctx) {
-    st().w.step = 'kcat';
+    enter('kcat');
     const kb = new InlineKeyboard();
     src().wizard.categories.forEach((c, i) => { kb.text(c.name, `w:kc:${i}`); if (i % 2 === 1) kb.row(); });
     kb.row().text('⬅️ Площадка', 'w:restart').text('✖️ Отмена', 'w:cancel');
@@ -159,7 +168,7 @@ function registerWizard(bot, { db, log, canAdd }) {
 
   // Kolesa и Krisha: подрубрика (марка, число комнат) или вся рубрика.
   async function stepKSub(ctx) {
-    st().w.step = 'ksub';
+    enter('ksub');
     const kcat = st().w.kcat;
     const kb = new InlineKeyboard().text(`✅ Вся «${kcat.name}»`, 'w:ks:all').row();
     kcat.subs.forEach((c, i) => { kb.text(c.name, `w:ks:${i}`); if (i % 3 === 2) kb.row(); });
@@ -182,6 +191,13 @@ function registerWizard(bot, { db, log, canAdd }) {
 
     if (data === 'w:cancel') { st().w = null; await ctx.editMessageText('Отменено.').catch(() => {}); return; }
     if (data === 'w:restart') { st().w = fresh(); await stepSource(ctx); return; }
+    if (data === 'w:prev') {
+      const h = st().w.hist || [];
+      h.pop();
+      const name = h.pop();
+      const STEP = { source: stepSource, cat: stepCategory, kcat: stepKCategory, ksub: stepKSub, city: stepCity, words: stepWords, price: stepPrice, seller: stepSeller, confirm: stepConfirm };
+      return (STEP[name] || stepSource)(ctx);
+    }
 
     if (data.startsWith('w:src:')) {
       const key = data.slice(6);
@@ -255,7 +271,12 @@ function registerWizard(bot, { db, log, canAdd }) {
   });
 
   // Текст во время мастера — ответ на его вопрос (слова или цена). Иначе — дальше по цепочке.
-  return async function onText(ctx, next) {
+  // Для меню бота: начать мастер заново или сбросить его (нажали кнопку меню посреди мастера).
+  onText.start = start;
+  onText.reset = () => { st().w = null; };
+  return onText;
+
+  async function onText(ctx, next) {
     if (!st().w || (st().w.step !== 'words' && st().w.step !== 'price')) return next();
     const text = ctx.message.text.trim();
     if (/https?:\/\//i.test(text) && sources.byUrl(text.match(/https?:\/\/\S+/)[0])) { st().w = null; return next(); } // прислали ссылку — мастер не нужен
@@ -268,7 +289,7 @@ function registerWizard(bot, { db, log, canAdd }) {
     st().w.priceFrom = p.from;
     st().w.priceTo = p.to;
     return stepSeller(ctx);
-  };
+  }
 }
 
 const SELLER = { all: 'все', private: 'частные', business: 'бизнес' };

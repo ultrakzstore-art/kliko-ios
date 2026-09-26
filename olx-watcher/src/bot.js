@@ -4,7 +4,7 @@
 // POLL_SEC, турбо, до PAID_SUBS поисков — разница только в сроке. Без доступа — не проверяем.
 // Оплата: Telegram Stars (автоматически) или Kaspi (перевод + подтверждение владельцем).
 
-const { Bot, InlineKeyboard, GrammyError, InputFile } = require('grammy');
+const { Bot, InlineKeyboard, Keyboard, GrammyError, InputFile } = require('grammy');
 const { collage, fetchImage } = require('./watermark');
 const olx = require('./olx');
 const vip = require('./vip');
@@ -86,6 +86,10 @@ function createBot({ token, db, config, getWatcher, log }) {
     return `Достигнут предел: ${limit} поисков. Удалите ненужный в /list.`;
   }
 
+  // Постоянное меню внизу экрана (под полем ввода) — из любого места, без команд.
+  const MENU = { new: '➕ Новый поиск', list: '📋 Мои поиски', access: '💎 Тарифы', vip: '👑 VIP', help: '❓ Помощь' };
+  const mainKb = () => new Keyboard().text(MENU.new).text(MENU.list).row().text(MENU.access).text(MENU.vip).text(MENU.help).resized().persistent();
+
   const menu = () => new InlineKeyboard()
     .text('➕ Новый поиск', 'w:new').text('📋 Мои поиски', 'list').row()
     .text('💎 Доступ', 'access');
@@ -118,6 +122,7 @@ function createBot({ token, db, config, getWatcher, log }) {
       if (kaspi) kb.text(`💳 ${planShort(d)} — ${fmt(kaspi)} ₸`, `kaspi:${p.key}:${d}`);
       kb.row();
     }
+    kb.text('⬅️ Тарифы', 'access');
     const what = p.key === 'all' ? 'все площадки: ' + sources.ALL.map((x) => x.title).join(', ') : sources.get(p.key).title;
     await ctx.reply(`<b>${esc(p.title)}</b> — ${esc(what)}.\n⚡ Мгновенные уведомления, до ${config.paidSubs} поисков.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
       { parse_mode: 'HTML', reply_markup: kb });
@@ -132,7 +137,7 @@ function createBot({ token, db, config, getWatcher, log }) {
 /list — мои поиски · /access — доступ и оплата · /buyvip — VIP-рубрика только для вас · /help — справка`;
 
   bot.command(['start', 'help'], async (ctx) => {
-    await ctx.reply(`${HELP}\n\n${planText(ctx.from.id)}`, { parse_mode: 'HTML', reply_markup: menu(), link_preview_options: { is_disabled: true } });
+    await ctx.reply(`${HELP}\n\n${planText(ctx.from.id)}`, { parse_mode: 'HTML', reply_markup: mainKb(), link_preview_options: { is_disabled: true } });
   });
 
   bot.command('access', showAccess);
@@ -150,7 +155,7 @@ function createBot({ token, db, config, getWatcher, log }) {
   const cityAt = (i) => cats.CITIES[Number(i)] || null;
   const vipLabel = (r, c) => `${r.name} · ${c.name}`;
 
-  async function vipStart(ctx) {
+  async function vipStart(ctx, edit = false) {
     if (!vipSellable()) return ctx.reply('VIP-рубрики пока не продаются — напишите владельцу бота.');
     const kb = new InlineKeyboard();
     let n = 0;
@@ -159,11 +164,21 @@ function createBot({ token, db, config, getWatcher, log }) {
       kb.text(r.name, `vr:${i}`);
       if (++n % 2 === 0) kb.row();
     });
-    await ctx.reply('👑 <b>VIP-рубрика</b> — объявления из выбранной рубрики OLX в вашем городе получаете <b>только вы</b>: другим подписчикам бота они не придут.\n\nВыберите рубрику:',
-      { parse_mode: 'HTML', reply_markup: kb });
+    kb.row().text('⬅️ Тарифы', 'access');
+    const text = '👑 <b>VIP-рубрика</b> — объявления из выбранной рубрики OLX в вашем городе получаете <b>только вы</b>: другим подписчикам бота они не придут.\n\nВыберите рубрику:';
+    if (edit) return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb }).catch(() => ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb }));
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
   }
-  bot.command('buyvip', vipStart);
+  bot.command('buyvip', (ctx) => vipStart(ctx));
   bot.callbackQuery('vip:start', async (ctx) => { await ctx.answerCallbackQuery(); await vipStart(ctx); });
+  bot.callbackQuery('vip:top', async (ctx) => { await ctx.answerCallbackQuery(); await vipStart(ctx, true); });
+  // «Назад» в выборе рубрики VIP: к родительской рубрике или к списку верхних.
+  const vipUp = (path) => {
+    const parent = path.split('/').slice(0, -1).join('/');
+    const i = parent ? RUBRICS.findIndex((r) => r.path === parent) : -1;
+    return i >= 0 ? `vr:${i}` : 'vip:top';
+  };
+  const hasKids = (path) => RUBRICS.some((x) => x.path.startsWith(`${path}/`));
 
   // Рубрика: вся или подрубрика (подрубрики — следующий уровень).
   bot.callbackQuery(/^vr:(\d+)$/, async (ctx) => {
@@ -178,6 +193,7 @@ function createBot({ token, db, config, getWatcher, log }) {
       kb.text(r.name.split(' › ').pop(), RUBRICS.some((x) => x.path.startsWith(`${r.path}/`)) ? `vr:${i}` : `vc:${i}`);
       if (++n % 2 === 0) kb.row();
     });
+    kb.row().text('⬅️ Назад', vipUp(top.path));
     await ctx.editMessageText(`👑 <b>${esc(top.name)}</b>\nВся рубрика или подрубрика:`, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
   });
 
@@ -188,6 +204,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     if (!r) return;
     const kb = new InlineKeyboard();
     cats.CITIES.forEach((c, i) => { kb.text(c.name, `vd:${ctx.match[1]}:${i}`); if (i % 3 === 2) kb.row(); });
+    kb.row().text('⬅️ Назад', hasKids(r.path) ? `vr:${ctx.match[1]}` : vipUp(r.path));
     await ctx.editMessageText(`👑 <b>${esc(r.name)}</b>\nГород:`, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
   });
 
@@ -199,8 +216,8 @@ function createBot({ token, db, config, getWatcher, log }) {
     if (!r || !c) return;
     const busy = db.lockConflict(ctx.from.id, 'olx', r.path, c.slug);
     if (busy) {
-      return ctx.editMessageText(`🔒 «${esc(vip.lockLabel(busy))}» уже закреплена за другим VIP до ${fmtDate(busy.until)}.\nВыберите другую рубрику или город: /buyvip`,
-        { parse_mode: 'HTML' }).catch(() => {});
+      return ctx.editMessageText(`🔒 «${esc(vip.lockLabel(busy))}» уже закреплена за другим VIP до ${fmtDate(busy.until)}.\nВыберите другую рубрику или город.`,
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Другой город', `vc:${ctx.match[1]}`).text('👑 Другая рубрика', 'vip:top') }).catch(() => {});
     }
     const kb = new InlineKeyboard();
     for (const d of PLANS) {
@@ -210,6 +227,7 @@ function createBot({ token, db, config, getWatcher, log }) {
       if (kaspi) kb.text(`💳 ${planShort(d)} — ${fmt(kaspi)} ₸`, `vk:${ctx.match[1]}:${ctx.match[2]}:${d}`);
       kb.row();
     }
+    kb.row().text('⬅️ Назад', `vc:${ctx.match[1]}`);
     await ctx.editMessageText(
       `👑 <b>${esc(vipLabel(r, c))}</b> — свободна.\n\nОбъявления из этой рубрики в городе ${esc(c.name)} будете получать только вы. ` +
       `Поиск по ней создам сам, доступ к OLX — на тот же срок.\n⭐ — Telegram Stars, 💳 — Kaspi.`,
@@ -255,7 +273,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.reply(
       `💳 <b>Kaspi — VIP «${esc(vipLabel(r, c))}», ${planName(days)}, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
       `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — рубрика закрепится после проверки.`,
-      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `vkp:${ri}:${ci}:${days}`) },
+      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `vkp:${ri}:${ci}:${days}`).row().text('⬅️ Назад', `vd:${ri}:${ci}`) },
     );
   });
 
@@ -349,7 +367,7 @@ function createBot({ token, db, config, getWatcher, log }) {
     await ctx.reply(
       `💳 <b>Kaspi — ${esc(p.title)}, ${planName(days)}, ${fmt(amount)} ₸</b>\n\n${esc(config.kaspiDetails)}\n\n` +
       `В комментарии к переводу укажите: <code>${ctx.from.id}</code>\nПосле перевода нажмите «Я оплатил» — доступ включится после проверки.`,
-      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `kpaid:${p.key}:${days}`) },
+      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('✅ Я оплатил', `kpaid:${p.key}:${days}`).row().text('⬅️ Назад', `buy:${p.key}`) },
     );
   });
 
@@ -489,6 +507,12 @@ function createBot({ token, db, config, getWatcher, log }) {
   // ---------- поиски ----------
 
   const wizardText = registerWizard(bot, { db, log, canAdd });
+  // Кнопки меню внизу — раньше мастера: нажали посреди мастера — он сбрасывается.
+  bot.hears(MENU.new, (ctx) => wizardText.start(ctx));
+  bot.hears(MENU.list, (ctx) => { wizardText.reset(); return sendList(ctx); });
+  bot.hears(MENU.access, (ctx) => { wizardText.reset(); return showAccess(ctx); });
+  bot.hears(MENU.vip, (ctx) => { wizardText.reset(); return vipStart(ctx); });
+  bot.hears(MENU.help, (ctx) => { wizardText.reset(); return ctx.reply(`${HELP}\n\n${planText(ctx.from.id)}`, { parse_mode: 'HTML', reply_markup: mainKb(), link_preview_options: { is_disabled: true } }); });
   bot.on('message:text', wizardText);
 
   // Сообщение со ссылкой на поиск OLX — новая подписка.
