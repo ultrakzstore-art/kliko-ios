@@ -57,6 +57,10 @@ struct СлойДенегСделки: ViewModifier {
             .overlay {
                 if let ход = деньги.ход {
                     ХодДенегВид(ход: ход, закрыть: { деньги.закрытьХод() })
+                } else if деньги.идёт {
+                    /* Денежный запрос в пути (или сверка после банка): кнопки карточки под прозрачной крышкой — второе
+                       нажатие не доходит ни до модели, ни до сервера. Шапка с «назад» остаётся доступной. */
+                    ЗанятоДеньгиВид()
                 }
             }
             .onChange(of: деньги.нуженСпор) { _, нужен in
@@ -122,6 +126,8 @@ struct СлойДенегСделки: ViewModifier {
             ОкноEGov(запрос: запрос, готово: { деньги.eGovПройден(запрос) }, закрыть: { деньги.лист = nil })
         case .банк(let адрес, _):
             ОкноБанка(адрес: адрес, вернулись: { итог in вернулисьСБанка(итог) }, закрыть: { деньги.лист = nil })
+        case .пополнение:
+            ЛистПополненияКошелька(открыть: открыть, закрыть: { деньги.лист = nil })
         }
     }
 
@@ -134,6 +140,25 @@ struct СлойДенегСделки: ViewModifier {
         деньги.лист = nil
         ЗаданияДенегСделок.shared.положить(.шлюз(итог))
         NativeRouter.shared.цель = .сделка(id: итог.сделка)
+    }
+}
+
+// MARK: - Крышка «запрос в пути»
+
+struct ЗанятоДеньгиВид: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.06)
+            ProgressView()
+                .controlSize(.large)
+                .padding(18)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {}
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ДеньгиСделкиText.т("ep_wait"))
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 
@@ -493,28 +518,20 @@ struct ВебСтраницаДенег: UIViewRepresentable {
     }
 }
 
+/// Страница банка сделки (pay_card, ship_add_card): общий лист ЛистШлюза (Wallet/MoneyGatewaySheet.swift) — возврат
+/// ?topup=…&deal= ловит ВозвратСоШлюза, уход на свой домен без итога и «Закрыть» — закрыть (сделка перечитается).
 struct ОкноБанка: View {
     let адрес: URL
     let вернулись: (ВозвратСоШлюза.Итог) -> Void
     let закрыть: () -> Void
 
     var body: some View {
-        NavigationStack {
-            ВебСтраницаДенег(адрес: адрес, перехват: { url in
-                guard let итог = ВозвратСоШлюза.разобрать(url) else { return false }
-                DispatchQueue.main.async { вернулись(итог) }
-                return true
-            })
-            .ignoresSafeArea(edges: .bottom)
-            .navigationTitle(ДеньгиСделкиText.т("gw_title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(СделкиText.т("close")) { закрыть() }
-                }
-            }
-        }
-        .interactiveDismissDisabled(true)
+        ЛистШлюза(адрес: адрес, заголовок: ДеньгиСделкиText.т("gw_title"), подписьЗакрыть: СделкиText.т("close"),
+                  перехват: { url in
+                      guard let итог = ВозвратСоШлюза.разобрать(url) else { return false }
+                      DispatchQueue.main.async { вернулись(итог) }
+                      return true
+                  }, закрыть: закрыть)
     }
 }
 

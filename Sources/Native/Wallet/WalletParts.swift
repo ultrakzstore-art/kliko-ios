@@ -101,7 +101,9 @@ struct КарточкаКошелька: View {
         if с.пополнениеКартой > 0 {
             части.append(КошелёкText.т("lock_line", n: КошелёкФормат.деньги(с.пополнениеКартой)))
         }
-        return части.isEmpty ? т("sub") : части.joined(separator: " · ")
+        /* 3.1.1: без Config.цифровыеПокупки строка не зовёт платить кошельком за продвижение и слоты (sub_app). */
+        let подпись = Config.цифровыеПокупки ? "sub" : "sub_app"
+        return части.isEmpty ? т(подпись) : части.joined(separator: " · ")
     }
 
     /// .hero-wpay: белая плашка, «Пополнить» | «Вывести» (второй — с оттенком).
@@ -158,7 +160,7 @@ struct СтрокаОперации: View {
 
     /// (a?"+":"−") + Math.abs(n).toLocaleString("ru-RU") + " ₸".
     private var сумма: String {
-        let модуль = Int(abs(операция.сумма).rounded())
+        let модуль = тенгеБезПереполнения(abs(операция.сумма))
         return (зачисление ? "+" : "−") + КошелёкФормат.тенге(модуль)
     }
 
@@ -196,7 +198,7 @@ struct СтрокаОперации: View {
                 .font(.system(size: 15, weight: .heavy))
                 .foregroundStyle(зачисление ? КраскаОбъявлений.хорошоТекст : Theme.текст)
                 .monospacedDigit()
-                .accessibilityLabel(т(зачисление ? "a11y_in" : "a11y_out") + " " + КошелёкФормат.тенге(Int(abs(операция.сумма).rounded())))
+                .accessibilityLabel(т(зачисление ? "a11y_in" : "a11y_out") + " " + КошелёкФормат.тенге(тенгеБезПереполнения(abs(операция.сумма))))
         }
         .padding(.vertical, 10)
         .padding(.horizontal, операция.гарант ? 10 : 0)
@@ -663,29 +665,20 @@ struct ОкноИтогаКошелька: View {
 
 // MARK: - Лист страницы банка (оплата пополнения, карта выплаты)
 
-/// Тот же WKWebView листа денег, что у этапа 44 (ВебСтраницаДенег): возврат банка на kliko.kz перехватывается.
+/// Общий лист страницы банка (ЛистШлюза, MoneyGatewaySheet.swift): возврат ?topup= / ?payout=back ловит
+/// ВозвратКошелька; «Закрыть», window.close() и уход на свой домен без итога — закрыть.
 struct ОкноБанкаКошелька: View {
     let адрес: URL
     let вернулись: (ВозвратКошелька) -> Void
     let закрыть: () -> Void
 
     var body: some View {
-        NavigationStack {
-            ВебСтраницаДенег(адрес: адрес, перехват: { url in
-                guard let итог = ВозвратКошелька.разобрать(url) else { return false }
-                DispatchQueue.main.async { вернулись(итог) }
-                return true
-            })
-            .ignoresSafeArea(edges: .bottom)
-            .navigationTitle(КошелёкText.т("gw_title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(КошелёкText.т("close")) { закрыть() }
-                }
-            }
-        }
-        .interactiveDismissDisabled(true)
+        ЛистШлюза(адрес: адрес, заголовок: КошелёкText.т("gw_title"), подписьЗакрыть: КошелёкText.т("close"),
+                  перехват: { url in
+                      guard let итог = ВозвратКошелька.разобрать(url) else { return false }
+                      DispatchQueue.main.async { вернулись(итог) }
+                      return true
+                  }, закрыть: закрыть)
     }
 }
 

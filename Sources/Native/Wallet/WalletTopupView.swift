@@ -27,7 +27,7 @@ struct ЭкранПополнения: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(LocalizedStringKey(т("topup_sub")))
+                    Text(LocalizedStringKey(т(Config.цифровыеПокупки ? "topup_sub" : "topup_sub_app")))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.текстВторой)
                         .fixedSize(horizontal: false, vertical: true)
@@ -43,6 +43,7 @@ struct ЭкранПополнения: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("close")) { закрыть() }
+                        .disabled(модель.идёт != nil || модель.сверяем)
                 }
                 ToolbarItem(placement: .keyboard) {
                     HStack {
@@ -52,6 +53,9 @@ struct ЭкранПополнения: View {
                 }
             }
         }
+        /* Пока идёт create (кнопка «Обработка…») или сверка «Проверяем оплату…», лист не смахнуть: страница банка и итог
+           должны появиться поверх него, а не пропасть вместе с ним. */
+        .interactiveDismissDisabled(модель.идёт != nil || модель.сверяем)
         .modifier(ОкнаПополнения(модель: модель, открыть: открыть, закрыть: закрыть))
     }
 
@@ -210,7 +214,7 @@ private struct ОкнаПополнения: ViewModifier {
                     case .пополнение(let оплачено): модель.вернулисьСБанка(оплачено: оплачено)
                     case .выплата: модель.банк = nil
                     }
-                }, закрыть: { модель.банк = nil })
+                }, закрыть: { модель.листБанкаЗакрыт() })
             }
             .alert(т("err_generic"), isPresented: ошибкаНаЭкране) {
                 Button(т("ok"), role: .cancel) {}
@@ -262,7 +266,8 @@ private struct ОкнаПополнения: ViewModifier {
         case .пополнен(let сумма, let баланс):
             ОкноИтогаКошелька(вид: .хорошо, заголовок: т("tpm_ok_t"),
                               сумма: сумма > 0 ? "+" + КошелёкФормат.тенге(сумма) : nil,
-                              строки: строкаБаланса(баланс), текст: т("tpm_ok_s"),
+                              строки: строкаБаланса(баланс),
+                              текст: т(Config.цифровыеПокупки ? "tpm_ok_s" : "tpm_ok_s_app"),
                               кнопки: [ОкноИтогаКошелька.Кнопка(подпись: т("tpm_ok_btn"), главная: true, действие: {
                                   модель.итог = nil
                                   закрыть()

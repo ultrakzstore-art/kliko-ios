@@ -141,6 +141,8 @@ final class ДеньгиСделкиМодель: ObservableObject {
         case приёмка(звёзды: Bool)
         case eGov(ЗапросEGov)
         case банк(URL, курьер: Bool)
+        /// «Недостаточно средств», картой нельзя: экран «Пополнить кошелёк» (только при Config.деньгиКошелька).
+        case пополнение
 
         var id: String {
             switch self {
@@ -149,6 +151,7 @@ final class ДеньгиСделкиМодель: ObservableObject {
             case .приёмка: return "accept"
             case .eGov(let з): return "egov-" + з.назначение
             case .банк(let адрес, _): return "bank-" + адрес.absoluteString
+            case .пополнение: return "topup"
             }
         }
     }
@@ -218,6 +221,8 @@ final class ДеньгиСделкиМодель: ObservableObject {
     private var вернулисьСБанка = false
     /// На экране (или только что был) лист банка.
     private var банкНаЭкране = false
+    /// На экране (или только что был) лист пополнения кошелька.
+    private var пополнениеНаЭкране = false
 
     init(id: String) {
         self.id = id
@@ -339,8 +344,11 @@ final class ДеньгиСделкиМодель: ObservableObject {
 
     /// dealReturnNote: «Возврат и обратная доставка» тремя пунктами.
     static var условияВозврата: String {
-        let т: (String) -> String = ДеньгиСделкиText.т
-        return т("ret_pol_title") + "\n• " + т("ret_pol_defect") + "\n• " + т("ret_pol_asis") + "\n• " + т("ret_pol_fwd")
+        /* Не цепочкой «+»: семь слагаемых в одном выражении — лишняя работа проверке типов (этап f0d29e1). */
+        let пункты: [String] = [ДеньгиСделкиText.т("ret_pol_defect"), ДеньгиСделкиText.т("ret_pol_asis"),
+                                ДеньгиСделкиText.т("ret_pol_fwd")]
+        let строки: [String] = [ДеньгиСделкиText.т("ret_pol_title")] + пункты.map { "• " + $0 }
+        return строки.joined(separator: "\n")
     }
 
     // MARK: - Общий путь денежного POST
@@ -408,7 +416,9 @@ final class ДеньгиСделкиМодель: ObservableObject {
 
     private func оплатить() {
         guard let с = сделка else { return }
-        let сумма = с.оплачено > 0 ? с.оплачено : с.кОплате
+        /* dealPay('<id>','<total_pay>') кнопки сайта: сумма окна «Заморозить N ₸» — total_pay; нет его — actual_pay
+           (запасной путь dealPay: actual_pay||total_pay из escrow.php?action=deal). */
+        let сумма = с.кОплате > 0 ? с.кОплате : с.оплачено
         guard сумма > 0 else {
             показать(т("dp_no_sum"))
             return
@@ -419,8 +429,9 @@ final class ДеньгиСделкиМодель: ObservableObject {
             let баллы = await self.баллы()
             self.идёт = false
             if let б = баллы, б.включены, б.баллов > 0 {
+                /* Math.round(n*o/100) сайта; доля — с сервера (max_spend), поэтому без Int(Double) напрямую. */
                 let доля = Double(сумма) * Double(б.доля) / 100
-                let максимум = min(б.баллов, Int(доля.rounded()))
+                let максимум = min(б.баллов, тенгеБезПереполнения(доля))
                 if максимум > 0 {
                     self.лист = .баллы(сумма: сумма, баллов: б.баллов, максимум: максимум)
                     return
@@ -482,8 +493,7 @@ final class ДеньгиСделкиМодель: ObservableObject {
         if недостача > 0 {
             if A.да(j["can_card"]) { return await оплатитьКартой() }
             показать(ДеньгиСделкиText.т("short", n: тенге(недостача)))
-            /* showTopup сайта: пополнение кошелька — этап 47 (Config.деньгиКошелька), пока страницей сайта. */
-            открытьСайт?("cabinet.php?go=wallet")
+            пополнитьКошелёк()
             return nil
         }
         if A.да(j["net"]) || A.строка(j["error"]) == "taken" {
@@ -572,10 +582,29 @@ final class ДеньгиСделкиМодель: ObservableObject {
      двигало — только сделка заново; оплатил ли человек до закрытия, скажет она сама (и следующий ?topup= по ссылке).
      */
     func листЗакрыт() {
+        if пополнениеНаЭкране {
+            /* Кошелёк могли пополнить — сделка заново; оплату с кошелька человек подтвердит новым нажатием. */
+            пополнениеНаЭкране = false
+            Task { await self.заново() }
+            return
+        }
         guard банкНаЭкране else { return }
         банкНаЭкране = false
         guard !вернулисьСБанка else { return }
         Task { await self.заново() }
+    }
+
+    /**
+     showTopup сайта («Недостаточно средств», картой нельзя): при Config.деньгиКошелька — свой экран «Пополнить кошелёк»
+     листом поверх карточки (ЛистПополненияКошелька); выключен — кабинет сайта, как на этапе 44. Сам ничего не шлёт.
+     */
+    private func пополнитьКошелёк() {
+        guard Config.деньгиКошелька else {
+            открытьСайт?("cabinet.php?go=wallet")
+            return
+        }
+        пополнениеНаЭкране = true
+        лист = .пополнение
     }
 
     // MARK: - Отмена (dealCancel) и взаимное решение (dealMutualResolve)
@@ -681,8 +710,12 @@ final class ДеньгиСделкиМодель: ObservableObject {
             }
             let e = СделкиAPI.строка(j["error"])
             if e == "pin_bad" {
-                let осталось = j["left"] != nil ? " · " + self.т("pin_left") + ": " + СделкиAPI.строка(j["left"]) : ""
-                self.показать(self.т("pin_bad") + осталось)
+                var текстОш = self.т("pin_bad")
+                if j["left"] != nil {
+                    let сколько = СделкиAPI.строка(j["left"])
+                    текстОш = "\(текстОш) · \(self.т("pin_left")): \(сколько)"
+                }
+                self.показать(текстОш)
             } else if e == "pin_locked" {
                 self.показать(self.т("pin_locked"))
             } else {
@@ -784,7 +817,7 @@ final class ДеньгиСделкиМодель: ObservableObject {
             if недостача > 0 {
                 if цена.бесплатно {
                     self.показать(ДеньгиСделкиText.т("shp_topup", n: self.тенге(недостача)))
-                    self.открытьСайт?("cabinet.php?go=wallet")
+                    self.пополнитьКошелёк()
                 } else {
                     self.вопрос = .картойЗаКурьера(недостача: недостача, цена)
                 }
@@ -816,7 +849,7 @@ final class ДеньгиСделкиМодель: ObservableObject {
             }
             self.показать(self.текстОтвета(j, запасной: self.т("shp_card_e")))
             if СделкиAPI.да(j["too_small"]) || СделкиAPI.да(j["too_big"]) || СделкиAPI.да(j["payments_off"]) {
-                self.открытьСайт?("cabinet.php?go=wallet")
+                self.пополнитьКошелёк()
             }
         }
     }

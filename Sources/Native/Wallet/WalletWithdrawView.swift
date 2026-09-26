@@ -52,7 +52,9 @@ struct ЭкранВывода: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    /* Пока withdraw в пути — не закрыть: ответ (заявка, eGov, соглашение) должен дойти до этого листа. */
                     Button(т("close")) { закрыть() }
+                        .disabled(модель.идёт)
                 }
                 ToolbarItem(placement: .keyboard) {
                     HStack {
