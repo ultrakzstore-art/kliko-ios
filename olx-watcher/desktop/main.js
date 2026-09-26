@@ -456,6 +456,40 @@ function botFiles() {
   return out;
 }
 
+// Текстовые файлы уходят на сервер с переносами LF — так же считаем и их суммы для сравнения.
+const TEXT_FILE = /\.(sh|service|js|json|example|md|txt)$/;
+function botFileData(f) {
+  const data = fs.readFileSync(path.join(APP_ROOT, f));
+  return TEXT_FILE.test(f) ? Buffer.from(data.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : data;
+}
+function localSums() {
+  const crypto = require('crypto');
+  const out = {};
+  for (const f of botFiles()) if (!f.endsWith('.example')) out[f] = crypto.createHash('sha256').update(botFileData(f)).digest('hex');
+  return out;
+}
+// Сравнить файлы и .env на сервере с тем, что поставила бы программа.
+function compareServer(sumsText, envText) {
+  const remote = {};
+  for (const line of String(sumsText).split('\n')) {
+    const m = /^([0-9a-f]{64})\s+\*?(.+)$/.exec(line.trim());
+    if (m) remote[m[2].replace(/^\.\//, '')] = m[1];
+  }
+  const local = localSums();
+  const changed = Object.keys(remote).filter((f) => local[f] && local[f] !== remote[f]);
+  const added = Object.keys(remote).filter((f) => !local[f] && !/^package-lock\.json$/.test(f));
+  const missing = Object.keys(local).filter((f) => !remote[f] && f !== 'package-lock.json');
+  const env = {};
+  for (const line of String(envText).split('\n')) {
+    const m = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (m) env[m[1]] = m[2].trim();
+  }
+  const clean = (v) => String(v ?? '').replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
+  const envDiff = KEYS.filter((k) => k in env && env[k] !== clean(settings.env[k])).map((k) => ({ k, server: env[k], app: clean(settings.env[k]) }));
+  const envExtra = Object.keys(env).filter((k) => !KEYS.includes(k) && k !== 'BOT_TOKEN');
+  return { changed, added, missing, env, envDiff, envExtra };
+}
+
 function envFileText(token) {
   // Значения — одной строкой, без кавычек: так их одинаково прочитает node --env-file.
   const clean = (v) => String(v ?? '').replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
@@ -503,6 +537,19 @@ async function deployToServer(opts) {
     // прошлой неудачной попытки, и свежая с ПК важнее.
     const hadDb = (await exec(`test -f ${REMOTE_DIR}/data/watcher.db && test -f /etc/systemd/system/olx-watcher.service && echo yes`, true)).text.trim() === 'yes';
 
+    // На сервере правили файлы или .env вручную — без подтверждения не перезаписываем.
+    if (!opts.force) {
+      const sums = await exec(`cd ${REMOTE_DIR} 2>/dev/null && find src deploy package.json -type f -exec sha256sum {} + 2>/dev/null`, true);
+      const envT = await exec(`cat ${REMOTE_DIR}/.env 2>/dev/null`, true);
+      if (sums.text.trim()) {
+        const c = compareServer(sums.text, envT.text);
+        if (c.changed.length || c.added.length || c.envExtra.length) {
+          out('На сервере есть ручные изменения — установка их перезапишет. Подтвердите в окне.\n');
+          return { ok: false, needConfirm: true, changed: c.changed, added: c.added, envExtra: c.envExtra };
+        }
+      }
+    }
+
     // Один токен — одна копия: бот на ПК останавливаем до запуска на сервере.
     if (bot.child) { out('Останавливаю бота на этом компьютере…\n'); await stopBot(); }
 
@@ -526,12 +573,7 @@ async function deployToServer(opts) {
     out(`Загружаю бота (${files.length} файлов) в ${REMOTE_DIR}…\n`);
     // Сборка для Windows может хранить текстовые файлы с переносами CRLF — Linux их не понимает
     // («set: pipefail\r: invalid option»). Текст отправляем с переносами LF.
-    const TEXT = /\.(sh|service|js|json|example|md|txt)$/;
-    for (const f of files) {
-      let data = fs.readFileSync(path.join(APP_ROOT, f));
-      if (TEXT.test(f)) data = Buffer.from(data.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
-      await put(`${REMOTE_DIR}/${f}`, data);
-    }
+    for (const f of files) await put(`${REMOTE_DIR}/${f}`, botFileData(f));
     await put(`${REMOTE_DIR}/.env`, envFileText(token));
     out('Настройки (токен, цены, реквизиты) записаны.\n');
 
@@ -695,6 +737,43 @@ ipcMain.handle('server-status', async (_e, opts = {}) => {
       ok: true, state: val('STATE'), since: val('SINCE'), blocks: Number(val('BLOCK')) || 0,
       olxBlocks: Number(val('OLXBLOCK')) || 0, mem: val('MEM'), log: text.split('---LOG---')[1]?.trim() || '',
     };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// «Проверить сервер»: только чтение. Служба, Node.js, диск и память, настройки (токен скрыт) и
+// отличия от программы, изменённые вручную файлы, доступность площадок с сервера, база.
+const CHECK_CMD = `cd ${REMOTE_DIR} 2>/dev/null || { echo NODIR; exit 0; }
+echo "STATE=$(systemctl is-active olx-watcher 2>/dev/null)"
+echo "SINCE=$(systemctl show olx-watcher -p ActiveEnterTimestamp --value 2>/dev/null)"
+NODEBIN=$(grep -o '^ExecStart=[^ ]*' /etc/systemd/system/olx-watcher.service 2>/dev/null | cut -d= -f2)
+echo "NODEV=$($NODEBIN -v 2>/dev/null)"
+echo "DISK=$(df -h ${REMOTE_DIR} | awk 'NR==2{print $4" свободно из "$2}')"
+echo "MEM=$(free -m | awk '/Mem:/{print $3"/"$2" МБ"}')"
+echo ---ENV---
+sed 's/^BOT_TOKEN=.*/BOT_TOKEN=(скрыт)/' .env 2>/dev/null
+echo ---SUMS---
+find src deploy package.json -type f -exec sha256sum {} + 2>/dev/null
+echo ---NET---
+for u in https://www.olx.kz/ https://kolesa.kz/ https://krisha.kz/ https://obyavleniya.kaspi.kz/ https://api.telegram.org/; do
+  if command -v curl >/dev/null; then c=$(curl -s -o /dev/null -m 12 -A 'Mozilla/5.0' -w '%{http_code}' "$u"); else c=нет-curl; fi
+  echo "$u $c"
+done
+echo ---DB---
+[ -n "$NODEBIN" ] && $NODEBIN --no-warnings -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('data/watcher.db',{readOnly:true});for(const t of ['users','subs','payments','vip_locks'])try{console.log(t+'='+d.prepare('SELECT COUNT(*) n FROM '+t).get().n)}catch{}" 2>/dev/null
+echo ---END---`;
+
+ipcMain.handle('server-check', async (_e, opts = {}) => {
+  try {
+    const text = await sshRun(opts, CHECK_CMD);
+    if (/^NODIR/m.test(text)) return { ok: false, error: `На сервере нет папки ${REMOTE_DIR} — бот туда не установлен.` };
+    const part = (a, b) => (text.split(`---${a}---`)[1] || '').split(`---${b}---`)[0].trim();
+    const val = (k) => (new RegExp(`^${k}=(.*)$`, 'm').exec(text) || [])[1]?.trim() || '';
+    const c = compareServer(part('SUMS', 'NET'), part('ENV', 'SUMS'));
+    const net = part('NET', 'DB').split('\n').filter(Boolean).map((l) => { const [u, code] = l.split(' '); return { host: new URL(u).host, code }; });
+    const db = Object.fromEntries(part('DB', 'END').split('\n').filter((l) => l.includes('=')).map((l) => l.split('=')));
+    return { ok: true, state: val('STATE'), since: val('SINCE'), node: val('NODEV'), disk: val('DISK'), mem: val('MEM'), ...c, net, db };
   } catch (e) {
     return { ok: false, error: e.message };
   }

@@ -322,7 +322,15 @@ $('btn-deploy').addEventListener('click', async () => {
   b.disabled = true;
   $('deploy-msg').textContent = 'Идёт установка…';
   $('deploy-out').dataset.fresh = '0';
-  const r = await window.app.deploy(srvOpts());
+  let r = await window.app.deploy(srvOpts());
+  if (r.needConfirm) {
+    const list = [...r.changed.map((f) => `• изменён: ${f}`), ...r.added.map((f) => `• добавлен: ${f}`), ...r.envExtra.map((k) => `• своя настройка в .env: ${k}`)];
+    if (confirm(`На сервере есть ручные изменения:\n${list.slice(0, 20).join('\n')}\n\nУстановка перезапишет файлы бота и .env версией из программы. Продолжить?`)) {
+      r = await window.app.deploy({ ...srvOpts(), force: true });
+    } else {
+      r = { ok: false, error: 'Установка отменена — на сервере ничего не изменено.' };
+    }
+  }
   $('srv-pass').value = '';
   $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на сервере.' : r.error;
   b.disabled = false;
@@ -374,4 +382,42 @@ $('btn-srv-restart').addEventListener('click', async () => {
   b.disabled = false;
   $('deploy-msg').textContent = r.ok ? 'Перезапущен.' : r.error;
   if (r.ok) serverStatus();
+});
+
+$('btn-check').addEventListener('click', async () => {
+  const b = $('btn-check');
+  b.disabled = true;
+  $('deploy-msg').textContent = 'Проверяю сервер (только чтение)…';
+  const r = await window.app.serverCheck(srvOpts());
+  $('srv-pass').value = '';
+  b.disabled = false;
+  if (!r.ok) { $('deploy-msg').textContent = r.error; return; }
+  $('deploy-msg').textContent = '';
+  const on = r.state === 'active';
+  const ok = (x) => (x ? '✅' : '⚠️');
+  const code = (c) => (c === '200' ? '✅ 200' : c === '000' ? '⚠️ нет ответа' : /^30/.test(c) ? `✅ ${c}` : `⚠️ ${c}`);
+  const lines = [
+    `${on ? '🟢' : '🔴'} Бот: ${on ? `работает с ${r.since}` : r.state || 'служба не найдена'}`,
+    `Node.js: ${r.node || '—'} · диск: ${r.disk || '—'} · память: ${r.mem || '—'}`,
+    `База: подписчиков ${r.db.users ?? '—'}, поисков ${r.db.subs ?? '—'}, оплат ${r.db.payments ?? '—'}, VIP ${r.db.vip_locks ?? '—'}`,
+    '',
+    'Доступ с сервера к площадкам (одна загрузка главной страницы):',
+    ...r.net.map((n) => `  ${n.host}: ${code(n.code)}`),
+    '',
+    `${ok(!r.changed.length && !r.added.length)} Файлы бота: ${!r.changed.length && !r.added.length ? 'как в программе' : 'есть ручные изменения'}`,
+    ...r.changed.map((f) => `  • изменён: ${f}`),
+    ...r.added.map((f) => `  • добавлен: ${f}`),
+    ...r.missing.map((f) => `  • нет на сервере: ${f}`),
+    '',
+    `${ok(!r.envDiff.length && !r.envExtra.length)} Настройки (.env): ${!r.envDiff.length && !r.envExtra.length ? 'как в программе' : 'отличаются'}`,
+    ...r.envDiff.map((d) => `  • ${d.k}: на сервере «${d.server}», в программе «${d.app}»`),
+    ...r.envExtra.map((k) => `  • своя настройка на сервере: ${k}`),
+    '',
+    'Настройки на сервере (токен скрыт):',
+    ...Object.entries(r.env).map(([k, v]) => `  ${k}=${k === 'BOT_TOKEN' ? '(скрыт)' : v}`),
+  ];
+  const o = $('deploy-out');
+  o.dataset.fresh = '1';
+  o.textContent = lines.join('\n');
+  o.scrollTop = 0;
 });
