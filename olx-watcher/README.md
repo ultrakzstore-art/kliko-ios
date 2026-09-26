@@ -117,6 +117,36 @@ Kaspi, реквизиты, лимиты, тестовый срок), «Пров�
 Бот работает, пока запущен. Чтобы круглосуточно — оставьте ПК включённым или поставьте на
 недорогой VPS (любой Linux с Node 22).
 
+## Сервер (VPS) — круглосуточно
+
+Ubuntu 22.04/24.04 или Debian 12, от root:
+
+```bash
+apt-get update && apt-get install -y git
+git clone https://github.com/ultrakzstore-art/kliko-ios.git /opt/kliko-ios   # приватный репозиторий — см. ниже
+cd /opt/kliko-ios && git checkout claude/idea-czum8v
+cd olx-watcher
+bash deploy/install.sh        # 1-й раз создаст .env и попросит вписать токен
+nano .env                     # BOT_TOKEN, ADMIN_ID, KASPI_DETAILS, цены
+bash deploy/install.sh        # поставит Node 22, зависимости и службу, запустит бота
+```
+
+- Журнал: `journalctl -u olx-watcher -f` · перезапуск: `systemctl restart olx-watcher` ·
+  остановить: `systemctl stop olx-watcher`.
+- Обновить до новой версии: `bash deploy/update.sh`.
+- Приватный репозиторий: при `git clone` логин — имя на GitHub, пароль — токен
+  (GitHub → Settings → Developer settings → Personal access tokens, право `repo` / Contents: read).
+- **Один токен — одна копия бота.** Перед запуском на сервере остановите бота в приложении
+  для ПК (вкладка «Бот» → «Остановить», и снимите автозапуск), иначе Telegram отдаёт обновления
+  то одной копии, то другой.
+- **Перенести пользователей, поиски и оплаты с ПК**: в приложении «Папка с данными» → файл
+  `watcher.db` → скопируйте на сервер в `olx-watcher/data/watcher.db` (например, через WinSCP),
+  затем `chown olxbot:olxbot data/watcher.db && systemctl restart olx-watcher`.
+- Настройки из приложения (цены, реквизиты Kaspi, тестовый срок) перенесите в `.env` вручную.
+- Сервер лучше в Казахстане: OLX и Kaspi могут ограничивать запросы с зарубежных
+  дата-центров. Если в журнале часто «ограничил запросы (403)» — пропишите прокси в `.env`
+  (`NODE_USE_ENV_PROXY=1`, `HTTPS_PROXY=…`).
+
 ## Проверка на своей машине
 
 Устройство OLX.kz изнутри из среды разработки проверить не удалось (сайт был недоступен),
