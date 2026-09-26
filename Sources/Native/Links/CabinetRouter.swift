@@ -16,14 +16,17 @@ import Foundation
    · ?go=import, ?go=aiimport                                 — перенос по ссылке и AI-импорт: модуль aiimport — сайт;
    · ?go=deals, ?s=deals, ?deal=<id>                          — «Мои сделки» и карточка сделки своим экраном (этап 43,
                                                                 Config.нативныеСделки; деньги в карточке — страницей сайта);
-   · ?start_deal=, ?start_service=, ?eds=                     — создание сделки и сделки eGov (44, деньги — сайт);
-   · ?topup=, ?payout=                                        — возвраты со шлюза: pay.php?action=confirm и payout_outcome
-                                                                зовёт страница сайта (деньги — не трогать нативно);
+   · ?start_deal=, ?start_service=                            — создание сделки: этап 44, только за Config.деньгиСделок
+                                                                (false) — иначе сайт; ?eds= (сделки eGov) — сайт;
+   · ?topup=…&deal=                                           — возврат со шлюза по сделке: этап 44 за тем же рубильником
+                                                                (pay.php?action=confirm); ?topup= без deal и ?payout= —
+                                                                кошелёк (47), страница сайта;
+   · ?meet=, ?parcel=                                         — коды передачи: этап 44 за тем же рубильником, иначе сайт;
    · ?go=wallet                                               — кошелёк (47);
    · ?go=verify, ?go=egov, ?open=password                     — профиль и верификация (46);
    · ?s=<раздел>, ?go=exchanges|requests|deliveries           — разделы (45);
    · ?egov=1, ?egov_confirm=1, ?after=, ?return=, ?bye=1      — только экран гостя (eGov живёт на странице);
-   · ?meet=, ?parcel=, ?ticket=, ?share=, ?social=, ?logout=  — страница сайта (коды сделок, поддержка, выход с токеном).
+   · ?ticket=, ?share=, ?social=, ?logout=                    — страница сайта (поддержка, выход с токеном).
  Адрес без параметров — тоже сайт: вошедшему нужен полный кабинет (объявления, сделки, кошелёк), а его нативного ещё нет.
  */
 enum АдресаКабинета {
@@ -34,6 +37,7 @@ enum АдресаКабинета {
 
     /// Нативный экран для параметров адреса кабинета (метки utm_ уже убраны) или nil — страница сайта.
     static func цель(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
+        if let деньги = цельДенег(параметры) { return деньги }
         guard параметры.count == 1, let п = параметры.first else { return nil }
         let значение = (п.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         switch п.name {
@@ -63,5 +67,55 @@ enum АдресаКабинета {
         default:
             return nil
         }
+    }
+
+    /**
+     Этап 44 — ссылки денег сделок, только при Config.деньгиСделок (false) и своих «Моих сделках». Задание кладётся в
+     ящик (ЗаданияДенегСделок), экран его забирает; распознать() зовётся только при входе снаружи (WebBridge), поэтому
+     задание кладётся, только когда адрес действительно открывают. Выключено — nil, и адрес открывает страница сайта.
+       · ?start_deal=<pid>[&pay=][&term=] и ?start_service=<pid> — «Мои сделки» и окно создания;
+       · ?meet=<qr>, ?parcel=<token>                            — «Мои сделки» и «Вы точно получили товар?»;
+       · ?topup=ok|fail&deal=<id>[&ship=1]                      — карточка сделки и сверка оплаты (без deal — кошелёк,
+                                                                  этап 47, страница сайта).
+     */
+    private static func цельДенег(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
+        guard Config.деньгиСделок && Config.нативныеСделки && Config.нативныйКабинет, !параметры.isEmpty else { return nil }
+        let имена = Set(параметры.map { $0.name })
+        func знач(_ имя: String) -> String {
+            (параметры.first(where: { $0.name == имя })?.value ?? "").trimmingCharacters(in: .whitespaces)
+        }
+        func годный(_ s: String) -> Bool {
+            s.range(of: "^[A-Za-z0-9_-]{1,128}$", options: .regularExpression) != nil
+        }
+        if имена.contains("start_deal") && имена.isSubset(of: ["start_deal", "pay", "term"]) {
+            let товар = знач("start_deal")
+            guard годный(товар) else { return nil }
+            /* (pay||"").replace(/[^a-z_]/gi,"").toLowerCase() и parseInt(term) сайта. */
+            let оплата = String(знач("pay").filter { $0.isASCII && ($0.isLetter || $0 == "_") }).lowercased()
+            let срок = Int(String(знач("term").prefix(while: { $0.isASCII && $0.isNumber }))) ?? 0
+            ЗаданияДенегСделок.shared.положить(.сделка(товар: товар, оплата: оплата, срок: срок))
+            return .сделки
+        }
+        if имена == ["start_service"] {
+            let товар = знач("start_service")
+            guard годный(товар) else { return nil }
+            ЗаданияДенегСделок.shared.положить(.услуга(товар: товар))
+            return .сделки
+        }
+        if имена == ["meet"] || имена == ["parcel"] {
+            let встреча = имена.contains("meet")
+            let токен = знач(встреча ? "meet" : "parcel")
+            guard годный(токен) else { return nil }
+            ЗаданияДенегСделок.shared.положить(.код(встреча: встреча, токен: токен))
+            return .сделки
+        }
+        if имена.contains("topup") && имена.contains("deal") && имена.isSubset(of: ["topup", "deal", "ship"]) {
+            let номер = знач("deal")
+            guard СделкиAPI.годныйНомер(номер) else { return nil }
+            let итог = ВозвратСоШлюза.Итог(оплачено: знач("topup") == "ok", сделка: номер, курьер: знач("ship") == "1")
+            ЗаданияДенегСделок.shared.положить(.шлюз(итог))
+            return .сделка(id: номер)
+        }
+        return nil
     }
 }

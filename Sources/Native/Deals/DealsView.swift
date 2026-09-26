@@ -40,6 +40,8 @@ struct МоиСделкиЭкран: View {
                     Task { await модель.загрузить() }
                 })
             }
+            /* Этап 44: ?start_deal=, ?start_service=, ?meet=, ?parcel= — окна создания и кода (Config.деньгиСделок). */
+            .modifier(СлойЗаданийСделок(открыть: открыть))
     }
 
     @ViewBuilder

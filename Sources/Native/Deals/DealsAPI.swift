@@ -386,6 +386,8 @@ struct Сделка: Equatable, Identifiable {
     var талонПодписан: Bool = false
     /// deal.live — данные Live Activity от сервера (§4.16); nil — считаем сами, как сайт.
     var живое: [String: String]? = nil
+    /// Этап 44: то, что читают только денежные блоки (код продавца, застой, возврат товара, заявка курьера).
+    var деньги = ДанныеДенегСделки()
 
     init(id: String) {
         self.id = id
@@ -413,6 +415,7 @@ struct Сделка: Equatable, Identifiable {
         разобратьСпор(j, ответ: ответ)
         разобратьПередачу(j)
         разобратьДоставку(j)
+        деньги = ДанныеДенегСделки(j)
     }
 
     private mutating func разобратьТовар(_ j: [String: Any]) {
