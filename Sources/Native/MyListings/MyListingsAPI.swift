@@ -104,7 +104,8 @@ enum МоиОбъявленияAPI {
     nonisolated static func целое(_ значение: Any?) -> Int {
         let n = число(значение)
         guard n.isFinite else { return 0 }
-        return Int(n.rounded(.towardZero))
+        /* Int(Double) падает на числах за пределами Int (от 9,2e18) — такое с сервера не ждём, но и не роняем приложение. */
+        return Int(exactly: n.rounded(.towardZero)) ?? 0
     }
 
     /// Ошибка сервера: сессии нет.
