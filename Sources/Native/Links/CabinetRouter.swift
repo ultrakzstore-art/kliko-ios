@@ -20,10 +20,15 @@ import Foundation
    · ?start_deal=, ?start_service=                            — создание сделки: этап 44, только за Config.деньгиСделок
                                                                 (false) — иначе сайт; ?eds= (сделки eGov) — сайт;
    · ?topup=…&deal=                                           — возврат со шлюза по сделке: этап 44 за тем же рубильником
-                                                                (pay.php?action=confirm); ?topup= без deal и ?payout= —
-                                                                кошелёк (47), страница сайта;
+                                                                (pay.php?action=confirm);
+   · ?topup=ok|fail (без deal и pro)                          — возврат с оплаты пополнения: этап 47, только за
+                                                                Config.деньгиКошелька (false) — иначе сайт;
+   · ?payout=back                                             — возврат со страницы банка выплаты: экран кошелька и
+                                                                payout_outcome (этап 47, только чтение);
    · ?meet=, ?parcel=                                         — коды передачи: этап 44 за тем же рубильником, иначе сайт;
-   · ?go=wallet                                               — кошелёк (47);
+   · ?go=wallet                                               — экран кошелька (этап 47, Config.нативныйКошелёк; у сайта
+                                                                ветки нет — главный экран, где кошелёк в шапке);
+   · ?s=points                                                — «Баллы» своим экраном (этап 47);
    · ?open=password                                           — окно пароля своим экраном (этап 46,
                                                                 Config.нативныеНастройки);
    · ?go=verify, ?go=egov                                     — верификация: eGov живёт на странице — сайт (46);
@@ -46,6 +51,7 @@ enum АдресаКабинета {
     /// Нативный экран для параметров адреса кабинета (метки utm_ уже убраны) или nil — страница сайта.
     static func цель(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
         if let деньги = цельДенег(параметры) { return деньги }
+        if let кошелёк = цельКошелька(параметры) { return кошелёк }
         guard параметры.count == 1, let п = параметры.first else { return nil }
         let значение = (п.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         switch п.name {
@@ -61,6 +67,9 @@ enum АдресаКабинета {
             if значение == "deals" && Config.нативныеСделки && Config.нативныйКабинет { return .сделки }
             /* Этап 45: ?s=requests и ?go=requests — «Заявки рядом» (у сайта оба ведут в showRequests). */
             if значение == "requests" && Config.нативныеСообщенияКабинета && Config.нативныйКабинет { return .заявки }
+            /* Этап 47: ?go=wallet — экран кошелька; ?s=points — «Баллы» (showPoints модуля deals). */
+            if п.name == "go" && значение == "wallet" && Config.нативныйКошелёк && Config.нативныйКабинет { return .кошелёк }
+            if п.name == "s" && значение == "points" && Config.нативныйКошелёк && Config.нативныйКабинет { return .баллы }
             return nil
         case "open":
             /* Этап 46: ?open=password — openChangePassword сайта: окно пароля поверх кабинета. */
@@ -136,6 +145,30 @@ enum АдресаКабинета {
             let итог = ВозвратСоШлюза.Итог(оплачено: знач("topup") == "ok", сделка: номер, курьер: знач("ship") == "1")
             ЗаданияДенегСделок.shared.положить(.шлюз(итог))
             return .сделка(id: номер)
+        }
+        return nil
+    }
+
+    /**
+     Этап 47 — возвраты со страниц банка для кошелька. Задание кладётся в ящик (ЗаданияКошелька), экран кошелька его
+     забирает. ?payout=back — только чтение (payout_outcome), при своём кошельке; ?topup=ok|fail без deal и pro — сверка
+     оплаты пополнения (pay.php?action=confirm), только при Config.деньгиКошелька: выключено — nil, страница сайта.
+     */
+    private static func цельКошелька(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
+        guard Config.нативныйКошелёк && Config.нативныйКабинет, !параметры.isEmpty else { return nil }
+        let имена = Set(параметры.map { $0.name })
+        func знач(_ имя: String) -> String {
+            (параметры.first(where: { $0.name == имя })?.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        }
+        if имена == ["payout"] && знач("payout") == "back" {
+            ЗаданияКошелька.shared.положить(.выплата)
+            return .кошелёк
+        }
+        if имена == ["topup"] && Config.деньгиКошелька {
+            let итог = знач("topup")
+            guard итог == "ok" || итог == "fail" else { return nil }
+            ЗаданияКошелька.shared.положить(.пополнение(оплачено: итог == "ok"))
+            return .кошелёк
         }
         return nil
     }

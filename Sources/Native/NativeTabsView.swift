@@ -441,6 +441,21 @@ struct NativeTabsView: View {
             путьКабинета = NavigationPath()
             вкладка = .кабинет
             НастройкиМодель.shared.открытьПароль()
+        case .кошелёк:
+            /* Этап 47: ?go=wallet, ?payout=back — вкладка «Кабинет» и экран кошелька поверх неё (задание ссылки экран
+               заберёт сам). */
+            guard NativeRouter.доступна(.кошелёк) else { return }
+            var путь = NavigationPath()
+            путь.append(КабинетЦель.кошелёк)
+            путьКабинета = путь
+            вкладка = .кабинет
+        case .баллы:
+            /* Этап 47: ?s=points — «Баллы» поверх кабинета. */
+            guard NativeRouter.доступна(.баллы) else { return }
+            var путь = NavigationPath()
+            путь.append(КабинетЦель.баллы)
+            путьКабинета = путь
+            вкладка = .кабинет
         }
     }
 

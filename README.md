@@ -80,7 +80,8 @@
 | 44 ✅ | Деньги сделок своими окнами — только за `Config.деньгиСделок` (`false`; выключен — кнопки открывают страницу сделки сайта): оплата (`points` → «Применить баллы?» / «Заморозить средства?» → ход → `pay`, `need_otp` → окно eGov `otp_step_create` / `otp_step_check`, `pay_card` → страница банка в листе приложения → возврат `?topup=ok\|fail&deal=` → `pay.php?action=confirm` до 5 раз), отмена (`cancel`, сбор 1 000 ₸ после отправки), приёмка (`buyer_confirm`), «Работа выполнена» (`seller_confirm`), взаимное решение спора, код продавца (`pin_enter`), возврат товара (`cancel {accept_fault}` + `clocal_return_confirm`), курьер Яндекса (`ship_quote` → `ship_add` / `ship_add_card`, `ship_drop`), создание (`?start_deal=`, `?start_service=` → `widget_data` → `create`), коды из ссылок (`?meet=`, `?parcel=` → `meet_scan` / `parcel_open`); денежный POST — ровно один раз по нажатию | `Sources/Native/Deals/DealMoney*.swift`, `DealCreate.swift` |
 | 45 ✅ | Сообщения кабинета своими экранами (`Config.нативныеСообщенияКабинета`): единый инбокс «Чат» — `dm.php?action=list&me_id=` + `chat.php?action=leads` + `buyer_chats` со склейкой lead > buyer > dm, вкладки «Все / Покупатели / Аренда / Обмен», поиск (и `chat.php?action=search`), «⋯» строки — `chat_pin` (до 5), `api/chat_hide.php` `hide` / `restore` / `purge` (после вопроса), число раз в 12 с; чат по лиду (`seller_chat` + long-poll `wait=1&since=`, `seller_join`, `seller_reply`, `typing`, `presence_event`, `set_label`, `subs.php block/unblock`, `request_unblock`, `report.php`, `offer_accept`, `offer_counter`; `offer_decline` — только за `Config.деньгиСделок`); «Заявки рядом» (`my_requests`, `request_action` respond / report / accept / confirm) и «Сделка состоялась?» (`my_pending_feedback` → `request_feedback`); колокольчик (записи со страницы кабинета, `mark_notif_read`); обращение в поддержку `?ticket=` (`sup_my_get`, `sup_my_reply`), «Запросить данные» (`support.php?action=create`), «Справочный центр»; переписка dm.php — `me_id`, `tid`, карточка заявки, «Прочитано / Отправлено», служебные по полям карты (§6.4.10) | `Sources/Native/Inbox/*`, `ChatModels.swift`, `ChatAPI.swift` |
 | 46 ✅ | Настройки и профиль разделами вкладки «Кабинет» (`Config.нативныеНастройки`): карточка профиля сайта (фото — `upload_photo` + `set_avatar`, имя, «Проверенный продавец», номер), «Аккаунт» — `change_password`, `change_phone` → `set_contacts`, `/cabinet.php?action=set_phone_policy`, `save_pref_chat`, статус верификации (пройти — страницей `?go=verify`); «Объявления» — `save_pref_cats`, `save_pref_geo` + `save_pref_ship`, `save_pref_hours`, `save_pref_redact`; «Продажи и оплата» — `save_pref_escrow`, `save_pref_pay`, `save_pref_reserve`; «Применить к объявлениям?» — `apply_pref_field`; «Устройства и входы» — `sec_devices`, `sec_end`, `sec_set`; мастер «Начало работы» — `save_onboard`; «Язык» — `save_pref_lang`; тема в аккаунт — `/api/ui_prefs.php` целиком; ссылка `?open=password`. Удаление аккаунта и выключение eGov-входа — страницей сайта | `Sources/Native/Settings/*`, `CabinetView.swift`, `AppearanceViews.swift` |
-| 47+ | Кошелёк, выплаты, платные услуги… | — |
+| 47 ✅ | Кошелёк и баллы (`Config.нативныйКошелёк`): карточка «Кошелёк» под шапкой вкладки «Кабинет» (баланс, «Вывести на карту», «На удержании», «пополнение с карты», скрыть баланс) и экран кошелька — `wallet_info` (история с «сделка» и «чек» — `escrow.php?action=deal`, «Выплата … готова»), `frozen_funds`, итог выплаты `payout_outcome` после `?payout=back`; экран «Баллы» — `escrow.php?action=points`; ссылки `?go=wallet`, `?s=points`. 🔴 Пополнение (`pay.php?action=create`, `cabinet.php?action=topup`, `pay.php?action=confirm`), вывод (`withdraw`), авто-вывод (`wd_autopay`) и «Указать карту» (`payout_link`) — только за `Config.деньгиКошелька` (false), «Вернуть деньги» обеспечения (`offer_unfund`) — за `Config.деньгиСделок`: выключены — кабинет сайта | `Sources/Native/Wallet/*`, `CabinetView.swift`, `CabinetRouter.swift` |
+| 48+ | Платные услуги, PRO, магазин и компания… | — |
 
 Как устроен этап 1:
 
@@ -661,6 +662,19 @@
   iPhone. Верификация и удаление аккаунта — страницами сайта. Ссылка `?open=password` → `NativeRouter.Цель.пароль`.
   Заодно исправлено повторное объявление `уведомления` в `CabinetView` (этап 45 → `записиКолокольчика`). Выход стирает
   профиль и закрывает окна (`ВыходНачисто`).
+- Кошелёк и баллы (этап 47) — по карте кабинета (§5, §8.9), коду кабинета (`loadWalletInfo`, `frozenRender`,
+  `payoutBannerHTML`, `payoutBackCheck`, `tpmOpen`) и докачанным модулям `cabinet-wallet` (`doTopup`, `showWithdraw`,
+  `wdCalcFee`, `wdAmountOk`, `wdAutoToggle`, `doWithdraw`) и `cabinet-deals` (`showPoints`). Чтение — `КошелёкAPI` и
+  `КошелёкМодель`: кошелёк перечитывается при каждом показе «Кабинета» фоном (страницу под слоем не уводит), IS_VERIFIED
+  и строки T со ставками вывода (`wd_min`, `wd_bank_hint`, `wd_term2_s`) берутся из той же страницы кабинета. «На
+  удержании» и «Пополнение с карты» у сайта живут на экране вывода — здесь они сведениями на экране кошелька, пока вывод
+  страницей сайта. Деньги: `ПополнениеМодель` и `ВыводМодель` написаны по модулю wallet целиком (чипы и ±1000, fresh
+  после неудачной оплаты, страница банка в листе с перехватом `?topup=` / `?payout=back`, сверка оплаты до пяти раз,
+  двухшаговый вывод с расчётом комиссии и ступенью доверия, eGov и соглашение этапов 44 и 40), но стоят за
+  `Config.деньгиКошелька` = false; денежный POST уходит один раз и только по нажатию, повторы сайта (`payments_off` →
+  `topup`, `doWithdraw` после eGov) — новым нажатием. «Сделка» и «Спор» из «Заморожено» — своя карточка сделки.
+  Глаз «скрыть баланс» прячет и номер в карточке профиля, как у сайта. Выход стирает кошелёк, выбор «скрыть» и задания
+  ссылок (`ВыходНачисто`).
 - Каждый пуш в ветку собирается под симулятор (`.github/workflows/ios-check.yml`) — без подписи
   и секретов, чтобы ошибки компиляции были видны сразу.
 

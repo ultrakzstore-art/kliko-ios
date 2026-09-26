@@ -25,6 +25,8 @@ import UIKit
 
 struct ШапкаПрофиля: View {
     let профиль: ПрофильКабинета
+    /// Этап 47: глаз карточки «Кошелёк» прячет и номер — как toggleHidePrivate сайта (баланс и телефон шапки).
+    @ObservedObject private var кошелёк = КошелёкМодель.shared
     @State private var выбор: PhotosPickerItem? = nil
     @State private var грузится = false
 
@@ -78,7 +80,7 @@ struct ШапкаПрофиля: View {
                 }
             }
             if !профиль.телефонПоказ.isEmpty {
-                Text(профиль.телефонПоказ)
+                Text(кошелёк.скрыто && Config.нативныйКошелёк ? "•• ••• •• ••" : профиль.телефонПоказ)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.95))
                     .monospacedDigit()
