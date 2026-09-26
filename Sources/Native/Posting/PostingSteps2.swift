@@ -501,10 +501,10 @@ struct ШагДополнительно: View {
             ЗаметкаПодачи(т("form_additional_note"), тон: .серый, значок: "slider.horizontal.3")
             if модель.правка {
                 /* У опубликованного сайт сохраняет эти настройки сразу своими окнами (openPayment / openDelivery /
-                   openTrust) — отдельно от edit_item. Здесь — их страница кабинета. */
+                   openTrust) — отдельно от edit_item. Здесь — своё окно тех же полей (MyListings/PublishedSettings.swift). */
                 КарточкаПодачи(т("form_additional"), подпись: т("cfg_edit_note")) {
                     КнопкаПодачиВторая(т("cfg_setup")) {
-                        открытьСайт("cabinet.php?edit=" + (модель.номерПравки.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? модель.номерПравки))
+                        ЛистНастроекОбъявления.показать(модель: модель)
                     }
                 }
             } else {
