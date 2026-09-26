@@ -10,8 +10,8 @@ import Foundation
 
    · sort — reco, price (дешевле), price_d (дороже): карта сайта {reco:"reco", price_asc:"price",
      price_desc:"price_d", date_*:"new"}; «Новые» по умолчанию (value="date") в карте нет — уходят как reco, а порядок
-     «новые + ТОП» ставит лента (Feed/FeedRhythm.swift). «Старые» и «По рейтингу» сайт сортирует у себя на странице —
-     у нас их нет;
+     «новые + ТОП» ставит лента (Feed/FeedRhythm.swift). «Старые» (sort=new) и «По рейтингу» (sort=reco) сайт
+     сортирует у себя на странице по загруженному — лента тоже (FeedModel.порядокНаТелефоне);
    · cond — new или used, пусто — не шлём;
    · verified=1, photo=1;
    · pmin, pmax — целые ₸;
@@ -27,31 +27,38 @@ import Foundation
  */
 
 /// «Сначала показывать» — значение <select id="mk-sort"> сайта; что уходит в sort= у api/listings.php — `параметр`.
-/// Порядок вариантов — как у сайта: «Новые» (по умолчанию, selected), «Рекомендуемые», «Дешевле», «Дороже».
+/// Порядок вариантов — как у сайта: «Новые» (по умолчанию, selected), «Рекомендуемые», «Старые», «Дешевле», «Дороже»,
+/// «По рейтингу».
 enum СортировкаЛенты: String, CaseIterable, Hashable, Sendable {
     case новые = "date"
     case рекомендуемые = "reco"
+    case старые = "date_asc"
     case дешевле = "price_asc"
     case дороже = "price_desc"
+    case поРейтингу = "rating"
 
     /// sort= запроса — карта _mkApiQS сайта {reco:"reco", price_asc:"price", price_desc:"price_d", date_*:"new"}[sort]
     /// || "reco". Значения "date" в ней нет: «Новые» уходят как reco, а порядок «новые + ТОП через десять» ставит лента
-    /// у себя (ЗолотойРитм, Feed/FeedRhythm.swift), как mkRender сайта.
+    /// у себя (ЗолотойРитм, Feed/FeedRhythm.swift), как mkRender сайта. «Старые» — date_asc, это "new"; «По рейтингу»
+    /// в карте нет — reco. Оба порядка сайт ставит у себя на странице по загруженному (FeedModel.порядокНаТелефоне).
     var параметр: String {
         switch self {
-        case .новые, .рекомендуемые: return "reco"
-        case .дешевле:              return "price"
-        case .дороже:               return "price_d"
+        case .новые, .рекомендуемые, .поРейтингу: return "reco"
+        case .старые:                            return "new"
+        case .дешевле:                           return "price"
+        case .дороже:                            return "price_d"
         }
     }
 
-    /// Подпись — sort_reco, sort_new, sort_cheap, sort_expensive сайта.
+    /// Подпись — sort_reco, sort_new, sort_old, sort_cheap, sort_expensive, sort_rating сайта.
     var подпись: String {
         switch self {
         case .рекомендуемые: return FilterText.т("sort_reco")
         case .новые:         return FilterText.т("sort_new")
+        case .старые:        return FilterText.т("sort_old")
         case .дешевле:       return FilterText.т("sort_cheap")
         case .дороже:        return FilterText.т("sort_expensive")
+        case .поРейтингу:    return FilterText.т("sort_rating")
         }
     }
 }

@@ -45,9 +45,11 @@ enum ListingsAPI {
         var фильтры = ФильтрыЛенты()
         /// gs из ответа первой страницы (этап 33) — уходит со второй страницы, как у сайта; nil или 0 — не шлём.
         var gs: Int?
+        /// Режим «Аренда» (mkVertical('rent') сайта): intent=rent — _mkApiQS шлёт его, только если это rent или sale.
+        var аренда = false
 
         /// Ленту по умолчанию кладём на диск; поиск, разделы и фильтры — нет, они быстро устаревают и нужны реже.
-        var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty && фильтры == ФильтрыЛенты() }
+        var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty && фильтры == ФильтрыЛенты() && !аренда }
     }
 
     private static let сессия: URLSession = {
@@ -72,6 +74,7 @@ enum ListingsAPI {
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
         поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, ymin, ymax, rooms
+        if з.аренда { поля.append(URLQueryItem(name: "intent", value: "rent")) }     // «Аренда», как _mkApiQS
         if з.page > 1, let gs = з.gs, gs > 0 { поля.append(URLQueryItem(name: "gs", value: String(gs))) }
         ч.queryItems = поля
 

@@ -123,6 +123,8 @@ struct Listing: Identifiable, Hashable {
     var свежесть = 0
     /// slot: "top" — сервер сам поставил объявление в ТОП-место выдачи «Рекомендуемые» (mkOrderPage сайта). Нет — nil.
     var слот: String? = nil
+    /// created_ts (секунды unix) — «Старые» сайта сортируют именно по нему (date_asc в mkRender). Нет — 0.
+    var созданоСекунд = 0
 
     struct Характеристика: Hashable {
         let ключ: String
@@ -377,6 +379,7 @@ extension Listing: Decodable {
         let свежее = число("fresh_ts").map { $0.isFinite && abs($0) < 1e12 ? Int($0) : 0 } ?? 0
         let созданное = число("created_ts").map { $0.isFinite && abs($0) < 1e12 ? Int($0) : 0 } ?? 0
         свежесть = свежее != 0 ? свежее : созданное
+        созданоСекунд = созданное
         слот = непусто(строка("slot"))
     }
 }

@@ -33,11 +33,21 @@ struct ЦенаКарточкиСайта: Hashable {
     let торг: Bool
 
     /// mkPriceHTML(t, false) при _mkVitHasPrice: цена, аренда с суточной ценой или «договорная»; иначе nil.
-    static func для(_ т: Listing) -> ЦенаКарточкиСайта? {
+    /// `режимАренды` — лента в режиме «Аренда» (mkSt.intent == "rent"): у сдаваемого — цена аренды «N ₸/сут» или «/М», а
+    /// без неё — «Аренда · Договорная», как первая ветка mkPriceHTML.
+    static func для(_ т: Listing, режимАренды: Bool = false) -> ЦенаКарточкиСайта? {
         let цена = т.price ?? 0
         let день = т.rentPriceDay ?? 0
         let аренда = т.forRent && день > 0
         guard цена > 0 || аренда || т.negotiable else { return nil }
+        if режимАренды && т.forRent {
+            if день > 0 {
+                let единица = "/" + ListingPageText.т(т.периодАренды == "month" ? "unit_month" : "unit_day")
+                return ЦенаКарточкиСайта(вид: .сумма, основная: сумма(день), единица: единица, старая: nil, торг: false)
+            }
+            let подпись = ВитринаТекст.т("rent") + " · " + ВитринаТекст.т("negotiable")
+            return ЦенаКарточкиСайта(вид: .договорная, основная: подпись, единица: nil, старая: nil, торг: false)
+        }
         if аренда && (т.negotiable || цена <= 0) {
             let единица = "/" + ListingPageText.т(т.периодАренды == "month" ? "unit_month" : "unit_day")
             return ЦенаКарточкиСайта(вид: .сумма, основная: сумма(день), единица: единица, старая: nil, торг: false)
