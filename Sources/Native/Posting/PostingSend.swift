@@ -529,7 +529,7 @@ extension ПодачаМодель {
         let тело = телоПодачи()
         do {
             let j: [String: Any]
-            if форма.топ != nil {
+            if Config.цифровыеПокупки && форма.топ != nil {
                 /* 🔴 С ТОПом submit списывает деньги — один раз, без повтора даже на «csrf». */
                 j = try await отправитьОдинРаз("cabinet.php?action=submit", тело: тело)
             } else {
@@ -593,7 +593,7 @@ extension ПодачаМодель {
             "variants": [Any](),
             "shop_section": "",
             "sn_hidden": false,
-            "top_preset": ф.топ?.ключ ?? "",
+            "top_preset": Config.цифровыеПокупки ? (ф.топ?.ключ ?? "") : "",
             "vin": vinРазрешён ? ф.vin.trimmingCharacters(in: .whitespaces) : "",
             "images": готовыеФото,
             "shot_slots": [String: String]()

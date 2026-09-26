@@ -374,9 +374,15 @@ enum КабинетСайта {
      */
     static func выйти() async throws {
         let страница = try await состояние()
-        if страница.вошёл == true, !страница.csrf.isEmpty {
+        /* Владелец 26.09.2026: стираем без запроса к серверу только когда страница ясно говорит «гость». Неизвестное
+           состояние (403/429 WAF, страница без KlikoUser и __ULX_GUEST) или вошедший без токена — сбой, ничего не
+           стираем: иначе сессия на сервере жила бы, а уведомления ушедшего шли бы на этот телефон. */
+        if страница.вошёл != false {
+            guard страница.вошёл == true, !страница.csrf.isEmpty else { throw Сбой.приложение }
             let токен = страница.csrf.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? страница.csrf
-            _ = try await запрос("/cabinet.php?logout=1&t=" + токен)
+            let ответ = try await запрос("/cabinet.php?logout=1&t=" + токен)
+            guard ответ.код > 0, ответ.код < 500 else { throw Сбой.сеть }
+            guard ответ.код < 400 else { throw Сбой.приложение }
         }
         if let web = WebBridge.shared.webView {
             web.evaluateJavaScript("try{window.webkit.messageHandlers.klikoLogout.postMessage({});}catch(e){};0",
