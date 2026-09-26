@@ -169,6 +169,12 @@ final class ИмпортМодель: ObservableObject {
     @Published private(set) var изСсылок = false
     @Published private(set) var публикуем: String? = nil
     @Published var ошибкаПубликации: String? = nil
+    /// Разметка местной таблицы (_aiLocalCard): столбцы «имя · пример», поле → номер столбца, из библиотеки ли она.
+    @Published private(set) var колонки: [String] = []
+    @Published private(set) var разметка: [String: Int] = [:]
+    @Published private(set) var разметкаИзБиблиотеки = false
+    private var подписьФормата = ""
+    private var текстТаблицы = ""
 
     // Итог
     @Published private(set) var итог = ""
@@ -490,7 +496,7 @@ final class ИмпортМодель: ObservableObject {
                 await разобратьКусками(чистый)
                 return
             }
-            if let местные = ТаблицаИмпорта.прочитать(чистый), !местные.isEmpty {
+            if let местные = await прочитатьТаблицу(чистый) {
                 строки = местные.map { СтрокаИмпорта($0) }
                 сИИ = false
                 осталосьИИ = nil
@@ -812,6 +818,76 @@ final class ИмпортМодель: ObservableObject {
         добавлено = 0
     }
 
+    // MARK: - Разметка таблицы (_aiLocalDone, _aiMapChange, _aiFmtRemember) и правка всех строк (aiBulk*)
+
+    /// Таблица без Kliko AI. Разметка этого формата, уже сохранённая на сервере (import_fmt {sig} → map), — поверх
+    /// угаданной по названиям столбцов, как у сайта.
+    private func прочитатьТаблицу(_ текст: String) async -> [[String: Any]]? {
+        колонки = []
+        разметка = [:]
+        разметкаИзБиблиотеки = false
+        guard let угаданная = ТаблицаИмпорта.разобрать(текст, карта: nil) else { return nil }
+        var итог = угаданная
+        if !угаданная.подпись.isEmpty,
+           let j = try? await ИмпортAPI.задание("import_fmt", ["sig": угаданная.подпись]),
+           A.да(j["ok"]), A.да(j["found"]), let сырая = j["map"] as? [String: Any], !сырая.isEmpty {
+            var карта: [String: Int] = [:]
+            for (поле, значение) in сырая {
+                let номер = A.целое(значение)
+                if номер >= 0 && номер < угаданная.колонки.count { карта[поле] = номер }
+            }
+            if карта["title"] != nil, let своя = ТаблицаИмпорта.разобрать(текст, карта: карта) {
+                итог = своя
+                разметкаИзБиблиотеки = true
+            }
+        }
+        guard !итог.строки.isEmpty else { return nil }
+        подписьФормата = итог.подпись
+        текстТаблицы = текст
+        колонки = итог.колонки
+        разметка = итог.карта
+        return итог.строки
+    }
+
+    /// _aiMapChange: поле → столбец (nil — «— нет —»), строки заново, разметка запоминается для этого формата.
+    func сменитьРазметку(_ поле: String, _ столбец: Int?) {
+        var карта = разметка
+        if let столбец { карта[поле] = столбец } else { карта[поле] = nil }
+        guard карта["title"] != nil, let новая = ТаблицаИмпорта.разобрать(текстТаблицы, карта: карта),
+              !новая.строки.isEmpty else {
+            заметка = т("need_input")
+            return
+        }
+        разметка = новая.карта
+        строки = новая.строки.map { СтрокаИмпорта($0) }
+        заметка = nil
+        let подпись = подписьФормата
+        let названия = колонки
+        let сохранить: [String: Any] = ["sig": подпись, "map": новая.карта, "cols": названия]
+        guard !подпись.isEmpty else { return }
+        Task { _ = try? await ИмпортAPI.задание("import_fmt", сохранить) }
+    }
+
+    /// _aiBulkMarkupGo: наценка (или скидка — минус) ко всем ценам, округление, не ниже нуля.
+    func наценка(_ процент: Double) {
+        guard процент.isFinite else { return }
+        for i in строки.indices {
+            let цена = строки[i].ценаЧисло
+            guard цена > 0 else { continue }
+            строки[i].цена = String(max(0, Int((Double(цена) * (1 + процент / 100)).rounded())))
+        }
+    }
+
+    /// aiBulkSetCat: раздел всем строкам.
+    func разделВсем(_ ключ: String) {
+        for i in строки.indices { строки[i].раздел = ключ }
+    }
+
+    /// aiBulkSetCond: состояние всем строкам.
+    func состояниеВсем(_ состояние: String) {
+        for i in строки.indices { строки[i].состояние = состояние }
+    }
+
     // MARK: - Публикация (aiPublish / liMassGo)
 
     func опубликовать() {
@@ -915,17 +991,54 @@ enum ТаблицаИмпорта {
     ]
     private static let пропустить: Set<String> = ["id", "ид", "код", "kod", "guid", "uuid", "uid", "sku", "artikul", "артикул"]
 
+    /// Разобранная таблица: строки товаров, разметка (поле → столбец), столбцы «имя · пример» и подпись формата.
+    struct Разбор {
+        let строки: [[String: Any]]
+        let карта: [String: Int]
+        let колонки: [String]
+        let подпись: String
+    }
+
     /// Таблица с шапкой, где есть название: строки товаров. nil — не таблица (пусть читает Kliko AI).
     static func прочитать(_ текст: String) -> [[String: Any]]? {
+        guard let р = разобрать(текст, карта: nil), !р.строки.isEmpty else { return nil }
+        return р.строки
+    }
+
+    /// _tblSigOf: подпись формата по нормализованным названиям столбцов — два хеша djb по 8 знаков, как у сайта.
+    static func подпись(_ шапка: [String]) -> String {
+        let строка = шапка.map { нормализовать($0) }.joined(separator: "|") + "#" + String(шапка.count)
+        let знаки = Array(строка.utf16)
+        var i: UInt32 = 5381
+        var a: UInt32 = 52711
+        for з in знаки { i = (i &* 33) ^ UInt32(з) }
+        for з in знаки.reversed() { a = (a &* 33) ^ UInt32(з) }
+        func хекс(_ x: UInt32) -> String {
+            let h = String(x, radix: 16)
+            return String(repeating: "0", count: max(0, 8 - h.count)) + h
+        }
+        return хекс(i) + хекс(a)
+    }
+
+    /// Разбор с разметкой: карта nil — угадать по названиям столбцов (_tblMapByName).
+    static func разобрать(_ текст: String, карта: [String: Int]?) -> Разбор? {
         let строки = текст.replacingOccurrences(of: "\u{FEFF}", with: "")
             .components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard строки.count >= 2 else { return nil }
         guard let разделитель = разделитель(Array(строки.prefix(20))) else { return nil }
         let таблица = строки.map { разбить($0, разделитель) }
         let шапка = таблица[0]
-        var столбцы: [String: Int] = [:]
-        var заняты: Set<Int> = []
-        for точно in [true, false] {
+        let колонки: [String] = шапка.enumerated().map { пара in
+            let имя = пара.element.trimmingCharacters(in: .whitespaces)
+            let пример = таблица.dropFirst().prefix(4).lazy
+                .compactMap { ряд in пара.offset < ряд.count ? ряд[пара.offset].trimmingCharacters(in: .whitespaces) : nil }
+                .first { !$0.isEmpty } ?? ""
+            let заголовок = имя.isEmpty ? "#" + String(пара.offset + 1) : имя
+            return пример.isEmpty ? заголовок : заголовок + " · " + String(пример.prefix(24))
+        }
+        var столбцы: [String: Int] = карта ?? [:]
+        var заняты: Set<Int> = Set(столбцы.values)
+        for точно in (карта == nil ? [true, false] : []) {
             for (номер, имя) in шапка.enumerated() where !заняты.contains(номер) {
                 let норм = нормализовать(имя)
                 guard !норм.isEmpty, !пропустить.contains(норм) else { continue }
@@ -939,6 +1052,7 @@ enum ТаблицаИмпорта {
                 }
             }
         }
+        _ = заняты
         guard let столбецНазвания = столбцы["title"] else { return nil }
         var итог: [[String: Any]] = []
         for ряд in таблица.dropFirst() {
@@ -963,7 +1077,7 @@ enum ТаблицаИмпорта {
                 "images": Array(картинки.prefix(8))
             ])
         }
-        return итог.isEmpty ? nil : итог
+        return Разбор(строки: итог, карта: столбцы, колонки: колонки, подпись: подпись(шапка))
     }
 
     /// _tblDelim: из «, ; таб |» — тот, что встречается в строке чаще всех.

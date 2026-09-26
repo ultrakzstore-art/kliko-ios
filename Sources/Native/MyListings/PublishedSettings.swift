@@ -11,8 +11,9 @@ import SwiftUI
      умолчанию 25), credit_banks[]} → «Способы оплаты сохранены»; нет pay_allowed — «Для этой категории
      рассрочка/кредит недоступны»;
    · openDelivery → POST save_delivery {csrf, item_id, ship_free, ship_days, ship_carrier, ship_scope "all"|"regions"|
-     "city", ship_regions[]} → «Доставка сохранена» (перевозчик по умолчанию выбирают только магазины PRO — здесь он
-     сохраняется как был);
+     "city", ship_regions[]} → «Доставка сохранена»; транспортную компанию по умолчанию (ship_carrier) магазин PRO
+     выбирает из chat.php?action=logistics_partners (ВыборПеревозчика, CabinetPlus/CarrierPicker.swift), остальным —
+     «Только для PRO», перевозчик сохраняется как был;
    · openTrust → POST save_trust {csrf, item_id, warranty_days, trust{ключ:true}} → «Знаки доверия сохранены», ответ
      clamped — «Без PRO гарантия — до 7 дней: сохранили 7 дней».
  Здесь — одно окно с тремя блоками (какие видны — по разделу, как renderCfgRows), «Сохранить» шлёт запросы только
@@ -364,6 +365,8 @@ struct ЛистНастроекОбъявления: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+            Divider()
+            ВыборПеревозчика(pro: н.pro, перевозчик: $н.перевозчик)
         }
     }
 

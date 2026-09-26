@@ -581,6 +581,18 @@ final class КарточкаСделкиМодель: ObservableObject {
 
     // MARK: - Передача: способ, отслеживание, курьер, перевозчик
 
+    /// rcpSave: получатель-подарок — escrow.php?action=set_recipient {deal_id, name, phone, clear}; сам — clear: 1.
+    func сохранитьПолучателя(имя: String, телефон: String, сам: Bool) {
+        записать("escrow.php?action=set_recipient",
+                 тело: ["deal_id": id, "name": сам ? "" : имя, "phone": сам ? "" : телефон, "clear": сам ? 1 : 0],
+                 готово: { _ in КабинетПлюсText.т(сам ? "rcp_cleared" : "rcp_saved") },
+                 ошибка: { j in
+                     let текст = СделкиAPI.строка(j["message"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                     return текст.isEmpty ? ТекстыОшибокСделки.текст(СделкиAPI.строка(j["error"])) : текст
+                 },
+                 сеть: т("err_no_conn"))
+    }
+
     /// hovSetMode: self / courier / carrier; "" — сменить способ (hovSwitchDo, когда нет встречи и посылки).
     func способ(_ режим: String) {
         записать("escrow.php?action=set_handover", тело: ["deal_id": id, "mode": режим],

@@ -558,9 +558,14 @@ private struct ПроверкаИмпорта: View {
     let открыть: (URL) -> Void
 
     @State private var разделДля: UUID? = nil
+    @State private var разделВсем = false
+    @State private var наценкаОткрыта = false
+    @State private var наценка = ""
+    @State private var плашка: String? = nil
 
     private func т(_ ключ: String) -> String { ИмпортText.т(ключ) }
     private func т(_ ключ: String, _ з: [String: String]) -> String { ИмпортText.т(ключ, з) }
+    private func тК(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
 
     private var всеВыбраны: Bool { !модель.строки.isEmpty && модель.строки.allSatisfy { $0.выбрана } }
 
@@ -577,6 +582,10 @@ private struct ПроверкаИмпорта: View {
                         .foregroundStyle(Theme.текст)
                 }
                 .toggleStyle(ГалочкаИмпорта())
+                if !модель.колонки.isEmpty && !модель.сИИ && !модель.изСсылок {
+                    РазметкаТаблицы(модель: модель)
+                }
+                массово
                 ForEach($модель.строки) { $строка in
                     СтрокаПроверки(строка: $строка, имяРаздела: модель.имяРаздела(строка.раздел),
                                    выбратьРаздел: { разделДля = строка.id },
@@ -597,7 +606,79 @@ private struct ПроверкаИмпорта: View {
                 разделДля = nil
             })
         }
+        .sheet(isPresented: $разделВсем) {
+            ВыборРаздела(справочники: модель.справочники, выбрано: { ключ in
+                модель.разделВсем(ключ)
+                разделВсем = false
+                показать(тК("imp_cat_done"))
+            })
+        }
+        .alert(тК("imp_markup_t"), isPresented: $наценкаОткрыта) {
+            TextField("15", text: $наценка)
+                .keyboardType(.numbersAndPunctuation)
+            Button(тК("imp_markup_apply")) {
+                let число = Double(наценка.replacingOccurrences(of: ",", with: ".")
+                    .trimmingCharacters(in: .whitespaces))
+                наценка = ""
+                if let число {
+                    модель.наценка(число)
+                    let вид = число == число.rounded() ? String(Int(число)) : String(число)
+                    показать(тК("imp_markup_done").replacingOccurrences(of: "{n}", with: вид))
+                }
+            }
+            Button(ИмпортText.т("close"), role: .cancel) { наценка = "" }
+        } message: {
+            Text(тК("imp_markup_s"))
+        }
+        .overlay(alignment: .bottom) {
+            if let плашка { ПлашкаКошелька(текст: плашка).padding(.bottom, 70) }
+        }
         .modifier(ОкнаИмпорта(модель: модель, открыть: открыть))
+    }
+
+    /// aiBulk*: наценка ко всем ценам, раздел и состояние всем строкам.
+    private var массово: some View {
+        Menu {
+            Button {
+                наценкаОткрыта = true
+            } label: {
+                Label(тК("imp_markup_t"), systemImage: "percent")
+            }
+            Button {
+                разделВсем = true
+            } label: {
+                Label(тК("imp_cat_all"), systemImage: "square.grid.2x2")
+            }
+            Button {
+                модель.состояниеВсем("new")
+                показать(тК("imp_cond_done"))
+            } label: {
+                Label(тК("imp_cond_new"), systemImage: "sparkles")
+            }
+            Button {
+                модель.состояниеВсем("used")
+                показать(тК("imp_cond_done"))
+            } label: {
+                Label(тК("imp_cond_used"), systemImage: "arrow.3.trianglepath")
+            }
+        } label: {
+            Label(тК("imp_bulk"), systemImage: "slider.horizontal.3")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.акцент)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        }
+        .disabled(модель.строки.isEmpty)
+    }
+
+    private func показать(_ текст: String) {
+        withAnimation { плашка = текст }
+        UIAccessibility.post(notification: .announcement, argument: текст)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_800_000_000)
+            withAnimation { плашка = nil }
+        }
     }
 
     private var сводка: some View {
@@ -973,5 +1054,57 @@ private struct ИтогИмпорта: View {
             }
             .padding(16)
         }
+    }
+}
+
+
+/// _aiLocalCard: разметка столбцов местной таблицы — поле → столбец; правка перестраивает строки и запоминается для
+/// этого формата (import_fmt), как у сайта.
+private struct РазметкаТаблицы: View {
+    @ObservedObject var модель: ИмпортМодель
+
+    @State private var открыта = false
+
+    /// _AI_FLD_ORDER сайта — поля, которые читает разбор приложения.
+    private static let поля = ["title", "price", "description", "images", "brand", "condition", "cpu", "ram", "storage",
+                               "gpu", "year"]
+
+    private func т(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $открыта) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(т(модель.разметкаИзБиблиотеки ? "imp_map_lib" : "imp_map_s"))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(Self.поля, id: \.self) { поле in
+                    HStack {
+                        Text(т("fld_" + поле))
+                            .font(.system(size: 13.5, weight: поле == "title" || поле == "price" ? .bold : .regular))
+                            .foregroundStyle(Theme.текст)
+                        Spacer(minLength: 8)
+                        Picker(т("fld_" + поле), selection: Binding<Int>(
+                            get: { модель.разметка[поле] ?? -1 },
+                            set: { модель.сменитьРазметку(поле, $0 < 0 ? nil : $0) })) {
+                            Text(т("imp_map_none")).tag(-1)
+                            ForEach(Array(модель.колонки.enumerated()), id: \.offset) { номер, подпись in
+                                Text(подпись).tag(номер)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.акцент)
+                    }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            Label(т("imp_map_t"), systemImage: "tablecells")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.текст)
+        }
+        .tint(Theme.текстВторой)
+        .padding(12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
     }
 }

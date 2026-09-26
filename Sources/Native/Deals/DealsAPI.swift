@@ -368,6 +368,10 @@ struct Сделка: Equatable, Identifiable {
     var адресКуда: String = ""
     var точкаКуда: ТочкаСделки? = nil
     var дверьКуда: ДверьСделки? = nil
+    /// recipient{name, phone} — «Отправить другому человеку — подарок» (rcpRowHtml); recipient_editable — можно менять.
+    var имяПолучателя: String = ""
+    var телефонПолучателя: String = ""
+    var получательМеняется: Bool = false
 
     var доставка: Int = 0
     var доставкаЗаСчётПродавца: Int = 0
@@ -532,6 +536,10 @@ struct Сделка: Equatable, Identifiable {
         адресКуда = A.строка(j["to_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
         точкаКуда = ТочкаСделки(A.координата(j["to_lat"]), A.координата(j["to_lon"]))
         дверьКуда = ДверьСделки(j["to_door"])
+        let получатель = (j["recipient"] as? [String: Any]) ?? [:]
+        имяПолучателя = A.строка(получатель["name"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        телефонПолучателя = A.строка(получатель["phone"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        получательМеняется = A.да(j["recipient_editable"])
         if let сырое = j["live"] as? [String: Any] {
             var словарь: [String: String] = [:]
             for (ключ, значение) in сырое { словарь[ключ] = A.строка(значение) }
