@@ -113,6 +113,17 @@ struct Listing: Identifiable, Hashable {
     /// Страница авто и жилья (SiteListingKinds.swift): проверки, оплата, место — разбираются там же.
     var поляВида = ПоляСтраницыВида()
 
+    // ── Порядок витрины как у сайта (ЗолотойРитм, FeedRhythm.swift): поля, по которым сайт ставит ТОП и «Новые» ──
+    /// is_active: false — объявление снято; сайт не берёт такое в ТОП (`!1!==t.is_active`). Не пришло — активно.
+    var активно = true
+    /// imp — сколько раз ТОП уже показан (rank_event.php сайта); ТОП с меньшим числом идёт в золотые места первым
+    /// (mkTopsSorted). Не пришло — 0.
+    var показыТопа = 0
+    /// Свежесть для «Новых»: fresh_ts, а без него created_ts (секунды unix), как g() в mkRender сайта. Нет — 0.
+    var свежесть = 0
+    /// slot: "top" — сервер сам поставил объявление в ТОП-место выдачи «Рекомендуемые» (mkOrderPage сайта). Нет — nil.
+    var слот: String? = nil
+
     struct Характеристика: Hashable {
         let ключ: String
         let значение: String
@@ -358,6 +369,15 @@ extension Listing: Decodable {
         звонок = телефон && (связь?.call?.ok?.да ?? false)
         whatsApp = телефон && (связь?.wa?.ok?.да ?? false)
         поляВида = (try? ПоляСтраницыВида(from: decoder)) ?? ПоляСтраницыВида()
+
+        /* Порядок витрины (FeedRhythm.swift). is_active — только явное «нет» снимает, как `!1!==t.is_active` сайта. */
+        if (try? c.decode(Bool.self, forKey: Ключ("is_active"))) == false { активно = false }
+        if let n = (try? c.decode(Int.self, forKey: Ключ("is_active"))), n == 0 { активно = false }
+        показыТопа = число("imp").map { $0.isFinite && abs($0) < 1e12 ? Int($0) : 0 } ?? 0
+        let свежее = число("fresh_ts").map { $0.isFinite && abs($0) < 1e12 ? Int($0) : 0 } ?? 0
+        let созданное = число("created_ts").map { $0.isFinite && abs($0) < 1e12 ? Int($0) : 0 } ?? 0
+        свежесть = свежее != 0 ? свежее : созданное
+        слот = непусто(строка("slot"))
     }
 }
 

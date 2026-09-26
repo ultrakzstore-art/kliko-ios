@@ -22,6 +22,10 @@ import WebKit
  photo, pmin, pmax, ymin, ymax, rooms), а лента берёт страницы по 48, как сайт (mkApiNext: per=48), и со второй страницы
  несёт gs — «снимок» первой страницы из её ответа (window._mkGoldSnap сайта), чтобы выдача не перетасовывалась между
  страницами. По умолчанию фильтров нет и sort=reco — запрос прежний.
+
+ Порядок «Новые» (владелец 26.09.2026, по умолчанию, как <option value="date" selected> сайта): сервер его не знает —
+ _mkApiQS шлёт для него sort=reco (СортировкаЛенты.параметр), а «новые + 3 ТОП через 10» лента ставит у себя
+ (ЗолотойРитм, FeedRhythm.swift).
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -61,7 +65,7 @@ enum ListingsAPI {
     static func загрузить(_ з: Запрос, куки заданные: [String: String]? = nil) async throws -> (страница: ListingsPage, сырое: Data) {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
-        var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.rawValue),     // этап 33; по умолчанию reco
+        var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.параметр),    // «Новые» — reco, как у сайта
                     URLQueryItem(name: "page", value: String(з.page)),
                     URLQueryItem(name: "per", value: String(з.per))]
         поля.append(contentsOf: Self.параметрыРаздела(з.cat))   // этап 49: «Товары» — cats=, как vs=goods у сайта

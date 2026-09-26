@@ -38,7 +38,7 @@ struct УсловияКарты: Equatable, Sendable {
         поля.append(contentsOf: ListingsAPI.параметрыРаздела(раздел))   // этап 49: «Товары» — cats=, как у ленты
         поля.append(contentsOf: где.параметры)
         поля.append(contentsOf: фильтры.параметры)
-        поля.append(URLQueryItem(name: "sort", value: фильтры.сортировка.rawValue))
+        поля.append(URLQueryItem(name: "sort", value: фильтры.сортировка.параметр))
         let текст = поиск.trimmingCharacters(in: .whitespacesAndNewlines)
         if !текст.isEmpty { поля.append(URLQueryItem(name: "q", value: текст)) }
         return поля

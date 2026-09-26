@@ -8,9 +8,10 @@ import Foundation
  Теперь известно — из самого сайта: строитель запроса ленты _mkApiQS (js/marketplace-feed.min.js) и разбор адреса
  страницы (js/marketplace.min.js). Поэтому отбирает сервер, по всему сайту, теми же параметрами, что шлёт сайт:
 
-   · sort — reco (по умолчанию), price (дешевле), price_d (дороже), new (новые): карта сайта
-     {reco:"reco", price_asc:"price", price_desc:"price_d", date_*:"new"}; «Старые» и «По рейтингу» сайт сортирует у себя
-     на странице, сервер их не знает — у нас их нет;
+   · sort — reco, price (дешевле), price_d (дороже): карта сайта {reco:"reco", price_asc:"price",
+     price_desc:"price_d", date_*:"new"}; «Новые» по умолчанию (value="date") в карте нет — уходят как reco, а порядок
+     «новые + ТОП» ставит лента (Feed/FeedRhythm.swift). «Старые» и «По рейтингу» сайт сортирует у себя на странице —
+     у нас их нет;
    · cond — new или used, пусто — не шлём;
    · verified=1, photo=1;
    · pmin, pmax — целые ₸;
@@ -25,12 +26,24 @@ import Foundation
  (этап 12) несёт цену и состояние — то же, что сайт кладёт в subs.php?action=add (pmin, pmax, cond).
  */
 
-/// «Сначала показывать» — значение sort= у api/listings.php.
+/// «Сначала показывать» — значение <select id="mk-sort"> сайта; что уходит в sort= у api/listings.php — `параметр`.
+/// Порядок вариантов — как у сайта: «Новые» (по умолчанию, selected), «Рекомендуемые», «Дешевле», «Дороже».
 enum СортировкаЛенты: String, CaseIterable, Hashable, Sendable {
+    case новые = "date"
     case рекомендуемые = "reco"
-    case новые = "new"
-    case дешевле = "price"
-    case дороже = "price_d"
+    case дешевле = "price_asc"
+    case дороже = "price_desc"
+
+    /// sort= запроса — карта _mkApiQS сайта {reco:"reco", price_asc:"price", price_desc:"price_d", date_*:"new"}[sort]
+    /// || "reco". Значения "date" в ней нет: «Новые» уходят как reco, а порядок «новые + ТОП через десять» ставит лента
+    /// у себя (ЗолотойРитм, Feed/FeedRhythm.swift), как mkRender сайта.
+    var параметр: String {
+        switch self {
+        case .новые, .рекомендуемые: return "reco"
+        case .дешевле:              return "price"
+        case .дороже:               return "price_d"
+        }
+    }
 
     /// Подпись — sort_reco, sort_new, sort_cheap, sort_expensive сайта.
     var подпись: String {
@@ -78,9 +91,10 @@ struct АктивныйФильтр: Identifiable, Hashable {
     var id: ВидФильтра { вид }
 }
 
-/// Что отбирает сервер. По умолчанию — ничего и sort=reco: тот же запрос, что был до этапа 33.
+/// Что отбирает сервер. По умолчанию — ничего и порядок «Новые» (mkSt.sort:"date" сайта; запрос — sort=reco, как до
+/// этапа 33).
 struct ФильтрыЛенты: Equatable, Hashable, Sendable {
-    var сортировка: СортировкаЛенты = .рекомендуемые
+    var сортировка: СортировкаЛенты = .новые
     /// pmin и pmax — целые ₸; nil — границы нет.
     var ценаОт: Int?
     var ценаДо: Int?
@@ -124,7 +138,7 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
     /// Только то, что умеет сохранённый поиск (цена и состояние — как subs.php сайта), и порядок по умолчанию. Тогда
     /// выдача ленты — та же, что проверит фоновая проверка (этап 12), и её номера годятся ей точкой отсчёта.
     var какУСохранённого: Bool {
-        сортировка == .рекомендуемые && !толькоПроверенные && !сФото && годОт == nil && годДо == nil && комнаты.isEmpty
+        сортировка.параметр == "reco" && !толькоПроверенные && !сФото && годОт == nil && годДо == nil && комнаты.isEmpty
     }
 
     /**
