@@ -120,6 +120,10 @@ struct NativeTabsView: View {
             Task { await обновитьСчётчик() }
         }
         /* Пуш пришёл, пока приложение открыто, — новое сообщение видно в списке сразу, не через 12 с. */
+        .onReceive(NotificationCenter.default.publisher(for: .klikoОткрытьКатегории)) { _ in
+            вкладка = .лента
+            листКатегорий = true
+        }
         .onReceive(NotificationCenter.default.publisher(for: .klikoПушПришёл)) { _ in
             Task { await обновитьСчётчик() }
         }
@@ -591,4 +595,9 @@ enum TabsText {
         "en": ["feed": "Feed", "messages": "Messages", "post": "Sell", "cabinet": "Account"],
         "ar": ["feed": "الإعلانات", "messages": "الرسائل", "post": "انشر", "cabinet": "الحساب"]
     ]
+}
+
+extension Notification.Name {
+    /// Чип «Категории» в полосе разделов ленты просит открыть экран категорий (он живёт здесь, над лентой).
+    static let klikoОткрытьКатегории = Notification.Name("kliko.categories.open")
 }
