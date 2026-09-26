@@ -83,6 +83,8 @@ struct ПодписьПоля: View {
 }
 
 /// Поле ввода .inp: ошибка — красная кромка, единица («км», «м²») — серым справа, фокус — от панели над клавиатурой.
+/// предел > 0 — не длиннее стольких знаков (и при вставке); счётчик «N/предел» под полем — всегда (счётчик: true)
+/// или с ПределыПодачи.счётчикЗаранее знаков до предела; на пределе он красный.
 struct ПолеПодачи: View {
     let подсказка: String
     @Binding var текст: String
@@ -93,10 +95,13 @@ struct ПолеПодачи: View {
     let ключ: String?
     let ошибка: Bool
     let единица: String
+    let предел: Int
+    let счётчик: Bool
 
     init(_ подсказка: String, текст: Binding<String>, клавиатура: UIKeyboardType = .default,
          заглавные: TextInputAutocapitalization = .sentences, заблокировано: Bool = false,
-         фокус: FocusState<String?>.Binding? = nil, ключ: String? = nil, ошибка: Bool = false, единица: String = "") {
+         фокус: FocusState<String?>.Binding? = nil, ключ: String? = nil, ошибка: Bool = false, единица: String = "",
+         предел: Int = 0, счётчик: Bool = false) {
         self.подсказка = подсказка
         self._текст = текст
         self.клавиатура = клавиатура
@@ -106,11 +111,37 @@ struct ПолеПодачи: View {
         self.ключ = ключ
         self.ошибка = ошибка
         self.единица = единица
+        self.предел = предел
+        self.счётчик = счётчик
     }
 
     var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            поле
+            if видноСчётчик {
+                СчётчикЗнаковПодачи(длина: текст.count, предел: предел)
+            }
+        }
+    }
+
+    private var видноСчётчик: Bool {
+        guard предел > 0, !заблокировано else { return false }
+        return счётчик || текст.count >= предел - ПределыПодачи.счётчикЗаранее
+    }
+
+    /// maxlength: лишнее (набор или вставка) отрезается сразу.
+    private var ограниченный: Binding<String> {
+        let предел = self.предел
+        let связь = $текст
+        guard предел > 0 else { return связь }
+        return Binding(get: { связь.wrappedValue }, set: { новое in
+            связь.wrappedValue = ПределыПодачи.обрезать(новое, предел)
+        })
+    }
+
+    private var поле: some View {
         HStack(spacing: 6) {
-            TextField(подсказка, text: $текст)
+            TextField(подсказка, text: ограниченный)
                 .font(.system(size: 16))
                 .keyboardType(клавиатура)
                 .textInputAutocapitalization(заглавные)
@@ -131,6 +162,19 @@ struct ПолеПодачи: View {
             RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
                 .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
         }
+    }
+}
+
+/// Счётчик «N/предел» под коротким полем; на пределе — красный.
+struct СчётчикЗнаковПодачи: View {
+    let длина: Int
+    let предел: Int
+
+    var body: some View {
+        Text(String(длина) + "/" + String(предел))
+            .font(.system(size: 12, weight: длина >= предел ? .semibold : .regular).monospacedDigit())
+            .foregroundStyle(длина >= предел ? Theme.ценаСкидка : Theme.текстВторой)
+            .accessibilityHidden(true)
     }
 }
 
@@ -303,15 +347,18 @@ struct СписокВыбора: Identifiable {
     let сброс: String?
     /// Открыть сразу строкой «впишите вручную» (пункт «Другое (вписать)…» из меню).
     let пишу: Bool
+    /// Предел своего значения (ПределыПодачи.короткое); 0 — без предела.
+    let предел: Int
     let выбрано: (String) -> Void
 
     init(заголовок: String, варианты: [ВариантПоля], своё: String? = nil, сброс: String? = nil, пишу: Bool = false,
-         выбрано: @escaping (String) -> Void) {
+         предел: Int = ПределыПодачи.короткое, выбрано: @escaping (String) -> Void) {
         self.заголовок = заголовок
         self.варианты = варианты
         self.своё = своё
         self.сброс = сброс
         self.пишу = пишу
+        self.предел = предел
         self.выбрано = выбрано
     }
 }
@@ -333,9 +380,14 @@ struct ЛистВыбора: View {
             List {
                 if пишу {
                     Section {
-                        TextField(ПодачаText.т("spec_write_manually"), text: $своёЗначение)
+                        TextField(ПодачаText.т("spec_write_manually"), text: своёОграниченное)
+                        if список.предел > 0 && своёЗначение.count >= список.предел - ПределыПодачи.счётчикЗаранее {
+                            СчётчикЗнаковПодачи(длина: своёЗначение.count, предел: список.предел)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
                         Button(ПодачаText.т("done")) {
-                            let чистое = своёЗначение.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let чистое = ПределыПодачи.обрезать(своёЗначение.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                                 список.предел)
                             guard !чистое.isEmpty else { return }
                             список.выбрано(чистое)
                             закрыть()
@@ -375,6 +427,16 @@ struct ЛистВыбора: View {
             }
         }
         .tint(Theme.акцент)
+    }
+
+    /// Своё значение не длиннее предела списка — и при вставке.
+    private var своёОграниченное: Binding<String> {
+        let предел = список.предел
+        let связь = $своёЗначение
+        guard предел > 0 else { return связь }
+        return Binding(get: { связь.wrappedValue }, set: { новое in
+            связь.wrappedValue = ПределыПодачи.обрезать(новое, предел)
+        })
     }
 
     private var видимые: [ВариантПоля] {
