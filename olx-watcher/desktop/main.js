@@ -329,6 +329,12 @@ const PRODUCT_SOURCES = {
 };
 const PRODUCT_TITLES = { all: 'Все площадки', olx: 'OLX', kolesa: 'Kolesa', krisha: 'Krisha', kaspi: 'Kaspi Объявления' };
 let dbHandle = null;
+// Закрыть базу окна (перед тем как отдать файл на сервер или заменить его): записи из WAL
+// попадут в сам файл, и следующий запрос откроет её заново.
+function closeDbHandle() {
+  try { dbHandle?.db?.close(); } catch { /* уже закрыта */ }
+  dbHandle = null;
+}
 function db() {
   if (!dbHandle) {
     const { Db } = require('../src/db');
@@ -528,6 +534,7 @@ async function deployToServer({ host, port, username, password }) {
 
     // База — только при первой установке: на сервере уже работающую не перезаписываем.
     const dbFile = path.join(app.getPath('userData'), 'watcher.db');
+    if (!hadDb) closeDbHandle();
     if (!hadDb && fs.existsSync(dbFile)) {
       out('Переношу подписчиков, поиски и оплаты…\n');
       await put(`${REMOTE_DIR}/data/watcher.db`, fs.readFileSync(dbFile));
@@ -561,6 +568,66 @@ async function deployToServer({ host, port, username, password }) {
 }
 
 ipcMain.handle('deploy', (_e, opts) => deployToServer(opts || {}));
+
+// Вернуть бота с сервера на ПК: на сервере — остановить и выключить автозапуск службы (файлы
+// остаются), свежую базу — забрать сюда (прежнюю копию на ПК сохраняем рядом), бот — запустить тут.
+async function bringBack({ host, port, username, password }) {
+  if (deploying) return { ok: false, error: 'Уже идёт работа с сервером.' };
+  if (!host || !password) return { ok: false, error: 'Нужны IP сервера и пароль.' };
+  deploying = true;
+  const out = (t) => send('deploy-log', t);
+  const { Client } = require('ssh2');
+  const conn = new Client();
+  try {
+    out(`Подключаюсь к ${host}…\n`);
+    await new Promise((resolve, reject) => {
+      conn.once('ready', resolve).once('error', reject)
+        .connect({ host: String(host).trim(), port: Number(port) || 22, username: String(username || 'root').trim(), password, readyTimeout: 25000 });
+    });
+    const exec = (cmd) => new Promise((resolve, reject) => {
+      conn.exec(cmd, (err, stream) => {
+        if (err) return reject(err);
+        const chunks = [];
+        let code = null;
+        stream.on('data', (d) => chunks.push(d));
+        stream.stderr.on('data', () => {});
+        stream.on('exit', (c) => { code = c; });
+        stream.on('close', () => resolve({ code, data: Buffer.concat(chunks) }));
+      });
+    });
+    out('Останавливаю бота на сервере…\n');
+    await exec('systemctl stop olx-watcher; systemctl disable olx-watcher >/dev/null 2>&1; true');
+    const db = await exec(`test -f ${REMOTE_DIR}/data/watcher.db && base64 -w0 ${REMOTE_DIR}/data/watcher.db`);
+    const local = path.join(app.getPath('userData'), 'watcher.db');
+    if (db.code === 0 && db.data.length) {
+      await stopBot();
+      closeDbHandle();
+      if (fs.existsSync(local)) fs.copyFileSync(local, `${local}.before-server-${Date.now()}`);
+      for (const ext of ['-wal', '-shm']) { try { fs.rmSync(local + ext); } catch { /* нет — и хорошо */ } }
+      fs.writeFileSync(local, Buffer.from(db.data.toString('ascii').trim(), 'base64'));
+      out('Забрал с сервера подписчиков, поиски и оплаты (прежняя копия на ПК сохранена рядом).\n');
+    } else {
+      out('Базы на сервере нет — остаётся та, что на ПК.\n');
+    }
+    settings.server = null;
+    settings.autoStart = true;
+    saveSettings();
+    startBot();
+    pushState();
+    out('\n✅ Бот снова работает на этом компьютере. На сервере он остановлен (файлы остались).\n');
+    return { ok: true };
+  } catch (e) {
+    const msg = /authentication/i.test(e.message) ? 'Неверный логин или пароль от сервера.' : e.message;
+    out(`\n✖ ${msg}\n`);
+    return { ok: false, error: msg };
+  } finally {
+    deploying = false;
+    conn.end();
+  }
+}
+
+ipcMain.handle('bring-back', (_e, opts) => bringBack(opts || {}));
+
 
 // ---------- IPC ----------
 

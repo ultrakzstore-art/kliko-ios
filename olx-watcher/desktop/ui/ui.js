@@ -326,3 +326,14 @@ $('btn-deploy').addEventListener('click', async () => {
   $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на сервере.' : r.error;
   b.disabled = false;
 });
+
+$('btn-back').addEventListener('click', async () => {
+  const b = $('btn-back');
+  b.disabled = true;
+  $('deploy-msg').textContent = 'Возвращаю бота на ПК…';
+  $('deploy-out').dataset.fresh = '0';
+  const r = await window.app.bringBack({ host: $('srv-host').value, port: $('srv-port').value, username: $('srv-user').value, password: $('srv-pass').value });
+  $('srv-pass').value = '';
+  $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на этом компьютере.' : r.error;
+  b.disabled = false;
+});

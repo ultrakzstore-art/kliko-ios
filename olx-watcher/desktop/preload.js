@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('app', {
   vipEnd: (lockId) => ipcRenderer.invoke('vip-end', { lockId }),
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   deploy: (opts) => ipcRenderer.invoke('deploy', opts),
+  bringBack: (opts) => ipcRenderer.invoke('bring-back', opts),
   onDeployLog: (fn) => ipcRenderer.on('deploy-log', (_e, text) => fn(text)),
   onState: (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
   onLog: (fn) => ipcRenderer.on('log', (_e, lines) => fn(lines)),
