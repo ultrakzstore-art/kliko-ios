@@ -29,6 +29,14 @@ import WebKit
 
  Подсказка на холодный старт (вошёл и проверен — два признака, без номера и имени) лежит в UserDefaults, чтобы до
  загрузки страницы витрина не просила регистрацию у вошедшего; выход её стирает.
+
+ БАЛЛЫ (владелец: «баллы — если выключены в админке, значит выключены везде»). Сайт узнаёт рубильник из ответа
+ escrow.php?action=points: поле enabled (_pointsData.enabled — по нему dealPay решает, открывать ли «Применить баллы?»;
+ выключено — оплата идёт с use_points 0). Здесь это баллыВключены — одно место на всё приложение: строка «Баллы» раздела
+ кошелька, экран «Баллы» и ссылка ?s=points, окно баллов при оплате сделки, строки баллов в чеке и в «Деньгах и
+ документах». Сверка — вместе с сессией (старт, возврат в приложение, чтение страницы кабинета; не чаще срокБаллов),
+ плюс каждый ответ action=points, который читают экран «Баллы» и оплата сделки. Последнее значение лежит в UserDefaults;
+ пока неизвестно — баллов не показываем.
  */
 @MainActor
 final class СессияПриложения: ObservableObject {
@@ -55,6 +63,8 @@ final class СессияПриложения: ObservableObject {
     @Published private(set) var eGovВключён: Bool = true
     /// Растёт при каждой смене человека: вход, выход, другой аккаунт. Экранам гостя — повод перечитать себя.
     @Published private(set) var смена: Int = 0
+    /// Баллы включены в админке сайта (escrow.php?action=points, enabled). false — и «выключены», и «ещё не знаем».
+    @Published private(set) var баллыВключены: Bool = false
 
     var роль: Роль {
         guard вошёл == true else { return .гость }
@@ -72,12 +82,20 @@ final class СессияПриложения: ObservableObject {
     /// Прошлая страница была не на kliko.kz (eGov, банк) — вернулись: перечитать кабинет.
     private var былаЧужая = false
     private var наблюдатель: NSObjectProtocol? = nil
+    /// Когда рубильник баллов последний раз сверен с сервером; идёт ли сверка сейчас.
+    private var баллыСверены: Date? = nil
+    private var баллыИдут = false
 
     private static let ключПодсказки = "kliko.session.hint"
     /// Признаки кабинета на витрине не видны: берём их со страницы кабинета не чаще раза в 10 минут на человека.
     private static let срокКабинета: TimeInterval = 600
+    /// Последний известный рубильник баллов (Bool) — на холодный старт.
+    private static let ключБаллов = "kliko.points.enabled"
+    /// Рубильник баллов спрашиваем не чаще раза в 5 минут (возврат в приложение, страницы кабинета).
+    private static let срокБаллов: TimeInterval = 300
 
     private init() {
+        баллыВключены = UserDefaults.standard.bool(forKey: Self.ключБаллов)
         if let подсказка = UserDefaults.standard.dictionary(forKey: Self.ключПодсказки),
            (подсказка["in"] as? Bool) == true {
             вошёл = true
@@ -101,6 +119,7 @@ final class СессияПриложения: ObservableObject {
             try? await Task.sleep(nanoseconds: пауза)
             guard !Task.isCancelled else { return }
             await СессияПриложения.shared.сверить()
+            await СессияПриложения.shared.сверитьБаллы()
         }
     }
 
@@ -169,6 +188,40 @@ final class СессияПриложения: ObservableObject {
         кабинетСверен = Date()
         кабинетДля = id
         запомнитьПодсказку()
+        Task { @MainActor in await СессияПриложения.shared.сверитьБаллы() }
+    }
+
+    // MARK: - Баллы
+
+    /**
+     Ответ escrow.php?action=points — чей угодно (сверка, экран «Баллы», оплата сделки). ok — рубильник из enabled (нет
+     поля — выключены). Нет сессии — не знаем, прежнее остаётся. Прочая ошибка сервера — выключены: лучше не показать
+     баллы, чем показать выключенные.
+     */
+    func принятьБаллы(_ j: [String: Any]) {
+        let включены: Bool
+        if МоиОбъявленияAPI.да(j["ok"]) {
+            включены = МоиОбъявленияAPI.да(j["enabled"])
+        } else if МоиОбъявленияAPI.нетСессии(j) {
+            return
+        } else {
+            включены = false
+        }
+        баллыСверены = Date()
+        UserDefaults.standard.set(включены, forKey: Self.ключБаллов)
+        if баллыВключены != включены { баллыВключены = включены }
+    }
+
+    /// Сверка рубильника баллов у вошедшего (гостю escrow.php отвечает «auth»): не чаще срока, если не сейчас.
+    func сверитьБаллы(сейчас: Bool = false) async {
+        guard вошёл == true, !баллыИдут else { return }
+        if !сейчас, let когда = баллыСверены, Date().timeIntervalSince(когда) < Self.срокБаллов { return }
+        баллыИдут = true
+        let снятое = поколение
+        let ответ = try? await КабинетСайта.вызвать("escrow.php?action=points", ждать: false)
+        баллыИдут = false
+        guard снятое == поколение, let j = ответ?.json else { return }
+        принятьБаллы(j)
     }
 
     // MARK: - Сверка

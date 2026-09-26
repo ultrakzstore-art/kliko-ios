@@ -441,11 +441,12 @@ final class ДеньгиСделкиМодель: ObservableObject {
         }
     }
 
-    /// escrow.php?action=points — только чтение (_pointsData сайта). Не пришло — без баллов, как у сайта.
+    /// escrow.php?action=points — только чтение (_pointsData сайта). Не пришло — без баллов, как у сайта. Ответ обновляет
+    /// рубильник приложения (СессияПриложения.баллыВключены): выключены в админке — окна баллов нет, use_points 0.
     private func баллы() async -> (включены: Bool, баллов: Int, доля: Int)? {
-        guard let j = try? await ДеньгиСделкиAPI.получить("escrow.php?action=points"), СделкиAPI.да(j["ok"]) else {
-            return nil
-        }
+        guard let j = try? await ДеньгиСделкиAPI.получить("escrow.php?action=points") else { return nil }
+        СессияПриложения.shared.принятьБаллы(j)
+        guard СделкиAPI.да(j["ok"]), СессияПриложения.shared.баллыВключены else { return nil }
         let доля = СделкиAPI.целое(j["max_spend"])
         return (СделкиAPI.да(j["enabled"]), СделкиAPI.целое(j["points"]), доля > 0 ? доля : 10)
     }

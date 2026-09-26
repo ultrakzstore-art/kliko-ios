@@ -9,6 +9,9 @@ import SwiftUI
  «Уровни участника» (0 / 100 / 500 / 1 000 / 5 000 — разметка страницы; кэшбэк ступени — из tiers) и «История
  начислений» со ссылкой «→ сделка». Ошибка — «Ошибка», как у сайта. Сюда ведёт ссылка ?s=points и строка «Баллы»
  вкладки «Кабинет». Тратятся баллы только при оплате сделки (окно «Применить баллы?» — этап 44, деньги сделок).
+
+ Рубильник админки (СессияПриложения.баллыВключены): ответ этого экрана его и обновляет; выключены — экран закрывается
+ сам, пустой заглушки нет.
  */
 struct ЭкранБаллов: View {
     let открыть: (URL) -> Void
@@ -18,6 +21,8 @@ struct ЭкранБаллов: View {
     @State private var нуженВход = false
     @State private var входОткрыт = false
     @State private var сделкаОткрыть: String? = nil
+    @ObservedObject private var сессия = СессияПриложения.shared
+    @Environment(\.dismiss) private var уйти
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
@@ -37,6 +42,9 @@ struct ЭкранБаллов: View {
             .navigationTitle(т("points"))
             .navigationBarTitleDisplayMode(.inline)
             .task { await загрузить() }
+            .onChange(of: сессия.баллыВключены) { _, включены in
+                if !включены && баллы != nil { уйти() }
+            }
             .navigationDestination(item: $сделкаОткрыть) { номер in
                 ЭкранСделки(id: номер, открыть: открыть)
             }
@@ -53,7 +61,7 @@ struct ЭкранБаллов: View {
             ПустоСайта(значок: "person.crop.circle", заголовок: CabinetText.т("signed_out"),
                        подпись: CabinetText.т("signed_out_sub"), кнопка: CabinetText.т("login"),
                        действие: { войти() })
-        } else if let баллы {
+        } else if let баллы, сессия.баллыВключены {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     карточка(баллы)
@@ -83,6 +91,13 @@ struct ЭкранБаллов: View {
         do {
             guard let j = try await КошелёкAPI.получить("escrow.php?action=points") else {
                 ошибка = баллы == nil
+                return
+            }
+            СессияПриложения.shared.принятьБаллы(j)
+            if !МоиОбъявленияAPI.нетСессии(j) && !СессияПриложения.shared.баллыВключены {
+                /* Баллы выключены в админке — экрана нет. */
+                баллы = nil
+                уйти()
                 return
             }
             if let новые = БаллыКошелька(j) {

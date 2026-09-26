@@ -356,6 +356,8 @@ private struct ОкнаЭкранаКошелька: ViewModifier {
  */
 struct РазделКошелька: View {
     @ObservedObject private var кошелёк = КошелёкМодель.shared
+    /// Рубильник баллов админки: выключены — строки «Баллы» нет.
+    @ObservedObject private var сессия = СессияПриложения.shared
     let открыть: (URL) -> Void
     let сразу: (ДействиеКошелька) -> Void
 
@@ -376,7 +378,9 @@ struct РазделКошелька: View {
                     .listRowBackground(Color.clear)
             }
             строка(КошелёкText.т("history"), значок: "clock.arrow.circlepath", цель: .кошелёк)
-            строка(КошелёкText.т("points"), значок: "star.circle", цель: .баллы)
+            if сессия.баллыВключены {
+                строка(КошелёкText.т("points"), значок: "star.circle", цель: .баллы)
+            }
         }
     }
 
