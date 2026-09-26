@@ -458,7 +458,7 @@ final class МодельСтудииРоликов: ObservableObject {
                let адрес = URL(string: "instagram://library?LocalIdentifier=\(ПоделитьсяСайта.код(ид))"),
                UIApplication.shared.canOpenURL(адрес) {
                 self.показатьТост(self.т("caption_copied"), секунд: 3)
-                UIApplication.shared.open(адрес)
+                UIApplication.shared.open(адрес, options: [:], completionHandler: nil)
             } else {
                 self.показатьТост(self.т("caption_copied"), секунд: 3)
                 ПоделитьсяСайта.системныйЛист([ролик.файл])
@@ -479,7 +479,7 @@ final class МодельСтудииРоликов: ObservableObject {
                 "com.instagram.sharedSticker.contentURL": данные.адрес.absoluteString
             ]
             UIPasteboard.general.setItems([предмет], options: [.expirationDate: Date().addingTimeInterval(300)])
-            UIApplication.shared.open(схема)
+            UIApplication.shared.open(схема, options: [:], completionHandler: nil)
             return
         }
         показатьТост(т("caption_copied"), секунд: 3)
