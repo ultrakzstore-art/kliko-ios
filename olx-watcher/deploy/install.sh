@@ -32,7 +32,12 @@ export PATH="$(dirname "$NODE"):$PATH"
 echo "== Node.js $("$NODE" -v)"
 
 echo "== Ставлю зависимости бота"
-npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+# С package-lock.json — точные версии (npm ci); без него (в сборке для ПК его нет) — npm install.
+if [ -f package-lock.json ]; then
+  npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+else
+  npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock
+fi
 
 # Настройки: .env рядом с ботом. Первый раз — из примера, и просим вписать токен.
 if [ ! -f .env ]; then
