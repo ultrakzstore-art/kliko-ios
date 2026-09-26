@@ -81,7 +81,8 @@
 | 45 ✅ | Сообщения кабинета своими экранами (`Config.нативныеСообщенияКабинета`): единый инбокс «Чат» — `dm.php?action=list&me_id=` + `chat.php?action=leads` + `buyer_chats` со склейкой lead > buyer > dm, вкладки «Все / Покупатели / Аренда / Обмен», поиск (и `chat.php?action=search`), «⋯» строки — `chat_pin` (до 5), `api/chat_hide.php` `hide` / `restore` / `purge` (после вопроса), число раз в 12 с; чат по лиду (`seller_chat` + long-poll `wait=1&since=`, `seller_join`, `seller_reply`, `typing`, `presence_event`, `set_label`, `subs.php block/unblock`, `request_unblock`, `report.php`, `offer_accept`, `offer_counter`; `offer_decline` — только за `Config.деньгиСделок`); «Заявки рядом» (`my_requests`, `request_action` respond / report / accept / confirm) и «Сделка состоялась?» (`my_pending_feedback` → `request_feedback`); колокольчик (записи со страницы кабинета, `mark_notif_read`); обращение в поддержку `?ticket=` (`sup_my_get`, `sup_my_reply`), «Запросить данные» (`support.php?action=create`), «Справочный центр»; переписка dm.php — `me_id`, `tid`, карточка заявки, «Прочитано / Отправлено», служебные по полям карты (§6.4.10) | `Sources/Native/Inbox/*`, `ChatModels.swift`, `ChatAPI.swift` |
 | 46 ✅ | Настройки и профиль разделами вкладки «Кабинет» (`Config.нативныеНастройки`): карточка профиля сайта (фото — `upload_photo` + `set_avatar`, имя, «Проверенный продавец», номер), «Аккаунт» — `change_password`, `change_phone` → `set_contacts`, `/cabinet.php?action=set_phone_policy`, `save_pref_chat`, статус верификации (пройти — страницей `?go=verify`); «Объявления» — `save_pref_cats`, `save_pref_geo` + `save_pref_ship`, `save_pref_hours`, `save_pref_redact`; «Продажи и оплата» — `save_pref_escrow`, `save_pref_pay`, `save_pref_reserve`; «Применить к объявлениям?» — `apply_pref_field`; «Устройства и входы» — `sec_devices`, `sec_end`, `sec_set`; мастер «Начало работы» — `save_onboard`; «Язык» — `save_pref_lang`; тема в аккаунт — `/api/ui_prefs.php` целиком; ссылка `?open=password`. Удаление аккаунта и выключение eGov-входа — страницей сайта | `Sources/Native/Settings/*`, `CabinetView.swift`, `AppearanceViews.swift` |
 | 47 ✅ | Кошелёк и баллы (`Config.нативныйКошелёк`): карточка «Кошелёк» под шапкой вкладки «Кабинет» (баланс, «Вывести на карту», «На удержании», «пополнение с карты», скрыть баланс) и экран кошелька — `wallet_info` (история с «сделка» и «чек» — `escrow.php?action=deal`, «Выплата … готова»), `frozen_funds`, итог выплаты `payout_outcome` после `?payout=back`; экран «Баллы» — `escrow.php?action=points`; ссылки `?go=wallet`, `?s=points`. 🔴 Пополнение (`pay.php?action=create`, `cabinet.php?action=topup`, `pay.php?action=confirm`), вывод (`withdraw`), авто-вывод (`wd_autopay`) и «Указать карту» (`payout_link`) — только за `Config.деньгиКошелька` (false), «Вернуть деньги» обеспечения (`offer_unfund`) — за `Config.деньгиСделок`: выключены — кабинет сайта | `Sources/Native/Wallet/*`, `CabinetView.swift`, `CabinetRouter.swift` |
-| 48+ | Платные услуги, PRO, магазин и компания… | — |
+| 48 ✅ | Платные услуги сведениями и бизнес, сверка паритета: раздел «Для бизнеса» во вкладке «Кабинет» — «Платные услуги» (Kliko PRO по `PRO_*` страницы, «Продвижение» — пакеты `PROMO_CFG` с серверной ценой `promo_quote`, «Слоты объявлений» — `slots` из `my_items`, «Комбо-пакеты», «Пакеты Kliko AI» — `AI_PACKS`, `CAB_AI`, `ai_scan_credits`; 🔴 купить нельзя — `Config.цифровыеПокупки`, текст сайта «Эта возможность недоступна в приложении.» и кабинет сайта), «Акции» — клуб основателей (`ref_stats`, ссылка, «Поделиться», партнёрская программа; промокод `redeem_coupon` — только за `цифровыеПокупки`), «Счета» — «Станьте магазином» (`split_submit`, после вопроса), реквизиты и мастер «Реквизиты юр. лица» (`company_lookup_bin`, `save_company`), заказы B2B (`b2b_orders_list`, только чтение); таблица паритета сайта и приложения — `docs/PARITY.md` | `Sources/Native/Business/*`, `CabinetView.swift`, `docs/PARITY.md` |
+| 49+ | Что осталось страницей сайта — по `docs/PARITY.md` (доставки, аренды, обмены, модуль `business`, покупки после решения по In-App Purchase)… | — |
 
 Как устроен этап 1:
 
@@ -675,6 +676,20 @@
   `topup`, `doWithdraw` после eGov) — новым нажатием. «Сделка» и «Спор» из «Заморожено» — своя карточка сделки.
   Глаз «скрыть баланс» прячет и номер в карточке профиля, как у сайта. Выход стирает кошелёк, выбор «скрыть» и задания
   ссылок (`ВыходНачисто`).
+- Платные услуги, бизнес и сверка паритета (этап 48) — по карте кабинета (§3.3, §6.6, §6.9, §8.10), коду кабинета
+  (`openPromote`, `promoDisc`, `upgSlotsPaneHTML`, `upgComboPaneHTML`, `upgAiPaneHTML`, `showProOffer` / `pxdRender`,
+  `clubOpen` / `_clubRender`, `showFounder`, `splitCard` / `splitSubmit`, `openReqWizard` / `_rwLookup` / `_rwSave`) и
+  докачанному модулю `cabinet-business` (`b2bLoadOrders`, `_b2bRow`). Данные — `БизнесМодель`: значения `PROMO_CFG`,
+  `AI_PACKS`, `AI_DISC`, `COMBO_PACKS`, `window.CAB_AI`, `PRO_*`, `let CAB_SPLIT`, `const CAB_COMPANY` разбираются из той же
+  страницы кабинета вне главного потока (`PRO_SLOTS` и `PRO_AI_DAYS` — объекты JS с числовыми ключами, их пары читаются
+  отдельно). Чтение — `promo_quote`, `my_items`, `ai_scan_credits`, `ref_stats`, `company_lookup_bin`, `b2b_orders_list`;
+  запись без денег, только по нажатию и каждая за своим рубильником — `save_company` (`Config.реквизитыКомпании`; `kbe`,
+  `acc_type` и шаблон счёта уходят прежними, как у сайта) и `split_submit` (`Config.заявкаМагазина`; сайт не спрашивает,
+  приложение спрашивает — заявка уходит эквайеру). Покупок нет вовсе, даже при `Config.цифровыеПокупки = true`: кнопка
+  ведёт в кабинет сайта, пока владелец не решил вопрос In-App Purchase (правило App Store 3.1.1); за этим рубильником
+  оживает только промокод клуба. Мастер реквизитов — за PRO, как `proGate("reqs")`. `docs/PARITY.md` — таблица всех
+  страниц и разделов сайта: свой экран или страница сайта и почему. Выход стирает платные услуги, клуб, реквизиты и заказы
+  (`ВыходНачисто`).
 - Каждый пуш в ветку собирается под симулятор (`.github/workflows/ios-check.yml`) — без подписи
   и секретов, чтобы ошибки компиляции были видны сразу.
 
