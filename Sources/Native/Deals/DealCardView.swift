@@ -474,7 +474,8 @@ struct МастерСделки: View {
 
     private func текущий(_ i: Int, подпись: String, всего: Int, пауза: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(т("dw_step") + " " + String(i + 1) + " " + т("dw_of") + " " + String(всего))
+            /* Цепочка из семи «+» не укладывалась во время проверки типов (Codemagic, 26.09.2026) — склейка массивом. */
+            Text([т("dw_step"), String(i + 1), т("dw_of"), String(всего)].joined(separator: " "))
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(Theme.акцент)
             Text(подпись)
