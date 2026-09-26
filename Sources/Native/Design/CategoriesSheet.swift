@@ -14,8 +14,8 @@ import UIKit
 
    · «Карта» — нативная карта объявлений (Native/Map, КартаЦель в стеке ленты);
    · разделы — лента раздела (как плитка главной); «Работа» — вакансии на сайте, своего экрана у приложения нет;
-   · «Частые вопросы» и «Как работает Гарант» — нативные листы с текстами сайта (КатегорииText);
-   · прочие справочные страницы и документы — страницы сайта в той же обёртке (юридический текст — только с сайта);
+   · «Частые вопросы» (help#faq), «Как работает Гарант» (help#safe) и прочие справочные страницы и документы — живые
+     страницы сайта своим экраном (НативныеОкна → ОкноСтраницСайта): текст правит команда сайта, в приложении его нет;
    · почта и телефон поддержки — системой.
  Поиск по полю — по названиям разделов и строк окна, как mhCatsQ сайта сужает плитки.
  */
@@ -35,20 +35,18 @@ struct ЛистКатегорийСайта: View {
 
     @Environment(\.dismiss) private var закрыть
     @State private var запрос = ""
-    @State private var сведения: СведенияСайта? = nil
 
     init(карта: Bool, выбрать: @escaping (ДействиеЛистаКатегорий) -> Void) {
         self.карта = карта
         self.выбрать = выбрать
     }
 
-    /// Строка справки: нативный лист или страница сайта.
+    /// Строка справки: страница сайта (/kz/<язык>/<хвост>) — открывается своим экраном справки.
     private struct Строка: Identifiable {
         let id: String
         let название: String
         let значок: String
-        let сведения: СведенияСайта?
-        let хвост: String?
+        let хвост: String
     }
 
     private struct Группа: Identifiable {
@@ -59,24 +57,19 @@ struct ЛистКатегорийСайта: View {
 
     private var группы: [Группа] {
         let покупателям = [
-            Строка(id: "faq", название: КатегорииText.т("faq"), значок: "questionmark.circle", сведения: .вопросы,
-                   хвост: nil),
-            Строка(id: "safe", название: DesignText.т("f_safe"), значок: "checkmark.shield", сведения: .гарант,
-                   хвост: nil),
-            Строка(id: "pay", название: DesignText.т("f_pay"), значок: "creditcard", сведения: nil, хвост: "oplata")
+            Строка(id: "faq", название: КатегорииText.т("faq"), значок: "questionmark.circle", хвост: "help#faq"),
+            Строка(id: "safe", название: DesignText.т("f_safe"), значок: "checkmark.shield", хвост: "help#safe"),
+            Строка(id: "pay", название: DesignText.т("f_pay"), значок: "creditcard", хвост: "oplata")
         ]
         let продавцам = [
-            Строка(id: "pro", название: DesignText.т("f_pro"), значок: "star", сведения: nil, хвост: "help#pro"),
-            Строка(id: "tariffs", название: DesignText.т("f_tariffs"), значок: "tag", сведения: nil, хвост: "tarify"),
-            Строка(id: "rules", название: DesignText.т("f_rules"), значок: "nosign", сведения: nil, хвост: "help#rules")
+            Строка(id: "pro", название: DesignText.т("f_pro"), значок: "star", хвост: "help#pro"),
+            Строка(id: "tariffs", название: DesignText.т("f_tariffs"), значок: "tag", хвост: "tarify"),
+            Строка(id: "rules", название: DesignText.т("f_rules"), значок: "nosign", хвост: "help#rules")
         ]
         let документы = [
-            Строка(id: "agreement", название: DesignText.т("f_agreement"), значок: "doc.text", сведения: nil,
-                   хвост: "soglashenie"),
-            Строка(id: "offer", название: DesignText.т("f_offer"), значок: "doc.plaintext", сведения: nil,
-                   хвост: "oferta"),
-            Строка(id: "privacy", название: DesignText.т("f_privacy"), значок: "lock.shield", сведения: nil,
-                   хвост: "privacy")
+            Строка(id: "agreement", название: DesignText.т("f_agreement"), значок: "doc.text", хвост: "soglashenie"),
+            Строка(id: "offer", название: DesignText.т("f_offer"), значок: "doc.plaintext", хвост: "oferta"),
+            Строка(id: "privacy", название: DesignText.т("f_privacy"), значок: "lock.shield", хвост: "privacy")
         ]
         return [
             Группа(id: "buyers", заголовок: DesignText.т("f_buyers"), строки: покупателям),
@@ -155,11 +148,9 @@ struct ЛистКатегорийСайта: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.фонСтраницы)
-        .sheet(item: $сведения) { вид in
-            ЛистСведенийСайта(вид: вид, открытьСайт: { адрес in
-                сведения = nil
-                выбрать(.страница(адрес))
-            })
+        .task {
+            /* Справка откроется сразу: страница /help на языке приложения — в память и на диск, пока окно открыто. */
+            await ЗагрузкаСтатьи.прогреть(СтраницаСайта(слаг: "help", якорь: nil))
         }
     }
 
@@ -330,9 +321,7 @@ struct ЛистКатегорийСайта: View {
 
     private func строкаСправки(_ строка: Строка) -> some View {
         Button {
-            if let вид = строка.сведения {
-                сведения = вид
-            } else if let хвост = строка.хвост, let адрес = Config.страницаСайта(хвост) {
+            if let адрес = Config.страницаСайта(строка.хвост) {
                 выбрать(.страница(адрес))
             }
         } label: {
@@ -347,7 +336,7 @@ struct ЛистКатегорийСайта: View {
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 8)
-                Image(systemName: строка.сведения == nil ? "arrow.up.forward" : "chevron.forward")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.текстВторой.opacity(0.6))
                     .accessibilityHidden(true)
@@ -357,7 +346,6 @@ struct ЛистКатегорийСайта: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityHint(строка.сведения == nil ? КатегорииText.т("site") : "")
     }
 
     /// Реквизиты поддержки подвала: почта и телефон открывает система, часы работы — подписью.
@@ -406,207 +394,5 @@ struct ЛистКатегорийСайта: View {
         .padding(.horizontal, 12)
         .frame(minHeight: 48)
         .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Листы сведений
-
-/// Какой нативный лист справки открыть из окна «Категории».
-enum СведенияСайта: String, Identifiable {
-    case вопросы, гарант
-
-    var id: String { rawValue }
-}
-
-/**
- Лист справки: «Частые вопросы» (раскрывающиеся ответы) или «Как работает Гарант» (четыре шага сделки). Кнопка «Понятно»
- закреплена внизу над полоской «домой» (листСКнопкойВнизу), под ней — ссылка на справочный центр сайта.
- */
-struct ЛистСведенийСайта: View {
-    let вид: СведенияСайта
-    let открытьСайт: (URL) -> Void
-
-    @Environment(\.dismiss) private var закрыть
-    @State private var открыт: Int? = 1
-
-    init(вид: СведенияСайта, открытьСайт: @escaping (URL) -> Void) {
-        self.вид = вид
-        self.открытьСайт = открытьСайт
-    }
-
-    private var заголовок: String {
-        switch вид {
-        case .вопросы: return КатегорииText.т("faq")
-        case .гарант: return DesignText.т("f_safe")
-        }
-    }
-
-    private var подзаголовок: String {
-        switch вид {
-        case .вопросы: return КатегорииText.т("faq_s")
-        case .гарант: return КатегорииText.т("safe_s")
-        }
-    }
-
-    private var значок: String {
-        switch вид {
-        case .вопросы: return "questionmark.circle.fill"
-        case .гарант: return "checkmark.shield.fill"
-        }
-    }
-
-    /// Страница справки сайта для ссылки внизу.
-    private var хвостСайта: String {
-        switch вид {
-        case .вопросы: return "help"
-        case .гарант: return "help#safe"
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: значок)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 48, height: 48)
-                        .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.md,
-                                                                         style: .continuous))
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(заголовок)
-                            .font(.system(size: 21, weight: .heavy))
-                            .foregroundStyle(Theme.текст)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(подзаголовок)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.текстВторой)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                switch вид {
-                case .вопросы: вопросы
-                case .гарант: шаги
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 22)
-            .padding(.bottom, 8)
-            .мерилоЛиста()
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .background(Theme.поверхность.ignoresSafeArea())
-        .листСКнопкойВнизу {
-            VStack(spacing: 6) {
-                Button { закрыть() } label: {
-                    Text(КатегорииText.т("ok"))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(Theme.зелёный,
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                Button {
-                    if let адрес = Config.страницаСайта(хвостСайта) { открытьСайт(адрес) }
-                } label: {
-                    Text(КатегорииText.т("help_site"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.акцент)
-                        .frame(maxWidth: .infinity, minHeight: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint(КатегорииText.т("site"))
-            }
-        }
-    }
-
-    /// Вопросы — раскрываются по нажатию; первый открыт сразу.
-    private var вопросы: some View {
-        VStack(spacing: 0) {
-            ForEach(1...КатегорииText.вопросов, id: \.self) { номер in
-                if номер > 1 {
-                    Theme.линия
-                        .frame(height: 1)
-                        .accessibilityHidden(true)
-                }
-                вопрос(номер)
-            }
-        }
-    }
-
-    private func вопрос(_ номер: Int) -> some View {
-        let раскрыт = открыт == номер
-        return VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { открыт = раскрыт ? nil : номер }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(КатегорииText.т("faq_q\(номер)"))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.текстВторой)
-                        .rotationEffect(.degrees(раскрыт ? 180 : 0))
-                        .accessibilityHidden(true)
-                }
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(раскрыт ? .isSelected : [])
-            if раскрыт {
-                Text(КатегорииText.т("faq_a\(номер)"))
-                    .font(.system(size: 14))
-                    .lineSpacing(3)
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    /// Шаги сделки через Гаранта — KLK_ADP.steps.buy сайта, с пояснением к каждому.
-    private var шаги: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(1...КатегорииText.шагов, id: \.self) { номер in
-                HStack(alignment: .top, spacing: 12) {
-                    Text(String(номер))
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundStyle(Theme.акцент)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.оттенокАкцента, in: Circle())
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(КатегорииText.т("safe_s\(номер)"))
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(Theme.текст)
-                        Text(КатегорииText.т("safe_d\(номер)"))
-                            .font(.system(size: 14))
-                            .lineSpacing(3)
-                            .foregroundStyle(Theme.текстВторой)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-            Text(КатегорииText.т("safe_note"))
-                .font(.footnote)
-                .foregroundStyle(Theme.текстВторой)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms,
-                                                                     style: .continuous))
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
