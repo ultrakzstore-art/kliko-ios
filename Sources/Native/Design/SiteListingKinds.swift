@@ -68,6 +68,12 @@ struct ПоляСтраницыВида: Hashable, Decodable {
     var район: String?
     /// year — «2019 · Астана» под названием в отчёте проверки.
     var год: String?
+    /// ship_scope — куда продавец отправляет: «all» (пусто), «city» — только по своему городу, «regions» — только в
+    /// свои области (ship_regions, ключи MK_GEO). Строка регионов отправки — mkShipRegionsLine (SiteListingDelivery.swift).
+    var отправкаКуда: String?
+    var регионыОтправки: [String] = []
+    /// ship_carrier — транспортная компания, выбранная продавцом: в списке ТК она первая, с меткой «выбор продавца».
+    var перевозчик: String?
 
     init() {}
 
@@ -86,6 +92,9 @@ struct ПоляСтраницыВида: Hashable, Decodable {
             район = р
         }
         год = ПоляСтраницыВида.строка(c, "year")
+        отправкаКуда = ПоляСтраницыВида.строка(c, "ship_scope")
+        регионыОтправки = ПоляСтраницыВида.строки(c, "ship_regions")
+        перевозчик = ПоляСтраницыВида.строка(c, "ship_carrier")
     }
 
     static func строка(_ c: KeyedDecodingContainer<КлючПоля>, _ k: String) -> String? {

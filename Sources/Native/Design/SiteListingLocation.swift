@@ -27,9 +27,10 @@ import UIKit
  Лист курьера (mkCourier): откуда — продавец, куда — ваш адрес (поле и «Определить автоматически»), «Вызвать курьера
  Яндекс Go» (tariffClass=courier, дальше 30 км — предупреждение, как mkCourierIntercityWarn), «Согласовать с
  продавцом» — чат объявления. 🔴 «Купить безопасно с доставкой» ведёт в сделку с деньгами — только при
- Config.деньгиСделок. Расчёт доставки (api/ship_quote.php) — часть той же сделки, его здесь нет.
- Не перенесено: «Газель / Грузоперевозки» и «Межгород из …» у крупного (mkBroadcast — запрос исполнителям),
- «Доставка из …» с транспортными компаниями (mkIntercityToggle) и строка регионов отправки (mkShipRegionsLine).
+ Config.деньгиСделок.
+ «Газель / Грузоперевозки» и «Межгород из …» у крупного (mkBroadcast — запрос исполнителям), «Доставка из …» с
+ транспортными компаниями (mkIntercityToggle), строка регионов отправки (mkShipRegionsLine) и расчёт доставки в листе
+ курьера (mkShipQuote, только сведения) — SiteListingDelivery.swift.
  «Скопировать адрес» — своё, у сайта его нет: город, район и улица одной строкой.
  */
 
@@ -69,7 +70,30 @@ enum ListingLocationText {
             "copy_addr": "Скопировать адрес", "copied": "Скопировано",
             "open_map": "Открыть карту", "close": "Закрыть",
             "geo_ask_mine": "Моё местоположение", "geo_locating": "Определяю местоположение…",
-            "dist_km": "≈ %@ км от вас", "dist_m": "≈ %@ м от вас"
+            "dist_km": "≈ %@ км от вас", "dist_m": "≈ %@ м от вас",
+            "gazelle_freight": "Газель / Грузоперевозки", "intercity_from": "Межгород из %@",
+            "delivery_route": "Доставка %1$@ → %2$@", "delivery_from": "Доставка из %@",
+            "delivery_other": "Доставка в другой город", "ship_only_city": "Доставка только по городу %@",
+            "ship_only_regions": "Доставка только: %@", "ship_not_yours": "В ваш регион продавец не отправляет — встреча или самовывоз",
+            "seller_choice": "выбор продавца", "delivered_by_tk": "Довезёт транспортная компания:",
+            "logi_car_note": "цена и срок — при оформлении, по вашему адресу", "logi_intercity_h": "Межгород-доставка",
+            "logi_other_h": "Доставка в другой город", "logi_free": "Бесплатная доставка — продавец организует и оплачивает сам",
+            "logi_none": "Транспортные компании недоступны.", "logi_loading": "Загружаем транспортные компании…",
+            "logi_price_from": "от %@ ₸", "logi_per_kg": "+%@ ₸/кг",
+            "logi_car_cta": "Оформить с доставкой", "collect_bids": "Собрать ставки от компаний",
+            "collect_bids_note": "Компании предложат свою цену — выберешь лучшую в «Мои доставки»", "bc_head": "Запрос специалистам рядом",
+            "bc_sub": "Ваш запрос получат продавцы и специалисты в радиусе 2 км (или в вашем городе)", "ph_broadcast": "Опишите, что вам нужно…",
+            "city_fail": "Не удалось определить город", "my_address": "Мой адрес",
+            "send_request": "Отправить запрос", "request_sent": "Отправлено",
+            "request_sent_n": "Отправлено (%@)", "write_need": "Напишите, что вам нужно",
+            "report_sending": "Отправляю…", "error_short": "Ошибка",
+            "net_error": "Ошибка сети", "detecting_addr": "Определяем адрес…",
+            "addr_detected": "Адрес определён", "no_geo_access": "Нет доступа к геолокации",
+            "bc_confirm_t": "Отправить запрос?", "bc_confirm_s": "Его увидят исполнители рядом и ответят вам в чате.",
+            "cancel": "Отмена", "need_session": "Откройте ленту сайта и попробуйте ещё раз",
+            "ship_quote": "Доставка ~ %@", "ship_quote_who": "платит покупатель, сверх суммы сделки",
+            "ship_eta": "~%@ мин в пути", "eta_days": "%1$@–%2$@ дн.",
+            "eta_days_one": "%@ дн.", "co_ship_free": "Доставка за счёт продавца"
         ],
         "kk": [
             "route_go_t": "Бағдар құру", "route_go_s": "Яндекс, inDrive немесе 2ГИС",
@@ -96,7 +120,30 @@ enum ListingLocationText {
             "copy_addr": "Мекенжайды көшіру", "copied": "Көшірілді",
             "open_map": "Картаны ашу", "close": "Жабу",
             "geo_ask_mine": "Менің орным", "geo_locating": "Орналасқан жерді анықтап жатырмын…",
-            "dist_km": "≈ сізден %@ км", "dist_m": "≈ сізден %@ м"
+            "dist_km": "≈ сізден %@ км", "dist_m": "≈ сізден %@ м",
+            "gazelle_freight": "Газель / Жүк тасымалы", "intercity_from": "%@ қаласынан қалааралық",
+            "delivery_route": "Жеткізу %1$@ → %2$@", "delivery_from": "%@ қаласынан жеткізу",
+            "delivery_other": "Басқа қалаға жеткізу", "ship_only_city": "Жеткізу тек %@ қаласы бойынша",
+            "ship_only_regions": "Жеткізу тек: %@", "ship_not_yours": "Сатушы сіздің өңірге жібермейді — кездесу немесе өзі алып кету",
+            "seller_choice": "сатушы таңдауы", "delivered_by_tk": "Көлік компаниясы жеткізеді:",
+            "logi_car_note": "бағасы мен мерзімі — рәсімдегенде, мекенжайыңыз бойынша", "logi_intercity_h": "Қалааралық жеткізу",
+            "logi_other_h": "Басқа қалаға жеткізу", "logi_free": "Тегін жеткізу — сатушы өзі ұйымдастырып, өзі төлейді",
+            "logi_none": "Көлік компаниялары қолжетімсіз.", "logi_loading": "Көлік компанияларын жүктеп жатырмыз…",
+            "logi_price_from": "%@ ₸-ден", "logi_per_kg": "+%@ ₸/кг",
+            "logi_car_cta": "Жеткізумен рәсімдеу", "collect_bids": "Компаниялардан ұсыныс жинау",
+            "collect_bids_note": "Компаниялар өз бағасын ұсынады — ең жақсысын «Менің жеткізулерім» бөлімінде таңдайсыз", "bc_head": "Жақын маңдағы мамандарға сұрау",
+            "bc_sub": "Сұрауыңызды 2 км радиустағы (немесе қалаңыздағы) сатушылар мен мамандар алады", "ph_broadcast": "Не қажет екенін сипаттаңыз…",
+            "city_fail": "Қаланы анықтау мүмкін болмады", "my_address": "Менің мекенжайым",
+            "send_request": "Сұрау жіберу", "request_sent": "Жіберілді",
+            "request_sent_n": "Жіберілді (%@)", "write_need": "Не қажет екенін жазыңыз",
+            "report_sending": "Жіберіп жатырмын…", "error_short": "Қате",
+            "net_error": "Желі қатесі", "detecting_addr": "Мекенжайды анықтап жатырмыз…",
+            "addr_detected": "Мекенжай анықталды", "no_geo_access": "Геолокацияға рұқсат жоқ",
+            "bc_confirm_t": "Сұрау жіберілсін бе?", "bc_confirm_s": "Оны жақын маңдағы орындаушылар көріп, сізге чатта жауап береді.",
+            "cancel": "Бас тарту", "need_session": "Сайт лентасын ашып, қайта көріңіз",
+            "ship_quote": "Жеткізу ~ %@", "ship_quote_who": "сатып алушы төлейді, мәміле сомасынан бөлек",
+            "ship_eta": "жолда ~%@ мин", "eta_days": "%1$@–%2$@ күн",
+            "eta_days_one": "%@ күн", "co_ship_free": "Жеткізуді сатушы төлейді"
         ],
         "en": [
             "route_go_t": "Get directions", "route_go_s": "Yandex, inDrive or 2GIS",
@@ -123,7 +170,30 @@ enum ListingLocationText {
             "copy_addr": "Copy address", "copied": "Copied",
             "open_map": "Open map", "close": "Close",
             "geo_ask_mine": "My location", "geo_locating": "Finding your location…",
-            "dist_km": "≈ %@ km from you", "dist_m": "≈ %@ m from you"
+            "dist_km": "≈ %@ km from you", "dist_m": "≈ %@ m from you",
+            "gazelle_freight": "Van / Freight", "intercity_from": "Intercity from %@",
+            "delivery_route": "Delivery %1$@ → %2$@", "delivery_from": "Delivery from %@",
+            "delivery_other": "Delivery to another city", "ship_only_city": "Delivery only within %@",
+            "ship_only_regions": "Delivery only: %@", "ship_not_yours": "The seller doesn't ship to your region — meet up or pick it up",
+            "seller_choice": "seller's choice", "delivered_by_tk": "Delivered by a shipping company:",
+            "logi_car_note": "price and time at checkout, for your address", "logi_intercity_h": "Intercity delivery",
+            "logi_other_h": "Delivery to another city", "logi_free": "Free delivery — the seller arranges and pays for it",
+            "logi_none": "No shipping companies available.", "logi_loading": "Loading shipping companies…",
+            "logi_price_from": "from %@ ₸", "logi_per_kg": "+%@ ₸/kg",
+            "logi_car_cta": "Order with delivery", "collect_bids": "Collect bids from companies",
+            "collect_bids_note": "Companies will offer their prices — pick the best one in “My deliveries”", "bc_head": "Request to specialists nearby",
+            "bc_sub": "Sellers and specialists within 2 km (or in your city) will get your request", "ph_broadcast": "Describe what you need…",
+            "city_fail": "Couldn't detect the city", "my_address": "My address",
+            "send_request": "Send request", "request_sent": "Sent",
+            "request_sent_n": "Sent (%@)", "write_need": "Write what you need",
+            "report_sending": "Sending…", "error_short": "Error",
+            "net_error": "Network error", "detecting_addr": "Detecting your address…",
+            "addr_detected": "Address found", "no_geo_access": "No access to location",
+            "bc_confirm_t": "Send the request?", "bc_confirm_s": "Providers nearby will see it and reply to you in chat.",
+            "cancel": "Cancel", "need_session": "Open the site feed and try again",
+            "ship_quote": "Delivery ~ %@", "ship_quote_who": "paid by the buyer, on top of the deal amount",
+            "ship_eta": "~%@ min on the way", "eta_days": "%1$@–%2$@ days",
+            "eta_days_one": "%@ days", "co_ship_free": "Delivery paid by the seller"
         ],
         "ar": [
             "route_go_t": "إنشاء مسار", "route_go_s": "Yandex أو inDrive أو 2GIS",
@@ -150,7 +220,30 @@ enum ListingLocationText {
             "copy_addr": "نسخ العنوان", "copied": "تم النسخ",
             "open_map": "فتح الخريطة", "close": "إغلاق",
             "geo_ask_mine": "موقعي", "geo_locating": "جارٍ تحديد الموقع…",
-            "dist_km": "≈ %@ كم منك", "dist_m": "≈ %@ م منك"
+            "dist_km": "≈ %@ كم منك", "dist_m": "≈ %@ م منك",
+            "gazelle_freight": "شاحنة صغيرة / نقل بضائع", "intercity_from": "نقل بين المدن من %@",
+            "delivery_route": "التوصيل من %1$@ إلى %2$@", "delivery_from": "التوصيل من %@",
+            "delivery_other": "التوصيل إلى مدينة أخرى", "ship_only_city": "التوصيل داخل مدينة %@ فقط",
+            "ship_only_regions": "التوصيل فقط: %@", "ship_not_yours": "البائع لا يرسل إلى منطقتك — لقاء أو استلام بنفسك",
+            "seller_choice": "اختيار البائع", "delivered_by_tk": "ستوصله شركة نقل:",
+            "logi_car_note": "السعر والمدة عند الطلب، حسب عنوانك", "logi_intercity_h": "توصيل بين المدن",
+            "logi_other_h": "التوصيل إلى مدينة أخرى", "logi_free": "توصيل مجاني — البائع ينظمه ويدفع ثمنه",
+            "logi_none": "شركات النقل غير متاحة.", "logi_loading": "جارٍ تحميل شركات النقل…",
+            "logi_price_from": "من %@ ₸", "logi_per_kg": "+%@ ₸/كغ",
+            "logi_car_cta": "اطلب مع التوصيل", "collect_bids": "اجمع العروض من الشركات",
+            "collect_bids_note": "ستقدم الشركات أسعارها — اختر الأفضل في «توصيلاتي»", "bc_head": "طلب إلى المختصين القريبين",
+            "bc_sub": "سيصل طلبك إلى البائعين والمختصين في نطاق 2 كم (أو في مدينتك)", "ph_broadcast": "صف ما تحتاجه…",
+            "city_fail": "تعذّر تحديد المدينة", "my_address": "عنواني",
+            "send_request": "إرسال الطلب", "request_sent": "تم الإرسال",
+            "request_sent_n": "تم الإرسال (%@)", "write_need": "اكتب ما تحتاجه",
+            "report_sending": "جارٍ الإرسال…", "error_short": "خطأ",
+            "net_error": "خطأ في الشبكة", "detecting_addr": "جارٍ تحديد العنوان…",
+            "addr_detected": "تم تحديد العنوان", "no_geo_access": "لا يوجد وصول إلى الموقع",
+            "bc_confirm_t": "إرسال الطلب؟", "bc_confirm_s": "سيراه مقدمو الخدمة القريبون ويردون عليك في الدردشة.",
+            "cancel": "إلغاء", "need_session": "افتح موجز الموقع وحاول مرة أخرى",
+            "ship_quote": "التوصيل ~ %@", "ship_quote_who": "يدفعه المشتري، إضافة إلى مبلغ الصفقة",
+            "ship_eta": "~%@ دقيقة في الطريق", "eta_days": "%1$@–%2$@ أيام",
+            "eta_days_one": "%@ أيام", "co_ship_free": "التوصيل على نفقة البائع"
         ]
     ]
 }
@@ -342,6 +435,7 @@ struct РасположениеСайта: View {
 
     var body: some View {
         let другойГород = МаршрутОбъявления.изДругогоГорода(товар)
+        let регионы = ДоставкаОбъявления.строкаРегионов(товар, мойГород: МаршрутОбъявления.мойГород)
         VStack(alignment: .leading, spacing: 10) {
             ПодзаголовокСайта(значок: "mappin.and.ellipse", текст: ListingKindsText.т("sec_location"))
             HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -368,6 +462,9 @@ struct РасположениеСайта: View {
             if !полныйАдрес.isEmpty {
                 кнопкаСкопировать
             }
+            if let регионы {
+                СтрокаРегионовОтправки(строка: регионы)
+            }
             if let т = точка {
                 КартаМестаСайта(точка: т, название: товар.title) { картаНаВесьЭкран = true }
             }
@@ -382,6 +479,12 @@ struct РасположениеСайта: View {
                     ЧипМестаСайта(значок: "shippingbox", текст: тМеста("courier_city"))
                 }
                 .buttonStyle(.plain)
+            }
+            if МаршрутОбъявления.довозимое(товар) && МаршрутОбъявления.крупное(товар) {
+                ЧипыГрузоперевозокСайта(товар: товар, другойГород: другойГород)
+            }
+            if ДоставкаОбъявления.естьДоставкаИзГорода(товар, закрыто: регионы?.закрыто ?? false) {
+                ДоставкаИзГородаСайта(товар: товар, оформить: купитьБезопасно)
             }
         }
         .padding(.top, 14)
@@ -532,7 +635,7 @@ private struct КнопкаМаршрутаСайта: View {
 }
 
 /// .mk-loc-chip: пилюля с значком.
-private struct ЧипМестаСайта: View {
+struct ЧипМестаСайта: View {
     let значок: String
     let текст: String
 
@@ -814,7 +917,7 @@ private struct РазделительМаршрута: View {
 }
 
 /// .mk-route-x: круглый «×».
-private struct КнопкаЗакрытьМеста: View {
+struct КнопкаЗакрытьМеста: View {
     let действие: () -> Void
 
     var body: some View {
@@ -891,6 +994,9 @@ struct ЛистКурьераСайта: View {
                 маршрутАБ
                 if let строка = строкаСостояния {
                     строка
+                }
+                if let моя {
+                    КотировкаДоставкиСайта(товар: товар, точка: моя)
                 }
                 if let купитьБезопасно {
                     Button { купитьБезопасно() } label: {
