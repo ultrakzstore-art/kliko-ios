@@ -1388,19 +1388,24 @@ struct ПлашкаЗагрузкиЛенты: View {
 // MARK: - Пустая выдача (#mk-empty)
 
 /// «Ничего не нашлось» как у сайта: лупа, заголовок, «запрос», «Попробуйте другой запрос или сбросьте фильтры»,
-/// зелёная «Сохранить поиск» и «Сбросить всё».
+/// зелёная «Сохранить поиск», рядом контурная «Ищу это — спросить продавцов» (.mk-empty-post, mkAskSellers) и
+/// «Сбросить всё».
 struct ПустаяВыдачаСайта: View {
     let запрос: String
     /// «Сохранить поиск»; nil — кнопки нет (рубильник сохранённых поисков выключен или сохранять нечего).
     let сохранить: (() -> Void)?
     let сохранён: Bool
     let сбросить: () -> Void
+    /// «Ищу это — спросить продавцов»; nil — кнопки нет.
+    let спросить: (() -> Void)?
 
-    init(запрос: String, сохранить: (() -> Void)?, сохранён: Bool, сбросить: @escaping () -> Void) {
+    init(запрос: String, сохранить: (() -> Void)?, сохранён: Bool, сбросить: @escaping () -> Void,
+         спросить: (() -> Void)? = nil) {
         self.запрос = запрос
         self.сохранить = сохранить
         self.сохранён = сохранён
         self.сбросить = сбросить
+        self.спросить = спросить
     }
 
     var body: some View {
@@ -1426,16 +1431,12 @@ struct ПустаяВыдачаСайта: View {
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 20)
-            if let сохранить {
-                Button(action: сохранить) {
-                    Label(SavedSearchText.т(сохранён ? "saved" : "save"), systemImage: сохранён ? "bell.fill" : "bell")
-                        .font(.system(.subheadline, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            if сохранить != nil || спросить != nil {
+                /* .mk-empty-acts: кнопки в ряд по центру, не влезают — друг под другом. */
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { кнопкиДействий }
+                    VStack(spacing: 10) { кнопкиДействий }
                 }
-                .buttonStyle(НажатиеСайта())
                 .padding(.bottom, 12)
             }
             Button(action: сбросить) {
@@ -1451,5 +1452,37 @@ struct ПустаяВыдачаСайта: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.vertical, 52)
+    }
+
+    @ViewBuilder
+    private var кнопкиДействий: some View {
+        if let сохранить {
+            Button(action: сохранить) {
+                Label(SavedSearchText.т(сохранён ? "saved" : "save"), systemImage: сохранён ? "bell.fill" : "bell")
+                    .font(.system(.subheadline, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеСайта())
+        }
+        if let спросить {
+            /* .mk-empty-post: без заливки, текст --mk-green2, рамка 1,5 px цвета линии. */
+            Button(action: спросить) {
+                Label(ListingLocationText.т("empty_post"), systemImage: "plus")
+                    .font(.system(.subheadline, weight: .bold))
+                    .foregroundStyle(Theme.зелёный2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1.5)
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеСайта())
+        }
     }
 }

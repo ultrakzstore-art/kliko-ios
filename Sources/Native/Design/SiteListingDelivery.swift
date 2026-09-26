@@ -13,7 +13,8 @@ import UIKit
    · Крупное (mkIsBulky) и довозимое: чип «Газель / Грузоперевозки» (запрос исполнителям с точкой объявления), а из
      другого города — ещё «Межгород из X» (без точки). Лист запроса — как mkBroadcast: текст (заполнен, как у сайта,
      по-русски: его читают исполнители), город и «Мой адрес», «Отправить запрос». Своё поверх сайта: перед отправкой —
-     подтверждение. Запрос — POST broadcast.php {text, section:"services", specialty:"", me_id, city, lat, lon,
+     подтверждение. Запрос — POST broadcast.php {text, section (у грузоперевозок "services", у пустой ленты — её
+     раздел), specialty:"", me_id, city, lat, lon,
      radius_km:2, csrf} с куками веб-сессии и CSRF страницы (SiteSession), ответ ok + count — «Отправлено (N)»,
      ok без count — msg сервера, иначе error.
    · «Доставка из X» / «Доставка X → Y» / «Доставка в другой город» (mkIntercityToggle): у довозимого некрупного, не
@@ -266,9 +267,11 @@ enum ДоставкаТКAPI {
                                  минут: минут > 0 ? минут : nil)
     }
 
-    /// mkBcSend: POST broadcast.php с CSRF страницы и куками веб-сессии.
+    /// mkBcSend: POST broadcast.php с CSRF страницы и куками веб-сессии. раздел — section тела: у сайта первый аргумент
+    /// mkBroadcast (грузоперевозки — «services», пустая лента — mkSt.cat или «other»).
     @MainActor
-    static func отправитьЗапрос(текст: String, город: String, широта: String, долгота: String) async -> ИтогЗапроса {
+    static func отправитьЗапрос(текст: String, город: String, широта: String, долгота: String,
+                                раздел: String = "services") async -> ИтогЗапроса {
         let состояние = await SiteSession.состояние()
         guard let csrf = состояние.csrf else { return .нетСессии }
         guard let адрес = URL(string: "broadcast.php", relativeTo: Config.apiBase)?.absoluteURL else { return .сеть }
@@ -280,7 +283,8 @@ enum ДоставкаТКAPI {
             запрос.setValue(значение, forHTTPHeaderField: имя)
         }
         let тело: [String: Any] = [
-            "text": текст, "section": "services", "specialty": "", "me_id": состояние.пользователь ?? "",
+            "text": текст, "section": раздел.isEmpty ? "other" : раздел, "specialty": "",
+            "me_id": состояние.пользователь ?? "",
             "city": город, "lat": широта, "lon": долгота, "radius_km": 2, "csrf": csrf
         ]
         запрос.httpBody = try? JSONSerialization.data(withJSONObject: тело)
@@ -360,6 +364,9 @@ struct ЗапросИсполнителям: Identifiable, Hashable {
     let город: String
     let широта: String
     let долгота: String
+    /// section запроса (первый аргумент mkBroadcast): по умолчанию «services», как у грузоперевозок; пустая лента
+    /// передаёт свой раздел (mkAskSellers: mkSt.cat или «other»).
+    var раздел: String = "services"
 }
 
 /// Чипы крупного товара: газель всегда, межгород — если вы смотрите из другого города.
@@ -585,7 +592,8 @@ struct ЛистЗапросаИсполнителям: View {
         let чтоОтправить = текст
         Task { @MainActor in
             let итог = await ДоставкаТКAPI.отправитьЗапрос(текст: чтоОтправить, город: город,
-                                                           широта: широта, долгота: долгота)
+                                                           широта: широта, долгота: долгота,
+                                                           раздел: запрос.раздел)
             отправляем = false
             switch итог {
             case .отправлено(let сколько):
