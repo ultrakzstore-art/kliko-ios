@@ -139,16 +139,44 @@ struct ЭкранКомпании: View {
 
     // MARK: - Инструменты магазина — страницы сайта
 
+    /// Этап 50: счета, журнал, КП, аналитика и разделы магазина — свои экраны (BusinessSectionsViews); печать и
+    /// подпись (eGov), прайс-лист (PDF) и интеграции — страницей сайта.
     private var инструменты: some View {
         КарточкаБизнеса(т("biz_title"), значок: "briefcase") {
-            строкаСайта(т("biz_invoices"), значок: "doc.text", путь: "cabinet.php?s=company")
+            строкаЭкрана(т("biz_invoices"), значок: "doc.text") { ЭкранСчетов(открыть: открыть) }
+            строкаЭкрана(БизнесРазделыText.т("jrn_title"), значок: "list.number") { ЭкранЖурнала(открыть: открыть) }
+            строкаЭкрана(т("biz_kp"), значок: "doc.richtext") { ЭкранКП(открыть: открыть) }
+            строкаЭкрана(т("biz_analytics"), значок: "chart.bar") { ЭкранАналитики(открыть: открыть) }
+            строкаЭкрана(т("biz_sections"), значок: "square.grid.2x2") { ЭкранРазделовМагазина(открыть: открыть) }
             строкаСайта(т("biz_seal"), значок: "signature", путь: "cabinet.php?s=company")
             строкаСайта(т("biz_pricelist"), значок: "list.bullet.rectangle", путь: "cabinet.php?s=company")
-            строкаСайта(т("biz_sections"), значок: "square.grid.2x2", путь: "cabinet.php?s=company")
-            строкаСайта(т("biz_kp"), значок: "doc.richtext", путь: "cabinet.php?s=kp")
-            строкаСайта(т("biz_analytics"), значок: "chart.bar", путь: "cabinet.php?s=analytics")
             строкаСайта(т("biz_integrations"), значок: "arrow.triangle.branch", путь: "cabinet.php")
         }
+    }
+
+    private func строкаЭкрана<Экран: View>(_ название: String, значок: String,
+                                          @ViewBuilder экран: @escaping () -> Экран) -> some View {
+        NavigationLink {
+            экран()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: значок)
+                    .foregroundStyle(Theme.акцент)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                Text(название)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.текст)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func строкаСайта(_ название: String, значок: String, путь: String) -> some View {
