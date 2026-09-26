@@ -6,7 +6,13 @@
 #   testflight — архив, подпись ключом App Store Connect API, заливка и выдача сборки группам TestFlight
 #                (как ios.yml + fastlane ios beta), только ручной запуск.
 #
-# ОДИН РАЗ В CODEMAGIC (codemagic.io → вход через GitHub → Add application → kliko-ios):
+# ОДИН РАЗ В CODEMAGIC. Вход через GitHub помеченный аккаунт не пускает («This account is flagged, and therefore
+# cannot authorize a third party application»), поэтому репозиторий подключается ключом развёртывания:
+#   ключ — на Windows в PowerShell: ssh-keygen -t ed25519 -N '""' -f codemagic_kliko
+#   Codemagic (вход по почте / GitLab / Bitbucket) → Add application → Other (Git URL):
+#     git@github.com:ultrakzstore-art/kliko-ios.git, SSH key — файл codemagic_kliko (закрытый);
+#   GitHub → kliko-ios → Settings → Deploy keys → Add deploy key: codemagic_kliko.pub (только чтение).
+#   Без подключения через GitHub сборка по пушу сама не стартует — Start new build вручную.
 #   Environment variables → группа «kliko», все «Secure»:
 #     APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 — те же значения, что в секретах GitHub
 #       (ASC_KEY_P8 — файл .p8 целиком, он же в base64 или только тело ключа — подходит любой вид);
@@ -66,8 +72,14 @@ workflows:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || true
-          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | head -200 || true
+          # Короткий список ошибок — в конце шага и в errors.txt (Artifacts): его копируют разработчику.
+          grep -E " error: " build.log | sed "s|^$CM_BUILD_DIR/||" | sort -u | head -300 > errors.txt || true
+          echo "===== ОШИБОК: $(wc -l < errors.txt | tr -d ' ') ====="
+          cat errors.txt
           grep -q "BUILD SUCCEEDED" build.log
+    artifacts:
+      - build.log
+      - errors.txt
     publishing:
       scripts:
         - name: Итог в ветку ci/build-log
@@ -159,7 +171,7 @@ workflows:
             CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION="$KLIKO_BUILD_NO" \
             MARKETING_VERSION="$APP_VERSION" > build.log 2>&1 \
-            || { grep -E "error:" build.log | head -200; tail -80 build.log; exit 1; }
+            || { grep -E " error: " build.log | sed "s|^$CM_BUILD_DIR/||" | sort -u | head -300 | tee errors.txt; tail -80 build.log; exit 1; }
           tail -5 build.log
       - name: Экспорт и заливка в App Store Connect
         script: |
@@ -194,6 +206,8 @@ workflows:
           command -v fastlane >/dev/null 2>&1 || brew install fastlane
           fastlane ios beta build:"$KLIKO_BUILD_NO" version:"$APP_VERSION" \
             || echo "Выдать группам не вышло — сборка залита, её можно выдать в App Store Connect → TestFlight"
+    artifacts:
+      - errors.txt
     publishing:
       scripts:
         - name: Убрать ключ и записать итог
