@@ -204,7 +204,21 @@ enum ИнбоксAPI {
             if a.element.порядок != b.element.порядок { return a.element.порядок > b.element.порядок }
             return a.offset < b.offset
         }
-        return упорядоченные.map { $0.element }
+        /* window._acwMeta сайта: после сортировки meta каждой записи кладётся в общую карту по номеру товара
+           (product_id || listing_id), и _msgAv / _msgSubline берут её ОТТУДА, а не из своей записи. Одна покупка часто
+           приходит только из dm.php list без meta, а её товар — ещё и в buyer_chats с meta: у сайта у обеих строк фото
+           и раздел, у приложения до этого фото было лишь у той записи, где пришла своя meta. Позже в порядке —
+           главнее (JS перезаписывает ключ); без номера товара у сайта меты нет вовсе. */
+        var метаПоТовару: [String: МетаИнбокса] = [:]
+        for пара in упорядоченные {
+            let товар = пара.element.объявлениеID
+            if !товар.isEmpty, let мета = пара.element.своиМета { метаПоТовару[товар] = мета }
+        }
+        return упорядоченные.map { пара in
+            var строка = пара.element
+            строка.применить(строка.объявлениеID.isEmpty ? nil : метаПоТовару[строка.объявлениеID])
+            return строка
+        }
     }
 
     // MARK: - Действия со строкой
@@ -322,6 +336,14 @@ extension КабинетСайта {
 
 // MARK: - Строка инбокса
 
+/// meta{img, catIcon, catName, catColor} записи инбокса — то, что сайт кладёт в window._acwMeta.
+struct МетаИнбокса: Equatable {
+    var обложка: String
+    var значок: String
+    var раздел: String
+    var цвет: String
+}
+
 /// Одна строка «Чата» кабинета — диалог dm.php, лид chat.php или покупка chat.php (_msgRowDm / _msgRowLead / _msgRowBuyer).
 struct СтрокаИнбокса: Identifiable, Equatable {
     enum Источник: String, Equatable {
@@ -369,10 +391,15 @@ struct СтрокаИнбокса: Identifiable, Equatable {
     /// peer_id (dm, buyer).
     var собеседник: String = ""
     var собеседникУдалён: Bool = false
-    /// meta.img / meta.catName / meta.catColor (_msgAv, _msgSubline).
+    /// meta.img / meta.catIcon / meta.catName / meta.catColor (_msgAv, _msgSubline) — уже после общей карты сайта
+    /// (_acwMeta, см. ИнбоксAPI.склеить): у строки то, что сайт нарисовал бы для её товара.
     var обложка: String = ""
+    /// meta.catIcon — SVG значка корневого раздела (MK_CATS[].icon); что рисовать — ЗначокРаздела.
+    var значокРаздела: String = ""
     var раздел: String = ""
     var цветРаздела: String = ""
+    /// meta своей записи, как пришла (nil — поля meta не было). Из них склейка собирает карту по товару.
+    var своиМета: МетаИнбокса? = nil
     /// Весь текст строки для поиска (_msgHay), в нижнем регистре.
     var стог: String = ""
 
@@ -493,9 +520,18 @@ struct СтрокаИнбокса: Identifiable, Equatable {
 
     private mutating func разобратьМета(_ значение: Any?) {
         guard let m = значение as? [String: Any] else { return }
-        обложка = З.строка(m["img"])
-        раздел = З.строка(m["catName"])
-        цветРаздела = З.строка(m["catColor"])
+        let мета = МетаИнбокса(обложка: З.строка(m["img"]), значок: З.строка(m["catIcon"]),
+                               раздел: З.строка(m["catName"]), цвет: З.строка(m["catColor"]))
+        своиМета = мета
+        применить(мета)
+    }
+
+    /// Поля аватара и подстроки из meta (или пусто, если у товара меты нет).
+    mutating func применить(_ мета: МетаИнбокса?) {
+        обложка = мета?.обложка ?? ""
+        значокРаздела = мета?.значок ?? ""
+        раздел = мета?.раздел ?? ""
+        цветРаздела = мета?.цвет ?? ""
     }
 
     /// {ai, hot_lead, seller_active, closed} → подпись строки лида.

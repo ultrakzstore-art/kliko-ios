@@ -99,9 +99,7 @@ struct ИнбоксЭкран: View {
     private var лента: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                Text(т("sub"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.текстВторой)
+                заголовок
                 инструменты
                 ВкладкиИнбокса(модель: модель)
                 if модель.фильтр == .trash { полосаКорзины }
@@ -111,6 +109,28 @@ struct ИнбоксЭкран: View {
             .padding(.vertical, 12)
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Верх #messages-screen: значок чата и «Чат» крупно, под ними chat_sub «Переписка, аренда и обмен — в одном месте».
+    private var заголовок: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный)
+                    .accessibilityHidden(true)
+                Text(т("title"))
+                    .font(.system(size: 26, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            Text(т("sub"))
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 4)
     }
 
     /// .msg-tools: поле поиска и «Корзина».
@@ -140,7 +160,7 @@ struct ИнбоксЭкран: View {
                 }
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 42)
+            .frame(minHeight: 44)
             .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
@@ -155,23 +175,19 @@ struct ИнбоксЭкран: View {
         return Button {
             модель.выбрать(.trash)
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(т("trash"))
-                    .font(.system(size: 14, weight: .bold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(включена ? Color.white : Theme.текстВторой)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 42)
-            .background(включена ? Theme.зелёный : Theme.поверхность,
-                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                    .strokeBorder(включена ? Color.clear : Theme.линия, lineWidth: 1)
-            }
+            /* .msg-trash на телефоне (до 480 px) — только значок 44×44, подпись .msg-trash-t скрыта; включённая —
+               на --tint-bad с кромкой --edge-bad, значок --on-bad. Нажатие только переключает вид на корзину. */
+            Image(systemName: "trash")
+                .font(.system(size: 18, weight: .semibold))
+                .accessibilityHidden(true)
+                .foregroundStyle(включена ? КраскаОбъявлений.плохоТекст : Theme.текстВторой)
+                .frame(width: 44, height: 44)
+                .background(включена ? КраскаОбъявлений.плохоФон : Theme.поверхность,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(включена ? КраскаОбъявлений.плохоКромка : Theme.линия, lineWidth: 1)
+                }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
         .accessibilityLabel(т("trash"))
@@ -330,6 +346,7 @@ struct СтрокаИнбоксаВид: View {
             NavigationLink(value: строка.цель) {
                 HStack(alignment: .top, spacing: 12) {
                     АватарИнбокса(строка: строка)
+                        .padding(.top, 2)
                     тело
                 }
                 .contentShape(Rectangle())
@@ -361,14 +378,16 @@ struct СтрокаИнбоксаВид: View {
                         .accessibilityHidden(true)
                 }
                 Text(строка.имя)
-                    .font(.system(size: 15, weight: непрочитана ? Font.Weight.heavy : Font.Weight.bold))
+                    .font(.system(size: 16, weight: непрочитана ? Font.Weight.heavy : Font.Weight.bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(ИнбоксВремя.коротко(строка.когда))
-                    .font(.system(size: 12, weight: непрочитана ? Font.Weight.bold : Font.Weight.regular))
+                    .font(.system(size: 13, weight: непрочитана ? Font.Weight.bold : Font.Weight.regular))
                     .monospacedDigit()
                     .foregroundStyle(непрочитана ? Theme.акцент : Theme.текстВторой)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             ПодстрокаИнбокса(строка: строка)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -391,7 +410,7 @@ struct СтрокаИнбоксаВид: View {
     private var превью: some View {
         if let отрывок {
             Text(отрывок)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(1)
         } else {
@@ -404,7 +423,7 @@ struct СтрокаИнбоксаВид: View {
                 Text((строка.превьюМоё ? т("you") : "") + строка.превью)
                     .lineLimit(1)
             }
-            .font(.system(size: 14))
+            .font(.system(size: 15))
             .foregroundStyle(непрочитана ? Theme.текст : Theme.текстВторой)
         }
     }
@@ -437,7 +456,7 @@ struct СтрокаИнбоксаВид: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(Theme.текстВторой)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
@@ -445,6 +464,7 @@ struct СтрокаИнбоксаВид: View {
         .disabled(занята)
         .padding(.top, -6)
         .padding(.trailing, -6)
+        .padding(.leading, 4)
         .accessibilityLabel(т("more"))
     }
 
@@ -461,39 +481,85 @@ struct СтрокаИнбоксаВид: View {
     }
 }
 
-/// .msg-sub: значок статуса объявления, раздел, подпись, «с какого числа» и теги (метка, аренда, обмен, лид…).
+/// .msg-sub (_msgSubline): одна строка без переноса — сначала теги (.msg-tags: «Покупка», «Аренда», «Лид»…), потом
+/// через «·» значок статуса объявления, раздел жирным в цвете раздела (meta.catColor), название объявления или состояние
+/// лида и «с какого числа» с календариком (msg-since). Не влезло — строка обрезается по правому краю карточки, как
+/// overflow:hidden у .msg-sub на сайте (название «Телевизор SAMSUNG» режется, дата уходит за край).
 struct ПодстрокаИнбокса: View {
     let строка: СтрокаИнбокса
 
-    private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
+    /// Части после тегов — в порядке сайта (i.join('<span class="msg-dot">·</span>')).
+    private enum Часть {
+        case статус(ТегИнбокса)
+        case раздел(String, Color?)
+        case текст(String)
+        case с(String)
+    }
+
+    private var части: [Часть] {
+        var список: [Часть] = []
+        if let статус = ТегИнбокса.статусОбъявления(строка.статусОбъявления) { список.append(.статус(статус)) }
+        if !строка.раздел.isEmpty { список.append(.раздел(строка.раздел, ИнбоксКраска.цвет(строка.цветРаздела))) }
+        if !строка.подпись.isEmpty { список.append(.текст(строка.подпись)) }
+        let с = ИнбоксВремя.коротко(строка.начат)
+        if !с.isEmpty { список.append(.с(с)) }
+        return список
+    }
 
     var body: some View {
         let теги = ТегИнбокса.для(строка)
-        let статус = ТегИнбокса.статусОбъявления(строка.статусОбъявления)
-        let с = ИнбоксВремя.коротко(строка.начат)
-        if !теги.isEmpty || статус != nil || !строка.раздел.isEmpty || !строка.подпись.isEmpty || !с.isEmpty {
-            ПереносСтрок(промежуток: 5, междуСтрок: 4) {
-                ForEach(теги) { тег in тег }
-                if let статус { статус }
-                if !строка.раздел.isEmpty {
-                    Text(строка.раздел)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ИнбоксКраска.цвет(строка.цветРаздела) ?? Theme.текстВторой)
-                        .lineLimit(1)
+        let части = self.части
+        if !теги.isEmpty || !части.isEmpty {
+            /* Ширина — у карточки (прозрачная подложка на всю ширину), сама строка — своей длины поверх неё слева и
+               обрезана по подложке: как overflow:hidden у сайта, без многоточия и без распирания карточки. */
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 18)
+                .overlay(alignment: .leading) {
+                    HStack(spacing: 6) {
+                        if !теги.isEmpty {
+                            HStack(spacing: 4) {
+                                ForEach(теги) { тег in тег }
+                            }
+                        }
+                        ForEach(Array(части.enumerated()), id: \.offset) { пара in
+                            if пара.offset > 0 {
+                                Text("·")
+                                    .opacity(0.5)
+                                    .accessibilityHidden(true)
+                            }
+                            вид(пара.element)
+                        }
+                    }
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(1)
+                    .fixedSize()
                 }
-                if !строка.подпись.isEmpty {
-                    Text(строка.подпись)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(строка.источник == .lead ? Theme.текстВторой : Theme.акцент)
-                        .lineLimit(1)
-                }
-                if !с.isEmpty {
-                    Label(с, systemImage: "calendar")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.текстВторой)
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
-                }
+                .clipped()
+        }
+    }
+
+    @ViewBuilder
+    private func вид(_ часть: Часть) -> some View {
+        switch часть {
+        case .статус(let тег):
+            тег
+        case .раздел(let название, let цвет):
+            Text(название)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(цвет ?? Theme.текстВторой)
+                .lineLimit(1)
+        case .текст(let текст):
+            Text(текст)
+                .lineLimit(1)
+        case .с(let дата):
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 11, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(дата)
+                    .lineLimit(1)
             }
         }
     }
@@ -535,11 +601,11 @@ struct ТегИнбокса: View, Identifiable {
         case .dm:
             if с.виды.contains("rental") {
                 теги.append(ТегИнбокса(id: "rent", текст: ИнбоксText.т("tag_rent"), значок: nil,
-                                       фон: ИнбоксКраска.иФон, цвет: ИнбоксКраска.иТекст))
+                                       фон: ИнбоксКраска.аиФон, цвет: ИнбоксКраска.аиТекст))
             }
             if с.виды.contains("exchange") {
                 теги.append(ТегИнбокса(id: "exch", текст: ИнбоксText.т("tag_exch"), значок: nil,
-                                       фон: КраскаОбъявлений.инфоФон, цвет: КраскаОбъявлений.инфоТекст))
+                                       фон: ИнбоксКраска.инфоФон, цвет: ИнбоксКраска.инфоТекст))
             }
         case .lead:
             if с.статусЛида == "hot_lead" {
@@ -551,7 +617,7 @@ struct ТегИнбокса: View, Identifiable {
             }
         case .buyer:
             теги.append(ТегИнбокса(id: "buy", текст: ИнбоксText.т("tag_buy"), значок: nil,
-                                   фон: КраскаОбъявлений.инфоФон, цвет: КраскаОбъявлений.инфоТекст))
+                                   фон: ИнбоксКраска.инфоФон, цвет: ИнбоксКраска.инфоТекст))
         }
         return теги
     }
@@ -581,10 +647,20 @@ struct ТегИнбокса: View, Identifiable {
     }
 }
 
-/// Аватар строки (_msgAv): фото товара (meta.img) или первая буква на подложке источника (лид — янтарная, покупка —
-/// голубая, диалог — серо-зелёная).
+/// Аватар строки (_msgAv, .msg-av): круг 40 pt. Есть meta.img — фото товара и в правом нижнем углу кружок .msg-catbadge
+/// 18 pt на подложке карточки со значком раздела в цвете раздела (телефон — электроника, ключ — услуги…). Фото нет, но
+/// есть значок раздела — значок крупно на подложке цвета раздела 14 %. Иначе — первая буква имени на подложке источника
+/// (лид — янтарная, покупка — голубая, диалог — серо-зелёная).
+///
+/// Фото — через КартинкиЛенты, а не AsyncImage (проверка на телефоне, сборка 35: у большинства строк пустая заглушка).
+/// AsyncImage грузит один раз: список перерисовывается опросом (каждые 12 с), pull-to-refresh и .task, загрузка в
+/// ленивом стеке при этом отменяется (NSURLErrorCancelled), AsyncImage остаётся в фазе .failure и рисует ту же заглушку
+/// навсегда, без повтора. Видны были только снимки, уже лежавшие в URLCache после ленты. КартинкиЛенты держит готовое в
+/// памяти, отменяет загрузку лишь когда её не ждёт ни одна ячейка и при следующем показе строки качает заново.
 struct АватарИнбокса: View {
     let строка: СтрокаИнбокса
+
+    private static let сторона: CGFloat = 40
 
     private var фон: Color {
         switch строка.источник {
@@ -603,28 +679,134 @@ struct АватарИнбокса: View {
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-            .fill(фон)
-            .overlay {
+        let адрес = ИнбоксКартинка.адрес(строка.обложка)
+        let значок = ЗначокРаздела(svg: строка.значокРаздела, цвет: строка.цветРаздела)
+        let цвет = ИнбоксКраска.цвет(строка.цветРаздела) ?? Theme.акцент
+        ZStack(alignment: .bottomTrailing) {
+            круг(адрес: адрес, значок: значок, цвет: цвет)
+                .frame(width: Self.сторона, height: Self.сторона)
+                .clipShape(Circle())
+            if адрес != nil, let значок {
+                значок.вид(размер: 11)
+                    .foregroundStyle(цвет)
+                    .frame(width: 18, height: 18)
+                    .background(Theme.поверхность, in: Circle())
+                    .overlay { Circle().strokeBorder(Theme.линия, lineWidth: 1) }
+                    .offset(x: 3, y: 3)
+            }
+        }
+        .frame(width: Self.сторона, height: Self.сторона)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func круг(адрес: URL?, значок: ЗначокРаздела?, цвет: Color) -> some View {
+        if let адрес {
+            ZStack {
+                фон
+                /* Сначала рамка ячейки, потом обрезка кругом (урок сборки 33): широкое фото режется по ячейке. */
+                КартинкаЛенты(адрес, пунктов: Self.сторона) {
+                    Color.clear
+                }
+                .frame(width: Self.сторона, height: Self.сторона)
+                .clipped()
+            }
+        } else if let значок {
+            ZStack {
+                цвет.opacity(0.14)
+                значок.вид(размер: 20)
+                    .foregroundStyle(цвет)
+            }
+        } else {
+            ZStack {
+                фон
                 Text(String(строка.имя.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(буква)
             }
-            .overlay {
-                if let адрес = Config.url(строка.обложка) {
-                    AsyncImage(url: адрес) { картинка in
-                        картинка.resizable().scaledToFill()
-                    } placeholder: {
-                        Color.clear
-                    }
-                    /* Сначала рамка, потом обрезка — урок сборки 33 (СтрокаДиалогаСайта): широкое фото режется по ячейке. */
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                }
-            }
-            .frame(width: 48, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Адрес фото из meta.img так, как его понимает браузер на странице кабинета (/kz/ru/cabinet.php): «/img/…» и прочие
+/// от корня — от kliko.kz (_ULX_BASE = ""), «//…» — https, полный адрес — как есть, путь без «/» — от /kz/ru/, как
+/// url(...) в стиле .msg-av. Пробелы и кириллица в имени файла кодируются. Всегда абсолютный URL — он же ключ кэша.
+enum ИнбоксКартинка {
+    static func адрес(_ путь: String) -> URL? {
+        let p = путь.trimmingCharacters(in: .whitespacesAndNewlines)
+        if p.isEmpty { return nil }
+        let строка: String
+        if p.hasPrefix("//") {
+            строка = "https:" + p
+        } else {
+            строка = p
+        }
+        let готовая = URL(string: строка)
+            ?? строка.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed).flatMap { URL(string: $0) }
+        guard let готовая else { return nil }
+        if let схема = готовая.scheme?.lowercased() {
+            return схема == "http" || схема == "https" ? готовая : nil
+        }
+        let база = p.hasPrefix("/") ? Config.apiBase : (URL(string: "/kz/ru/", relativeTo: Config.apiBase)?.absoluteURL ?? Config.apiBase)
+        return URL(string: готовая.absoluteString, relativeTo: база)?.absoluteURL
+    }
+}
+
+/// Значок раздела из meta.catIcon. Сервер кладёт туда SVG корневого раздела из справочника сайта (js/cats-ru.js, MK_CATS:
+/// поля icon и color). SVG в SwiftUI не рисуется, поэтому узнаём раздел по его рисунку (запасной путь — по цвету) и берём
+/// похожий SF Symbol. Не SVG (эмодзи) — показываем как текст.
+enum ЗначокРаздела {
+    case символ(String)
+    case эмодзи(String)
+
+    /// Корни MK_CATS: кусок рисунка (без кавычек и пробелов), цвет, символ.
+    private static let корни: [(рисунок: String, цвет: String, символ: String)] = [
+        ("width=12height=19rx=2.5", "2563EB", "iphone"),                 // electronics
+        ("M511l1.6-4.3", "DC2626", "car"),                               // transport
+        ("M311l9-89", "059669", "house"),                                // realty
+        ("M8.53L46.5", "DB2777", "tshirt"),                              // clothing
+        ("M511V8a220012-2h10", "D97706", "sofa"),                        // home-garden
+        ("cx=6.5cy=7r=2.5", "FACC15", "teddybear"),                      // kids
+        ("M123c2.524", "0891B2", "soccerball"),                          // sport
+        ("ellipsecx=7cy=9.5", "7C3AED", "pawprint"),                     // animals
+        ("rectx=3y=7width=18height=13", "4F46E5", "briefcase"),          // jobs
+        ("M14.56.2a3.6", "0D9488", "wrench.adjustable"),                 // services
+        ("M123a99010018c1", "C026D3", "paintpalette"),                   // hobby
+        ("M128c-1-1.3", "65A30D", "carrot"),                             // food-farm
+        ("M921V11h6v10z", "E11D48", "sparkles")                          // beauty
+    ]
+
+    init?(svg: String, цвет: String) {
+        let сырой = svg.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !сырой.isEmpty else { return nil }
+        if !сырой.contains("<") {
+            self = .эмодзи(String(сырой.prefix(4)))
+            return
+        }
+        let плоский = сырой.filter { $0 != "\"" && $0 != "'" && $0 != "\\" && !$0.isWhitespace }
+        if let корень = Self.корни.first(where: { плоский.contains($0.рисунок) }) {
+            self = .символ(корень.символ)
+            return
+        }
+        var hex = цвет.trimmingCharacters(in: .whitespaces).uppercased()
+        if hex.hasPrefix("#") { hex.removeFirst() }
+        if let корень = Self.корни.first(where: { $0.цвет == hex }) {
+            self = .символ(корень.символ)
+            return
+        }
+        self = .символ("square.grid.2x2")
+    }
+
+    @ViewBuilder
+    func вид(размер: CGFloat) -> some View {
+        switch self {
+        case .символ(let имя):
+            Image(systemName: имя)
+                .font(.system(size: размер, weight: .semibold))
+        case .эмодзи(let знак):
+            Text(знак)
+                .font(.system(size: размер))
+        }
     }
 }
 
@@ -663,6 +845,12 @@ enum МеткаДиалога: String, CaseIterable, Identifiable {
 enum ИнбоксКраска {
     static let иФон = Theme.цвет(0xEDE9FE, 0x261E3D)
     static let иТекст = Theme.цвет(0x6D28D9, 0xC4B5FD)
+    /// .msg-tag.rent: --tint-ai #f4eefb / --on-ai #6c3fc5 (тёмная — rgba(167,139,250,.15) на карточке / #b79bf5).
+    static let аиФон = Theme.цвет(0xF4EEFB, 0x2A2440)
+    static let аиТекст = Theme.цвет(0x6C3FC5, 0xB79BF5)
+    /// .msg-tag.info и .exch («Покупка», «Обмен»): --tint-info #eef4ff / --on-info #1e40af (тёмная — #7cb8f5).
+    static let инфоФон = Theme.цвет(0xEEF4FF, 0x1C2A3E)
+    static let инфоТекст = Theme.цвет(0x1E40AF, 0x7CB8F5)
 
     /// «#1d9e5e» → цвет; не цвет — nil.
     static func цвет(_ hex: String) -> Color? {
