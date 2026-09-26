@@ -33,6 +33,10 @@
   }
 
   * { box-sizing: border-box; }
+  /* Дети сеток и флексов могут ужиматься уже своего содержимого — иначе длинные слова распирают колонки. */
+  .hero > *, .race > *, .track > *, .lane > *, .wins > *, .dropband > *, .drop-cards > *, .who > *, .steps > *,
+  .feat > *, .plans > *, .vip > *, .roi > *, .final > *, .dcard > * { min-width: 0; }
+  h1, h2, h3, p, li, span, b { overflow-wrap: break-word; }
   svg.i { width: 1em; height: 1em; vertical-align: -.15em; flex: none; }
   body {
     background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--body);
@@ -142,9 +146,9 @@
   .lane.them .bar i { width: 80%; background: repeating-linear-gradient(135deg, #3a4a5b 0 10px, #33424f 10px 20px); }
   .lane.them .flag { left: 80%; margin-left: 12px; color: var(--ink-2); }
   .scale { display: flex; justify-content: space-between; margin-left: 228px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
-  .wins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .wins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .wins div { background: rgba(14,22,33,.6); border-radius: 16px; padding: 18px; display: grid; gap: 6px; box-shadow: inset 0 0 0 1px var(--line); }
-  .wins b { font-size: clamp(24px, 3vw, 32px); line-height: 1; color: var(--accent); font-weight: 800; }
+  .wins b { font-size: clamp(20px, 3vw, 32px); overflow-wrap: anywhere; line-height: 1; color: var(--accent); font-weight: 800; }
   .wins span { color: var(--ink-2); font-size: 14.5px; line-height: 1.4; }
   .race-note { font-size: 13.5px; color: var(--muted); }
   @keyframes pulse { 50% { box-shadow: 0 0 34px rgba(46,166,255,1); } }
@@ -188,13 +192,17 @@
   .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px -4px rgba(0,0,0,.3); }
   .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .plan { padding: 22px !important; }
-  .rows .p { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  /* Строка цены: слева срок (и подпись), справа столбиком — было/скидка, цена, цена в день. */
+  .rows .d { display: flex; flex-direction: column; gap: 2px; }
+  .rows .d small { font-size: 12px; color: var(--muted); }
+  .rows .p { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; }
+  .rows .was { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .rows s { font-size: 13px; color: var(--muted); text-decoration-thickness: 1.5px; }
-  .rows .off { font: 700 11.5px/1 var(--body); color: #0e1621; background: var(--amber); padding: 3px 6px; border-radius: 6px; margin-left: 6px; vertical-align: 2px; }
-  .rows .best { color: var(--accent); }
-  .rows .best span::after { content: " · выгодно"; color: var(--accent); font-weight: 600; font-size: 12.5px; }
-  .rows .trial span:first-child::after { content: " · попробовать"; color: var(--muted); font-size: 12.5px; }
-  .rows .perday { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+  .rows .off { font: 700 11.5px/1 var(--body); font-style: normal; color: #0e1621; background: var(--amber); padding: 3px 6px; border-radius: 6px; }
+  .rows b { white-space: nowrap; }
+  .rows .best { background: var(--accent-soft); border-radius: 10px; padding-inline: 10px; margin-inline: -10px; border-bottom-color: transparent; }
+  .rows .best .d small { color: var(--accent); font-weight: 600; }
+  .rows .perday { font-size: 12.5px; color: var(--accent); font-weight: 600; white-space: nowrap; }
   .save { font-size: 14px; color: var(--ink); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
   .save b { color: var(--accent); }
   .plan { background: var(--surface); border-radius: 20px; padding: 26px; display: grid; gap: 16px; align-content: start; box-shadow: inset 0 0 0 1px var(--line); }
@@ -202,14 +210,14 @@
   .plan.hot .tag { position: absolute; top: -12px; right: 20px; background: var(--accent); color: var(--accent-ink); font: 700 12px/1 var(--body); padding: 7px 10px; border-radius: 8px; letter-spacing: .04em; text-transform: uppercase; }
   .plan .for { color: var(--ink-2); font-size: 15px; }
   .rows { display: grid; gap: 8px; }
-  .rows div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-block: 8px; border-bottom: 1px dashed var(--line); }
+  .rows > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 9px; border-bottom: 1px dashed var(--line); }
   .rows span { color: var(--ink-2); font-size: 15px; }
   .rows b { font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
   .plan ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 15px; display: grid; gap: 4px; }
   .vip { margin-top: 16px; background: linear-gradient(135deg, #1d2b3a, #17212b); color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,197,61,.35); border-radius: 20px; padding: 28px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center; }
   .vip h3 { font-size: 22px; color: var(--ink); }
   .vip p { opacity: .82; margin-top: 8px; font-size: 15.5px; }
-  .vip .rows div { border-color: rgba(255,255,255,.2); }
+  .vip .rows > div { border-color: rgba(255,255,255,.2); }
   .vip .rows span { color: inherit; opacity: .75; }
   .roi { margin-top: 16px; background: var(--surface); border-radius: 20px; padding: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; box-shadow: inset 0 0 0 1px var(--line); }
   .roi-text { display: grid; gap: 10px; }
@@ -248,7 +256,17 @@
     .plans .hot { order: -1; grid-column: span 2; }
     .who article.wide { grid-column: span 2; }
     .vip, .final, .roi, .dropband { grid-template-columns: 1fr; }
-    .wins { grid-template-columns: 1fr 1fr; }
+    .wins { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 380px) {
+    body { padding-inline: 12px; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 24px; }
+    .race, .dropband, .roi, .vip, .final { padding: 22px 16px; }
+    .plan { padding: 18px !important; }
+    .wins div { padding: 14px; }
+    .scale span:nth-child(even) { visibility: hidden; }
+    .device { max-width: 300px; }
   }
   @media (max-width: 620px) {
     .chat .msg.small, .chat .day { display: none; }
@@ -515,7 +533,8 @@
         const was = i > 1 ? weekly(list, i, pay) : 0;
         const off = was > v ? Math.round((1 - v / was) * 100) : 0;
         const day = i === 3 ? `<small class="perday">≈ ${money(Math.round(v / 30), pay)} в день</small>` : '';
-        return `<div class="${i === 3 && off ? 'best' : ''}${i === 0 ? ' trial' : ''}"><span>${dayName(DAYS[i])}</span><span class="p">${off ? `<s>${money(was, pay)}</s>` : ''}<b>${money(v, pay)}${off ? `<em class="off">−${off}%</em>` : ''}</b>${day}</span></div>`;
+        const note = i === 0 ? '<small>попробовать</small>' : i === 3 && off ? '<small>выгоднее всего</small>' : '';
+        return `<div class="${i === 3 && off ? 'best' : ''}"><span class="d">${dayName(DAYS[i])}${note}</span><span class="p">${off ? `<span class="was"><s>${money(was, pay)}</s><em class="off">−${off}%</em></span>` : ''}<b>${money(v, pay)}</b>${day}</span></div>`;
       }).join('');
     });
     // «Всё сразу» против четырёх площадок по отдельности, на 30 дней.
@@ -595,5 +614,6 @@
     document.querySelectorAll('[data-ago]').forEach((el) => { const s = Number(el.dataset.ago) + 1; el.dataset.ago = s; el.textContent = agoText(s); });
   }, 1000);
 </script>
+
 </body>
 </html>
