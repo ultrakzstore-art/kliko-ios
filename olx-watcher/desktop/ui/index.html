@@ -211,12 +211,19 @@
           <label>Пользователь<input id="srv-user" value="root" spellcheck="false"></label>
           <label>Пароль<input id="srv-pass" type="password" autocomplete="off"></label>
         </div>
+        <label class="check"><input type="checkbox" id="srv-remember" checked> Запомнить пароль на этом компьютере (зашифрованно, как токен)</label>
         <div class="row">
           <button id="btn-deploy" class="primary">Установить на сервер</button>
           <button id="btn-back" class="secondary">Вернуть бота на ПК</button>
+          <button id="btn-status" class="secondary">Статус бота на сервере</button>
+          <button id="btn-srv-restart" class="secondary">Перезапустить</button>
           <span class="muted" id="deploy-msg"></span>
         </div>
         <p class="muted">Обновить бота на сервере до новой версии — та же кнопка: база и подписчики на сервере сохранятся.<br>«Вернуть бота на ПК» — остановит бота на сервере, заберёт оттуда подписчиков, поиски и оплаты и запустит бота на этом компьютере. Файлы на сервере останутся.</p>
+      </div>
+      <div class="card" id="srv-status" hidden>
+        <h2 id="srv-state"></h2>
+        <p class="muted" id="srv-meta"></p>
       </div>
       <pre id="deploy-out" class="console">Здесь будет ход установки.</pre>
     </section>

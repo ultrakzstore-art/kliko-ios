@@ -131,7 +131,8 @@ const bot = {
 };
 
 function publicState() {
-  const { tokenEnc, tokenPlain, ...rest } = settings;
+  const { tokenEnc, tokenPlain, serverPassEnc, ...rest } = settings;
+  rest.hasServerPass = !!serverPassEnc;
   const token = getToken();
   return {
     settings: rest,
@@ -464,7 +465,9 @@ function envFileText(token) {
 }
 
 let deploying = false;
-async function deployToServer({ host, port, username, password }) {
+async function deployToServer(opts) {
+  const { host, port, username } = opts;
+  const password = serverPassword(opts);
   if (deploying) return { ok: false, error: 'Установка уже идёт.' };
   const token = getToken();
   if (!token) return { ok: false, error: 'Сначала вставьте токен бота во вкладке «Настройки».' };
@@ -571,7 +574,9 @@ ipcMain.handle('deploy', (_e, opts) => deployToServer(opts || {}));
 
 // Вернуть бота с сервера на ПК: на сервере — остановить и выключить автозапуск службы (файлы
 // остаются), свежую базу — забрать сюда (прежнюю копию на ПК сохраняем рядом), бот — запустить тут.
-async function bringBack({ host, port, username, password }) {
+async function bringBack(opts) {
+  const { host, port, username } = opts;
+  const password = serverPassword(opts);
   if (deploying) return { ok: false, error: 'Уже идёт работа с сервером.' };
   if (!host || !password) return { ok: false, error: 'Нужны IP сервера и пароль.' };
   deploying = true;
@@ -627,6 +632,83 @@ async function bringBack({ host, port, username, password }) {
 }
 
 ipcMain.handle('bring-back', (_e, opts) => bringBack(opts || {}));
+
+// Пароль сервера — по желанию, зашифрованным средствами Windows (как токен). Пустой пароль
+// в окне — берём сохранённый.
+function serverPassword(opts) {
+  if (opts.password) {
+    if (opts.remember && safeStorage.isEncryptionAvailable()) settings.serverPassEnc = safeStorage.encryptString(opts.password).toString('base64');
+    else if (opts.remember === false) delete settings.serverPassEnc;
+    saveSettings();
+    return opts.password;
+  }
+  if (settings.serverPassEnc && safeStorage.isEncryptionAvailable()) {
+    try { return safeStorage.decryptString(Buffer.from(settings.serverPassEnc, 'base64')); } catch { return ''; }
+  }
+  return '';
+}
+
+// Одна команда на сервере: вывод целиком.
+async function sshRun(opts, cmd) {
+  const password = serverPassword(opts);
+  if (!opts.host || !password) throw new Error('Нужны IP сервера и пароль.');
+  const { Client } = require('ssh2');
+  const conn = new Client();
+  try {
+    await new Promise((resolve, reject) => {
+      conn.once('ready', resolve).once('error', reject)
+        .connect({ host: String(opts.host).trim(), port: Number(opts.port) || 22, username: String(opts.username || 'root').trim(), password, readyTimeout: 20000 });
+    });
+    return await new Promise((resolve, reject) => {
+      conn.exec(cmd, (err, stream) => {
+        if (err) return reject(err);
+        let text = '';
+        stream.on('data', (d) => { text += d; });
+        stream.stderr.on('data', (d) => { text += d; });
+        stream.on('close', () => resolve(text));
+      });
+    });
+  } catch (e) {
+    throw new Error(/authentication/i.test(e.message) ? 'Неверный логин или пароль от сервера.'
+      : /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|Timed out/i.test(e.message) ? `Не удалось подключиться к ${opts.host}.` : e.message);
+  } finally {
+    conn.end();
+  }
+}
+
+// Статус бота на сервере: работает ли, с какого времени, сколько 403 от площадок за час, журнал.
+const STATUS_CMD = [
+  'echo "STATE=$(systemctl is-active olx-watcher 2>/dev/null)"',
+  'echo "SINCE=$(systemctl show olx-watcher -p ActiveEnterTimestamp --value 2>/dev/null)"',
+  'echo "BLOCK=$(journalctl -u olx-watcher --since \'1 hour ago\' --no-pager -o cat 2>/dev/null | grep -ci \'ограничил запросы\')"',
+  'echo "OLXBLOCK=$(journalctl -u olx-watcher --since \'1 hour ago\' --no-pager -o cat 2>/dev/null | grep -i \'ограничил запросы\' | grep -ci olx)"',
+  'echo "MEM=$(free -m 2>/dev/null | awk \'/Mem:/{print $3\"/\"$2\" МБ\"}\')"',
+  'echo ---LOG---',
+  'journalctl -u olx-watcher -n 30 --no-pager -o short-iso 2>/dev/null | cut -c1-240',
+].join('; ');
+
+ipcMain.handle('server-status', async (_e, opts = {}) => {
+  try {
+    const text = await sshRun(opts, STATUS_CMD);
+    const val = (k) => (new RegExp(`^${k}=(.*)$`, 'm').exec(text) || [])[1]?.trim() || '';
+    return {
+      ok: true, state: val('STATE'), since: val('SINCE'), blocks: Number(val('BLOCK')) || 0,
+      olxBlocks: Number(val('OLXBLOCK')) || 0, mem: val('MEM'), log: text.split('---LOG---')[1]?.trim() || '',
+    };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('server-restart', async (_e, opts = {}) => {
+  try {
+    await sshRun(opts, 'systemctl restart olx-watcher; sleep 3; systemctl is-active olx-watcher');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 
 
 // ---------- IPC ----------

@@ -307,6 +307,7 @@ function showServer(st) {
   const srv = st?.settings?.server;
   $('server-now').textContent = srv ? `Бот установлен на сервер ${srv.host} (${new Date(srv.at).toLocaleString('ru-RU')}).` : '';
   if (srv && !$('srv-host').value) { $('srv-host').value = srv.host; $('srv-port').value = srv.port || 22; $('srv-user').value = srv.username || 'root'; }
+  if (st?.settings?.hasServerPass) $('srv-pass').placeholder = 'сохранён — можно не вводить';
 }
 window.app.state().then(showServer);
 window.app.onState(showServer);
@@ -321,7 +322,7 @@ $('btn-deploy').addEventListener('click', async () => {
   b.disabled = true;
   $('deploy-msg').textContent = 'Идёт установка…';
   $('deploy-out').dataset.fresh = '0';
-  const r = await window.app.deploy({ host: $('srv-host').value, port: $('srv-port').value, username: $('srv-user').value, password: $('srv-pass').value });
+  const r = await window.app.deploy(srvOpts());
   $('srv-pass').value = '';
   $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на сервере.' : r.error;
   b.disabled = false;
@@ -332,8 +333,45 @@ $('btn-back').addEventListener('click', async () => {
   b.disabled = true;
   $('deploy-msg').textContent = 'Возвращаю бота на ПК…';
   $('deploy-out').dataset.fresh = '0';
-  const r = await window.app.bringBack({ host: $('srv-host').value, port: $('srv-port').value, username: $('srv-user').value, password: $('srv-pass').value });
+  const r = await window.app.bringBack(srvOpts());
   $('srv-pass').value = '';
   $('deploy-msg').textContent = r.ok ? 'Готово — бот работает на этом компьютере.' : r.error;
   b.disabled = false;
+});
+
+function srvOpts() {
+  return { host: $('srv-host').value, port: $('srv-port').value, username: $('srv-user').value, password: $('srv-pass').value, remember: $('srv-remember').checked };
+}
+async function serverStatus() {
+  const b = $('btn-status');
+  b.disabled = true;
+  $('deploy-msg').textContent = 'Смотрю статус на сервере…';
+  const r = await window.app.serverStatus(srvOpts());
+  $('srv-pass').value = '';
+  b.disabled = false;
+  if (!r.ok) { $('deploy-msg').textContent = r.error; return; }
+  $('deploy-msg').textContent = '';
+  const on = r.state === 'active';
+  $('srv-status').hidden = false;
+  $('srv-state').textContent = on ? '🟢 Бот на сервере работает' : `🔴 Бот на сервере не работает (${r.state || 'нет службы'})`;
+  $('srv-meta').textContent = [
+    on && r.since ? `Запущен: ${r.since}` : '',
+    `Ограничения площадок за час: ${r.blocks}${r.olxBlocks ? ` (OLX: ${r.olxBlocks})` : ''}`,
+    r.mem ? `Память сервера: ${r.mem}` : '',
+  ].filter(Boolean).join(' · ');
+  const o = $('deploy-out');
+  o.dataset.fresh = '1';
+  o.textContent = r.log || 'Журнал пуст.';
+  o.scrollTop = o.scrollHeight;
+}
+$('btn-status').addEventListener('click', serverStatus);
+$('btn-srv-restart').addEventListener('click', async () => {
+  const b = $('btn-srv-restart');
+  b.disabled = true;
+  $('deploy-msg').textContent = 'Перезапускаю бота на сервере…';
+  const r = await window.app.serverRestart(srvOpts());
+  $('srv-pass').value = '';
+  b.disabled = false;
+  $('deploy-msg').textContent = r.ok ? 'Перезапущен.' : r.error;
+  if (r.ok) serverStatus();
 });

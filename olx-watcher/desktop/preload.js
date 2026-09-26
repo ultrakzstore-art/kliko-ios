@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('app', {
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   deploy: (opts) => ipcRenderer.invoke('deploy', opts),
   bringBack: (opts) => ipcRenderer.invoke('bring-back', opts),
+  serverStatus: (opts) => ipcRenderer.invoke('server-status', opts),
+  serverRestart: (opts) => ipcRenderer.invoke('server-restart', opts),
   onDeployLog: (fn) => ipcRenderer.on('deploy-log', (_e, text) => fn(text)),
   onState: (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
   onLog: (fn) => ipcRenderer.on('log', (_e, lines) => fn(lines)),

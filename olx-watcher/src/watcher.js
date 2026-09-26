@@ -146,6 +146,7 @@ class Watcher {
         this.otherBackoff.set(source, b);
       }
       const name = source === 'olx' ? 'OLX' : sources.get(source).title;
+      this.log(`${name} ограничил запросы (${e.status}) — пауза ${Math.round(b.ms / 60_000)} мин`);   // для журнала и «Статуса» в приложении
       this.alert(`${name} ограничил запросы (${e.status}). Пауза ${Math.round(b.ms / 60_000)} мин, потом продолжу реже.`);
       return true;
     }
