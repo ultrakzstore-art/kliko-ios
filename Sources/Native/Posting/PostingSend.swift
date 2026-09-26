@@ -657,6 +657,7 @@ extension ПодачаМодель {
             if !id.isEmpty { применитьДополнительно(id) }
             ПодачаМодель.стеретьЧерновик()
             плашкаПосле = плашки.joined(separator: "\n")
+            топПослеПодачи = (j["top_applied"] as? NSNumber)?.boolValue ?? false
             let авто = A.строка(j["auto"])
             let чисто = авто == "approved" && !A.да(j["held"]) && !A.да(j["held_verify"]) && !A.да(j["no_phone"])
             if !чисто && (A.да(j["held_verify"]) || A.да(j["need_verify"]) || A.да(j["no_phone"])) {
@@ -672,7 +673,7 @@ extension ПодачаМодель {
                 let причина = A.строка(j["reason"])
                 итог = .отклонено(причина.isEmpty ? т("mod_rej_d") : причина)
             } else {
-                итог = .наПроверке
+                итог = .наПроверке(id: id)
             }
             return
         }
