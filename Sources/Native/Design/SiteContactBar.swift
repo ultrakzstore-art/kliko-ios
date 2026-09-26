@@ -33,6 +33,8 @@ struct ПанельСвязиСайта: View {
     let открыть: (URL) -> Void
     @State private var ждём: Канал? = nil
     @State private var окно: ОкноСвязи? = nil
+    /// Своё ждущее предложение цены по этому объявлению (TestFlight 26.09.2026: «отозвать предложение нет»).
+    @ObservedObject private var торг = ТоргПредложений.shared
 
     enum Канал { case звонок, whatsApp }
 
@@ -42,6 +44,35 @@ struct ПанельСвязиСайта: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            /* Своё предложение ждёт ответа продавца — строка «Ваше предложение · N ₸» с «Отозвать предложение» над
+               панелью (OfferWithdraw.swift); итог отзыва — на её месте. */
+            if Config.нативныйЧат && Config.чатОбъявления
+                && (торг.ждущие[товар.id] != nil || торг.итоги[товар.id] != nil) {
+                ПолосаСвоегоПредложения(объявление: товар.id, открыть: открыть)
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
+            }
+            пилюля
+        }
+        .animation(ДвижениеСайта.смена, value: торг.ждущие[товар.id] != nil || торг.итоги[товар.id] != nil)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .background(alignment: .top) { ПодложкаПанелиСвязи() }
+        .alert(окно?.заголовок ?? "", isPresented: Binding(get: { окно != nil }, set: { if !$0 { окно = nil } }),
+               presenting: окно) { о in
+            if о.регистрация, let вход = Config.url("/cabinet.php") {
+                Button(ListingPageText.т("reg")) { зарегистрироваться(вход) }
+            }
+            Button(ListingPageText.т(о.регистрация ? "later" : "ok"), role: .cancel) {}
+        } message: { о in
+            Text(о.текст)
+        }
+    }
+
+    /// Сама панель: главная часть и круглые кнопки на зелёной пилюле.
+    private var пилюля: some View {
         HStack(spacing: 0) {
             главнаяЧасть
                 .frame(maxHeight: .infinity)
@@ -56,19 +87,6 @@ struct ПанельСвязиСайта: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .shadow(color: Theme.панельСвязиКонец.opacity(0.55), radius: 14, x: 0, y: 10)
         .shadow(color: Color.black.opacity(0.22), radius: 3, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-        .background(alignment: .top) { ПодложкаПанелиСвязи() }
-        .alert(окно?.заголовок ?? "", isPresented: Binding(get: { окно != nil }, set: { if !$0 { окно = nil } }),
-               presenting: окно) { о in
-            if о.регистрация, let вход = Config.url("/cabinet.php") {
-                Button(ListingPageText.т("reg")) { зарегистрироваться(вход) }
-            }
-            Button(ListingPageText.т(о.регистрация ? "later" : "ok"), role: .cancel) {}
-        } message: { о in
-            Text(о.текст)
-        }
     }
 
     /// Свой экран входа и регистрации листом поверх вкладок, когда алерт уедет; слоя окон нет — страница сайта.

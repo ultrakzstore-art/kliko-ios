@@ -170,21 +170,19 @@ final class ТоргПредложений: ObservableObject {
         /* Переписка кабинета шлёт только chat_id (_dmOfferGo), чат объявления и плашка «Торг» — ещё и pid. */
         let итог = await ОтзывПредложенияAPI.отозвать(чат: чат, объявление: сОбъявлением ? объявление : "")
         guard моё == поколение else { return nil }
+        let текстИтога: String
         switch итог {
         case .готово(let текст):
+            текстИтога = текст
             ОткликСайта.успех()
             if !объявление.isEmpty { ждущие[объявление] = nil }
-            показать(текст, объявление: объявление)
             ИнбоксМодель.shared.перепискаЗакрыта()
         case .ошибка(let текст):
+            текстИтога = текст
             ОткликСайта.предупреждение()
-            показать(текст, объявление: объявление)
         }
-        UIAccessibility.post(notification: .announcement, argument: {
-            switch итог {
-            case .готово(let т), .ошибка(let т): return т
-            }
-        }())
+        показать(текстИтога, объявление: объявление)
+        UIAccessibility.post(notification: .announcement, argument: текстИтога)
         return итог
     }
 

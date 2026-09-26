@@ -962,7 +962,17 @@ struct КарточкаПредложенияЧата: View {
         return название + срок
     }
 
+    /// VoiceOver: карточка читается одним элементом (РамкаКарточкиЧата) — «Отозвать предложение» ей действием.
     var body: some View {
+        if let отозвать {
+            карточка.accessibilityAction(named: Text(ТекстыОтзываПредложения.т("withdraw")), отозвать)
+        } else {
+            карточка
+        }
+    }
+
+    @ViewBuilder
+    private var карточка: some View {
         switch вид {
         case .погасло(let строка):
             РамкаКарточкиЧата(справа: true, погасла: true) {
