@@ -15,6 +15,8 @@ import SwiftUI
      (upgAiPaneHTML), запуски глубокого разбора (ai_scan_credits).
  🔴 Купить здесь нельзя (Config.цифровыеПокупки = false, правило 3.1.1): под каждым блоком — текст сайта «Эта возможность
  недоступна в приложении.» и кнопка в кабинет сайта (ЦифроваяПокупка). Запросов покупки в этом экране нет вовсе.
+ При Config.цифровыеПокупки = true кнопка блока открывает окно покупки через App Store (ЛистУслугиApple, StoreKit 2);
+ цены в самих блоках — сведения сайта о тарифах, в окне покупки — только цена App Store.
  Свои слова приложения — только заголовок экрана и «Открыть в кабинете на сайте»; остальное — слова сайта.
  */
 struct ЭкранПлатныхУслуг: View {
@@ -175,7 +177,7 @@ private struct БлокПРО: View {
             }
             ЗаметкаБизнеса(т("pro_note"), тон: .серый, значок: "checkmark.shield")
             ЦифроваяПокупка(подпись: с.proБесплатно ? т("pro_activate_free") : т("cab_get_pro"), путь: "cabinet.php",
-                            открыть: открыть)
+                            открыть: открыть, услуга: с.proБесплатно ? nil : .про)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -278,7 +280,8 @@ private struct БлокПродвижения: View {
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
             }
-            ЦифроваяПокупка(подпись: т("promo_boost_v"), путь: "cabinet.php?go=promote", открыть: открыть)
+            ЦифроваяПокупка(подпись: т("promo_boost_v"), путь: "cabinet.php?go=promote", открыть: открыть,
+                            услуга: .продвижение)
         }
     }
 
@@ -351,7 +354,7 @@ private struct БлокСлотов: View {
                 if !с.верифицирован {
                     КнопкаСайтаБизнеса(подпись: т("upg_verify_bonus"), главная: false) { пройтиВерификацию() }
                 }
-                ЦифроваяПокупка(подпись: т("upg_choose"), путь: "cabinet?go=items", открыть: открыть)
+                ЦифроваяПокупка(подпись: т("upg_choose"), путь: "cabinet?go=items", открыть: открыть, услуга: .слоты)
             } else {
                 Text(т("upg_slots_in_section"))
                     .font(.system(size: 14))
@@ -443,7 +446,7 @@ private struct БлокКомбо: View {
                 .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                 .accessibilityElement(children: .combine)
             }
-            ЦифроваяПокупка(подпись: т("bc_order"), путь: "cabinet?go=items", открыть: открыть)
+            ЦифроваяПокупка(подпись: т("bc_order"), путь: "cabinet?go=items", открыть: открыть, услуга: .комбо)
         }
     }
 }
@@ -515,7 +518,7 @@ private struct БлокИИ: View {
             ForEach(с.пакетыИИ) { пакет in
                 строкаПакета(пакет)
             }
-            ЦифроваяПокупка(подпись: т("bc_ai_pack"), путь: "cabinet?go=items", открыть: открыть)
+            ЦифроваяПокупка(подпись: т("bc_ai_pack"), путь: "cabinet?go=items", открыть: открыть, услуга: .пакетИИ)
         }
     }
 

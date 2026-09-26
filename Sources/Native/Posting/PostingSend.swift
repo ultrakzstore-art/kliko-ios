@@ -438,7 +438,7 @@ extension ПодачаМодель {
 
     /// publishTopPick: GET promo_quote (только цена и баланс) → PUBLISH_TOP. Деньги спишутся при публикации.
     func выбратьТоп(_ пакет: ПакетТоп) {
-        guard Config.цифровыеПокупки, проверяемТоп.isEmpty else { return }
+        guard Config.цифровыеПокупки, ПродуктыApple.топПодачиСКошелька, проверяемТоп.isEmpty else { return }
         проверяемТоп = пакет.id
         let код = пакет.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? пакет.id
         Task { @MainActor in
@@ -594,7 +594,7 @@ extension ПодачаМодель {
             "variants": [Any](),
             "shop_section": "",
             "sn_hidden": false,
-            "top_preset": Config.цифровыеПокупки ? (ф.топ?.ключ ?? "") : "",
+            "top_preset": Config.цифровыеПокупки && ПродуктыApple.топПодачиСКошелька ? (ф.топ?.ключ ?? "") : "",
             "vin": vinРазрешён ? ф.vin.trimmingCharacters(in: .whitespaces) : "",
             "images": готовыеФото,
             "shot_slots": [String: String]()
