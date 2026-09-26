@@ -113,7 +113,15 @@ struct NativeTabsView: View {
             Task { await послеСменыЧеловека() }
         }
         .onChange(of: фаза) { _, стала in
-            if стала == .active { СессияПриложения.shared.запросить() }
+            guard стала == .active else { return }
+            СессияПриложения.shared.запросить()
+            /* Вернулись в приложение — список «Чата» и число сразу, как visibilitychange → loadLeadsBadge сайта:
+               пока приложение было в фоне, опрос стоял. */
+            Task { await обновитьСчётчик() }
+        }
+        /* Пуш пришёл, пока приложение открыто, — новое сообщение видно в списке сразу, не через 12 с. */
+        .onReceive(NotificationCenter.default.publisher(for: .klikoПушПришёл)) { _ in
+            Task { await обновитьСчётчик() }
         }
         /* Этап 42: мастер подачи на весь экран — как #add-screen сайта, без панели и вкладок под ним. */
         .fullScreenCover(item: $подача.цель) { цель in

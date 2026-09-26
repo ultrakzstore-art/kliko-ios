@@ -62,6 +62,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        /* Список «Чата» и число непрочитанных — заново сразу: пуш о сообщении пришёл раньше, чем опрос (12 с) его увидит. */
+        NotificationCenter.default.post(name: .klikoПушПришёл, object: nil)
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -90,4 +92,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard let url = info["url"] as? String, !url.isEmpty else { return }
         Task { @MainActor in WebBridge.shared.openPath(url) }
     }
+}
+
+extension Notification.Name {
+    /// Пуш пришёл, пока приложение открыто (willPresent): вкладки перечитывают список «Чата» и число непрочитанных.
+    static let klikoПушПришёл = Notification.Name("kliko.push.willPresent")
 }

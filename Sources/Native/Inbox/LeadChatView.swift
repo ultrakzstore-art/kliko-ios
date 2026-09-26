@@ -67,6 +67,8 @@ struct ЭкранЛида: View {
         .onChange(of: фаза) { _, стала in
             if стала == .background { модель.ушлиВФон() }
         }
+        /* Закрыли чат лида — список «Чата» заново, как _afterChatClose сайта. */
+        .onDisappear { ИнбоксМодель.shared.перепискаЗакрыта() }
         .confirmationDialog(т("blk_t"), isPresented: $спроситьБлок, titleVisibility: .visible) {
             Button(т("blk_ok"), role: .destructive) { Task { await модель.заблокировать() } }
             Button(т("cancel"), role: .cancel) {}
