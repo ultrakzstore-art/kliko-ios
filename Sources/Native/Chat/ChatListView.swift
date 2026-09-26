@@ -155,8 +155,7 @@ struct ChatListView: View {
     private var видСайта: some View {
         Group {
             if !модель.загружено {
-                ProgressView()
-                    .tint(Theme.акцент)
+                SiteSpinner()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if модель.ошибка == .нуженВход {
                 ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),
@@ -201,7 +200,7 @@ struct ChatListView: View {
     private var видПрежний: some View {
         Group {
             if !модель.загружено {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                SiteSpinner().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if модель.ошибка == .нуженВход {
                 ContentUnavailableView {
                     Label(ChatText.т("login"), systemImage: "person.crop.circle.badge.questionmark")

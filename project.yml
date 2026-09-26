@@ -60,7 +60,10 @@ targets:
         # думал, что шлёт седьмую сборку.
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
-        UILaunchScreen: {}
+        # ЭКРАН ЗАПУСКА — ФОН ЗАГРУЗОЧНОГО ЭКРАНА (SitePreloader): #f4f7f5, в тёмной теме #0d0d14 (LaunchBackground в
+        # Assets). Система рисует его до нашего кода; тот же цвет у загрузочного экрана — без скачка при смене.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         # ОКНО СОЗДАЁТ СЦЕНА UIKit (1.6): корнем стал KlikoHostingController — он решает, светлые часы или тёмные.
         # Одна сцена, как и раньше у WindowGroup на телефоне.
         UIApplicationSceneManifest:

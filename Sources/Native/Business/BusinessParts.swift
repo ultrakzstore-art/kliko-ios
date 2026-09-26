@@ -243,7 +243,7 @@ struct КнопкаБизнеса: View {
 struct ЗагрузкаБизнеса: View {
     var body: some View {
         VStack(spacing: 12) {
-            ProgressView()
+            SiteSpinner()
             Text(БизнесText.т("loading"))
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.текстВторой)

@@ -130,7 +130,7 @@ struct ListingDetailView: View {
                         if let описание = товар.описание { блокОписания(описание) }
                         if товар.продавец != nil { строкаПродавца }
                         if догружаем {
-                            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
+                            SiteSpinner().frame(maxWidth: .infinity).padding(.vertical, 8)
                         }
                     }
                     .padding(16)
@@ -174,8 +174,7 @@ struct ListingDetailView: View {
     @ViewBuilder
     private var экранЗаготовки: some View {
         if догружаем {
-            ProgressView()
-                .controlSize(.large)
+            SiteSpinner()
                 .frame(maxWidth: .infinity)
                 .padding(.top, 160)
                 .accessibilityLabel(LinksText.т("opening"))

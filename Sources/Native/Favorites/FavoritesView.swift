@@ -135,8 +135,7 @@ struct FavoritesView: View {
     /// Этап 35: пустой список ждёт ответа сайта — колесо и «Загружаем объявления» (fl_loading сайта).
     private var загрузка: some View {
         VStack(spacing: 12) {
-            ProgressView()
-                .tint(Theme.акцент)
+            SiteSpinner()
             Text(FavoritesText.т("loading"))
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.текстВторой)

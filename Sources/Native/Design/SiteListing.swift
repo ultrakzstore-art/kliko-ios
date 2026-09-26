@@ -279,7 +279,7 @@ private struct НизСтраницы: View {
                 РасположениеСайта(товар: товар)
             }
             if догружаем {
-                ProgressView()
+                SiteSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
             }

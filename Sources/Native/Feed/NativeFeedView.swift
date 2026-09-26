@@ -103,6 +103,10 @@ struct NativeFeedView: View {
             }
         }
         .task { await модель.начать() }
+        /* Загрузочный экран запуска (SitePreloader, RootWebView) уходит, когда здесь есть что показать. */
+        .onChange(of: первыеДанныеЕсть, initial: true) { _, есть in
+            if есть { ЗаставкаЗапуска.shared.данныеПришли() }
+        }
         /* Этап 25: зелёная шапка под часами — только на корне ленты в стеке; SceneDelegate красит по этому часы. */
         .onAppear { отметитьКорень() }
         .onChange(of: путьСтека.wrappedValue.count) { _, _ in отметитьКорень() }
@@ -596,6 +600,15 @@ struct NativeFeedView: View {
     /// одного фильтра — отобранная лента показывается выдачей с чипами, а не под плитками (FeedModel.наГлавной). Этап 49:
     /// и не «все объявления», и без района.
     private var наГлавной: Bool { модель.наГлавной }
+
+    /// Первые данные для загрузочного экрана: на главной вида сайта — ответ подборок (ряды, VIP, числа или неудача), иначе —
+    /// лента (с диска или ответ сервера, в том числе с ошибкой: ждать дальше нечего).
+    private var первыеДанныеЕсть: Bool {
+        if Config.дизайнКакНаСайте && наГлавной {
+            return !подборки.ряды.isEmpty || !подборки.вип.isEmpty || подборки.числаГотовы || подборки.неудача
+        }
+        return !модель.items.isEmpty || модель.ответПришёл
+    }
 
     /**
      Главная как у сайта (html.mk-home, этап 49): плитки с баннером, «Рекомендуем» — ряды разделов и VIP среди них,
@@ -1203,7 +1216,7 @@ struct NativeFeedView: View {
                 if Config.скелетЛенты {
                     СкелетЛенты(колонки: ListingCard.сетка(размерТекста))
                 } else {
-                    ProgressView()
+                    SiteSpinner()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 120)
                 }
@@ -1297,7 +1310,7 @@ struct NativeFeedView: View {
         if модель.грузим {
             /* Этап 49: в виде сайта подгрузку показывает плашка внизу экрана (mkLoadBar), колеса под лентой у сайта нет. */
             if !Config.дизайнКакНаСайте {
-                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 16)
+                SiteSpinner().frame(maxWidth: .infinity).padding(.vertical, 16)
             }
         } else if модель.ошибка != nil {
             Button(FeedText.т("retry")) { модель.повторить() }

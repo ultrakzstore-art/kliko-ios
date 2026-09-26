@@ -103,7 +103,7 @@ struct МоиОбъявленияЭкран: View {
                        действие: { Task { await модель.загрузить(страницу: true) } })
         case .загрузка:
             VStack(spacing: 12) {
-                ProgressView()
+                SiteSpinner()
                 Text(т("loading"))
                     .font(.system(size: 15))
                     .foregroundStyle(Theme.текстВторой)

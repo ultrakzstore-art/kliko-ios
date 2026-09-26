@@ -206,7 +206,7 @@ struct ChatThreadView: View {
         VStack(spacing: 0) {
             if Config.дизайнКакНаСайте { шапкаСайта }
             if !модель.загружено {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                SiteSpinner().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if модель.ошибка == .нуженВход {
                 ContentUnavailableView {
                     Label(ChatText.т("login"), systemImage: "person.crop.circle.badge.questionmark")

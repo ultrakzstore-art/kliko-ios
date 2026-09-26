@@ -12,6 +12,10 @@ struct RootWebView: View {
     /// Этап 49: язык из пилюли «тема │ RU» шапки — нативный слой собирается заново уже на нём (ЯзыкПриложения).
     @ObservedObject private var язык = ЯзыкПриложения.shared
     @State private var minElapsed = false     // минимум показа сплэша, чтобы лого не мелькал
+    /// Загрузочный экран сайта (SitePreloader) над нативной лентой: ждёт первых данных главной или ленты…
+    @ObservedObject private var заставка = ЗаставкаЗапуска.shared
+    /// …но не дольше 8 с от запуска.
+    @State private var заставкаИстекла = false
 
     /* ЛЕНТА ВМЕСТО ПУСТОГО ОЖИДАНИЯ (владелец 24.09.2026: «когда интернет кончается — очень долго работает»).
        Снимок читаем синхронно при создании экрана: файл крошечный, а нужен он на ПЕРВОМ кадре — уйдя в фон,
@@ -22,6 +26,19 @@ struct RootWebView: View {
        не заставка, и держать её лишнюю секунду поверх готовой страницы значит самому же замедлять запуск.
        Поэтому со снимком ждём ровно столько, сколько грузится страница. */
     private var showSplash: Bool { !(bridge.isLoaded && (minElapsed || снимок != nil)) }
+
+    /* ЗАГРУЗОЧНЫЙ ЭКРАН НАД НАТИВНОЙ ЛЕНТОЙ (владелец 26.09.2026: «лоадера почему нету?»). С нативной лентой сплэша не было
+       вовсе: лента на экране с первого кадра, и до ответа сервера человек видел серые заготовки. Теперь — #ulx-preloader
+       сайта, пока у главной или ленты нет первых данных (ЗаставкаЗапуска), не меньше minElapsed и не дольше 8 с. */
+    private var нативнаяЗаставка: Bool {
+        Config.нативнаяЛента && bridge.лентаВидна && !заставкаИстекла && !(заставка.данныеЕсть && minElapsed)
+    }
+
+    /// Любая заставка на экране — строка состояния пока системная (splashDone).
+    private var заставкаНаЭкране: Bool { showSplash || нативнаяЗаставка }
+
+    /// Уход #ulx-preloader: transition opacity .45s ease.
+    private static let уходЗаставки = Animation.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.45)
 
     var body: some View {
         ZStack {
@@ -66,7 +83,7 @@ struct RootWebView: View {
                     .id(язык.код)
                     .opacity(bridge.лентаВидна ? 1 : 0)
                     .allowsHitTesting(bridge.лентаВидна)
-                    .accessibilityHidden(!bridge.лентаВидна)
+                    .accessibilityHidden(!bridge.лентаВидна || нативнаяЗаставка)
                     /* Этап 16: «Что нового» листом над этим слоем и просьба оценить после удачных моментов в нём. */
                     .чтоНовогоИОценка()
                     /* Этап 35: избранное вместе с сайтом — сообщение об ошибке записи и сверка при возврате в приложение. */
@@ -89,9 +106,15 @@ struct RootWebView: View {
                     FeedPreview(снимок: снимок) { адрес in bridge.pendingURL = адрес }
                         .transition(.opacity)
                 } else {
-                    SplashView()
+                    SitePreloader()
                         .transition(.opacity)
                 }
+            }
+
+            if нативнаяЗаставка {
+                SitePreloader()
+                    .transition(.opacity)
+                    .zIndex(5)
             }
 
             /* Защита входа включена: заперто или приложение неактивно — содержимое закрыто (переключатель приложений
@@ -104,16 +127,20 @@ struct RootWebView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: lock.locked)
         .animation(.easeInOut(duration: 0.15), value: lock.cover)
-        .animation(.easeInOut(duration: 0.4), value: showSplash)
+        .animation(Self.уходЗаставки, value: showSplash)
+        .animation(Self.уходЗаставки, value: нативнаяЗаставка)
         .animation(.easeInOut(duration: 0.2), value: bridge.лентаВидна)
         // Сплэш ушёл — строка состояния начинает следовать странице (SceneDelegate, KlikoHostingController).
-        .onAppear { bridge.splashDone = !showSplash }
-        .onChange(of: showSplash) { _, виден in bridge.splashDone = !виден }
+        .onAppear { bridge.splashDone = !заставкаНаЭкране }
+        .onChange(of: заставкаНаЭкране) { _, виден in bridge.splashDone = !виден }
         .animation(.easeInOut(duration: 0.25), value: bridge.loadFailed)
         .task {
             // Минимум ~1.6с показа прелоадера (логотип + подсказка успевают появиться).
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             minElapsed = true
+            // Потолок загрузочного экрана — 8 с от запуска, даже если лента так и не ответила.
+            try? await Task.sleep(nanoseconds: 6_400_000_000)
+            заставкаИстекла = true
         }
     }
 }
