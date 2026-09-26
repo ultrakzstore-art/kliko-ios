@@ -671,6 +671,8 @@ struct БаннерГлавной: View {
         .sheet(item: $открытый, onDismiss: {
             guard let адрес = послеЗакрытия else { return }
             послеЗакрытия = nil
+            /* Проверенному продавцу — «Разместить объявление»: свой мастер подачи, как у баннера «Продавай на Kliko.kz». */
+            if адрес.query == "go=add" && Config.нижниеВкладки && ПодачаОкно.shared.открыть(.новое) { return }
             открыть(адрес)
         }) { слайд in
             ЛистСлайдаГлавной(слайд: слайд, перейти: { путь in
@@ -769,6 +771,8 @@ struct ЛистСлайдаГлавной: View {
     let перейти: (String) -> Void
     let закрыть: () -> Void
     @Environment(\.colorScheme) private var схема
+    /// TestFlight 1.10: кнопка «Продавайте на Kliko» — по общему состоянию входа (СессияПриложения).
+    @ObservedObject private var сессия = СессияПриложения.shared
 
     init(слайд: БаннерГлавной.Слайд, перейти: @escaping (String) -> Void, закрыть: @escaping () -> Void) {
         self.слайд = слайд
@@ -969,11 +973,11 @@ struct ЛистСлайдаГлавной: View {
         Button {
             switch тексты {
             case "import": перейти("/cabinet?go=aiimport")
-            case "sell": перейти("/cabinet?go=egov")
+            case "sell": перейти(путьПродажи)
             default: закрыть()
             }
         } label: {
-            Text(DesignText.т("hp_\(тексты)_go"))
+            Text(DesignText.т(ключКнопки))
                 .font(.system(.subheadline, weight: .bold))
                 .foregroundStyle(Color.white)
                 .multilineTextAlignment(.center)
@@ -986,6 +990,29 @@ struct ЛистСлайдаГлавной: View {
                 .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
         .buttonStyle(НажатиеСайта())
+    }
+
+    /**
+     TestFlight 1.10 (владелец: «просит регу через eGov, хотя я зашёл уже»): кнопка продажи — по роли, а не всем одна.
+     Гость — «Регистрация продавца через eGov» (?egov=1: окно eGov гостевой страницы; ?go=egov гостю ничего не делает,
+     карта кабинета §0.10); вошедший без проверки — «Пройти верификацию через eGov» (?go=egov → requestVerification);
+     проверенный продавец — «Разместить объявление» (?go=add). Проверенному регистрацию не показываем никогда.
+     */
+    private var путьПродажи: String {
+        switch сессия.роль {
+        case .гость: return "/cabinet?egov=1"
+        case .вошёл: return "/cabinet?go=egov"
+        case .продавец: return "/cabinet?go=add"
+        }
+    }
+
+    private var ключКнопки: String {
+        guard тексты == "sell" else { return "hp_" + тексты + "_go" }
+        switch сессия.роль {
+        case .гость: return "hp_sell_go"
+        case .вошёл: return "hp_sell_go_verify"
+        case .продавец: return "hp_sell_go_post"
+        }
     }
 
     /// color-mix(in srgb, var(--bc) доля, var(--mk-surf)) — поверхность своей темы.
