@@ -729,6 +729,11 @@ struct NativeFeedView: View {
     /// «Работа»: своего экрана вакансий у приложения нет — раздел сайта /?cat=jobs; вакансия — #vac=<номер>, её лист сайт
     /// открывает сам (mkJobsHash), как по ссылке из ряда главной.
     private func открытьВакансии(_ номер: String?) {
+        /* Свой список и своя карточка вакансии поверх ленты (Jobs/JobsView.swift); сайт — только запасной путь. */
+        if Config.нижниеВкладки {
+            ОкноВакансий.открыть(номер)
+            return
+        }
         var хвост = "?cat=jobs"
         if let номер, !номер.isEmpty {
             хвост += "#vac=" + (номер.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? номер)

@@ -461,7 +461,7 @@ struct ЛистНастроекОбъявления: View {
                                 .foregroundStyle(Theme.текстВторой)
                         }
                         Spacer(minLength: 4)
-                        Text(ШагДополнительно.срокГарантии(н.гарантия))
+                        Text(Self.срокГарантии(н.гарантия))
                             .font(.system(size: 14, weight: .heavy))
                             .foregroundStyle(н.гарантия > 0 ? Theme.зелёный2 : Theme.текстВторой)
                     }
@@ -471,7 +471,7 @@ struct ЛистНастроекОбъявления: View {
                             Button {
                                 н.гарантия = дни
                             } label: {
-                                Text(ШагДополнительно.срокГарантии(дни))
+                                Text(Self.срокГарантии(дни))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(вкл ? Color.white : Theme.текст)
                                     .lineLimit(1)
@@ -506,6 +506,15 @@ struct ЛистНастроекОбъявления: View {
                 }
             }
         }
+    }
+
+    /// warrTerm сайта: «Нет», «3 дня», «7 дней», «1 месяц», «12 месяцев» (то же правило, что у мастера подачи).
+    static func срокГарантии(_ дни: Int) -> String {
+        if дни <= 0 { return ПодачаText.т("wr_none") }
+        let месяцы = дни == 365 ? 12 : (дни >= 30 && дни % 30 == 0 ? дни / 30 : 0)
+        let число = месяцы > 0 ? месяцы : дни
+        let ключ = (месяцы > 0 ? "wr_m" : "wr_d") + ПодачаText.множественное(число)
+        return String(число) + " " + ПодачаText.т(ключ)
     }
 
     private func флаг(_ ключ: String) -> Binding<Bool> {
