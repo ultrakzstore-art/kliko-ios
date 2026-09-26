@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Telegram-бот новых объявлений OLX, Kolesa, Krisha и Kaspi Объявлений: узнавайте о новинках и снижении цены раньше всех. 24 часа бесплатно.">
+<style>html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Раньше всех — бот новых объявлений</title>
+<style>
+  /* Тёмная тема Telegram — одна, всегда. */
+  :root {
+    color-scheme: dark;
+    --bg: #0e1621;
+    --surface: #17212b;
+    --surface-2: #202b36;
+    --ink: #f5f7fa;
+    --ink-2: #c5d0db;
+    --muted: #7f91a4;
+    --line: #26323f;
+    --accent: #2ea6ff;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(46, 166, 255, .14);
+    --amber: #ffc53d;
+    --amber-soft: rgba(255, 197, 61, .10);
+    --tg-bg: #0e1621;
+    --tg-bubble: #182533;
+    --tg-link: #6ab3f3;
+    --tg-btn: rgba(255, 255, 255, .07);
+    --shadow: 0 30px 70px -30px rgba(0, 0, 0, .9);
+    --display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  svg.i { width: 1em; height: 1em; vertical-align: -.15em; flex: none; }
+  body {
+    background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--body);
+    padding-inline: 20px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin-inline: auto; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+  h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.05; font-weight: 800; letter-spacing: -.02em; }
+  h2 { font-size: clamp(26px, 3.6vw, 40px); line-height: 1.1; font-weight: 700; }
+  h3 { font-size: 18px; line-height: 1.25; font-weight: 700; }
+  p { margin: 0; }
+  a { color: inherit; }
+  .eyebrow { font: 600 13px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .lead { font-size: clamp(17px, 1.8vw, 20px); color: var(--ink-2); max-width: 36em; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px; text-decoration: none; cursor: pointer;
+    font: 700 17px/1 var(--body); padding: 18px 26px; border-radius: 14px; border: 0;
+    background: var(--accent); color: var(--accent-ink); transition: transform .15s ease, box-shadow .15s ease;
+    box-shadow: 0 10px 24px -12px var(--accent);
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:focus-visible, .seg button:focus-visible, summary:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+  .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+  .btn svg { width: 20px; height: 20px; flex: none; }
+
+  /* ---------- шапка ---------- */
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
+  .logo { display: flex; align-items: center; gap: 10px; font: 800 17px/1 var(--display); text-decoration: none; }
+  .logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: var(--accent-ink); font-style: normal; font-size: 17px; }
+  .top .btn { padding: 12px 18px; font-size: 15px; }
+
+  /* ---------- первый экран ---------- */
+  .hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; padding-block: 28px 64px; }
+  .hero-text { display: grid; gap: 24px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .note { font-size: 14px; color: var(--muted); }
+  .sites { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sites .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 7px; vertical-align: 1px; }
+  .sites span { font: 600 14px/1 var(--body); padding: 9px 12px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+
+  /* Telegram-чат */
+  /* Телефон: рамка iPhone и тёмный Telegram внутри */
+  .device { justify-self: end; width: 100%; max-width: 380px; aspect-ratio: 380 / 800; border-radius: 56px; padding: 11px;
+    background: linear-gradient(145deg, #3b4148, #15181c 40%, #2a2f35); box-shadow: var(--shadow), inset 0 0 0 1.5px #555c64, inset 0 0 0 4px #0b0d10; position: relative; }
+  .device::before { content: ""; position: absolute; left: -3px; top: 150px; width: 3px; height: 60px; border-radius: 2px 0 0 2px; background: #2c3137; box-shadow: 0 80px 0 #2c3137; }
+  .device::after { content: ""; position: absolute; right: -3px; top: 190px; width: 3px; height: 90px; border-radius: 0 2px 2px 0; background: #2c3137; }
+  .screen { height: 100%; border-radius: 46px; overflow: hidden; background: #0e1621; display: flex; flex-direction: column; position: relative; font-size: 13.5px; line-height: 1.4; color: #f5f7fa; }
+  .island { position: absolute; top: 11px; left: 50%; translate: -50% 0; width: 100px; height: 30px; border-radius: 20px; background: #000; z-index: 3; }
+  .status { display: flex; justify-content: space-between; align-items: center; padding: 16px 28px 6px 34px; font: 600 15px var(--body); background: #17212b; }
+  .status .icons { display: flex; gap: 6px; align-items: center; }
+  .status svg { height: 12px; fill: #f5f7fa; }
+  .tg-head { display: flex; align-items: center; gap: 10px; padding: 6px 12px 9px; background: #17212b; border-bottom: 1px solid #0b121a; }
+  .tg-head .back { color: #6ab3f3; font-size: 15px; display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+  .tg-head .back svg { width: 12px; height: 20px; stroke: #6ab3f3; fill: none; stroke-width: 2.4; }
+  .tg-head .tg-who { flex: 1; text-align: center; line-height: 1.2; min-width: 0; }
+  .tg-head .tg-who b { display: block; font-size: 15.5px; }
+  .tg-head .tg-who small { color: #7f91a4; font-size: 12.5px; }
+  .tg-head .ava { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #5fc0ff, #2a8ad8); display: grid; place-items: center; font-size: 17px; flex: none; }
+  .chat { flex: 1; overflow: hidden; padding: 10px 8px 6px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+    background-color: #0e1621;
+    background-image:
+      radial-gradient(circle at 12px 12px, rgba(106,179,243,.07) 2px, transparent 2.5px),
+      radial-gradient(circle at 36px 30px, rgba(106,179,243,.05) 3px, transparent 3.5px),
+      linear-gradient(160deg, rgba(46,166,255,.06), transparent 60%);
+    background-size: 48px 48px, 48px 48px, 100% 100%; }
+  .day { align-self: center; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 12px; background: rgba(0,0,0,.35); color: #dfe8f1; }
+  .msg { align-self: flex-start; max-width: 88%; background: #182533; border-radius: 14px 14px 14px 5px; overflow: hidden; position: relative; }
+  .msg.small { padding: 7px 10px; }
+  .msg .time { float: right; margin: 6px 0 -4px 10px; font-size: 11px; color: #7f91a4; }
+  .feed { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; flex: none; }
+  .item { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; flex: none; transition: opacity .45s ease, transform .45s ease; }
+  .item.enter { opacity: 0; transform: translateY(24px) scale(.98); }
+  .item .photo { aspect-ratio: 2 / 1; }
+  .item .art { width: 30% !important; height: 60% !important; }
+  .photo { position: relative; aspect-ratio: 4 / 3; width: 100%; display: grid; place-items: center; overflow: hidden; }
+  .photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .photo .art { width: 42%; height: 42%; color: rgba(255,255,255,.92); stroke-width: 1.2; filter: drop-shadow(0 14px 18px rgba(0,0,0,.45)); }
+  .photo .count { position: absolute; right: 8px; top: 8px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: rgba(0,0,0,.45); color: #fff; }
+  .card { padding: 8px 10px 7px; display: grid; gap: 0; }
+  .card .t { font-weight: 700; color: #6ab3f3; text-decoration: underline; text-underline-offset: 2px; }
+  .card .gap { height: 6px; }
+  .card blockquote { margin: 2px 0 0; padding: 3px 8px; border-left: 3px solid #6ab3f3; background: rgba(106,179,243,.1); border-radius: 4px; }
+  .kb { align-self: flex-start; width: 88%; display: grid; gap: 3px; }
+  .item .kb { width: 88%; }
+  .kb span { display: flex; justify-content: center; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; padding: 8px; border-radius: 9px; background: rgba(24, 37, 51, .8); color: #f5f7fa; }
+  .kb span::after { content: "↗"; font-size: 11px; color: #7f91a4; }
+  .input { display: flex; align-items: center; gap: 10px; padding: 8px 10px 22px; background: #17212b; }
+  .input .field { flex: 1; background: #0e1621; border-radius: 18px; padding: 7px 14px; color: #7f91a4; font-size: 14px; }
+  .input svg { width: 24px; height: 24px; stroke: #7f91a4; fill: none; stroke-width: 1.8; flex: none; }
+  .live { color: var(--tg-link); font-weight: 700; }
+
+  /* ---------- полоса: чем отличается ---------- */
+  .race { background: linear-gradient(160deg, #15263a, #17212b 55%); color: var(--ink); border-radius: 24px; padding: 36px clamp(20px, 4vw, 48px); display: grid; gap: 28px; box-shadow: inset 0 0 0 1px rgba(46,166,255,.25); }
+  .race-head { display: grid; gap: 12px; max-width: 780px; }
+  .track { display: grid; gap: 16px; }
+  .lane { display: grid; grid-template-columns: 210px 1fr; gap: 18px; align-items: center; }
+  .lane-name b { display: block; font-size: 16px; }
+  .lane-name small { display: block; font-size: 13px; color: var(--muted); }
+  .bar { height: 34px; border-radius: 10px; background: rgba(255,255,255,.05); position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; }
+  .bar .flag { position: absolute; top: 50%; translate: 0 -50%; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .lane.us .bar i { width: 4%; min-width: 34px; background: linear-gradient(90deg, #2ea6ff, #6ab3f3); box-shadow: 0 0 22px rgba(46,166,255,.7); animation: pulse 1.6s ease-in-out infinite; }
+  .lane.us .flag { left: max(4%, 34px); margin-left: 12px; color: #6ab3f3; }
+  .lane.them .bar i { width: 80%; background: repeating-linear-gradient(135deg, #3a4a5b 0 10px, #33424f 10px 20px); }
+  .lane.them .flag { left: 80%; margin-left: 12px; color: var(--ink-2); }
+  .scale { display: flex; justify-content: space-between; margin-left: 228px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+  .wins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .wins div { background: rgba(14,22,33,.6); border-radius: 16px; padding: 18px; display: grid; gap: 6px; box-shadow: inset 0 0 0 1px var(--line); }
+  .wins b { font-size: clamp(24px, 3vw, 32px); line-height: 1; color: var(--accent); font-weight: 800; }
+  .wins span { color: var(--ink-2); font-size: 14.5px; line-height: 1.4; }
+  .race-note { font-size: 13.5px; color: var(--muted); }
+  @keyframes pulse { 50% { box-shadow: 0 0 34px rgba(46,166,255,1); } }
+  @media (prefers-reduced-motion: reduce) { .lane.us .bar i { animation: none; } }
+  section { padding-block: 72px 0; }
+  .dropband { margin-top: 16px; background: var(--surface); border-radius: 24px; padding: 34px clamp(20px, 4vw, 44px); display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: center; box-shadow: inset 0 0 0 1px var(--line); }
+  .drop-text { display: grid; gap: 14px; }
+  .drop-cards { display: grid; gap: 10px; }
+  .dcard { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "n n e" "o nw e"; gap: 2px 12px; align-items: center; background: var(--surface-2); border-radius: 14px; padding: 12px 16px; }
+  .dcard span { grid-area: n; font-weight: 600; }
+  .dcard s { grid-area: o; color: var(--muted); font-size: 14px; }
+  .dcard b { grid-area: nw; color: var(--accent); font-size: 17px; justify-self: start; }
+  .dcard em { grid-area: e; font: 700 15px/1 var(--body); color: #0e1621; background: var(--amber); padding: 7px 9px; border-radius: 9px; }
+  .sec-head { display: grid; gap: 12px; margin-bottom: 32px; max-width: 760px; }
+
+  /* ---------- кому ---------- */
+  .who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .who article { background: var(--surface); border-radius: 18px; padding: 22px; display: grid; gap: 12px; align-content: start; box-shadow: inset 0 0 0 1px var(--line); }
+  .who .ico { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; color: var(--accent); background: var(--accent-soft); }
+  .who p { color: var(--ink-2); font-size: 15.5px; }
+  .who .q { font: 500 13px/1.4 var(--mono); color: var(--accent); background: var(--accent-soft); padding: 8px 10px; border-radius: 8px; }
+  .who article.wide { grid-column: span 3; display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; background: var(--amber-soft); box-shadow: inset 0 0 0 1px rgba(255,197,61,.25); }
+
+  /* ---------- как ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
+  .steps li { list-style: none; background: var(--surface); border-radius: 18px; padding: 24px; display: grid; gap: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+  .steps li::before { counter-increment: s; content: counter(s); font: 800 30px/1 var(--display); color: var(--accent); }
+  .steps p { color: var(--ink-2); font-size: 15.5px; }
+  ol.steps { padding: 0; margin: 0; }
+
+  /* ---------- возможности ---------- */
+  .feat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 48px; }
+  .feat > div { display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding-block: 20px; border-top: 1px solid var(--line); }
+  .feat .k { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 21px; color: var(--accent); background: var(--accent-soft); }
+  .feat p { color: var(--ink-2); font-size: 15.5px; margin-top: 4px; }
+
+  /* ---------- тарифы ---------- */
+  .price-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 22px; }
+  .seg { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button { font: 600 15px var(--body); border: 0; background: transparent; color: var(--ink-2); padding: 10px 16px; border-radius: 9px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px -4px rgba(0,0,0,.3); }
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .plan { padding: 22px !important; }
+  .rows .p { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .rows s { font-size: 13px; color: var(--muted); text-decoration-thickness: 1.5px; }
+  .rows .off { font: 700 11.5px/1 var(--body); color: #0e1621; background: var(--amber); padding: 3px 6px; border-radius: 6px; margin-left: 6px; vertical-align: 2px; }
+  .rows .best { color: var(--accent); }
+  .rows .best span::after { content: " · выгодно"; color: var(--accent); font-weight: 600; font-size: 12.5px; }
+  .rows .trial span:first-child::after { content: " · попробовать"; color: var(--muted); font-size: 12.5px; }
+  .rows .perday { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+  .save { font-size: 14px; color: var(--ink); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+  .save b { color: var(--accent); }
+  .plan { background: var(--surface); border-radius: 20px; padding: 26px; display: grid; gap: 16px; align-content: start; box-shadow: inset 0 0 0 1px var(--line); }
+  .plan.hot { box-shadow: inset 0 0 0 2px var(--accent); position: relative; }
+  .plan.hot .tag { position: absolute; top: -12px; right: 20px; background: var(--accent); color: var(--accent-ink); font: 700 12px/1 var(--body); padding: 7px 10px; border-radius: 8px; letter-spacing: .04em; text-transform: uppercase; }
+  .plan .for { color: var(--ink-2); font-size: 15px; }
+  .rows { display: grid; gap: 8px; }
+  .rows div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-block: 8px; border-bottom: 1px dashed var(--line); }
+  .rows span { color: var(--ink-2); font-size: 15px; }
+  .rows b { font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
+  .plan ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 15px; display: grid; gap: 4px; }
+  .vip { margin-top: 16px; background: linear-gradient(135deg, #1d2b3a, #17212b); color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,197,61,.35); border-radius: 20px; padding: 28px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center; }
+  .vip h3 { font-size: 22px; color: var(--ink); }
+  .vip p { opacity: .82; margin-top: 8px; font-size: 15.5px; }
+  .vip .rows div { border-color: rgba(255,255,255,.2); }
+  .vip .rows span { color: inherit; opacity: .75; }
+  .roi { margin-top: 16px; background: var(--surface); border-radius: 20px; padding: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; box-shadow: inset 0 0 0 1px var(--line); }
+  .roi-text { display: grid; gap: 10px; }
+  .roi h3 { font-size: 22px; }
+  .roi-text p { color: var(--ink-2); font-size: 15.5px; }
+  .roi-calc { display: grid; gap: 10px; }
+  .roi-calc label { display: flex; justify-content: space-between; font-size: 14.5px; color: var(--ink-2); }
+  .roi-calc label b { color: var(--ink); }
+  .roi-calc input[type=range] { width: 100%; accent-color: var(--accent); }
+  .roi-out { display: grid; gap: 6px; margin-top: 6px; }
+  .roi-out div { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; color: var(--ink-2); padding-block: 6px; border-bottom: 1px dashed var(--line); }
+  .roi-out b { color: var(--ink); }
+  .roi-out .big { border: 0; background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; color: var(--ink); }
+  .roi-out .big b { color: var(--accent); font-size: 22px; }
+  .fine { font-size: 13.5px; color: var(--muted); margin-top: 14px; }
+
+  /* ---------- вопросы ---------- */
+  .faq { display: grid; gap: 10px; max-width: 820px; }
+  details { background: var(--surface); border-radius: 14px; padding: 4px 20px; box-shadow: inset 0 0 0 1px var(--line); }
+  summary { cursor: pointer; font-weight: 700; padding-block: 16px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  summary::after { content: "+"; font: 700 20px/1 var(--mono); color: var(--accent); }
+  details[open] summary::after { content: "−"; }
+  details p { color: var(--ink-2); padding-bottom: 18px; font-size: 15.5px; }
+
+  /* ---------- финал ---------- */
+  .final { margin-block: 80px 40px; background: linear-gradient(135deg, #2ea6ff, #1c7fd0); color: var(--accent-ink); border-radius: 28px; padding: clamp(28px, 5vw, 56px); display: grid; grid-template-columns: 1.3fr auto; gap: 28px; align-items: center; }
+  .final h2 { color: var(--accent-ink); }
+  .final p { margin-top: 12px; opacity: .9; font-size: 17px; }
+  .final .btn { background: #fff; color: #1a8ad8; box-shadow: none; }
+  footer { padding-block: 10px 40px; color: var(--muted); font-size: 13.5px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; gap: 36px; }
+    .device { justify-self: center; }
+    .who, .steps, .plans { grid-template-columns: 1fr 1fr; }
+    .plans .hot { order: -1; grid-column: span 2; }
+    .who article.wide { grid-column: span 2; }
+    .vip, .final, .roi, .dropband { grid-template-columns: 1fr; }
+    .wins { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 620px) {
+    .chat .msg.small, .chat .day { display: none; }
+    body { font-size: 16px; padding-inline: 16px; }
+    .who, .steps, .plans, .feat { grid-template-columns: 1fr; }
+    .plans .hot { grid-column: auto; }
+    .who article.wide { grid-column: auto; grid-template-columns: 1fr; }
+    .lane { grid-template-columns: 1fr; gap: 6px; }
+    .scale { margin-left: 0; }
+    .lane.them .bar i { width: 62%; }
+    .lane.them .flag { left: 62%; }
+    .top .btn span { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-game" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 4a2.5 2.5 0 0 1-4.3 1.3L14.5 16h-5l-1.6 1.8a2.5 2.5 0 0 1-4.3-1.3l-.6-4A4 4 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r=".6"/><circle cx="17" cy="13.5" r=".6"/></symbol><symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></symbol><symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2" width="11" height="20" rx="2.5"/><path d="M10.5 18.5h3"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></symbol><symbol id="i-watch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5.5"/><path d="M8.5 7.5 9.5 2.5h5l1 5M8.5 16.5l1 5h5l1-5M12 9.5V12l1.8 1.2"/></symbol><symbol id="i-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16.5v-3.8l2.2-5A2 2 0 0 1 7 6.5h10a2 2 0 0 1 1.8 1.2l2.2 5v3.8"/><path d="M3 12.5h18M3 16.5h18v2h-3v-2M6 16.5v2H3v-2"/><circle cx="7.5" cy="14.3" r=".6"/><circle cx="16.5" cy="14.3" r=".6"/></symbol><symbol id="i-sofa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M5 17v2M19 17v2"/></symbol><symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 1 5.3-3.8L17 5.5l1.5 1.5 2.8-2.8A4 4 0 0 1 16.5 10L8 18.5a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol><symbol id="i-case" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18"/></symbol><symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h17l-6.5 8v5.5L10 20.5V13z"/></symbol><symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 11v6h-6"/></symbol><symbol id="i-call" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3.5h3.5l1.8 4.5-2.3 1.5a11 11 0 0 0 6 6l1.5-2.3 4.5 1.8v3.5a2 2 0 0 1-2 2A16.5 16.5 0 0 1 3.5 5.5a2 2 0 0 1 2-2z"/></symbol><symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></symbol><symbol id="i-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></symbol><symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5c1 4 6 5.5 6 11.5a6 6 0 0 1-12 0c0-3 1.8-5 3-6.8.8 1.8 1.8 2.8 3 3 0-2.8-.8-4.9 0-7.7z"/></symbol><symbol id="i-laptop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="11" rx="1.2"/><path d="M2 19h20l-1.5-3.5h-17z"/></symbol><symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5.5L12 3v18M12 9l8 2.5V21M2 21h20"/><path d="M7 8h2M7 12h2M7 16h2M15 14h2M15 17.5h2"/></symbol></svg>
+<div class="wrap">
+  <header class="top">
+    <a class="logo" href="#top"><i><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></i>Раньше всех</a>
+    <a class="btn tg-link" href="https://t.me/olxwatcherkzbot" target="_blank" rel="noopener" data-tg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13.2 1.4 11.7c-1-.3-1.1-1 .2-1.5L20.5 3c.9-.3 1.6.2 1.4 1.3Z"/></svg><span>Открыть в Telegram</span></a>
+  </header>
+
+  <main id="top">
+    <div class="hero">
+      <div class="hero-text">
+        <span class="eyebrow">Telegram-бот · OLX · Kolesa · Krisha · Kaspi Объявления</span>
+        <h1>Узнавайте о новых объявлениях <em>раньше всех</em></h1>
+        <p class="lead">Бот следит за вашими поисками круглосуточно и присылает новое объявление в Telegram в момент публикации: с ценой, фото, городом и телефоном продавца. А если продавец снизил цену — сразу сообщит и об этом. Вы звоните первым, пока остальные ещё листают ленту.</p>
+        <div class="ctas">
+          <a class="btn" href="https://t.me/olxwatcherkzbot" target="_blank" rel="noopener" data-tg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13.2 1.4 11.7c-1-.3-1.1-1 .2-1.5L20.5 3c.9-.3 1.6.2 1.4 1.3Z"/></svg>Попробовать бесплатно</a>
+          <a class="btn ghost" href="#price">Тарифы</a>
+        </div>
+        <p class="note">24 часа бесплатно, все площадки. Потом — от 233 ₸ в день. Без карты и регистрации, только Telegram.</p>
+        <div class="sites" aria-label="Площадки"><span><b class="dot" style="--c:#8a5cf6"></b>OLX</span><span><b class="dot" style="--c:#2ea6ff"></b>Kolesa</span><span><b class="dot" style="--c:#29c26b"></b>Krisha</span><span><b class="dot" style="--c:#f14635"></b>Kaspi Объявления</span></div>
+      </div>
+
+      <div class="device" aria-label="Так выглядит уведомление бота в Telegram на телефоне">
+        <div class="screen">
+          <span class="island"></span>
+          <div class="status"><span class="mono">9:41</span><span class="icons">
+            <svg viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+            <svg viewBox="0 0 16 12"><path d="M8 11.5 5.6 9a3.4 3.4 0 0 1 4.8 0L8 11.5Zm-4.2-4.3L2.3 5.7a8 8 0 0 1 11.4 0l-1.5 1.5a5.9 5.9 0 0 0-8.4 0ZM.5 3.9-.9 2.5a12.5 12.5 0 0 1 17.8 0l-1.4 1.4a10.5 10.5 0 0 0-15 0Z"/></svg>
+            <svg viewBox="0 0 27 12"><rect x=".5" y=".5" width="23" height="11" rx="3.5" fill="none" stroke="#f5f7fa" opacity=".5"/><rect x="2" y="2" width="17" height="8" rx="2"/><rect x="24.5" y="4" width="1.8" height="4" rx=".9" opacity=".5"/></svg>
+          </span></div>
+          <div class="tg-head">
+            <span class="back"><svg viewBox="0 0 12 20"><path d="M10 2 2 10l8 8"/></svg>Чаты</span>
+            <div class="tg-who"><b>Раньше всех</b><small>бот</small></div>
+            <div class="ava"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></div>
+          </div>
+          <div class="chat">
+            <span class="day">Сегодня</span>
+            <div class="msg small">Слежу за 5 поисками. Присылать буду только новые объявления.<span class="time mono">09:12</span></div>
+            <div class="feed" id="feed" aria-live="off"></div>
+          </div>
+          <div class="input">
+            <svg viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10 17.4a1.7 1.7 0 0 1-2.4-2.4l8-8"/></svg>
+            <span class="field">Сообщение</span>
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="race">
+      <div class="race-head">
+        <span class="eyebrow">Почему первыми</span>
+        <h2>Фора до 5 минут. Этого хватает, чтобы позвонить первым.</h2>
+        <p class="lead">Пока новое объявление доползёт до ленты и витрины сайта, бот уже прислал его вам — с ценой, фото и телефоном.</p>
+      </div>
+      <div class="track">
+        <div class="lane us">
+          <div class="lane-name"><b>Бот «Раньше всех»</b><small>присылает в момент публикации</small></div>
+          <div class="bar"><i></i><span class="flag mono">секунды</span></div>
+        </div>
+        <div class="lane them">
+          <div class="lane-name"><b>Лента и витрина сайта</b><small>сортировка, платные сверху</small></div>
+          <div class="bar"><i></i><span class="flag mono">3–5 мин</span></div>
+        </div>
+        <div class="scale mono" aria-hidden="true"><span>0</span><span>1 мин</span><span>2 мин</span><span>3 мин</span><span>4 мин</span><span>5 мин</span></div>
+      </div>
+      <div class="wins">
+        <div><b class="mono">секунды</b><span>от публикации до уведомления в Telegram</span></div>
+        <div><b class="mono">до 5 мин</b><span>форы, пока объявление не поднялось в ленте</span></div>
+        <div><b class="mono">1-й звонок</b><span>продавцу — ваш, пока цену не перебили</span></div>
+        <div><b class="mono">0</b><span>платных и поднятых старых — только свежее</span></div>
+      </div>
+      <p class="race-note">Замер на Kaspi Объявлениях: сайт показал новинку на витрине через 3–5 минут, бот прислал её через секунды после одобрения.</p>
+    </div>
+
+    <div class="dropband">
+      <div class="drop-text">
+        <span class="eyebrow">Узнавайте о снижении цены</span>
+        <h2>Продавец сбросил цену — вы узнаете первым</h2>
+        <p class="lead">Бот запоминает объявления из ваших поисков. Стоит продавцу снизить цену — придёт отдельное уведомление: сколько было, сколько стало и на сколько процентов дешевле. Не нужно каждый день проверять избранное.</p>
+      </div>
+      <div class="drop-cards">
+        <div class="dcard"><span>PlayStation 5 Slim</span><s class="mono">260 000 ₸</s><b class="mono">215 000 ₸</b><em>−17%</em></div>
+        <div class="dcard"><span>Toyota Camry 70, 2019</span><s class="mono">13 900 000 ₸</s><b class="mono">12 900 000 ₸</b><em>−7%</em></div>
+        <div class="dcard"><span>2-комн, 54 м², Астана</span><s class="mono">41 000 000 ₸</s><b class="mono">38 500 000 ₸</b><em>−6%</em></div>
+      </div>
+    </div>
+
+    <section id="who">
+      <div class="sec-head">
+        <span class="eyebrow">Кому подходит</span>
+        <h2>Тем, кто зарабатывает на том, что успел первым</h2>
+        <p class="lead">Хорошее объявление по нормальной цене уходит за минуты. Первым звонит тот, кто первым увидел.</p>
+      </div>
+      <div class="who">
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg></div><h3>Перекупы электроники</h3><p>iPhone, MacBook, PlayStation, видеокарты ниже рынка. Ставите потолок цены — бот присылает только то, на чём можно заработать.</p><div class="q">Apple · Алматы · до 350 000 ₸</div></article>
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg></div><h3>Риелторы и инвесторы</h3><p>Квартиры от собственника на Krisha, пока их не разобрали агентства. Фильтр «только от хозяев» убирает агентов.</p><div class="q">2-комн · Астана · от хозяина</div></article>
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-watch"/></svg></div><h3>Охотники за часами</h3><p>Rolex, Omega, Tissot, Casio G-Shock — редкое попадается раз в неделю и уходит за час. Поиск по словам находит модель в любой рубрике.</p><div class="q">rolex · omega · весь Казахстан</div></article>
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-car"/></svg></div><h3>Авто-перекупы и автоподбор</h3><p>Kolesa и OLX Транспорт. «Только от хозяев» отсеивает автосалоны и дилеров — звоните частнику первым.</p><div class="q">Camry · до 12 млн ₸ · частник</div></article>
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-sofa"/></svg></div><h3>Мебель и техника под перепродажу</h3><p>Холодильники, стиральные машины, диваны при переезде и «отдам даром». Цена снижена — бот пришлёт уведомление о скидке.</p><div class="q">отдам даром · Шымкент</div></article>
+        <article><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-wrench"/></svg></div><h3>Запчасти и инструмент</h3><p>Диски, шины, редкие запчасти, электроинструмент. Бот держит до 20 поисков одновременно — на каждую позицию свой.</p><div class="q">R17 5×114,3 · Караганда</div></article>
+        <article class="wide"><div class="ico"><svg class="i" aria-hidden="true"><use href="#i-case"/></svg></div><div><h3>Закупщики для бизнеса</h3><p style="margin-top:6px">Кофемашины, оборудование для кафе и салонов, витринные холодильники, оргтехника — б/у в разы дешевле нового. Бот мониторит за вас, пока вы работаете.</p></div></article>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="sec-head">
+        <span class="eyebrow">Как это работает</span>
+        <h2>Три минуты на настройку</h2>
+      </div>
+      <ol class="steps">
+        <li><h3>Откройте бота в Telegram</h3><p>Нажмите «Попробовать» и отправьте /start. Бесплатный доступ на 24 часа включается сразу — ко всем площадкам.</p></li>
+        <li><h3>Задайте поиск</h3><p>Кнопками: площадка → рубрика → город → цена. Или просто пришлите ссылку на поиск с OLX, Kolesa, Krisha или Kaspi.</p></li>
+        <li><h3>Получайте новое первым</h3><p>Карточка приходит с фото, ценой, городом, телефоном из описания и кнопкой «Открыть» — остаётся только позвонить.</p></li>
+      </ol>
+    </section>
+
+    <section id="features">
+      <div class="sec-head">
+        <span class="eyebrow">Что умеет бот</span>
+        <h2>Всё, чтобы звонить первым и не тратить время на мусор</h2>
+      </div>
+      <div class="feat">
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg></span><div><h3>Мгновенно</h3><p>Объявление приходит в момент публикации — раньше, чем оно поднимется в ленте и на витрине сайта.</p></div></div>
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg></span><div><h3>Только от хозяев</h3><p>На Krisha отсеивает агентов, на Kolesa — автосалоны и дилеров. Остаются частники.</p></div></div>
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-filter"/></svg></span><div><h3>Без платного старья</h3><p>Поднятые и платные объявления висят сверху неделями. Бот смотрит время подачи и присылает только свежее.</p></div></div>
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></span><div><h3>Снижение цены</h3><p>Продавец сбросил цену на объявление из вашего поиска — придёт отдельное уведомление: было, стало и на сколько процентов дешевле.</p></div></div>
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-call"/></svg></span><div><h3>Телефон сразу в карточке</h3><p>Номер, который продавец написал в описании, становится кнопкой звонка. Плюс ссылка на все объявления автора.</p></div></div>
+        <div><span class="k"><svg class="i" aria-hidden="true"><use href="#i-target"/></svg></span><div><h3>До 20 поисков</h3><p>Рубрика, город, цена от и до, слова. Весь Казахстан или один город. Каждый поиск — свой поток уведомлений.</p></div></div>
+      </div>
+    </section>
+
+    <section id="price">
+      <div class="price-top">
+        <div class="sec-head" style="margin:0">
+          <span class="eyebrow">Тарифы</span>
+          <h2>Первые 24 часа — бесплатно</h2>
+          <p class="lead">Потом выберите площадку и срок — от 24 часов за 500 ₸. Платите звёздами Telegram или переводом на Kaspi.</p>
+        </div>
+        <div class="seg" role="group" aria-label="Способ оплаты">
+          <button type="button" id="pay-kaspi" aria-pressed="true" data-pay="kaspi">Kaspi, ₸</button>
+          <button type="button" id="pay-stars" aria-pressed="false" data-pay="stars">Telegram Stars ★</button>
+        </div>
+      </div>
+
+      <div class="plans">
+        <div class="plan">
+          <h3>OLX, Kolesa или Krisha</h3>
+          <p class="for">Одна площадка — где вы работаете.</p>
+          <div class="rows" data-plan="olx"></div>
+          <ul><li>До 20 поисков</li><li>Мгновенные уведомления и фильтры</li><li>Krisha и Kolesa — «только от хозяев»</li><li>Фото без водяного знака</li></ul>
+        </div>
+        <div class="plan">
+          <h3>Kaspi Объявления</h3>
+          <p class="for">Для тех, кто ищет на Kaspi.</p>
+          <div class="rows" data-plan="kaspi"></div>
+          <ul><li>Новинки сразу после одобрения</li><li>Без платных и поднятых</li><li>Все города Казахстана</li></ul>
+        </div>
+        <div class="plan hot">
+          <span class="tag">Выгоднее всего</span>
+          <h3><svg class="i" aria-hidden="true"><use href="#i-flame"/></svg> Всё сразу</h3>
+          <p class="for">OLX + Kolesa + Krisha + Kaspi.</p>
+          <div class="rows" data-plan="all"></div>
+          <p class="save" id="all-save"></p>
+          <ul><li>Все четыре площадки</li><li>До 20 поисков на всё</li></ul>
+        </div>
+      </div>
+
+      <div class="vip">
+        <div>
+          <span class="eyebrow" style="color: var(--amber)"><svg class="i" aria-hidden="true"><use href="#i-crown"/></svg> VIP-рубрика</span>
+          <h3 style="margin-top:10px">Рубрика в вашем городе — только ваша</h3>
+          <p>Закрепите, например, «Ноутбуки · Алматы»: новые объявления из неё бот присылает только вам. Остальные подписчики их не получат, как бы ни настроили поиск. Одна рубрика — один владелец на срок.</p>
+        </div>
+        <div class="rows" data-plan="vip"></div>
+      </div>
+      <div class="roi">
+        <div class="roi-text">
+          <span class="eyebrow">Окупается с первой сделки</span>
+          <h3>Покупайте ниже рынка — подписка отбивается одним звонком</h3>
+          <p>Первый, кто позвонил, забирает вещь по цене продавца, а не по цене перекупа. Посчитайте на своих цифрах.</p>
+        </div>
+        <div class="roi-calc">
+          <label for="roi-margin">Выгода с одной сделки <b id="roi-margin-v" class="mono"></b></label>
+          <input type="range" id="roi-margin" min="5000" max="300000" step="5000" value="40000">
+          <label for="roi-deals">Сделок в месяц <b id="roi-deals-v" class="mono"></b></label>
+          <input type="range" id="roi-deals" min="1" max="20" step="1" value="3">
+          <div class="roi-out">
+            <div><span>Заработок за месяц</span><b id="roi-earn" class="mono"></b></div>
+            <div><span>«Всё сразу» на 30 дней</span><b class="mono">14 990 ₸</b></div>
+            <div class="big"><span>Подписка окупается</span><b id="roi-x" class="mono"></b></div>
+          </div>
+        </div>
+      </div>
+      <p class="fine">Зачёркнута цена того же срока при продлении по неделе. Цены за 24 часа, 7, 14 и 30 дней. Оплата звёздами — прямо в Telegram, доступ включается сразу. Kaspi — перевод и подтверждение, обычно в течение нескольких минут.</p>
+    </section>
+
+    <section id="faq">
+      <div class="sec-head"><span class="eyebrow">Вопросы</span><h2>Коротко о главном</h2></div>
+      <div class="faq">
+        <details><summary>Нужно ли что-то устанавливать?</summary><p>Нет. Всё работает в Telegram: открываете бота, настраиваете поиск кнопками — и уведомления приходят туда же, где ваши чаты.</p></details>
+        <details><summary>Насколько быстро приходит объявление?</summary><p>Сразу, как площадка опубликовала объявление: обычно за секунды. Вы узнаёте о нём раньше, чем оно поднимется в ленте сайта.</p></details>
+        <details><summary>Можно ли видеть объявления до модерации?</summary><p>Нет — бот работает только с тем, что площадка уже опубликовала. Выигрыш во времени даёт скорость: вы узнаёте о публикации в ту же минуту, а не когда листаете ленту.</p></details>
+        <details><summary>Что будет после бесплатных 24 часов?</summary><p>Поиски встанут на паузу, пока вы не выберете тариф в /access. Настройки сохранятся — после оплаты всё продолжит работать как было.</p></details>
+        <details><summary>Сколько поисков можно держать?</summary><p>До 20 одновременно на любом тарифе: разные рубрики, города, цены и слова.</p></details>
+        <details><summary>Как работает VIP-рубрика?</summary><p>Вы выбираете рубрику OLX и город в боте (/buyvip). Пока VIP действует, новые объявления из неё приходят только вам. Если рубрика уже занята, бот покажет, до какого числа.</p></details>
+      </div>
+    </section>
+
+    <div class="final">
+      <div>
+        <h2>Следующее выгодное объявление уже подают</h2>
+        <p>Настройте поиск за три минуты и получите его первым. 24 часа бесплатно.</p>
+      </div>
+      <a class="btn" href="https://t.me/olxwatcherkzbot" target="_blank" rel="noopener" data-tg><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13.2 1.4 11.7c-1-.3-1.1-1 .2-1.5L20.5 3c.9-.3 1.6.2 1.4 1.3Z"/></svg>Попробовать в Telegram</a>
+    </div>
+  </main>
+
+  <footer><span>Раньше всех — уведомления о новых объявлениях OLX, Kolesa, Krisha и Kaspi Объявлений в Telegram.</span><span>Не является сервисом площадок.</span></footer>
+</div>
+
+<script>
+  // Ссылка на Telegram-канал или бота — все кнопки «Попробовать» ведут сюда.
+  const TELEGRAM_URL = 'https://t.me/olxwatcherkzbot';
+  document.querySelectorAll('[data-tg]').forEach((a) => { a.href = TELEGRAM_URL; a.target = '_blank'; a.rel = 'noopener'; });
+
+  // Цены по умолчанию из настроек бота: 7 / 14 / 30 дней.
+  // Цены из настроек бота: 7 / 14 / 30 дней.
+  const PRICES = {
+    olx:    { kaspi: [500, 2990, 4990, 8990],      stars: [20, 100, 180, 300] },
+    krisha: { kaspi: [500, 2990, 4990, 8990],      stars: [20, 100, 180, 300] },
+    kaspi:  { kaspi: [500, 1990, 3990, 6990],      stars: [20, 80, 150, 250] },
+    all:    { kaspi: [990, 4990, 8990, 14990],     stars: [50, 250, 450, 800] },
+    vip:    { kaspi: [null, 75000, 125000, 225000], stars: [null, 5000, 9000, 15000] },
+  };
+  const DAYS = [1, 7, 14, 30];
+  const dayName = (d) => (d === 1 ? '24 часа' : `${d} дней`);
+  const fmt = (n) => n.toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
+  const money = (v, pay) => (pay === 'stars' ? `${fmt(v)} ★` : `${fmt(v)} ₸`);
+  // Сколько стоил бы тот же срок, если продлевать по неделе, — от этого и скидка.
+  const weekly = (list, i, pay) => { const raw = list[1] * DAYS[i] / 7; const step = pay === 'stars' ? 10 : 100; return Math.round(raw / step) * step; };
+  function render(pay) {
+    document.querySelectorAll('[data-plan]').forEach((box) => {
+      const list = PRICES[box.dataset.plan][pay];
+      box.innerHTML = list.map((v, i) => {
+        if (v == null) return '';
+        const was = i > 1 ? weekly(list, i, pay) : 0;
+        const off = was > v ? Math.round((1 - v / was) * 100) : 0;
+        const day = i === 3 ? `<small class="perday">≈ ${money(Math.round(v / 30), pay)} в день</small>` : '';
+        return `<div class="${i === 3 && off ? 'best' : ''}${i === 0 ? ' trial' : ''}"><span>${dayName(DAYS[i])}</span><span class="p">${off ? `<s>${money(was, pay)}</s>` : ''}<b>${money(v, pay)}${off ? `<em class="off">−${off}%</em>` : ''}</b>${day}</span></div>`;
+      }).join('');
+    });
+    // «Всё сразу» против четырёх площадок по отдельности, на 30 дней.
+    const sep = PRICES.olx[pay][3] * 2 + PRICES.krisha[pay][3] + PRICES.kaspi[pay][3];
+    const all = PRICES.all[pay][3];
+    document.getElementById('all-save').innerHTML = `Четыре площадки отдельно на 30 дней — ${money(sep, pay)}. Вместе — ${money(all, pay)}, <b>выгода ${money(sep - all, pay)}</b>.`;
+    document.querySelectorAll('[data-pay]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pay === pay)));
+    try { localStorage.setItem('pay', pay); } catch {}
+  }
+  // Калькулятор окупаемости.
+  const rm = document.getElementById('roi-margin'), rd = document.getElementById('roi-deals');
+  function roi() {
+    const m = Number(rm.value), d = Number(rd.value), earn = m * d;
+    document.getElementById('roi-margin-v').textContent = `${fmt(m)} ₸`;
+    document.getElementById('roi-deals-v').textContent = d;
+    document.getElementById('roi-earn').textContent = `${fmt(earn)} ₸`;
+    document.getElementById('roi-x').textContent = `в ${Math.floor(earn / 14990 * 10) / 10} раза`;
+  }
+  rm.addEventListener('input', roi); rd.addEventListener('input', roi); roi();
+
+  let saved = 'kaspi';
+  try { saved = localStorage.getItem('pay') || 'kaspi'; } catch {}
+  render(saved === 'stars' ? 'stars' : 'kaspi');
+  document.querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', () => render(b.dataset.pay)));
+
+  // Слайдер уведомлений в телефоне. Фото — img/<name>.jpg рядом со страницей; нет файла — заставка.
+  const ADS = [
+    { img: 'car', art: 'car', src: '🚗', site: 'Kolesa', title: 'Toyota Camry 70, 2019, 2.5 AT', price: '12 900 000 ₸', place: 'Алматы', ago: 10, at: '09:41', flag: '🏠 От хозяина', photos: 14, search: 'Camry до 13 млн' },
+    { img: 'flat', art: 'building', src: '🏠', site: 'Krisha', title: '2-комнатная квартира, 54 м², 7/12 этаж', price: '38 500 000 ₸', place: 'Астана, Есильский р-н', ago: 24, at: '09:40', flag: '🏠 От хозяина', photos: 9, search: '2-комн Астана' },
+    { img: 'phone', art: 'phone', src: '🟣', site: 'OLX', title: 'iPhone 15 Pro 256GB Natural Titanium', price: '420 000 ₸', place: 'Шымкент', ago: 7, at: '09:41', phone: '+7 701 555 12 34', photos: 6, search: 'iPhone Шымкент' },
+    { img: 'laptop', art: 'laptop', src: '🟣', site: 'OLX', title: 'MacBook Pro 14 M3 Pro 18/512, как новый', price: '780 000 ₸', place: 'Алматы, Бостандыкский р-н', ago: 38, at: '09:40', phone: '+7 707 123 45 67', photos: 8, search: 'Макбуки Алматы' },
+    { img: 'ps5', art: 'game', src: '🟣', site: 'OLX', title: 'PlayStation 5 Slim + 2 геймпада', drop: [260000, 215000], place: 'Алматы', agoText: '2 дн', at: '09:41', photos: 7, search: 'PS5 Алматы' },
+    { img: 'watch', art: 'watch', src: '🔴', site: 'Kaspi Объявления', title: 'Часы Tissot PRX Powermatic 80', price: '290 000 ₸', place: 'Караганда', ago: 15, at: '09:41', photos: 5, search: 'Часы Tissot' },
+  ];
+  const BG = { ps5: '#1f2a44,#4a5c8a', car: '#2c3e50,#4b6584', flat: '#3d5a6c,#8aa6b5', phone: '#2d2b3a,#6a5e7a', laptop: '#26323c,#6d7f8a', watch: '#3a2f25,#8c7355' };
+  // Лента в телефоне: уведомления приходят одно за другим, старые уезжают вверх — как в чате.
+  const feed = document.getElementById('feed');
+  const agoText = (s) => (s < 60 ? `${s} сек` : `${Math.floor(s / 60)} мин`);
+  function item(a) {
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.innerHTML = `
+      <div class="msg">
+        <div class="photo" style="background: linear-gradient(160deg, ${BG[a.img]})">
+          <svg class="art" aria-hidden="true"><use href="#i-${a.art}"/></svg>
+          <img src="img/${a.img}.jpg" alt="" onerror="this.remove()">
+          <span class="count">1 / ${a.photos}</span>
+        </div>
+        <div class="card">
+          ${a.drop ? `<div>📉 <b>Цена снижена на ${Math.round((1 - a.drop[1] / a.drop[0]) * 100)}%</b>: <s>${fmt(a.drop[0])}</s> → <b>${fmt(a.drop[1])} ₸</b></div>` : ''}
+          <div>${a.src} <span class="t">${a.title}</span></div>
+          ${a.site !== 'OLX' ? `<div>🏷 ${a.site}</div>` : ''}
+          ${a.price ? `<div>💰 <b>${a.price}</b></div>` : ''}
+          <div>📍 ${a.place}</div>
+          <div>🕒 Подано ${a.agoText ? `<span class="mono">${a.agoText}</span>` : `<span class="live mono" data-ago="${a.ago}">${agoText(a.ago)}</span>`} назад</div>
+          ${a.flag ? `<div>${a.flag}</div>` : a.phone ? `<div>📞 <b class="mono">${a.phone}</b></div>` : ''}
+          <div>🔎 Поиск: ${a.search}<span class="time mono">${a.at}</span></div>
+        </div>
+      </div>
+      <div class="kb"><span>Открыть на ${a.site}</span></div>`;
+    return el;
+  }
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let next = 0;
+  for (; next < 3; next++) feed.appendChild(item(ADS[next]));
+  function push() {
+    const el = item(ADS[next % ADS.length]);
+    next += 1;
+    el.classList.add('enter');
+    feed.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('enter')));
+    while (feed.children.length > 5) feed.firstElementChild.remove();
+  }
+  if (!still) setInterval(push, 3200);
+  // «Подано N сек назад» у каждого своё и тикает, как живое.
+  if (!still) setInterval(() => {
+    document.querySelectorAll('[data-ago]').forEach((el) => { const s = Number(el.dataset.ago) + 1; el.dataset.ago = s; el.textContent = agoText(s); });
+  }, 1000);
+</script>
+</body>
+</html>
