@@ -614,25 +614,29 @@ struct ЛистДоверия: View {
                         .padding(.top, 6)
                     СписокСовета(ключ: ключ)
                 }
-                Button { закрыть() } label: {
-                    Text(ListingPageText.т("ok"))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 6)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 8)
             .мерилоЛиста()
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
-        /* Этап 31: лист целиком на поверхности сайта — иначе в тёмной теме по краям видна системная подложка. */
-        .presentationBackground(Theme.поверхность)
-        .листПоВысоте()
+        /* Этап 31: лист целиком на поверхности сайта — иначе в тёмной теме по краям видна системная подложка.
+           TestFlight 1.10 («срезается снизу кнопка»): «Понятно» — не последней строкой прокрутки, а закреплена внизу
+           над полоской «домой» (SheetPinned.swift); высота листа — текст + кнопка. */
+        .листСКнопкойВнизу {
+            Button { закрыть() } label: {
+                Text(ListingPageText.т("ok"))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 

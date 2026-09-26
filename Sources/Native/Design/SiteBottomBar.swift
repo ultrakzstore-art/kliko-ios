@@ -12,12 +12,22 @@ import UIKit
 
  Первая кнопка — как у сайта: на главной «Категории», в разделе или поиске — «Главная» с домиком, и ведёт на главную.
  Камера — страница подачи (a.ulx-bb-add: /kz/<язык>/cabinet?go=add). Значки — ближайшие SF Symbols к SVG сайта.
+
+ TestFlight 1.10 (владелец: «снизу боттом бар более современный — как на iOS 26+»): панель — плавающая капсула с
+ отступом от краёв над домашней полосой. iOS 26 — Liquid Glass (glassEffect), iOS 17–25 — .ultraThinMaterial с кромкой и
+ тенью (СтеклоПанели). Выбранный пункт — пилюля, переезжающая между пунктами (matchedGeometryEffect), значок залитый;
+ камера — круглая заметная кнопка внутри капсулы (КругКамеры), без прежнего подъёма на 20 pt. Пункты, подписи, счётчик,
+ VoiceOver — прежние; отклик под пальцем — sensoryFeedback(.selection). Прятать панель над экранами поверх корня и место
+ под ней у корней вкладок (оставитьМестоПодПанелью, высота 64) — как раньше. ФонПанелиСайта (прежняя сплошная панель)
+ оставлен для совместимости.
  */
 struct НижняяПанельСайта: View {
     enum Пункт: Hashable { case категории, избранное, чат, кабинет }
 
-    /// Высота панели над домашней полосой. Её же оставляют внизу корни вкладок (оставитьМестоПодПанелью).
-    static let высота: CGFloat = 60
+    /// Место под панелью у корней вкладок (оставитьМестоПодПанелью): капсула 58 pt и зазор 6 pt над домашней полосой.
+    static let высота: CGFloat = 64
+    /// Высота самой капсулы.
+    static let высотаКапсулы: CGFloat = 58
 
     /// Выбранный пункт; nil — ни один.
     let выбран: Пункт?
@@ -28,6 +38,12 @@ struct НижняяПанельСайта: View {
     let выбрать: (Пункт) -> Void
     /// Кнопка камеры; nil — адреса подачи нет, и кнопки нет.
     let камера: (() -> Void)?
+
+    /// Пилюля выбранного пункта переезжает между пунктами (matchedGeometryEffect).
+    @Namespace private var пилюля
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
+    /// Отклик под пальцем — счётчик нажатий, а не выбранный пункт: повторное нажатие (к началу стека) тоже отзывается.
+    @State private var нажатий = 0
 
     /// Явный init, как у ListingCard: панель создаёт другой файл (NativeTabsView), и поэлементный init не должен
     /// зависеть от того, появится ли здесь закрытое свойство.
@@ -42,7 +58,23 @@ struct НижняяПанельСайта: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        ряд
+            .padding(.horizontal, 6)
+            .frame(height: Self.высотаКапсулы)
+            .modifier(СтеклоПанели())
+            .frame(maxWidth: 520)
+            .padding(.horizontal, 14)
+            .padding(.bottom, Self.высота - Self.высотаКапсулы)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.высота, alignment: .bottom)
+            .animation(безДвижения ? nil : .spring(response: 0.36, dampingFraction: 0.82), value: выбран)
+            .sensoryFeedback(.selection, trigger: нажатий)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(DesignText.т("nav"))
+    }
+
+    private var ряд: some View {
+        HStack(alignment: .center, spacing: 2) {
             пункт(.категории, значок: главная ? "square.grid.2x2" : "house",
                   подпись: DesignText.т(главная ? "categories" : "home"))
             if показатьИзбранное {
@@ -54,34 +86,32 @@ struct НижняяПанельСайта: View {
             пункт(.чат, значок: "message", подпись: DesignText.т("chat"), счёт: непрочитано)
             пункт(.кабинет, значок: "person", подпись: DesignText.т("cabinet"))
         }
-        .frame(maxWidth: 560)
-        .padding(.horizontal, 6)
-        .padding(.top, 7)
-        .frame(maxWidth: .infinity)
-        .frame(height: Self.высота, alignment: .top)
-        .background(alignment: .top) {
-            ФонПанелиСайта()
-                .ignoresSafeArea(edges: .bottom)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(DesignText.т("nav"))
     }
 
     private func пункт(_ п: Пункт, значок: String, подпись: String, счёт: Int = 0) -> some View {
         let активен = выбран == п
-        return Button { выбрать(п) } label: {
-            VStack(spacing: 4) {
-                Image(systemName: значок)
-                    .font(.system(size: 20, weight: .regular))
-                    .frame(height: 23)
+        return Button {
+            нажатий += 1
+            выбрать(п)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: активен ? значок + ".fill" : значок)
+                    .font(.system(size: 19, weight: активен ? Font.Weight.semibold : Font.Weight.regular))
+                    .frame(height: 22)
                 Text(подпись)
-                    .font(.system(size: 11, weight: активен ? Font.Weight.bold : Font.Weight.semibold))
+                    .font(.system(size: 10.5, weight: активен ? Font.Weight.bold : Font.Weight.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
             .foregroundStyle(активен ? Theme.акцент : Theme.панельПункт)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 2)
+            .frame(height: Self.высотаКапсулы - 10)
+            .background {
+                if активен {
+                    ПилюляВыбора()
+                        .matchedGeometryEffect(id: "выбор", in: пилюля)
+                }
+            }
             .overlay(alignment: .top) {
                 if счёт > 0 {
                     Text(счёт > 99 ? "99+" : String(счёт))
@@ -91,7 +121,7 @@ struct НижняяПанельСайта: View {
                         .frame(minWidth: 17, minHeight: 17)
                         .background(Theme.сердце, in: Capsule())
                         .shadow(color: Theme.сердце.opacity(0.4), radius: 2, x: 0, y: 1)
-                        .offset(x: 14, y: -3)
+                        .offset(x: 13, y: 2)
                         .accessibilityHidden(true)
                 }
             }
@@ -103,29 +133,97 @@ struct НижняяПанельСайта: View {
         .accessibilityAddTraits(активен ? .isSelected : [])
     }
 
-    /// .ulx-bb-add: круг 50 pt на 20 pt выше панели, градиент зелёного, кромка 3 pt цвета панели, камера 26 pt.
+    /// Камера посередине — круглая заметная кнопка: зелёное стекло на iOS 26, зелёный градиент раньше.
     private func кнопкаКамеры(_ действие: @escaping () -> Void) -> some View {
-        Button(action: действие) {
-            Image(systemName: "camera")
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .frame(width: 50, height: 50)
+        Button {
+            нажатий += 1
+            действие()
+        } label: {
+            КругКамеры()
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.9))
+        .frame(width: 58)
+        .accessibilityLabel(DesignText.т("post"))
+        .accessibilityHint(DesignText.т("on_site"))
+    }
+}
+
+/**
+ Нижняя панель в духе iOS 26 (владелец, TestFlight 1.10: «снизу боттом бар более современный — как на iOS 26+»):
+ плавающая капсула с отступом от краёв над домашней полосой. На iOS 26 — Liquid Glass (glassEffect(.regular, in:)),
+ раньше — .ultraThinMaterial с тонкой кромкой и мягкой тенью. Пункты, камера, счётчик и подписи — прежние, сайта.
+ */
+private struct СтеклоПанели: ViewModifier {
+    @Environment(\.colorScheme) private var схема
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+                .shadow(color: Color.black.opacity(схема == .dark ? 0.35 : 0.10), radius: 14, x: 0, y: 6)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(Theme.панель.opacity(схема == .dark ? 0.55 : 0.45), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .strokeBorder(LinearGradient(colors: [Color.white.opacity(схема == .dark ? 0.16 : 0.7),
+                                                              Theme.панельКромка.opacity(0.25)],
+                                                     startPoint: .top, endPoint: .bottom),
+                                      lineWidth: 0.8)
+                        .accessibilityHidden(true)
+                }
+                .shadow(color: схема == .dark ? Color.black.opacity(0.5)
+                                              : Color(red: 10 / 255, green: 45 / 255, blue: 28 / 255).opacity(0.16),
+                        radius: 16, x: 0, y: 6)
+        }
+    }
+}
+
+/// Пилюля выбранного пункта: мягкий зелёный оттенок с бликом сверху — «стеклянная» подсветка на любой версии.
+private struct ПилюляВыбора: View {
+    @Environment(\.colorScheme) private var схема
+
+    var body: some View {
+        Capsule()
+            .fill(Theme.оттенокАкцента)
+            .overlay {
+                Capsule()
+                    .strokeBorder(LinearGradient(colors: [Color.white.opacity(схема == .dark ? 0.18 : 0.8),
+                                                          Theme.акцент.opacity(0.18)],
+                                                 startPoint: .top, endPoint: .bottom),
+                                  lineWidth: 0.8)
+            }
+            .padding(.horizontal, 2)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Круг камеры 46 pt: на iOS 26 — зелёное «жидкое стекло» с откликом на касание, раньше — градиент с бликом и тенью.
+private struct КругКамеры: View {
+    var body: some View {
+        let значок = Image(systemName: "camera.fill")
+            .font(.system(size: 19, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .frame(width: 46, height: 46)
+        if #available(iOS 26.0, *) {
+            значок
+                .glassEffect(.regular.tint(Theme.кнопкаКамерыНачало).interactive(), in: Circle())
+                .shadow(color: Theme.кнопкаКамерыНачало.opacity(0.35), radius: 8, x: 0, y: 4)
+        } else {
+            значок
                 .background(
-                    LinearGradient(colors: [Theme.кнопкаКамерыНачало, Theme.кнопкаКамерыКонец],
+                    LinearGradient(colors: [Theme.кнопкаКамерыКонец, Theme.кнопкаКамерыНачало],
                                    startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: Circle()
                 )
                 .overlay {
-                    Circle().strokeBorder(Theme.панель, lineWidth: 3)
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
                 }
-                .shadow(color: Theme.кнопкаКамерыНачало.opacity(0.55), radius: 9, x: 0, y: 6)
-                .contentShape(Circle())
+                .shadow(color: Theme.кнопкаКамерыНачало.opacity(0.45), radius: 8, x: 0, y: 4)
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.9))
-        .frame(width: 54)
-        .offset(y: -20)
-        .accessibilityLabel(DesignText.т("post"))
-        .accessibilityHint(DesignText.т("on_site"))
     }
 }
 
