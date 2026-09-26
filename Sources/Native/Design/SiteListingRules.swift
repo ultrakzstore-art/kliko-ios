@@ -162,7 +162,8 @@ extension Listing {
     /// mkDate сайта для даты «2026-09-24»: «сегодня», «вчера», «3 дня назад», «24 сен» (и год, если не этот); не такая
     /// строка — как пришла. Этап 37 (владелец 25.09.2026): тем же правилом сайт пишет дату отзыва о продавце
     /// (_mkSellerRevPaint: mkDate(t.date)), поэтому правило вынесено из «Добавлено …» и общее для обоих.
-    static func датаСайта(_ строка: String) -> String {
+    /// Этап 49: `коротко` — mkDate(t, true) карточек главной: «3 дня» без «назад».
+    static func датаСайта(_ строка: String, коротко: Bool = false) -> String {
         let части = строка.prefix(10).split(separator: "-").compactMap { Int($0) }
         guard части.count == 3 else { return строка }
         var календарь = Calendar(identifier: .gregorian)
@@ -174,7 +175,10 @@ extension Listing {
         let дней = календарь.dateComponents([.day], from: день, to: сегодня).day ?? 0
         if дней <= 0 { return ListingPageText.т("today") }
         if дней == 1 { return ListingPageText.т("yesterday") }
-        if дней < 7 { return String(format: ListingPageText.т("ago"), ListingPageText.число(дней, "day")) }
+        if дней < 7 {
+            let сколько = ListingPageText.число(дней, "day")
+            return коротко ? сколько : String(format: ListingPageText.т("ago"), сколько)
+        }
         let месяцы = ListingPageText.т("months").split(separator: ",").map(String.init)
         let месяц = месяцы.indices.contains(части[1] - 1) ? месяцы[части[1] - 1] : String(части[1])
         let этотГод = календарь.component(.year, from: Date())

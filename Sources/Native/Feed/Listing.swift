@@ -76,6 +76,41 @@ struct Listing: Identifiable, Hashable {
     /// (этап 36, mkSellerFolHtml сайта). Ноль или не пришло — nil: сайт ноль не показывает.
     var подписчикиПродавца: Int? = nil
 
+    // ── Витрина как на сайте (этап 49, владелец 26.09.2026: «всё одно и то же, просто код разный»): поля, по которым
+    //    сайт рисует карточки главной (mhCardFor в js/marketplace-home.min.js) и ленты (mkVitCardHTML) ──
+    /// district_name — «Есильский район» в подвале карточки жилья главной.
+    var районНазвание: String? = nil
+    /// status: "reserved" — метка «Резерв» на фото карточки ленты.
+    var вРезерве = false
+    /// auto_check, realty_check, device_check — отчёты проверок (mkVitTrust): «Проверен по VIN», «Кадастр проверен»,
+    /// «IMEI проверен». Истина — как в JS: объект, непустая строка, не ноль.
+    var проверкаАвто = false
+    var проверкаЖилья = false
+    var проверкаУстройства = false
+    /// warranty_ok истинно — у карточки ленты «Гарантия 12 месяцев» (mkVitTrust смотрит именно его и warranty_days).
+    var гарантияОтмечена = false
+    /// Плоские поля как пришли: year, ram, storage, cpu, gpu. У машин сайт кладёт в них пробег (ram), объём (storage) и
+    /// коробку (cpu) — mhCardCar читает их так.
+    var годСтрокой: String? = nil
+    var ramСтрокой: String? = nil
+    var storageСтрокой: String? = nil
+    var cpuСтрокой: String? = nil
+    var gpuСтрокой: String? = nil
+    /// specs в порядке ответа с признаком образца цвета (swatch) — строка характеристик карточек. Образцы сайт в карточках
+    /// пропускает по-разному: главная берёт первые три без них (_mhSpecs), лента — первые четыре и уже из них выкидывает
+    /// образцы (mkCapSpecs), поэтому они здесь остаются с пометкой.
+    var характеристикиКарточки: [ПунктКарточки] = []
+
+    struct ПунктКарточки: Hashable {
+        let ключ: String
+        let значение: String
+        let образец: Bool
+    }
+    /// realty — поля жилья («rooms», «area», «floor», «floors», «kind»…) строками; не объект — пусто.
+    var жильё: [String: String] = [:]
+    /// shop_accent «#RRGGBB» — фирменный цвет магазина: полоса сверху карточки ленты и цена (.mk-cbrand сайта).
+    var акцентМагазина: UInt32? = nil
+
     struct Характеристика: Hashable {
         let ключ: String
         let значение: String
@@ -181,10 +216,29 @@ extension Listing: Decodable {
         struct ПунктХарактеристик: Decodable {
             let label: String?
             let value: String?
+            /// Этап 49: образец цвета (swatch) — у сайта такие пункты в строке характеристик карточки не участвуют.
+            let образец: Bool
+
+            init(from decoder: Decoder) throws {
+                let к = try decoder.container(keyedBy: Ключ.self)
+                label = try? к.decode(String.self, forKey: Ключ("label"))
+                if let строка = try? к.decode(String.self, forKey: Ключ("value")) {
+                    value = строка
+                } else if let число = try? к.decode(Double.self, forKey: Ключ("value")), число.isFinite,
+                          abs(число) < 1e15 {
+                    value = число == число.rounded() ? String(Int(число)) : String(число)
+                } else {
+                    value = nil
+                }
+                образец = !(((try? к.decode([String].self, forKey: Ключ("swatch"))) ?? []).isEmpty)
+            }
         }
         if let пункты = try? c.decode([ПунктХарактеристик].self, forKey: Ключ("specs")) {
             for п in пункты {
-                if let к = непусто(п.label), let з = непусто(п.value) { х.append(Характеристика(ключ: к, значение: з)) }
+                if let к = непусто(п.label), let з = непусто(п.value) {
+                    х.append(Характеристика(ключ: к, значение: з))
+                    характеристикиКарточки.append(ПунктКарточки(ключ: к, значение: з, образец: п.образец))
+                }
             }
         }
         let изМассива = !х.isEmpty
@@ -243,6 +297,60 @@ extension Listing: Decodable {
         периодАренды = непусто(строка("rent_period"))
         продавецС = непусто(строка("seller_since"))
         подписчикиПродавца = число("seller_followers").map { Int($0) }.flatMap { $0 > 0 ? $0 : nil }
+
+        /* Этап 49: поля карточек витрины. Истинность — как у JS сайта (if (t.auto_check)): null, false, 0 и пустая строка
+           — нет; объект, массив, непустая строка и число не ноль — да. */
+        func истинно(_ k: String) -> Bool {
+            let ключ = Ключ(k)
+            guard c.contains(ключ) else { return false }
+            if (try? c.decodeNil(forKey: ключ)) == true { return false }
+            if let b = try? c.decode(Bool.self, forKey: ключ) { return b }
+            if let d = try? c.decode(Double.self, forKey: ключ) { return d != 0 }
+            if let s = try? c.decode(String.self, forKey: ключ) { return !s.isEmpty }
+            return true
+        }
+        районНазвание = непусто(строка("district_name"))
+        вРезерве = строка("status") == "reserved"
+        проверкаАвто = истинно("auto_check")
+        проверкаЖилья = истинно("realty_check")
+        проверкаУстройства = истинно("device_check")
+        гарантияОтмечена = истинно("warranty_ok")
+        годСтрокой = непусто(строка("year"))
+        ramСтрокой = непусто(строка("ram"))
+        storageСтрокой = непусто(строка("storage"))
+        cpuСтрокой = непусто(строка("cpu"))
+        gpuСтрокой = непусто(строка("gpu"))
+        /// Значение поля жилья в любом виде PHP; false и null — нет значения, true — «1».
+        struct ПолеЖилья: Decodable {
+            let текст: String?
+            init(from decoder: Decoder) throws {
+                let з = try decoder.singleValueContainer()
+                if з.decodeNil() {
+                    текст = nil
+                } else if let b = try? з.decode(Bool.self) {
+                    текст = b ? "1" : nil
+                } else if let d = try? з.decode(Double.self), d.isFinite, abs(d) < 1e15 {
+                    текст = d == d.rounded() ? String(Int(d)) : String(d)
+                } else if let s = try? з.decode(String.self) {
+                    let чистая = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    текст = чистая.isEmpty ? nil : чистая
+                } else {
+                    текст = nil
+                }
+            }
+        }
+        if let поля = try? c.decode([String: ПолеЖилья].self, forKey: Ключ("realty")) {
+            var итог: [String: String] = [:]
+            for (ключ, значение) in поля {
+                if let текст = значение.текст { итог[ключ] = текст }
+            }
+            жильё = итог
+        }
+        /* shop_accent — только «#RRGGBB» (/^#[0-9a-fA-F]{6}$/ сайта), иначе как будто его нет. */
+        if let акцент = непусто(строка("shop_accent")), акцент.count == 7, акцент.hasPrefix("#"),
+           акцент.dropFirst().allSatisfy({ $0.isHexDigit }), let v = UInt32(акцент.dropFirst(), radix: 16) {
+            акцентМагазина = v
+        }
         let телефон = да("has_phone")
         let связь = try? c.decode(Связь.self, forKey: Ключ("contact"))
         звонок = телефон && (связь?.call?.ok?.да ?? false)

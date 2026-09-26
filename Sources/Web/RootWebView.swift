@@ -9,6 +9,8 @@ import SwiftUI
 struct RootWebView: View {
     @StateObject private var bridge = WebBridge.shared
     @ObservedObject private var lock = AppLock.shared   // вход по Face ID: экран замка поверх всего (AppLock)
+    /// Этап 49: язык из пилюли «тема │ RU» шапки — нативный слой собирается заново уже на нём (ЯзыкПриложения).
+    @ObservedObject private var язык = ЯзыкПриложения.shared
     @State private var minElapsed = false     // минимум показа сплэша, чтобы лого не мелькал
 
     /* ЛЕНТА ВМЕСТО ПУСТОГО ОЖИДАНИЯ (владелец 24.09.2026: «когда интернет кончается — очень долго работает»).
@@ -50,6 +52,9 @@ struct RootWebView: View {
                                        открытьСайт: { bridge.открытьСайтВместоЛенты() })
                     }
                 }
+                    /* Этап 49: сменили язык в шапке — тексты читаются заново только у новых экранов, поэтому слой
+                       пересобирается целиком, как сайт перезагружает страницу по ссылке /kz/<язык>/. */
+                    .id(язык.код)
                     .opacity(bridge.лентаВидна ? 1 : 0)
                     .allowsHitTesting(bridge.лентаВидна)
                     .accessibilityHidden(!bridge.лентаВидна)

@@ -20,7 +20,7 @@ import WebKit
  Этап 32: при Config.выборГорода город больше не ведёт на сайт — он открывает свой лист «Где ищете?» (ЛистГорода,
  Native/Geo), а подпись — выбор приложения (ВыборГорода.подпись), а не #mk-city-lbl страницы.
  */
-struct ШапкаСайта<Справа: View, УПоиска: View>: View {
+struct ШапкаСайта<Справа: View, УПоиска: View, Снизу: View>: View {
     @Binding var текст: String
     let фокус: FocusState<Bool>.Binding
     /// Подпись города — как на странице сайта (#mk-city-lbl), по умолчанию «По всей стране».
@@ -31,13 +31,20 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
     /// Камера в поле; nil — без неё.
     let поискПоФото: (() -> Void)?
     let найти: () -> Void
+    /// Этап 49: под шапкой полоса разделов (не главная) — у шапки тогда меньше отступ снизу и скругление 22, как у
+    /// .mk-vrail сайта; на главной — скругление 20 (html.mk-gtop.mk-home .mk-topbar).
+    let сПолосой: Bool
     let справа: Справа
     let уПоиска: УПоиска
+    let снизу: Снизу
+    /// Этап 49: подсказка в поле — одна из тех, что сервер сайта ставит в #mk-q при каждой отрисовке страницы; здесь —
+    /// при каждом появлении шапки.
+    @State private var подсказка: String = DesignText.подсказкиПоиска.randomElement() ?? DesignText.т("search")
 
     init(текст: Binding<String>, фокус: FocusState<Bool>.Binding, город: String,
          открытьГород: @escaping () -> Void, подсказкаГорода: String = DesignText.т("on_site"),
-         поискПоФото: (() -> Void)?, найти: @escaping () -> Void,
-         @ViewBuilder справа: () -> Справа, @ViewBuilder уПоиска: () -> УПоиска) {
+         поискПоФото: (() -> Void)?, найти: @escaping () -> Void, сПолосой: Bool = false,
+         @ViewBuilder справа: () -> Справа, @ViewBuilder уПоиска: () -> УПоиска, @ViewBuilder снизу: () -> Снизу) {
         _текст = текст
         self.фокус = фокус
         self.город = город
@@ -45,32 +52,37 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
         self.подсказкаГорода = подсказкаГорода
         self.поискПоФото = поискПоФото
         self.найти = найти
+        self.сПолосой = сПолосой
         self.справа = справа()
         self.уПоиска = уПоиска()
+        self.снизу = снизу()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                логотип
-                    .fixedSize()
-                кнопкаГорода
-                Spacer(minLength: 0)
-                справа
-                    .fixedSize()
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    логотип
+                        .fixedSize()
+                    кнопкаГорода
+                    Spacer(minLength: 0)
+                    справа
+                        .fixedSize()
+                }
+                HStack(spacing: 8) {
+                    полеПоиска
+                    уПоиска
+                        .fixedSize()
+                }
             }
-            HStack(spacing: 8) {
-                полеПоиска
-                уПоиска
-                    .fixedSize()
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, сПолосой ? 8 : 14)
+            снизу
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 14)
         .frame(maxWidth: .infinity)
         .background(alignment: .top) {
-            ФонШапкиСайта()
+            ФонШапкиСайта(радиус: сПолосой ? Theme.Радиус.шапка : Theme.Радиус.xl)
                 .ignoresSafeArea(edges: .top)
         }
     }
@@ -118,16 +130,16 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// Белое поле высотой 38–40 pt: лупа, текст 16 pt (меньше — и iOS увеличит страницу, на сайте то же правило),
-    /// крестик, пока что-то набрано, и камера в светлом кружке.
+    /// Белое поле 38 pt (.mk-tbsearch): лупа, текст 16 pt (меньше — и iOS увеличит страницу, на сайте то же правило),
+    /// крестик, пока что-то набрано, и камера (.mk-cam-badge: 33 × 33 без подложки, серая #6b7f76).
     private var полеПоиска: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
-            TextField(DesignText.т("search"), text: $текст,
-                      prompt: Text(DesignText.т("search")).foregroundColor(Theme.текстВторой))
+            TextField(подсказка, text: $текст,
+                      prompt: Text(подсказка).foregroundColor(Theme.текстВторой))
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.текст)
                 .tint(Theme.акцент)
@@ -148,10 +160,10 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
             if let поискПоФото {
                 Button(action: поискПоФото) {
                     Image(systemName: "camera")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.текстВторой)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.полеПоискаКнопка, in: Circle())
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Color(uiColor: Theme.hex(0x6B7F76)))
+                        .frame(width: 33, height: 33)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(DesignText.т("photo"))
@@ -159,12 +171,155 @@ struct ШапкаСайта<Справа: View, УПоиска: View>: View {
             }
         }
         .padding(.leading, 12)
-        .padding(.trailing, 5)
-        .frame(height: 40)
+        .padding(.trailing, 6)
+        .frame(height: 38)
         .frame(maxWidth: .infinity)
         .background(Theme.полеПоиска, in: Capsule())
         .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 6)
         .contentShape(Capsule())
+    }
+}
+
+/**
+ Пилюля шапки «тема │ язык» — #theme-sw и #mk-lang-wrap сайта (этап 49): левая половина 38 × 38 — луна или солнце,
+ разделитель белый 16 %, правая — код языка 13 pt жирным; подложка белый 12 % (в тёмной 8 %) с кромкой белый 18 %.
+ Нажатие на язык — список #mk-lang-dd: RU «Рус», KZ «Қаз», EN «Eng», AR «عربي», у текущего галочка (ЯзыкПриложения).
+ Выбор темы выключен — одна половина с языком.
+ */
+struct ПилюляТемыИЯзыка: View {
+    /// Смена темы; nil — половины темы нет.
+    let тема: (() -> Void)?
+    /// Луна в светлой теме, солнце в тёмной — как uipThemeIcon сайта.
+    let значокТемы: String
+    @ObservedObject private var язык = ЯзыкПриложения.shared
+
+    init(тема: (() -> Void)?, значокТемы: String) {
+        self.тема = тема
+        self.значокТемы = значокТемы
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if let тема {
+                Button(action: тема) {
+                    Image(systemName: значокТемы)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 38, height: 38)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(DesignText.т("theme"))
+                Rectangle()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 1, height: 22)
+                    .accessibilityHidden(true)
+            }
+            Menu {
+                ForEach(ЯзыкПриложения.варианты) { вариант in
+                    Button {
+                        язык.выбрать(вариант)
+                    } label: {
+                        if вариант.код == язык.код {
+                            Label(вариант.метка + "  " + вариант.имя, systemImage: "checkmark")
+                        } else {
+                            Text(вариант.метка + "  " + вариант.имя)
+                        }
+                    }
+                }
+            } label: {
+                Text(язык.текущий.метка)
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.white)
+                    .padding(.leading, тема == nil ? 11 : 8)
+                    .padding(.trailing, 11)
+                    .frame(height: 38)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .accessibilityLabel(DesignText.т("lang"))
+            .accessibilityValue(язык.текущий.имя)
+        }
+        .background(Theme.шапкаКнопка, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Theme.шапкаКнопкаРамка, lineWidth: 1)
+        }
+    }
+}
+
+/**
+ Полоса разделов под шапкой — .mk-vrail сайта на телефоне вне главной (этап 49): зелёное продолжение шапки, пилюли 38 pt
+ со значками — «Все», Авто, Недвижимость, Услуги, Электроника, Товары, Животные, Работа; выбранная — белая, текст и значок
+ цветом раздела («Все» — #0f4d31). «Работа» — страница вакансий сайта (своего экрана у приложения нет).
+ */
+struct ПолосаРазделовШапки: View {
+    /// Раздел ленты: «» — «Все».
+    let выбран: String
+    let название: (РазделГлавной) -> String
+    let выбрать: (String) -> Void
+    let вакансии: () -> Void
+    @Environment(\.colorScheme) private var схема
+
+    init(выбран: String, название: @escaping (РазделГлавной) -> String, выбрать: @escaping (String) -> Void,
+         вакансии: @escaping () -> Void) {
+        self.выбран = выбран
+        self.название = название
+        self.выбрать = выбрать
+        self.вакансии = вакансии
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                чип(ключ: "", подпись: DesignText.т("v_all"), значок: "square.grid.2x2", краска: 0x0F4D31)
+                ForEach(РазделГлавной.полоса) { раздел in
+                    чип(ключ: раздел.ключ, подпись: название(раздел), значок: раздел.значок, краска: раздел.краска)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .mask {
+            LinearGradient(stops: [Gradient.Stop(color: Color.clear, location: 0),
+                                   Gradient.Stop(color: Color.black, location: 0.04),
+                                   Gradient.Stop(color: Color.black, location: 0.9),
+                                   Gradient.Stop(color: Color.clear, location: 1)],
+                           startPoint: .leading, endPoint: .trailing)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 14)
+    }
+
+    private func чип(ключ: String, подпись: String, значок: String, краска: UInt32) -> some View {
+        let выбранный = ключ == выбран
+        return Button {
+            if ключ == "jobs" {
+                вакансии()
+            } else {
+                выбрать(ключ)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(подпись)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(выбранный ? Color(uiColor: Theme.hex(краска)) : Color.white)
+            .padding(.horizontal, 13)
+            .frame(height: 38)
+            .background(выбранный ? Color.white : (схема == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.12)),
+                        in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(выбранный ? Color.white : Theme.шапкаКнопкаРамка, lineWidth: 1)
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+        .accessibilityAddTraits(выбранный ? .isSelected : [])
+        .accessibilityHint(ключ == "jobs" ? DesignText.т("on_site") : "")
     }
 }
 
@@ -187,9 +342,16 @@ struct КругШапкиСайта: View {
 
 /// Фон шапки: градиент сверху вниз, блик слева сверху и скруглённый низ 22 pt с тенью — html.mk-gtop .mk-topbar.
 struct ФонШапкиСайта: View {
+    /// Этап 49: на главной — 20 (--r-xl), с полосой разделов под шапкой — 22, как у сайта.
+    let радиус: CGFloat
+
+    init(радиус: CGFloat = Theme.Радиус.шапка) {
+        self.радиус = радиус
+    }
+
     private var форма: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: Theme.Радиус.шапка,
-                               bottomTrailingRadius: Theme.Радиус.шапка, topTrailingRadius: 0, style: .continuous)
+        UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: радиус,
+                               bottomTrailingRadius: радиус, topTrailingRadius: 0, style: .continuous)
     }
 
     var body: some View {

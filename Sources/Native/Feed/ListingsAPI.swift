@@ -64,7 +64,7 @@ enum ListingsAPI {
         var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.rawValue),     // этап 33; по умолчанию reco
                     URLQueryItem(name: "page", value: String(з.page)),
                     URLQueryItem(name: "per", value: String(з.per))]
-        if !з.cat.isEmpty { поля.append(URLQueryItem(name: "cat", value: з.cat)) }
+        поля.append(contentsOf: Self.параметрыРаздела(з.cat))   // этап 49: «Товары» — cats=, как vs=goods у сайта
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
         поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, ymin, ymax, rooms
@@ -117,6 +117,24 @@ enum ListingsAPI {
 
     static func разобрать(_ данные: Data) throws -> ListingsPage {
         do { return try JSONDecoder().decode(ListingsPage.self, from: данные) } catch { throw Ошибка.разбор }
+    }
+
+    /// MK_VSETS.goods главной (home.html, 26.09.2026): из чего состоит «Товары».
+    static let наборТоваров = ["clothing", "home-garden", "kids", "sport", "hobby", "food-farm", "beauty"]
+
+    /**
+     Раздел ленты → параметры запроса — как _mkApiQS сайта (этап 49). «Товары» главной — не раздел дерева, а набор
+     (mkHomeGo открывает его как vs=goods): у сайта это cats=clothing,home-garden,…; раздела «goods» сервер не знает, и
+     прежний cat=goods давал не ту выдачу. Вакансии — cat=jobs и jkind=vacancy (mkVertical('jobs')). Прочие — cat=.
+     */
+    static func параметрыРаздела(_ раздел: String) -> [URLQueryItem] {
+        guard !раздел.isEmpty else { return [] }
+        if раздел == "goods" {
+            return [URLQueryItem(name: "cats", value: наборТоваров.joined(separator: ","))]
+        }
+        var поля = [URLQueryItem(name: "cat", value: раздел)]
+        if раздел == "jobs" { поля.append(URLQueryItem(name: "jkind", value: "vacancy")) }
+        return поля
     }
 }
 

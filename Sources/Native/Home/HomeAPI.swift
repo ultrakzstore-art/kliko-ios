@@ -40,12 +40,17 @@ struct ОтветГлавной: Decodable, @unchecked Sendable {
     let вип: [Listing]
     /// total — «Показать все объявления N». nil — не пришло.
     let всего: Int?
+    /// Этап 49: jobs.items — ряд «Работа» (mhCardJob сайта); пусто — ряда нет.
+    let вакансии: [ВакансияГлавной]
+    /// Этап 49: jobs.n — число на плитке «Работа» и в заголовке её ряда («N вакансий»); nil — не пришло.
+    let вакансийВсего: Int?
 
     private enum Ключи: String, CodingKey {
         case ok
         case verts
         case vip
         case total
+        case jobs
     }
 
     init(from decoder: Decoder) throws {
@@ -57,6 +62,10 @@ struct ОтветГлавной: Decodable, @unchecked Sendable {
         ok = да
         всего = (try? c.decode(ЧислоГлавной.self, forKey: .total))?.значение
         вип = ((try? c.decode([ТоварГлавной].self, forKey: .vip)) ?? []).compactMap(\.товар)
+        /* Этап 49: вакансии — отдельным блоком jobs{items, n}, как у _mhRow и _mhTiles сайта. Не объект — ряда нет. */
+        let работа = try? c.decode(СырыеВакансии.self, forKey: .jobs)
+        вакансии = работа?.вакансии ?? []
+        вакансийВсего = работа?.всего
         guard да else {
             разделы = [:]
             return
@@ -175,6 +184,91 @@ private struct ТоварГлавной: Decodable {
 
     init(from decoder: Decoder) throws {
         товар = try? Listing(from: decoder)
+    }
+}
+
+/**
+ Вакансия ряда «Работа» главной (этап 49) — поля, которые читает mhCardJob сайта: id, title, salary_min, salary_max,
+ employment (full, part, shift, remote, internship), city, company, top. Своей карточки вакансии у приложения нет —
+ нажатие открывает её на сайте (/?cat=jobs#vac=<id>: сайт сам откроет её лист, mkJobOpen).
+ */
+struct ВакансияГлавной: Identifiable, Hashable, Sendable {
+    let id: String
+    let название: String
+    /// salary_min и salary_max, ₸; 0 — не указана.
+    let зарплатаОт: Int
+    let зарплатаДо: Int
+    let занятость: String
+    let город: String
+    let компания: String
+    /// top — метка «★ ТОП» над названием.
+    let топ: Bool
+}
+
+/// jobs{items, n} как пришёл. Вакансия без id пропускается — её не открыть.
+private struct СырыеВакансии: Decodable {
+    let вакансии: [ВакансияГлавной]
+    let всего: Int?
+
+    private enum Ключи: String, CodingKey {
+        case items
+        case n
+    }
+
+    private struct Одна: Decodable {
+        let вакансия: ВакансияГлавной?
+
+        private struct Ключ: CodingKey {
+            var stringValue: String
+            var intValue: Int? { nil }
+            init(_ s: String) { stringValue = s }
+            init?(stringValue: String) { self.stringValue = stringValue }
+            init?(intValue: Int) { nil }
+        }
+
+        init(from decoder: Decoder) throws {
+            guard let c = try? decoder.container(keyedBy: Ключ.self) else {
+                вакансия = nil
+                return
+            }
+            func строка(_ k: String) -> String {
+                if let s = try? c.decode(String.self, forKey: Ключ(k)) {
+                    return s.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if let n = try? c.decode(Int.self, forKey: Ключ(k)) { return String(n) }
+                return ""
+            }
+            func число(_ k: String) -> Int {
+                if let n = try? c.decode(Int.self, forKey: Ключ(k)) { return n }
+                if let d = try? c.decode(Double.self, forKey: Ключ(k)), d.isFinite, abs(d) < 1e15 { return Int(d) }
+                /* Строка «nan» или «1e40» — не число зарплаты: Int(Double) на них упал бы. */
+                if let s = try? c.decode(String.self, forKey: Ключ(k)),
+                   let d = Double(s.replacingOccurrences(of: " ", with: "")), d.isFinite, abs(d) < 1e15 {
+                    return Int(d)
+                }
+                return 0
+            }
+            func да(_ k: String) -> Bool {
+                if let b = try? c.decode(Bool.self, forKey: Ключ(k)) { return b }
+                if let n = try? c.decode(Int.self, forKey: Ключ(k)) { return n != 0 }
+                if let s = try? c.decode(String.self, forKey: Ключ(k)) { return s == "1" || s.lowercased() == "true" }
+                return false
+            }
+            let номер = строка("id")
+            guard !номер.isEmpty else {
+                вакансия = nil
+                return
+            }
+            вакансия = ВакансияГлавной(id: номер, название: строка("title"), зарплатаОт: max(0, число("salary_min")),
+                                       зарплатаДо: max(0, число("salary_max")), занятость: строка("employment"),
+                                       город: строка("city"), компания: строка("company"), топ: да("top"))
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Ключи.self)
+        вакансии = ((try? c.decode([Одна].self, forKey: .items)) ?? []).compactMap(\.вакансия)
+        всего = (try? c.decode(ЧислоГлавной.self, forKey: .n))?.значение
     }
 }
 

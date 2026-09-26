@@ -16,9 +16,16 @@ import UIKit
  Этап 34 (владелец 25.09.2026): теперь — тем самым одним запросом home=1, разобранным терпимо (Native/Home/HomeAPI.swift),
  с VIP и копией на диске; запросы по разделам остались запасным путём и для выключенного Config.главнаяОдинЗапрос.
 
- Разделы и краски — MK_HOME_V главной, картинки — MK_CATPIC (/img/cat-<раздел>.webp — публичные файлы сайта). «Работа»
- на главной приложения не стоит: её объявления — вакансии другого API (api/jobs.php), нативного экрана для них нет,
- а плитка, уводящая на сайт, среди разделов ленты путала бы. Сайт и сам показывает шесть плиток из семи.
+ Этап 49 (владелец 26.09.2026: «всё одно и то же, просто код разный»): как у сайта сейчас —
+   · разделов семь, вместе с «Работой» (MK_HOME_V): сервер тасует их и рисует первые шесть, скрипт тасует шесть ещё раз
+     при каждом входе на главную (_mhHubShuffle) — поэтому здесь шесть случайных из семи в случайном порядке, заново при
+     каждом возвращении на главную; первые две после баннера — сплошные;
+   · число на плитке — только n ответа (_mhTiles): у «Работы» — jobs.n и «вакансий»; ноль — у сплошной подпись раздела
+     («Вакансии и резюме»), у светлой пусто; пока ответа нет — мерцающая полоска;
+   · слайдов баннера четыре (перенос, продажа, торг, «Деньги ждут у нас»), порядок тасуется раз за загрузку, нажатие
+     открывает лист со сведениями (hpOpen) — кнопки листа ведут на страницы сайта, денег нигде нет;
+   · ряд «Работа» — вакансии jobs.items (mhCardJob), их открывает сайт: своего экрана вакансий у приложения нет;
+   · порядок рядов тасуется при каждой загрузке (mkHomeRender), ширина карточки — (W − 32 − 20) / 2,2, как .mh-rs.
  */
 struct РазделГлавной: Identifiable, Hashable {
     /// Ключ раздела — cat= у api/listings.php и k в снимке главной (FeedSnapshot).
@@ -31,15 +38,41 @@ struct РазделГлавной: Identifiable, Hashable {
     /// Картинка плитки с сайта — MK_CATPIC: /img/cat-<раздел>.webp, 320 px. Малая (-s, 200 px) на экране 3× мылится.
     var картинка: URL? { Config.url("/img/cat-\(ключ).webp?v=1789893153") }
 
-    /// MH_ORDER сайта без «Работы»: transport, realty, electronics, services, goods, animals.
+    /// «Работа»: её объявления — вакансии (api/jobs.php у сайта), нативного экрана для них нет — открывает сайт.
+    var вакансии: Bool { ключ == "jobs" }
+
+    /// Значок раздела в полосе разделов под шапкой (.mk-vchip-ic) — ближайший SF Symbol к SVG сайта.
+    var значок: String {
+        switch ключ {
+        case "transport": return "car"
+        case "realty": return "building.2"
+        case "services": return "wrench.and.screwdriver"
+        case "electronics": return "desktopcomputer"
+        case "goods": return "bag"
+        case "animals": return "pawprint"
+        case "jobs": return "briefcase"
+        default: return "square.grid.2x2"
+        }
+    }
+
+    /// MK_HOME_V сайта целиком, в порядке MH_ORDER (порядок рядов до тасовки): семь разделов вместе с «Работой».
     static let все: [РазделГлавной] = [
         РазделГлавной(ключ: "transport", краска: 0xDC2626),
         РазделГлавной(ключ: "realty", краска: 0x059669),
         РазделГлавной(ключ: "electronics", краска: 0x2563EB),
+        РазделГлавной(ключ: "jobs", краска: 0x4F46E5),
         РазделГлавной(ключ: "services", краска: 0x0D9488),
         РазделГлавной(ключ: "goods", краска: 0xD97706),
         РазделГлавной(ключ: "animals", краска: 0x7C3AED)
     ]
+
+    /// Порядок полосы разделов под шапкой (#mk-vrail): Авто, Недвижимость, Услуги, Электроника, Товары, Животные, Работа.
+    static let полоса: [РазделГлавной] = ["transport", "realty", "services", "electronics", "goods", "animals", "jobs"]
+        .compactMap { ключ in все.first { $0.ключ == ключ } }
+
+    static func с(ключом ключ: String) -> РазделГлавной? {
+        все.first { $0.ключ == ключ }
+    }
 }
 
 /// Ряды «Рекомендуем» и числа на плитках. Живут, пока жива лента: вернулись со страницы сайта — те же ряды.
@@ -51,6 +84,8 @@ final class ПодборкиГлавной: ObservableObject {
     struct Ряд: Identifiable {
         let раздел: РазделГлавной
         let товары: [Listing]
+        /// Этап 49: ряд «Работа» — вакансии вместо объявлений.
+        let вакансии: [ВакансияГлавной]
         /// Всего объявлений в разделе (total, с этапа 34 — verts[раздел].n); nil — сайт не прислал.
         let всего: Int?
         var id: String { раздел.ключ }
@@ -59,16 +94,24 @@ final class ПодборкиГлавной: ObservableObject {
     @Published private(set) var ряды: [Ряд] = []
     /// «N предложений» на плитках — только больше нуля.
     @Published private(set) var счёт: [String: Int] = [:]
+    /// Этап 49: ответ уже был (или не придёт): до него у плиток вместо числа — мерцающая полоска (.mh-tile-n:empty).
+    @Published private(set) var числаГотовы = false
     @Published private(set) var грузим = false
     /// Ни один запрос не прошёл, а показать нечего — строка «Не удалось загрузить подборки» с «Повторить».
     @Published private(set) var неудача = false
     /// Этап 34: vip[] ответа home=1 — блок «VIP-объявления» среди рядов. Пусто — блока нет.
     @Published private(set) var вип: [Listing] = []
-    /// Этап 34: total ответа home=1 (нет его — counts=1) — число на «Показать все объявления». nil — не пришло.
+    /// Этап 34: total ответа home=1 — число на «Показать все объявления». nil — не пришло.
     @Published private(set) var всегоОбъявлений: Int?
     /// Этап 34: на экране главная не для нынешнего запроса — копия с диска или прежнего места, а свежая не пришла:
     /// «Показано, как было в последний раз» с «Повторить» (.mh-stale сайта).
     @Published private(set) var устарело = false
+    /// Этап 49: шесть плиток из семи в случайном порядке (MK_HOME_V сервера и _mhHubShuffle сайта).
+    @Published private(set) var плитки: [РазделГлавной] = ПодборкиГлавной.новыеПлитки()
+    /// Этап 49: названия подразделов у карточек техники (_mxKind: mkCatName раздела) — со страницы сайта, на её языке.
+    @Published private(set) var подразделы: [String: String] = [:]
+    /// Этап 49: слайды баннера в случайном порядке — mhBannerInit тасует их раз за загрузку страницы.
+    let слайды: [БаннерГлавной.Слайд] = БаннерГлавной.слайды.shuffled()
 
     /// Этап 32: пока ряды грузились, их попросили снова (сменили город) — по окончании загрузить ещё раз, уже для него.
     private var ещёРаз = false
@@ -79,18 +122,22 @@ final class ПодборкиГлавной: ObservableObject {
     private var показаноСДиска = false
     /// Этап 34: home=1 в этот запуск ответил не тем видом — дальше по разделам (этап 26), не спрашивая его снова.
     private var одинЗапросНеПонят = false
-    /// Этап 34: порядок рядов — MH_ORDER сайта, перемешанный (mkHomeRender тасует его при каждом показе). Здесь — раз за
-    /// запуск: копия с диска и свежий ответ приходят подряд, и ряды не прыгали бы у человека под пальцем.
-    private let порядок: [РазделГлавной] = РазделГлавной.все.shuffled()
-    /// Этап 34: где среди рядов VIP — у сайта после 1 + floor(random · рядов) рядов; случайная доля — тоже раз за запуск.
-    private let доляВИП = Double.random(in: 0..<1)
-    /// Этап 34: больше карточек в ряду не берём — сайт показывает все, что прислано, это страховка от неожиданно
-    /// длинного ответа.
+    /// Порядок рядов — MH_ORDER, перемешанный: mkHomeRender тасует его при каждой отрисовке. Этап 49: заново при каждой
+    /// загрузке; копия с диска и свежий ответ одной загрузки идут в одном порядке — ряды не прыгают под пальцем дважды.
+    private var порядок: [РазделГлавной] = РазделГлавной.все.shuffled()
+    /// Где среди рядов VIP — у сайта после 1 + floor(random · рядов) рядов; случайная доля — тоже на загрузку.
+    private var доляВИП = Double.random(in: 0..<1)
+    /// Больше карточек в ряду не берём — сайт показывает все, что прислано, это страховка от неожиданно длинного ответа.
     private static let вРяду = 30
 
     init() {
         /* Этап 34 выключен — копия главной прежних запусков больше не нужна. */
         if !Config.главнаяОдинЗапрос { КэшГлавной.стереть() }
+    }
+
+    /// Шесть из семи в случайном порядке.
+    private static func новыеПлитки() -> [РазделГлавной] {
+        Array(РазделГлавной.все.shuffled().prefix(6))
     }
 
     /// После скольких рядов стоит VIP (1…число рядов; у сайта d ≥ рядов — в конец). Рядов нет — 0: VIP сам по себе.
@@ -101,6 +148,12 @@ final class ПодборкиГлавной: ObservableObject {
 
     /// .mh-busy сайта: главная обновляется поверх уже показанной — ряды и VIP притушены.
     var обновляем: Bool { грузим && (!ряды.isEmpty || !вип.isEmpty) }
+
+    /// Этап 49: снова на главной — плитки в новом случайном порядке (_mhHubShuffle при входе на главную). Ряды сайт при
+    /// этом не перерисовывает — они того же места и уже на экране.
+    func перетасовать() {
+        плитки = Self.новыеПлитки()
+    }
 
     /// Первый показ: ряды уже есть — второй раз не просим. Этап 34: на экране копия с диска, а свежую так и не спросили
     /// до конца (лента ушла с экрана посреди запроса, и .task его отменил), — спросить; не пришла по-настоящему
@@ -121,6 +174,8 @@ final class ПодборкиГлавной: ObservableObject {
         defer { грузим = false }
         repeat {
             ещёРаз = false
+            порядок = РазделГлавной.все.shuffled()
+            доляВИП = Double.random(in: 0..<1)
             await загрузитьРаз()
         } while ещёРаз && !Task.isCancelled
     }
@@ -143,7 +198,7 @@ final class ПодборкиГлавной: ObservableObject {
         /* Как _mhCacheGet: на экране не эта главная — сначала копия с диска для того же места, если свежая. */
         if показанныйКлюч != ключ, let сохранённый = await КэшГлавной.прочитатьВФоне(ключ) {
             guard !Task.isCancelled else { return true }
-            показать(сохранённый, числа: nil, ключ: ключ, сДиска: true)
+            показать(сохранённый, ключ: ключ, сДиска: true)
         }
         let куки = await SiteSession.куки()
         let ответ: ОтветГлавной
@@ -162,41 +217,44 @@ final class ПодборкиГлавной: ObservableObject {
             неПришло(ключ)
             return true
         }
-        /* Раздел без n — числа counts=1 (mkLoadCounts), и только «честные»: вся страна или город. Один запрос, по
-           надобности; не пришли — плитка без числа, как у сайта без счёта. */
-        var числа: СчётРазделов? = nil
-        let безЧисла = порядок.contains { раздел in ответ.разделы[раздел.ключ]?.всего == nil }
-        if безЧисла && ГлавнаяAPI.счётЧестный(где) {
-            числа = try? await ГлавнаяAPI.числа(где, куки: куки)
-            guard !Task.isCancelled else { return true }
-        }
-        показать(ответ, числа: числа, ключ: ключ, сДиска: false)
+        показать(ответ, ключ: ключ, сДиска: false)
         await КэшГлавной.сохранитьВФоне(сырое, ключ: ключ)
         return true
     }
 
     /// Ответ home=1 — на экран (mkHomeRender): ряды в перемешанном порядке, пустых разделов нет, ТОП в начале ряда
-    /// вперемешку; числа плиток — n раздела (_mhTiles), нет его — сумма counts=1 по подразделам.
-    private func показать(_ ответ: ОтветГлавной, числа: СчётРазделов?, ключ: String, сДиска: Bool) {
+    /// вперемешку. Этап 49: числа плиток и рядов — только n ответа (_mhTiles, _mhRow): у сайта других нет; у «Работы» —
+    /// jobs{items, n}.
+    private func показать(_ ответ: ОтветГлавной, ключ: String, сДиска: Bool) {
         var новые: [Ряд] = []
         var счётПлиток: [String: Int] = [:]
         for раздел in порядок {
+            if раздел.вакансии {
+                if let всего = ответ.вакансийВсего, всего > 0 { счётПлиток[раздел.ключ] = всего }
+                if !ответ.вакансии.isEmpty {
+                    новые.append(Ряд(раздел: раздел, товары: [], вакансии: Self.вакансииБезПовторов(ответ.вакансии),
+                                     всего: ответ.вакансийВсего))
+                }
+                continue
+            }
             let сРаздела = ответ.разделы[раздел.ключ]
-            let всегоВРазделе: Int? = сРаздела?.всего ?? числа.map { ч in ч.число(раздел.ключ) }
+            let всегоВРазделе = сРаздела?.всего
             if let всегоВРазделе, всегоВРазделе > 0 { счётПлиток[раздел.ключ] = всегоВРазделе }
             if let сРаздела, !сРаздела.товары.isEmpty {
                 let товары = Self.топВперемешку(Self.безПовторов(Array(сРаздела.товары.prefix(Self.вРяду))))
-                новые.append(Ряд(раздел: раздел, товары: товары, всего: всегоВРазделе))
+                новые.append(Ряд(раздел: раздел, товары: товары, вакансии: [], всего: всегоВРазделе))
             }
         }
         ряды = новые
         счёт = счётПлиток
+        числаГотовы = true
         вип = Self.безПовторов(ответ.вип)
-        всегоОбъявлений = ответ.всего ?? числа?.всего
+        всегоОбъявлений = ответ.всего
         показанныйКлюч = ключ
         показаноСДиска = сДиска
         неудача = false
         устарело = false
+        спроситьПодразделы()
     }
 
     /// Свежая главная не пришла (_mhFail): показать нечего — «Не удалось загрузить подборки»; на экране копия с диска или
@@ -205,6 +263,7 @@ final class ПодборкиГлавной: ObservableObject {
         if ряды.isEmpty && вип.isEmpty {
             неудача = true
             устарело = false
+            числаГотовы = true              // _mhTiles(null): у плиток подписи вместо мерцания
         } else {
             устарело = показаноСДиска || показанныйКлюч != ключ
         }
@@ -224,9 +283,39 @@ final class ПодборкиГлавной: ObservableObject {
         return товары.filter { товар in были.insert(товар.id).inserted }
     }
 
+    private static func вакансииБезПовторов(_ вакансии: [ВакансияГлавной]) -> [ВакансияГлавной] {
+        var были = Set<String>()
+        return Array(вакансии.filter { были.insert($0.id).inserted }.prefix(вРяду))
+    }
+
+    /// Этап 49: подпись подраздела у карточек техники (_mxKind — mkCatName раздела объявления) — у загруженной страницы
+    /// сайта, на её языке. Страница ещё не загружена — спросим, когда догрузится (NativeFeedView зовёт снова).
+    func спроситьПодразделы() {
+        var нужны = Set<String>()
+        for ряд in ряды where ряд.раздел.ключ == "electronics" {
+            for товар in ряд.товары {
+                if let раздел = товар.категория, подразделы[раздел] == nil { нужны.insert(раздел) }
+            }
+        }
+        for товар in вип where ВидКарточкиГлавной(товара: товар) == .техника {
+            if let раздел = товар.категория, подразделы[раздел] == nil { нужны.insert(раздел) }
+        }
+        guard !нужны.isEmpty else { return }
+        let список = Array(нужны)
+        Task { @MainActor [weak self] in
+            let имена = await SiteSession.названияРазделов(список)
+            guard let self, !имена.isEmpty else { return }
+            /* Имя, совпадающее с ключом, сайт не показывает (r !== n в _mxKind). */
+            var годные: [String: String] = [:]
+            for (раздел, имя) in имена where имя != раздел { годные[раздел] = имя }
+            self.подразделы.merge(годные) { _, новое in новое }
+        }
+    }
+
     // MARK: - По разделам (этап 26)
 
-    /// Ряды запросами по разделам — как на этапе 26: без рубильника этапа 34, с районом и когда home=1 не понят.
+    /// Ряды запросами по разделам — как на этапе 26: без рубильника этапа 34 и когда home=1 не понят. Вакансий так не
+    /// взять — у них другой ответ (jobs), ряда «Работа» тогда нет.
     private func загрузитьПоРазделам(_ где: ГдеИскать) async {
         let куки = await SiteSession.куки()
         let ответы = await Self.запросить(куки: куки, где: где)
@@ -235,32 +324,36 @@ final class ПодборкиГлавной: ObservableObject {
             неудача = ряды.isEmpty && вип.isEmpty
             /* Этап 34: на экране осталась копия главной с диска — сказать, что она не свежая. */
             устарело = показаноСДиска && !неудача
+            if неудача { числаГотовы = true }
             return
         }
         var новые: [Ряд] = []
         var числа: [String: Int] = [:]
-        for раздел in РазделГлавной.все {
+        for раздел in порядок where !раздел.вакансии {
             guard let страница = ответы[раздел.ключ] else { continue }
             if let всего = страница.total, всего > 0 { числа[раздел.ключ] = всего }
             if !страница.items.isEmpty {
-                новые.append(Ряд(раздел: раздел, товары: Array(страница.items.prefix(10)), всего: страница.total))
+                новые.append(Ряд(раздел: раздел, товары: Array(страница.items.prefix(10)), вакансии: [],
+                                 всего: страница.total))
             }
         }
         неудача = false
         ряды = новые
         счёт = числа
+        числаГотовы = true
         /* Этап 34: по разделам VIP и total не приходят, и это уже не главная home=1 — ни её места, ни «как было». */
         вип = []
         всегоОбъявлений = nil
         показанныйКлюч = nil
         показаноСДиска = false
         устарело = false
+        спроситьПодразделы()
     }
 
     /// Первая страница каждого раздела: api/listings.php?cat=<раздел>&per=10 (и город этапа 32) с куками, взятыми один раз.
     nonisolated private static func запросить(куки: [String: String], где: ГдеИскать) async -> [String: ListingsPage] {
         await withTaskGroup(of: ОтветРяда.self, returning: [String: ListingsPage].self) { группа in
-            for раздел in РазделГлавной.все {
+            for раздел in РазделГлавной.все where раздел.ключ != "jobs" {
                 let ключ = раздел.ключ
                 группа.addTask {
                     var з = ListingsAPI.Запрос()
@@ -291,11 +384,15 @@ private struct ОтветРяда: @unchecked Sendable {
 /**
  Сетка главной на телефоне (@media max-width:599px): баннер — две верхние строки слева, справа две плитки «потяжелее»
  (is-prio, сплошная краска), ниже две строки по две светлые плитки. Высота верхних строк — clamp(86px, …, 118px),
- нижних — 88px, зазор — --vx-gap (10px).
+ нижних — 88px, зазор — --vx-gap (10px). Этап 49: плитки — шесть из семи в порядке, который дала ПодборкиГлавной.
  */
 struct ПлиткиГлавной: View {
+    let разделы: [РазделГлавной]
+    let слайды: [БаннерГлавной.Слайд]
     let название: (РазделГлавной) -> String
     let счёт: [String: Int]
+    /// Ответ главной уже был — до него вместо чисел мерцание.
+    let готово: Bool
     let выбрать: (РазделГлавной) -> Void
     let открыть: (URL) -> Void
 
@@ -303,10 +400,13 @@ struct ПлиткиГлавной: View {
     private static let низ: CGFloat = 88
     private static let зазор: CGFloat = 10
 
-    init(название: @escaping (РазделГлавной) -> String, счёт: [String: Int],
-         выбрать: @escaping (РазделГлавной) -> Void, открыть: @escaping (URL) -> Void) {
+    init(разделы: [РазделГлавной], слайды: [БаннерГлавной.Слайд], название: @escaping (РазделГлавной) -> String,
+         счёт: [String: Int], готово: Bool, выбрать: @escaping (РазделГлавной) -> Void, открыть: @escaping (URL) -> Void) {
+        self.разделы = разделы
+        self.слайды = слайды
         self.название = название
         self.счёт = счёт
+        self.готово = готово
         self.выбрать = выбрать
         self.открыть = открыть
     }
@@ -314,7 +414,7 @@ struct ПлиткиГлавной: View {
     var body: some View {
         VStack(spacing: Self.зазор) {
             HStack(spacing: Self.зазор) {
-                БаннерГлавной(открыть: открыть)
+                БаннерГлавной(слайды: слайды, открыть: открыть)
                     .frame(maxWidth: .infinity)
                     .frame(height: Self.верх * 2 + Self.зазор)
                 VStack(spacing: Self.зазор) {
@@ -339,11 +439,15 @@ struct ПлиткиГлавной: View {
 
     @ViewBuilder
     private func плитка(_ номер: Int, сплошная: Bool, высота: CGFloat) -> some View {
-        if номер < РазделГлавной.все.count {
-            let раздел = РазделГлавной.все[номер]
-            ПлиткаРаздела(раздел: раздел, название: название(раздел), счёт: счёт[раздел.ключ], сплошная: сплошная,
-                          высота: высота, действие: { выбрать(раздел) })
+        if номер < разделы.count {
+            let раздел = разделы[номер]
+            ПлиткаРаздела(раздел: раздел, название: название(раздел), счёт: счёт[раздел.ключ], готово: готово,
+                          сплошная: сплошная, высота: высота, действие: { выбрать(раздел) })
                 .frame(maxWidth: .infinity)
+        } else {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: высота)
         }
     }
 }
@@ -353,17 +457,20 @@ struct ПлиткаРаздела: View {
     let раздел: РазделГлавной
     let название: String
     let счёт: Int?
+    /// Этап 49: ответ главной был — число или подпись; нет — мерцающая полоска (.mh-tile-n:empty).
+    let готово: Bool
     /// is-prio / is-solid — залита краской раздела, текст белый.
     let сплошная: Bool
     let высота: CGFloat
     let действие: () -> Void
     @Environment(\.colorScheme) private var схема
 
-    init(раздел: РазделГлавной, название: String, счёт: Int?, сплошная: Bool, высота: CGFloat,
+    init(раздел: РазделГлавной, название: String, счёт: Int?, готово: Bool, сплошная: Bool, высота: CGFloat,
          действие: @escaping () -> Void) {
         self.раздел = раздел
         self.название = название
         self.счёт = счёт
+        self.готово = готово
         self.сплошная = сплошная
         self.высота = высота
         self.действие = действие
@@ -375,7 +482,8 @@ struct ПлиткаРаздела: View {
                 LinearGradient(stops: остановки, startPoint: UnitPoint(x: 0.25, y: 0), endPoint: UnitPoint(x: 0.75, y: 1))
                 /* ::after — круг 104 px за правым нижним краем: 10 % краски (в тёмной 16 %), у сплошной — белый 14 %. */
                 Circle()
-                    .fill(сплошная ? Color.white.opacity(0.14) : Color(uiColor: краска).opacity(тёмная ? 0.16 : 0.1))
+                    .fill(сплошная ? Color.white.opacity(тёмная ? 0.12 : 0.14)
+                                   : Color(uiColor: краска).opacity(тёмная ? 0.16 : 0.1))
                     .frame(width: 104, height: 104)
                     .offset(x: 22, y: 30)
                 /* Владелец 25.09.2026, проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — WebP плитки
@@ -409,6 +517,7 @@ struct ПлиткаРаздела: View {
         .buttonStyle(НажатиеСайта())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(голос)
+        .accessibilityHint(раздел.вакансии ? DesignText.т("on_site") : "")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -419,16 +528,36 @@ struct ПлиткаРаздела: View {
                 .foregroundStyle(сплошная ? Color.white : Theme.текст)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
-            if let счёт, счёт > 0 {
-                Text(DesignText.предложений(счёт))
-                    .font(.system(.caption2, weight: .bold))
-                    .foregroundStyle(цветСчёта)
-                    .lineLimit(1)
-            }
+            строкаЧисла
         }
         .padding(.leading, сплошная ? 14 : 12)
         .padding(.trailing, сплошная ? 14 : 58)          // has-pic: у светлой плитки название не заходит на картинку
         .padding(.vertical, сплошная ? 12 : 10)
+    }
+
+    /// .mh-tile-n: число — «N предложений» (у «Работы» — «N вакансий»); ноль — у сплошной подпись раздела (is-sub), у
+    /// светлой ничего; ответа ещё не было — мерцающая полоска 58 % ширины.
+    @ViewBuilder
+    private var строкаЧисла: some View {
+        if !готово {
+            GeometryReader { место in
+                МерцаниеСайта(радиус: Theme.Радиус.xxs)
+                    .frame(width: место.size.width * 0.58, height: 14)
+            }
+            .frame(height: 16)
+            .padding(.top, 1)
+        } else if let счёт, счёт > 0 {
+            Text(раздел.вакансии ? DesignText.вакансий(счёт) : DesignText.предложений(счёт))
+                .font(.system(size: сплошная ? 12 : 11, weight: .bold))
+                .foregroundStyle(цветСчёта)
+                .lineLimit(1)
+        } else if сплошная {
+            Text(DesignText.т("sub_" + раздел.ключ))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.86))
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
+        }
     }
 
     private var тёмная: Bool { схема == .dark }
@@ -466,39 +595,57 @@ struct ПлиткаРаздела: View {
 
     private var голос: String {
         guard let счёт, счёт > 0 else { return название }
-        return название + ", " + DesignText.предложений(счёт)
+        return название + ", " + (раздел.вакансии ? DesignText.вакансий(счёт) : DesignText.предложений(счёт))
     }
 }
 
-/// Баннер Kliko (.mh-bn): слайды сменяются наплывом раз в 6 с (MH_BN_EVERY), точки справа внизу.
-///
-/// Из четырёх слайдов сайта взяты два, у которых есть своя страница: «Перенесём ваши объявления» (/cabinet) и «Продавайте
-/// на Kliko» (/cabinet?add=1) — ссылки .mh-bn-s главной. «Торгуйтесь» и «Деньги ждут у нас» на сайте открывают окно
-/// внутри страницы (hpOpen) без адреса; кнопка, которая никуда не ведёт, хуже её отсутствия.
+// MARK: - Баннер (.mh-bn)
+
+/**
+ Баннер Kliko (.mh-bn): слайды сменяются наплывом раз в 6 с (MH_BN_EVERY), точки справа внизу.
+
+ Этап 49: слайдов четыре, как у сайта — «Перенесём ваши объявления» (#2563EB), «Продавайте на Kliko» (#0F7A44),
+ «Торгуйтесь по-настоящему» (#D97706) и «Деньги ждут у нас» (#7C3AED); порядок тасует ПодборкиГлавной раз за жизнь ленты
+ (mhBannerInit — раз за загрузку страницы). Нажатие — лист со сведениями, как hpOpen сайта (ЛистСлайдаГлавной); точка —
+ этот слайд и пауза на две смены (mhBannerGo). При «Уменьшении движения» слайды не листаются сами.
+ */
 struct БаннерГлавной: View {
-    struct Слайд: Identifiable {
+    struct Слайд: Identifiable, Hashable {
+        /// data-k слайда: import, sell, bid, escrow — ключ текстов «bn_<k>_*» и «hp_<k>_*».
         let id: String
+        /// --bc слайда.
         let краска: UInt32
+        /// .mh-bn-ic — ближайший SF Symbol к SVG сайта.
         let значок: String
-        let путь: String
     }
 
+    /// Слайды .mh-bn главной в порядке разметки.
     static let слайды: [Слайд] = [
-        Слайд(id: "import", краска: 0x2563EB, значок: "square.and.arrow.down.on.square", путь: "/cabinet"),
-        Слайд(id: "sell", краска: 0x0F7A44, значок: "tag", путь: "/cabinet?add=1")
+        Слайд(id: "import", краска: 0x2563EB, значок: "tray.and.arrow.down"),
+        Слайд(id: "sell", краска: 0x0F7A44, значок: "storefront"),
+        Слайд(id: "bid", краска: 0xD97706, значок: "text.bubble"),
+        Слайд(id: "escrow", краска: 0x7C3AED, значок: "checkmark.shield")
     ]
 
+    let слайды: [Слайд]
     let открыть: (URL) -> Void
     @State private var номер = 0
+    /// Точку нажали — до этого времени слайд не меняется сам (mhBannerGo: 2 × MH_BN_EVERY).
+    @State private var держатьДо = Date.distantPast
+    /// Открытый лист слайда.
+    @State private var открытый: Слайд? = nil
+    /// Кнопка листа ведёт на страницу сайта — открыть, когда лист уже закрылся (иначе он остался бы над страницей).
+    @State private var послеЗакрытия: URL? = nil
     @Environment(\.accessibilityReduceMotion) private var безДвижения
 
-    init(открыть: @escaping (URL) -> Void) {
+    init(слайды: [Слайд], открыть: @escaping (URL) -> Void) {
+        self.слайды = слайды
         self.открыть = открыть
     }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            ForEach(Array(Self.слайды.enumerated()), id: \.element.id) { индекс, слайд in
+            ForEach(Array(слайды.enumerated()), id: \.element.id) { индекс, слайд in
                 слайдВид(слайд)
                     .opacity(индекс == номер ? 1 : 0)
                     .allowsHitTesting(индекс == номер)
@@ -514,10 +661,20 @@ struct БаннерГлавной: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 6_000_000_000)
                 if Task.isCancelled { break }
-                if !безДвижения && Self.слайды.count > 1 {
-                    withAnimation(.easeInOut(duration: 0.45)) { номер = (номер + 1) % Self.слайды.count }
+                if !безДвижения && слайды.count > 1 && Date() >= держатьДо && открытый == nil {
+                    withAnimation(.easeInOut(duration: 0.45)) { номер = (номер + 1) % слайды.count }
                 }
             }
+        }
+        .sheet(item: $открытый, onDismiss: {
+            guard let адрес = послеЗакрытия else { return }
+            послеЗакрытия = nil
+            открыть(адрес)
+        }) { слайд in
+            ЛистСлайдаГлавной(слайд: слайд, перейти: { путь in
+                послеЗакрытия = Config.url(путь)
+                открытый = nil
+            }, закрыть: { открытый = nil })
         }
     }
 
@@ -526,7 +683,7 @@ struct БаннерГлавной: View {
         let заголовок = DesignText.т("bn_\(слайд.id)_t")
         let подпись = DesignText.т("bn_\(слайд.id)_s")
         return Button {
-            if let u = Config.url(слайд.путь) { открыть(u) }
+            открытый = слайд
         } label: {
             ZStack(alignment: .bottomLeading) {
                 LinearGradient(colors: [Color(uiColor: краска), Color(uiColor: Theme.смесь(краска, Theme.hex(0x0B1A12), 0.62))],
@@ -550,6 +707,8 @@ struct БаннерГлавной: View {
                         .minimumScaleFactor(0.85)
                     HStack(spacing: 4) {
                         Text(DesignText.т("bn_\(слайд.id)_b"))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .heavy))
                     }
@@ -574,9 +733,10 @@ struct БаннерГлавной: View {
     /// .mh-bn-d: выбранная — полоска 18×6 белая, прочие — точки 6×6 белые 42 %.
     private var точки: some View {
         HStack(spacing: 6) {
-            ForEach(Array(Self.слайды.enumerated()), id: \.element.id) { индекс, слайд in
+            ForEach(Array(слайды.enumerated()), id: \.element.id) { индекс, слайд in
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) { номер = индекс }
+                    держатьДо = Date().addingTimeInterval(12)
                 } label: {
                     Capsule()
                         .fill(индекс == номер ? Color.white : Color.white.opacity(0.42))
@@ -594,6 +754,246 @@ struct БаннерГлавной: View {
     }
 }
 
+/**
+ Лист слайда — .hp-ov сайта (hpOpen): квадрат со значком цветом слайда, заголовок и подзаголовок, пункты со значками,
+ блок «Kliko AI соберёт объявление за вас» и кнопка. Тексты — .hp-p главной; у «Деньги ждут у нас» сайт показывает тот же
+ лист, что у «Продавайте на Kliko», только фиолетовый, — так и здесь. Кнопки: перенос — «Начать перенос»
+ (/cabinet?go=aiimport), продажа — «Регистрация продавца через eGov» (/cabinet?go=egov), торг — «Понятно». 🔴 Денег здесь
+ нет: «Подкрепить деньгами?» у торга — картинка-пример (.hp-ofc, pointer-events: none), не кнопка.
+ */
+struct ЛистСлайдаГлавной: View {
+    let слайд: БаннерГлавной.Слайд
+    /// Путь страницы сайта для кнопки листа.
+    let перейти: (String) -> Void
+    let закрыть: () -> Void
+    @Environment(\.colorScheme) private var схема
+
+    init(слайд: БаннерГлавной.Слайд, перейти: @escaping (String) -> Void, закрыть: @escaping () -> Void) {
+        self.слайд = слайд
+        self.перейти = перейти
+        self.закрыть = закрыть
+    }
+
+    private struct Пункт: Identifiable {
+        let id: Int
+        let значок: String
+        let ключ: String
+    }
+
+    /// Чьи тексты: у «Деньги ждут у нас» — продажи.
+    private var тексты: String { слайд.id == "escrow" ? "sell" : слайд.id }
+
+    private var пункты: [Пункт] {
+        switch тексты {
+        case "import":
+            return [Пункт(id: 1, значок: "tray.and.arrow.down", ключ: "hp_import_1"),
+                    Пункт(id: 2, значок: "list.bullet.rectangle", ключ: "hp_import_2"),
+                    Пункт(id: 3, значок: "checkmark", ключ: "hp_import_3")]
+        case "bid":
+            return [Пункт(id: 1, значок: "bubble.left", ключ: "hp_bid_1"),
+                    Пункт(id: 2, значок: "checkmark.shield", ключ: "hp_bid_2"),
+                    Пункт(id: 3, значок: "banknote", ключ: "hp_bid_3")]
+        default:
+            return [Пункт(id: 1, значок: "banknote", ключ: "hp_sell_1"),
+                    Пункт(id: 2, значок: "checkmark.shield", ключ: "hp_sell_2"),
+                    Пункт(id: 3, значок: "bubble.left", ключ: "hp_sell_3"),
+                    Пункт(id: 4, значок: "checkmark.circle", ключ: "hp_sell_4")]
+        }
+    }
+
+    private var краска: UIColor { Theme.hex(слайд.краска) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                шапка
+                    .padding(.bottom, 16)
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(пункты) { пункт in
+                        строка(пункт)
+                    }
+                }
+                .padding(.bottom, 16)
+                if тексты != "bid" {
+                    блокAI
+                        .padding(.bottom, 16)
+                }
+                кнопка
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 20)
+        }
+        .overlay(alignment: .topTrailing) {
+            Button(action: закрыть) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.поверхность2, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(12)
+            .accessibilityLabel(DesignText.т("close"))
+        }
+        .background(Theme.поверхность)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// .hp-hd: квадрат 56 со значком (140°: краска → краска 68 % к почти чёрному), заголовок 21/800, подзаголовок серым.
+    private var шапка: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: слайд.значок)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 56, height: 56)
+                .background(LinearGradient(colors: [Color(uiColor: краска),
+                                                    Color(uiColor: Theme.смесь(краска, Theme.hex(0x0B1A12), 0.68))],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .padding(.bottom, 6)
+                .accessibilityHidden(true)
+            Text(DesignText.т("hp_\(тексты)_t"))
+                .font(.system(.title2, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .padding(.trailing, 36)
+                .accessibilityAddTraits(.isHeader)
+            Text(DesignText.т("hp_\(тексты)_s"))
+                .font(.subheadline)
+                .foregroundStyle(Theme.текстВторой)
+        }
+    }
+
+    /// .hp-l li: значок в квадрате 36 (краска 20 % к поверхности, рамка краски 30 %), жирная строка и серая подпись.
+    private func строка(_ пункт: Пункт) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: пункт.значок)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(uiColor: краска))
+                .frame(width: 36, height: 36)
+                .background(Color(uiColor: смесьСПоверхностью(0.2)),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(Color(uiColor: краска).opacity(0.3), lineWidth: 1)
+                }
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(DesignText.т(пункт.ключ))
+                    .font(.system(.subheadline, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                Text(DesignText.т(пункт.ключ + "s"))
+                    .font(.caption)
+                    .foregroundStyle(Theme.текстВторой)
+                if пункт.ключ == "hp_bid_3" {
+                    примерПредложения
+                        .padding(.top, 8)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// .hp-ofc — картинка-пример «Ваше предложение · 150 000 ₸ · Подкрепить деньгами?»; не нажимается.
+    private var примерПредложения: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(DesignText.т("hp_bid_card_h").uppercased())
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(0.4)
+                .foregroundStyle(Theme.текстВторой)
+            Text("150\u{00A0}000\u{00A0}₸")
+                .font(.system(size: 19, weight: .black))
+                .foregroundStyle(Theme.текст)
+            Text(DesignText.т("hp_bid_card_b"))
+                .font(.system(.caption, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .background(Theme.зелёный2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .padding(.top, 4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 250, alignment: .leading)
+        .background(Theme.поверхность2,
+                    in: UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.md, bottomLeadingRadius: Theme.Радиус.md,
+                                               bottomTrailingRadius: Theme.Радиус.xxs, topTrailingRadius: Theme.Радиус.md,
+                                               style: .continuous))
+        .overlay {
+            UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.md, bottomLeadingRadius: Theme.Радиус.md,
+                                   bottomTrailingRadius: Theme.Радиус.xxs, topTrailingRadius: Theme.Радиус.md,
+                                   style: .continuous)
+                .stroke(Theme.линия, lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// .hp-ai: «Kliko AI соберёт объявление за вас» — квадрат 38 краски с искрами, подложка краски 13 % к surf2.
+    private var блокAI: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 38, height: 38)
+                .background(Color(uiColor: краска), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(DesignText.т("hp_ai_t"))
+                    .font(.system(.subheadline, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                Text(DesignText.т("hp_ai_s"))
+                    .font(.caption)
+                    .foregroundStyle(Theme.текстВторой)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(LinearGradient(colors: [Color(uiColor: смесьСПоверхностью(0.13)), Theme.поверхность2],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Color(uiColor: краска).opacity(0.2), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// .hp-go: 54 pt, скругление 14, градиент краски, белый текст.
+    private var кнопка: some View {
+        Button {
+            switch тексты {
+            case "import": перейти("/cabinet?go=aiimport")
+            case "sell": перейти("/cabinet?go=egov")
+            default: закрыть()
+            }
+        } label: {
+            Text(DesignText.т("hp_\(тексты)_go"))
+                .font(.system(.subheadline, weight: .bold))
+                .foregroundStyle(Color.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(LinearGradient(colors: [Color(uiColor: краска),
+                                                    Color(uiColor: Theme.смесь(краска, Theme.hex(0x0B1A12), 0.72))],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        }
+        .buttonStyle(НажатиеСайта())
+    }
+
+    /// color-mix(in srgb, var(--bc) доля, var(--mk-surf)) — поверхность своей темы.
+    private func смесьСПоверхностью(_ доля: CGFloat) -> UIColor {
+        let база = краска
+        return UIColor { признаки in
+            Theme.смесь(база, признаки.userInterfaceStyle == .dark ? Theme.hex(0x16161F) : UIColor.white, доля)
+        }
+    }
+}
+
 // MARK: - Ряд раздела (.mh-row)
 
 /**
@@ -604,23 +1004,24 @@ struct БаннерГлавной: View {
 struct РядГлавной<Карточка: View>: View {
     let раздел: РазделГлавной
     let название: String
-    let товары: [Listing]
+    /// Сколько карточек в ряду — от него «Смотреть все» (i > items.length у сайта).
+    let показано: Int
     let всего: Int?
     /// Второй, четвёртый… ряд — .mh-row:nth-of-type(2n).
     let чётный: Bool
     let всё: () -> Void
-    let карточка: (Listing) -> Карточка
+    let карточки: Карточка
     @Environment(\.colorScheme) private var схема
 
-    init(раздел: РазделГлавной, название: String, товары: [Listing], всего: Int?, чётный: Bool,
-         всё: @escaping () -> Void, @ViewBuilder карточка: @escaping (Listing) -> Карточка) {
+    init(раздел: РазделГлавной, название: String, показано: Int, всего: Int?, чётный: Bool,
+         всё: @escaping () -> Void, @ViewBuilder карточки: () -> Карточка) {
         self.раздел = раздел
         self.название = название
-        self.товары = товары
+        self.показано = показано
         self.всего = всего
         self.чётный = чётный
         self.всё = всё
-        self.карточка = карточка
+        self.карточки = карточки()
     }
 
     var body: some View {
@@ -629,13 +1030,10 @@ struct РядГлавной<Карточка: View>: View {
                 .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 10) {
-                    ForEach(товары) { товар in
-                        карточка(товар)
-                            .containerRelativeFrame(.horizontal) { длина, _ in Self.ширина(длина) }
-                    }
-                    if let всего, всего > товары.count {
+                    карточки
+                    if let всего, всего > показано {
                         конецРяда(всего)
-                            .containerRelativeFrame(.horizontal) { длина, _ in Self.ширина(длина) }
+                            .containerRelativeFrame(.horizontal) { длина, _ in ШиринаКарточкиРяда.для(длина) }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -649,11 +1047,6 @@ struct РядГлавной<Карточка: View>: View {
         .padding(.top, 12)
         .padding(.bottom, 4)
         .background(полоса)
-    }
-
-    /// grid-auto-columns: calc((100% - 2 * gap) / 2.2) — две карточки и край третьей; на широком экране не шире 220.
-    private static func ширина(_ длина: CGFloat) -> CGFloat {
-        min(220, max(120, (длина - 20) / 2.2))
     }
 
     private var заголовок: some View {
@@ -671,7 +1064,7 @@ struct РядГлавной<Карточка: View>: View {
                 Text(DesignText.число(всего))
                     .font(.system(.caption, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
-                    .accessibilityLabel(DesignText.предложений(всего))
+                    .accessibilityLabel(числоСловом(всего))
             }
             Spacer(minLength: 8)
             Button(action: всё) {
@@ -687,7 +1080,13 @@ struct РядГлавной<Карточка: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(DesignText.т("row_all") + ": " + название)
+            .accessibilityHint(раздел.вакансии ? DesignText.т("on_site") : "")
         }
+    }
+
+    /// «26 предложений», у «Работы» — «3 вакансии» (_mhCount(n, jobs)).
+    private func числоСловом(_ n: Int) -> String {
+        раздел.вакансии ? DesignText.вакансий(n) : DesignText.предложений(n)
     }
 
     /// .mh-rend: плитка с кружком-стрелкой краски раздела, «Смотреть все» и числом — ведёт туда же, куда «Все».
@@ -702,7 +1101,7 @@ struct РядГлавной<Карточка: View>: View {
                 Text(DesignText.т("see_all"))
                     .font(.system(.subheadline, weight: .bold))
                     .foregroundStyle(цветСсылки)
-                Text(DesignText.предложений(всего))
+                Text(числоСловом(всего))
                     .font(.system(.caption, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
             }
@@ -714,7 +1113,7 @@ struct РядГлавной<Карточка: View>: View {
         }
         .buttonStyle(НажатиеСайта())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(DesignText.т("see_all") + ": " + название + ", " + DesignText.предложений(всего))
+        .accessibilityLabel(DesignText.т("see_all") + ": " + название + ", " + числоСловом(всего))
         .accessibilityAddTraits(.isButton)
     }
 
@@ -750,6 +1149,20 @@ struct РядГлавной<Карточка: View>: View {
                                          center: .topLeading, startRadius: 0, endRadius: 280))
             }
             .accessibilityHidden(true)
+    }
+}
+
+/**
+ Ширина карточки ряда — grid-auto-columns .mh-rs: на телефоне (100 % − 2 зазора) / 2,2 от ширины ряда без полей 16 — две
+ карточки и край третьей (155 pt на 393-pt экране); от 600 pt — / 3,3, от 960 — пять в ряд. Отдельно от РядГлавной: он
+ обобщённый, а ширина нужна и тому, кто кладёт в него карточки (и заготовке рядов).
+ */
+enum ШиринаКарточкиРяда {
+    static func для(_ длина: CGFloat) -> CGFloat {
+        let поле = max(0, длина - 32)
+        if длина >= 960 { return (поле - 40) / 5 }
+        if длина >= 600 { return (поле - 30) / 3.3 }
+        return max(120, (поле - 20) / 2.2)
     }
 }
 

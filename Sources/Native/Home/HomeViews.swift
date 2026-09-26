@@ -26,7 +26,8 @@ struct БлокВИП<Карточка: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             заголовок
-            LazyVGrid(columns: колонки, spacing: 12) {
+            /* Между строками — тот же зазор, что между колонками (.mh-vipg: gap var(--vx-gap)). */
+            LazyVGrid(columns: колонки, spacing: колонки.first?.spacing ?? 12) {
                 ForEach(товары) { товар in
                     карточка(товар)
                 }
@@ -113,8 +114,8 @@ struct СтрокаУстаревшейГлавной: View {
     }
 }
 
-/// «Показать все объявления» с total (.mh-all): у сайта она уводит с главной на всю ленту (mkHomeAll), у приложения
-/// вся лента — прямо под главной, и кнопка листает к ней.
+/// «Показать все объявления» с total (.mh-all): уводит с главной на всю ленту (mkHomeAll сайта; этап 49 — и у приложения:
+/// FeedModel.показатьВсе).
 struct КнопкаВсехОбъявлений: View {
     /// total ответа home=1; nil или 0 — без плашки, как .mh-all b:empty.
     let всего: Int?

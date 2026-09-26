@@ -61,12 +61,13 @@ struct FavoritesView: View {
                     VStack(spacing: 16) {
                         /* Этап 30: заголовок ряда, как «• Раздел N» главной сайта: точка-сердце и число. */
                         if Config.дизайнКакНаСайте { заголовокСайта }
-                        LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: 12) {
+                        /* Этап 49: зазор и поля — как у сетки ленты (у сайта избранное — та же сетка витрины). */
+                        LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: ListingCard.зазор) {
                             ForEach(избранное.товары) { товар in
                                 карточка(товар)
                             }
                         }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, ListingCard.поле)
                         Text(FavoritesText.т(подписьХранения))
                             .font(.caption)
                             .foregroundStyle(Config.дизайнКакНаСайте ? Theme.текстВторой : Color.secondary)
@@ -184,6 +185,7 @@ struct FavoritesView: View {
             }
             .buttonStyle(.plain)
             .сердечкоИзбранного(товар)
+            .поделитьсяНаКарточке(товар)        // этап 49: «Поделиться» под сердцем — карточка та же, что в ленте
         }
     }
 

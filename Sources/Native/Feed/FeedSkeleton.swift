@@ -38,14 +38,15 @@ struct СкелетЛенты: View {
     }
 
     private func сетка(_ прозрачность: Double) -> some View {
-        LazyVGrid(columns: колонки, spacing: 12) {
+        /* Зазор и поля — те же, что у сетки ленты (этап 49: у вида сайта 14 и 16), иначе карточки прыгнут при ответе. */
+        LazyVGrid(columns: колонки, spacing: ListingCard.зазор) {
             ForEach(Self.объявления) { товар in
                 ListingCard(товар: товар)
             }
         }
         .redacted(reason: .placeholder)
         .opacity(прозрачность)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, ListingCard.поле)
     }
 
     /// Прозрачность от 0,6 до 1 и обратно за 1,6 с — мягко, без вспышек.
