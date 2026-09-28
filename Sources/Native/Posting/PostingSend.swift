@@ -279,18 +279,22 @@ extension ПодачаМодель {
         распознаём = true
         шагРаспознавания = 1
         статусИИ = nil
+        номерРаспознавания += 1
+        let мой = номерРаспознавания
         let тело: [String: Any] = ["mode": "add", "image_urls": адреса, "hint": форма.подсказка, "cat": форма.раздел,
                                    "atype": форма.тип, "entry": форма.плитка, "also_sell": форма.тожеПродаю, "paid": 0]
         Task { @MainActor in
             let шаги = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 600_000_000)
-                guard let модель = self, модель.распознаём else { return }
+                guard let модель = self, модель.распознаём, мой == модель.номерРаспознавания else { return }
                 модель.шагРаспознавания = 2
             }
             let итог = await self.сПределом(55) {
                 try await МоиОбъявленияAPI.отправить("cabinet.php?action=recognize", тело: тело)
             }
             шаги.cancel()
+            /* «Заполнить вручную» (airecManual сайта): запуск отменён — ответ никуда не ложится. */
+            guard мой == self.номерРаспознавания else { return }
             switch итог {
             case .ответ(let j):
                 self.разобратьРаспознавание(j)
@@ -301,6 +305,14 @@ extension ПодачаМодель {
             }
             if self.шагРаспознавания < 4 { self.распознаём = false }
         }
+    }
+
+    /// «Заполнить вручную» в окне распознавания (airecManual): окно прочь, запуск забыт, с «Фото» — дальше.
+    func отменитьРаспознавание() {
+        номерРаспознавания += 1
+        распознаём = false
+        шагРаспознавания = 0
+        if шаг == .фото { далее() }
     }
 
     enum ИтогЗапроса {
@@ -388,9 +400,10 @@ extension ПодачаМодель {
             }
             шагРаспознавания = 4
             заполненоИИ = true
+            let мой = номерРаспознавания
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 900_000_000)
-                guard let модель = self else { return }
+                guard let модель = self, мой == модель.номерРаспознавания else { return }
                 модель.распознаём = false
                 модель.статусИИ = модель.т("airec_done_l")
                 if модель.шаг == .фото { модель.далее() }

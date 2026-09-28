@@ -375,10 +375,10 @@ struct ВыборСегментом: View {
             }
         }
         .padding(3)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+                .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
         }
     }
 
@@ -394,7 +394,7 @@ struct ВыборСегментом: View {
         } label: {
             Text(в.подпись)
                 .font(.system(size: 14, weight: выбран ? Font.Weight.bold : Font.Weight.semibold))
-                .foregroundStyle(выбран ? Theme.акцент : Theme.текст)
+                .foregroundStyle(выбран ? КраскаПодачи.акцентТекст : КраскаПодачи.текст)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .padding(.horizontal, 4)
@@ -416,7 +416,8 @@ struct ВыборСегментом: View {
     }
 }
 
-/// Меню для средних списков (5–15 вариантов): «— не указано —», варианты с галочкой, «Другое (вписать)…».
+/// Меню для средних списков (select.inp на --card со стрелкой вниз): «— не указано —», варианты с галочкой,
+/// «Другое (вписать)…».
 struct МенюВыбора: View {
     let варианты: [ВариантПоля]
     @Binding var значение: String
@@ -457,20 +458,20 @@ struct МенюВыбора: View {
             HStack(spacing: 8) {
                 Text(показ.isEmpty ? подсказка : показ)
                     .font(.system(size: 16))
-                    .foregroundStyle(показ.isEmpty ? Theme.текстВторой : Theme.текст)
+                    .foregroundStyle(показ.isEmpty ? Theme.текстВторой : КраскаПодачи.текст)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
             .frame(minHeight: 46)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
             }
             .contentShape(Rectangle())
         }
@@ -485,7 +486,7 @@ struct МенюВыбора: View {
 
 // MARK: - Цена
 
-/// Большое поле суммы: цифры с пробелами между тысячами и «₸» справа.
+/// Поле суммы #f-price: 21/800, высота 46, --surf2 с кромкой, «₸» серым справа; цифры с пробелами между тысячами.
 struct ПолеЦены: View {
     @Binding var текст: String
     let заблокировано: Bool
@@ -505,30 +506,29 @@ struct ПолеЦены: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             TextField("0", text: $текст)
-                .font(.system(size: 30, weight: .heavy))
-                .foregroundStyle(Theme.текст)
+                .font(.system(size: 21, weight: .heavy))
+                .foregroundStyle(заблокировано ? Theme.текстВторой : КраскаПодачи.текст)
                 .keyboardType(.numberPad)
                 .disabled(заблокировано)
                 .modifier(ФокусПоля(фокус: фокус, ключ: ключ))
             Text("₸")
-                .font(.system(size: 26, weight: .heavy))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 64)
-        .background(заблокировано ? Theme.поверхность2 : Theme.поверхность,
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .frame(minHeight: 46)
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
+                .strokeBorder(ошибка ? Theme.ценаСкидка : КраскаПодачи.линия, lineWidth: ошибка ? 2 : 1)
         }
     }
 }
 
 // MARK: - Кнопка «Назад» низа
 
-/// Узкая вторичная кнопка «‹ Назад» — рядом с главной, чтобы главная была шире и заметнее.
+/// «Назад» (.ast-back): --surf2 с кромкой, 16/800, высота 46, скругление 14; ширина — как у «Далее».
 struct КнопкаНазадПодачи: View {
     let действие: () -> Void
 
@@ -538,24 +538,17 @@ struct КнопкаНазадПодачи: View {
 
     var body: some View {
         Button(action: действие) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 14, weight: .bold))
-                    .accessibilityHidden(true)
-                Text(ПодачаText.т("back"))
-                    .font(.system(size: 15, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(Theme.текст)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 50)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1)
-            }
+            Text(ПодачаText.т("back"))
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(КраскаПодачи.текст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
+                }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
@@ -827,7 +820,8 @@ struct ЗначокРазделаПодачи: View {
     }
 }
 
-/// Строка выбранного раздела в форме: значок, имя и путь; пусто — «Выберите категорию».
+/// Раздел в форме — как select.inp #f-category: имя на --card со стрелкой вниз; путь (#f-cat-crumbs, 13 серым) — под
+/// строкой. Пусто — «Выберите категорию».
 struct СтрокаРазделаПодачи: View {
     let справочники: СправочникиПодачи
     let раздел: String
@@ -843,42 +837,41 @@ struct СтрокаРазделаПодачи: View {
 
     var body: some View {
         let цепочка = раздел.isEmpty ? [] : справочники.цепочка(раздел)
-        let предки = цепочка.dropLast().map { справочники.имя($0) }
+        let путь = цепочка.map { справочники.имя($0) }
         let имя = справочники.имя(раздел)
-        return Button(action: действие) {
-            HStack(spacing: 12) {
-                ЗначокРазделаПодачи(корень: раздел.isEmpty ? "" : справочники.корень(раздел))
-                VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: 8) {
+            Button(action: действие) {
+                HStack(spacing: 8) {
                     Text(имя.isEmpty ? ПодачаText.т("cat_pick") : имя)
-                        .font(.system(size: 16, weight: имя.isEmpty ? Font.Weight.regular : Font.Weight.semibold))
-                        .foregroundStyle(имя.isEmpty ? Theme.текстВторой : Theme.текст)
+                        .font(.system(size: 16))
+                        .foregroundStyle(имя.isEmpty ? Theme.текстВторой : КраскаПодачи.текст)
                         .lineLimit(1)
-                    if !предки.isEmpty {
-                        Text(предки.joined(separator: " › "))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.текстВторой)
-                            .lineLimit(1)
-                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
+                        .accessibilityHidden(true)
                 }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 46)
+                .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(ошибка ? Theme.ценаСкидка : КраскаПодачи.линия, lineWidth: ошибка ? 2 : 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(ПодачаText.т("form_category"))
+            .accessibilityValue(имя)
+            if путь.count > 1 {
+                Text(путь.joined(separator: " › "))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(2)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 58)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(ПодачаText.т("form_category"))
-        .accessibilityValue(имя)
     }
 }
 
@@ -1024,7 +1017,7 @@ struct РазделыПроверки: View {
             let шаги = модель.видимыеШаги.filter { $0 != .проверка }
             ForEach(Array(шаги.enumerated()), id: \.element) { номер, ш in
                 if номер > 0 {
-                    Rectangle().fill(Theme.линия).frame(height: 1)
+                    Rectangle().fill(КраскаПодачи.линия).frame(height: 1)
                 }
                 строка(ш)
             }

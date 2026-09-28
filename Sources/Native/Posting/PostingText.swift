@@ -58,7 +58,6 @@ enum ПодачаText {
         "ver_bar_t": "Без верификации объявление не выйдет на витрину",
         "ver_bar_s": "Подать можно прямо сейчас — оно дождётся проверки в кабинете. eGov занимает минуту.",
         "ver_bar_go": "Пройти eGov",
-        "top_bar": "ТОП подключён · %@", "top_bar_s": "%@ ₸ спишется при публикации · до 30 фото",
         // стартовый экран
         "as_root_q": "Что размещаете?", "as_root_s": "Подскажем нужные поля — заполнять лишнее не придётся.",
         "as_clothing": "Одежда", "as_clothing_s": "вещи, обувь, аксессуары",
@@ -111,7 +110,7 @@ enum ПодачаText {
         "ph_fail_toast": "Фото не загрузилось: {why}. Нажмите «повторить» на плитке",
         "retry_photo": "повторить", "main_photo": "главное", "make_main": "Сделать главным", "made_main": "Сделано главным ✓",
         "photo": "Фото", "photo_actions": "Действия с фото",
-        "photo_cap_full": "Бесплатно — до %d фото. Больше фото — с ТОПом",
+        "photo_cap_full": "Можно до %d фото",
         "photos_busy": "Фото ещё загружаются — секунду",
         // Kliko AI
         "rsh_done_t2": "Фото готовы — распознать?", "rsh_done_ai": "Распознать", "rsh_done_ai_s": "Kliko AI заполнит поля по фото",
@@ -277,7 +276,19 @@ enum ПодачаText {
         "bargain_sub": "Покупатель сможет предложить свою цену", "negot_sub": "Стоимость обсудите с клиентом в чате",
         "card_rent": "Аренда", "rent_kit_short": "Например: зарядка, чехол, 2 насадки", "address_label": "Адрес",
         "extra_sub": "Всё здесь необязательно — применится сразу после публикации, изменить можно в «Моих объявлениях».",
-        "rv_sections": "Всё ли верно?", "rv_deal": "Сделка", "rv_empty": "Не заполнено"
+        "rv_sections": "Всё ли верно?", "rv_deal": "Сделка", "rv_empty": "Не заполнено",
+        "draft": "Черновик", "edit_pill": "Опубликовано", "as_sub": "Выберите, что размещаете",
+        "as_rent_lbl": "Или сразу укажите срок",
+        "as_cloth_s": "Раздел подставим сразу — и поля будут нужные, и Kliko AI точнее прочитает фото.",
+        "as_anim_s": "У щенка спрашивают прививки, у коровы — вес и удой. Раздел подставим сразу.",
+        "ver_bar_why": "Что это даёт", "where_card": "Где и когда", "mod_ok": "Хорошо",
+        "soc_ttl": "Опубликовано! Поделитесь роликом",
+        "soc_sub": "Короткое видео в ваших Reels / TikTok — больше просмотров и быстрее продажа.",
+        "soc_or": "или расскажите о нём", "soc_hero": "Сделать видео и поделиться",
+        "soc_hero_s": "Reels · TikTok · Stories — в один тап", "guest_tap": "Нажмите чтобы добавить фото",
+        "cfg_pay_t": "Рассрочка и кредит", "cfg_del_t": "Доставка", "cfg_off": "Выключено",
+        "cfg_del_def": "Аукцион (по умолчанию)", "cfg_del_free": "Бесплатная", "cfg_days": "дн.",
+        "wr_short": "Гарантия", "wr_signs_n": "знаков: {n}", "wr_not_chosen": "Не выбраны"
     ]
 
     private static let kk: [String: String] = [
@@ -297,7 +308,6 @@ enum ПодачаText {
         "ver_bar_t": "Верификациясыз хабарландыру витринаға шықпайды",
         "ver_bar_s": "Қазір-ақ беруге болады — ол кабинетте тексеруді күтеді. eGov бір минут алады.",
         "ver_bar_go": "eGov өту",
-        "top_bar": "ТОП қосылды · %@", "top_bar_s": "Жариялағанда %@ ₸ шегеріледі · 30 фотоға дейін",
         "as_root_q": "Не орналастырасыз?", "as_root_s": "Керекті өрістерді көрсетеміз — артығын толтырудың қажеті жоқ.",
         "as_clothing": "Киім", "as_clothing_s": "заттар, аяқ киім, аксессуарлар",
         "as_animals": "Жануарлар", "as_animals_s": "үй жануарлары және олар үшін бәрі",
@@ -347,7 +357,7 @@ enum ПодачаText {
         "ph_fail_toast": "Фото жүктелмеді: {why}. Плиткадағы «қайталау» түймесін басыңыз",
         "retry_photo": "қайталау", "main_photo": "басты", "make_main": "Басты ету", "made_main": "Басты болды ✓",
         "photo": "Фото", "photo_actions": "Фотомен әрекеттер",
-        "photo_cap_full": "Тегін — %d фотоға дейін. Көп фото — ТОП-пен",
+        "photo_cap_full": "%d фотоға дейін болады",
         "photos_busy": "Фото әлі жүктелуде — бір сәт",
         "rsh_done_t2": "Фото дайын — тану керек пе?", "rsh_done_ai": "Тану", "rsh_done_ai_s": "Kliko AI өрістерді фото бойынша толтырады",
         "airec_t_light": "Kliko AI тауарды танып жатыр", "airec_s_light": "Фотоларыңызды талдаудамыз…",
@@ -504,7 +514,19 @@ enum ПодачаText {
         "bargain_sub": "Сатып алушы өз бағасын ұсына алады", "negot_sub": "Құнын клиентпен чатта келісесіз",
         "card_rent": "Жалға беру", "rent_kit_short": "Мысалы: зарядтағыш, қап, 2 саптама", "address_label": "Мекенжай",
         "extra_sub": "Мұндағының бәрі міндетті емес — жарияланған соң бірден қолданылады, «Хабарландыруларымда» өзгертуге болады.",
-        "rv_sections": "Бәрі дұрыс па?", "rv_deal": "Мәміле", "rv_empty": "Толтырылмаған"
+        "rv_sections": "Бәрі дұрыс па?", "rv_deal": "Мәміле", "rv_empty": "Толтырылмаған",
+        "draft": "Жоба", "edit_pill": "Жарияланған", "as_sub": "Не орналастыратыныңызды таңдаңыз",
+        "as_rent_lbl": "Немесе мерзімді бірден көрсетіңіз",
+        "as_cloth_s": "Бөлімді бірден қоямыз — өрістер керектісі болады, Kliko AI фотоны дәлірек оқиды.",
+        "as_anim_s": "Күшіктен екпелерді, сиырдан салмағы мен сауынын сұрайды. Бөлімді бірден қоямыз.",
+        "ver_bar_why": "Бұл не береді", "where_card": "Қайда және қашан", "mod_ok": "Жақсы",
+        "soc_ttl": "Жарияланды! Роликпен бөлісіңіз",
+        "soc_sub": "Reels / TikTok-тағы қысқа видео — қаралым көп, сату тезірек.",
+        "soc_or": "немесе ол туралы айтыңыз", "soc_hero": "Видео жасап, бөлісу",
+        "soc_hero_s": "Reels · TikTok · Stories — бір түртумен", "guest_tap": "Фото қосу үшін басыңыз",
+        "cfg_pay_t": "Бөліп төлеу және несие", "cfg_del_t": "Жеткізу", "cfg_off": "Өшірулі",
+        "cfg_del_def": "Аукцион (әдепкі)", "cfg_del_free": "Тегін", "cfg_days": "күн",
+        "wr_short": "Кепілдік", "wr_signs_n": "белгі: {n}", "wr_not_chosen": "Таңдалмаған"
     ]
 
     private static let en: [String: String] = [
@@ -524,7 +546,6 @@ enum ПодачаText {
         "ver_bar_t": "Without verification the listing won't go live",
         "ver_bar_s": "You can post right now — it will wait for review in your account. eGov takes a minute.",
         "ver_bar_go": "Verify with eGov",
-        "top_bar": "TOP added · %@", "top_bar_s": "%@ ₸ will be charged on publishing · up to 30 photos",
         "as_root_q": "What are you posting?", "as_root_s": "We'll show the right fields — nothing extra to fill in.",
         "as_clothing": "Clothing", "as_clothing_s": "clothes, shoes, accessories",
         "as_animals": "Animals", "as_animals_s": "pets and everything for them",
@@ -574,7 +595,7 @@ enum ПодачаText {
         "ph_fail_toast": "Photo not uploaded: {why}. Tap “retry” on the tile",
         "retry_photo": "retry", "main_photo": "main", "make_main": "Make main", "made_main": "Made main ✓",
         "photo": "Photo", "photo_actions": "Photo actions",
-        "photo_cap_full": "Free — up to %d photos. More photos with TOP",
+        "photo_cap_full": "Up to %d photos",
         "photos_busy": "Photos are still uploading — one moment",
         "rsh_done_t2": "Photos ready — recognise?", "rsh_done_ai": "Recognise", "rsh_done_ai_s": "Kliko AI will fill in the fields from the photos",
         "airec_t_light": "Kliko AI is recognising the item", "airec_s_light": "Analysing your photos…",
@@ -731,7 +752,19 @@ enum ПодачаText {
         "bargain_sub": "Buyers can offer their own price", "negot_sub": "Agree on the price with the client in chat",
         "card_rent": "Rent", "rent_kit_short": "E.g. charger, case, 2 attachments", "address_label": "Address",
         "extra_sub": "Everything here is optional — it applies right after publishing and can be changed in “My listings”.",
-        "rv_sections": "Is everything right?", "rv_deal": "Deal", "rv_empty": "Not filled in"
+        "rv_sections": "Is everything right?", "rv_deal": "Deal", "rv_empty": "Not filled in",
+        "draft": "Draft", "edit_pill": "Published", "as_sub": "Choose what you are posting",
+        "as_rent_lbl": "Or pick the term right away",
+        "as_cloth_s": "We set the section right away — the right fields, and Kliko AI reads the photo more accurately.",
+        "as_anim_s": "A puppy needs vaccinations, a cow needs weight and milk yield. We set the section right away.",
+        "ver_bar_why": "What it gives", "where_card": "Where and when", "mod_ok": "OK",
+        "soc_ttl": "Published! Share a video",
+        "soc_sub": "A short video in your Reels / TikTok — more views and a faster sale.",
+        "soc_or": "or tell people about it", "soc_hero": "Make a video and share",
+        "soc_hero_s": "Reels · TikTok · Stories — in one tap", "guest_tap": "Tap to add photos",
+        "cfg_pay_t": "Installments and credit", "cfg_del_t": "Delivery", "cfg_off": "Off",
+        "cfg_del_def": "Auction (default)", "cfg_del_free": "Free", "cfg_days": "days",
+        "wr_short": "Warranty", "wr_signs_n": "badges: {n}", "wr_not_chosen": "Not chosen"
     ]
 
     private static let ar: [String: String] = [
@@ -751,7 +784,6 @@ enum ПодачаText {
         "ver_bar_t": "بدون التحقق لن يظهر الإعلان في الواجهة",
         "ver_bar_s": "يمكنك النشر الآن — سينتظر المراجعة في حسابك. يستغرق eGov دقيقة.",
         "ver_bar_go": "التحقق عبر eGov",
-        "top_bar": "تم تفعيل TOP · %@", "top_bar_s": "سيُخصم %@ ₸ عند النشر · حتى 30 صورة",
         "as_root_q": "ماذا تنشر؟", "as_root_s": "سنعرض الحقول اللازمة فقط — لا شيء زائد.",
         "as_clothing": "ملابس", "as_clothing_s": "ملابس، أحذية، إكسسوارات",
         "as_animals": "حيوانات", "as_animals_s": "حيوانات أليفة وكل ما يلزمها",
@@ -801,7 +833,7 @@ enum ПодачаText {
         "ph_fail_toast": "لم تُرفع الصورة: {why}. اضغط «إعادة المحاولة» على المربع",
         "retry_photo": "إعادة المحاولة", "main_photo": "الرئيسية", "make_main": "اجعلها الرئيسية", "made_main": "أصبحت الرئيسية ✓",
         "photo": "صورة", "photo_actions": "إجراءات الصورة",
-        "photo_cap_full": "مجانًا — حتى %d صور. صور أكثر مع TOP",
+        "photo_cap_full": "حتى %d صور",
         "photos_busy": "ما زالت الصور تُرفع — لحظة",
         "rsh_done_t2": "الصور جاهزة — هل نتعرف عليها؟", "rsh_done_ai": "تعرّف", "rsh_done_ai_s": "سيملأ Kliko AI الحقول من الصور",
         "airec_t_light": "Kliko AI يتعرف على السلعة", "airec_s_light": "نحلل صورك…",
@@ -958,6 +990,18 @@ enum ПодачаText {
         "bargain_sub": "يمكن للمشتري اقتراح سعره", "negot_sub": "اتفق على السعر مع العميل في الدردشة",
         "card_rent": "الإيجار", "rent_kit_short": "مثلًا: شاحن، غطاء، ملحقان", "address_label": "العنوان",
         "extra_sub": "كل ما هنا اختياري — يُطبق فور النشر ويمكن تغييره في «إعلاناتي».",
-        "rv_sections": "هل كل شيء صحيح؟", "rv_deal": "الصفقة", "rv_empty": "غير معبأ"
+        "rv_sections": "هل كل شيء صحيح؟", "rv_deal": "الصفقة", "rv_empty": "غير معبأ",
+        "draft": "مسودة", "edit_pill": "منشور", "as_sub": "اختر ما تريد نشره",
+        "as_rent_lbl": "أو حدّد المدة مباشرةً",
+        "as_cloth_s": "سنضبط القسم فورًا — حقول مناسبة، وسيقرأ Kliko AI الصورة بدقة أكبر.",
+        "as_anim_s": "للجرو يُسأل عن التطعيمات، وللبقرة عن الوزن وإنتاج الحليب. سنضبط القسم فورًا.",
+        "ver_bar_why": "ما الفائدة", "where_card": "أين ومتى", "mod_ok": "حسنًا",
+        "soc_ttl": "تم النشر! شارك فيديو",
+        "soc_sub": "فيديو قصير في Reels / TikTok — مشاهدات أكثر وبيع أسرع.",
+        "soc_or": "أو أخبر الناس عنه", "soc_hero": "اصنع فيديو وشاركه",
+        "soc_hero_s": "Reels · TikTok · Stories — بنقرة واحدة", "guest_tap": "اضغط لإضافة صور",
+        "cfg_pay_t": "التقسيط والائتمان", "cfg_del_t": "التوصيل", "cfg_off": "متوقف",
+        "cfg_del_def": "مزاد (افتراضي)", "cfg_del_free": "مجاني", "cfg_days": "يوم",
+        "wr_short": "الضمان", "wr_signs_n": "شارات: {n}", "wr_not_chosen": "لم يتم الاختيار"
     ]
 }

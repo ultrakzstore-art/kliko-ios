@@ -2,15 +2,13 @@ import SwiftUI
 import UIKit
 
 /**
- ПОСЛЕ ПОДАЧИ — ЭКРАН «ОПУБЛИКОВАНО» / «НА ПРОВЕРКЕ» (владелец 26.09.2026: «как на сайте»).
+ ПОСЛЕ ПОДАЧИ — ЛИСТ «ОПУБЛИКОВАНО! ПОДЕЛИТЕСЬ РОЛИКОМ» (владелец 26.09.2026: «как на сайте»).
 
- Сайт после submit (js/cabinet.min.js): auto = approved — плашка «Объявление опубликовано!» и окно showSocialModal
- (карточка, блок promoUpsellHTML «Продвиньте — продайте быстрее» с полосами «Без продвижения ×1» и «В ТОПе до ×7», кнопка
- «Продвинуть объявление» → openPromote; «или расскажите о нём» и быстрые кнопки WhatsApp, Telegram, «Ссылка» —
- socialQuickShare: текст «Название — цена ₸» и адрес /marketplace.php?item=<id>). Иначе — окно _modOver «Объявление
- на проверке» с текстами mod_wait_*. Здесь оба случая — один экран: статус словами сайта, карточка ленты (ListingCard),
- быстрые кнопки и «Поделиться» — окно кабинета ОкноПоделитьсяКабинета
- (ролик для Reels, автопостинг), «Посмотреть объявление», «Мои объявления», «Подать ещё».
+ Сайт после submit (js/cabinet.min.js): auto = approved — плашка «Объявление опубликовано!» и лист showSocialModal
+ (.soc-card): ручка и «✕», галочка, «Опубликовано! Поделитесь роликом», строка объявления .soc-prev (фото, название,
+ цена), «или расскажите о нём», .soc-hero «Сделать видео и поделиться» — окно кабинета ОкноПоделитьсяКабинета (ролик
+ для Reels, автопостинг), быстрые плитки WhatsApp, Telegram, «Ссылка» (socialQuickShare: «Название — цена ₸» и адрес
+ /marketplace.php?item=<id>) и «Позже». «На проверке» — окно _modOver (ОкноИтогаПодачи), не этот лист.
 
  Платные услуги в приложении не продаются: блока «Продвиньте» и кнопки «Продвинуть» здесь нет, только сведения
  «ТОП уже подключён».
@@ -20,11 +18,10 @@ struct ЭкранПослеПодачи: View {
 
     let итог: ИтогПодачи
     let товар: Listing
-    /// ТОП подключили при подаче (top_applied) — вместо предложения «ТОП уже подключён».
+    /// ТОП подключили при подаче (top_applied) — сведения «ТОП уже подключён».
     let топПодключён: Bool
     let действие: (Действие) -> Void
 
-    @Environment(\.openURL) private var открытьСсылку
     @State private var скопировано = false
 
     init(итог: ИтогПодачи, товар: Listing, топПодключён: Bool, действие: @escaping (Действие) -> Void) {
@@ -34,12 +31,10 @@ struct ЭкранПослеПодачи: View {
         self.действие = действие
     }
 
-    /// Этот экран — для опубликованного и отправленного на проверку; остальные итоги — окно ОкноИтогаПодачи.
+    /// Этот лист — для опубликованного; остальные итоги (и «на проверке») — окно ОкноИтогаПодачи.
     static func берёт(_ итог: ИтогПодачи) -> Bool {
-        switch итог {
-        case .опубликовано, .наПроверке: return true
-        default: return false
-        }
+        if case .опубликовано = итог { return true }
+        return false
     }
 
     static func номер(_ итог: ИтогПодачи) -> String {
@@ -59,7 +54,6 @@ struct ЭкранПослеПодачи: View {
     private func п(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
     private var id: String { Self.номер(итог) }
-    private var опубликовано: Bool { Self.опубликовано(итог) }
 
     /// Адрес объявления, как у socialQuickShare сайта.
     private var ссылка: URL? {
@@ -76,112 +70,188 @@ struct ЭкранПослеПодачи: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Theme.фонСтраницы.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 16) {
-                    шапка
-                    VStack(spacing: 8) {
-                        Text(т("preview"))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.текстВторой)
-                        КарточкаЛентыПодачи(товар: товар)
-                    }
-                    if !id.isEmpty && топПодключён { продвижение }
-                    if let ссылка { поделиться(ссылка) }
-                    кнопки
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 52)
-                .padding(.bottom, 28)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture { действие(.закрыть) }
+                .accessibilityHidden(true)
+            ViewThatFits(in: .vertical) {
+                лист
+                ScrollView { лист }
+                    .scrollBounceBehavior(.basedOnSize)
             }
-            Button { действие(.закрыть) } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.поверхность, in: Circle())
-                    .overlay { Circle().strokeBorder(Theme.линия, lineWidth: 1) }
+            .background {
+                КраскаПодачи.карточка
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous))
+                    .ignoresSafeArea(edges: .bottom)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
-            .padding(.trailing, 16)
-            .accessibilityLabel(п("close"))
         }
     }
 
-    // MARK: - Статус
-
-    private var шапка: some View {
-        VStack(spacing: 10) {
-            Image(systemName: опубликовано ? "checkmark.circle.fill" : "clock.fill")
-                .font(.system(size: 46, weight: .semibold))
-                .foregroundStyle(опубликовано ? Theme.зелёныйЯркий : КраскаОбъявлений.предупреждениеТекст)
+    private var лист: some View {
+        VStack(spacing: 0) {
+            верх
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56, weight: .regular))
+                .foregroundStyle(Theme.зелёныйЯркий)
+                .frame(width: 62, height: 62)
                 .accessibilityHidden(true)
-            Text(опубликовано ? п("published") : п("mod_wait_t"))
-                .font(.system(size: 22, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-            if опубликовано {
-                Text(п("published_s"))
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.текстВторой)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                VStack(spacing: 6) {
-                    Text(п("mod_wait_b"))
-                    Text("\(Text(п("mod_wait_b2")).bold()) — \(п("mod_wait_b3"))")
-                }
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.текст)
+            Text(п("soc_ttl"))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(КраскаПодачи.текст)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .padding(.top, 10)
+                .accessibilityAddTraits(.isHeader)
+            Text(п("soc_sub"))
+                .font(.system(size: 13))
+                .lineSpacing(4)
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            строкаОбъявления
+                .padding(.top, 16)
+            if топПодключён { продвижение.padding(.top, 12) }
+            if let ссылка { поделиться(ссылка) }
+            Button { действие(.закрыть) } label: {
+                Text(п("later"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 18)
+        .frame(maxWidth: 560)
+    }
+
+    /// .soc-top: ручка 42×4 и «✕» 32×32 на --surf2.
+    private var верх: some View {
+        ZStack {
+            Capsule()
+                .fill(КраскаПодачи.линия)
+                .frame(width: 42, height: 4)
+            HStack {
+                Spacer(minLength: 0)
+                Button { действие(.закрыть) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.текст)
+                        .frame(width: 32, height: 32)
+                        .background(КраскаПодачи.поле, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(п("close"))
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(height: 44)
+    }
+
+    /// .soc-prev: фото 52×52, название и цена; нажатие — открыть объявление.
+    private var строкаОбъявления: some View {
+        Button { действие(.посмотреть) } label: {
+            HStack(spacing: 10) {
+                обложка
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(товар.title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.текст)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(ценаСтрокой)
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(КраскаПодачи.акцентТекст)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(id.isEmpty)
+    }
+
+    /// Обложка: файл снимка на телефоне или адрес сервера.
+    @ViewBuilder
+    private var обложка: some View {
+        if let адрес = адресОбложки {
+            AsyncImage(url: адрес) { фаза in
+                if let изображение = фаза.image {
+                    изображение.resizable().scaledToFill()
+                } else {
+                    КраскаПодачи.линия
+                }
+            }
+        } else {
+            КраскаПодачи.линия
+        }
+    }
+
+    private var адресОбложки: URL? {
+        guard let обложка = товар.thumb, !обложка.isEmpty else { return nil }
+        if обложка.hasPrefix("file:") { return URL(string: обложка) }
+        return Config.url(обложка)
+    }
+
+    /// Цена как у сайта: «150 000 ₸», без цены — «Договорная».
+    private var ценаСтрокой: String {
+        let цена = Int(товар.price ?? 0)
+        return цена > 0 ? ПодачаМодель.деньги(цена) + " ₸" : п("price_negotiable")
     }
 
     // MARK: - ТОП уже подключён (из promoUpsellHTML — только сведения)
 
-    @ViewBuilder
     private var продвижение: some View {
-        if топПодключён {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.зелёныйЯркий)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(т("top_done"))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                    Text(т("top_done_s"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(КраскаПодачи.хорошоТекст)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(т("top_done"))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.текст)
+                Text(т("top_done_s"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
-            .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
         }
+        .padding(12)
+        .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Поделиться (socialQuickShare)
+    // MARK: - Поделиться (.soc-hero и .soc-quick)
 
     private func поделиться(_ ссылка: URL) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(т("share_h"))
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.текст)
+        VStack(spacing: 0) {
+            Text(п("soc_or"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+            Button {
+                /* Окно кабинета (showSocialModal сайта): ролик, быстрые кнопки, автопостинг — CabinetShare.swift. */
+                ОкноПоделитьсяКабинета.показать(ДанныеОтправкиСайта(товар, номер: id))
+            } label: {
+                ролик
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
             HStack(spacing: 8) {
                 быстрая(т("wa"), значок: "message.fill", краска: Color(red: 37 / 255, green: 211 / 255, blue: 102 / 255)) {
                     ПоделитьсяСайта.whatsApp(ДанныеОтправкиСайта(товар, номер: id))
@@ -190,59 +260,79 @@ struct ЭкранПослеПодачи: View {
                     ПоделитьсяСайта.telegram(ДанныеОтправкиСайта(товар, номер: id))
                 }
                 быстрая(скопировано ? т("copied") : т("copy"), значок: скопировано ? "checkmark" : "link",
-                        краска: скопировано ? Theme.зелёныйЯркий : Theme.текстВторой) {
+                        краска: скопировано ? КраскаПодачи.хорошоТекст : КраскаПодачи.текст) {
                     скопировать(ссылка)
                 }
-                быстрая(п("share"), значок: "square.and.arrow.up", краска: Theme.акцент) {
-                    /* Окно кабинета (showSocialModal сайта): ролик, быстрые кнопки, автопостинг — CabinetShare.swift. */
-                    ОкноПоделитьсяКабинета.показать(ДанныеОтправкиСайта(товар, номер: id))
-                }
             }
-            if !опубликовано {
-                Text(т("share_mod"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+            .padding(.top, 8)
         }
     }
 
-    private func быстрая(_ подпись: String, значок: String, краска: Color, _ нажато: @escaping () -> Void) -> some View {
-        Button(action: нажато) {
-            ярлык(подпись, значок: значок, краска: краска)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func ярлык(_ подпись: String, значок: String, краска: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: значок)
+    /// .soc-hero: градиент Instagram 120°, скругление 18, значок в белом квадрате 20 %.
+    private var ролик: some View {
+        let градиент = Gradient(stops: [
+            .init(color: Color(red: 249 / 255, green: 206 / 255, blue: 52 / 255), location: 0),
+            .init(color: Color(red: 238 / 255, green: 42 / 255, blue: 123 / 255), location: 0.44),
+            .init(color: Color(red: 98 / 255, green: 40 / 255, blue: 215 / 255), location: 1)
+        ])
+        return HStack(spacing: 12) {
+            Image(systemName: "video.fill")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(краска)
-                .frame(width: 44, height: 44)
-                .background(Theme.поверхность2, in: Circle())
+                .foregroundStyle(Color.white)
+                .frame(width: 40, height: 40)
+                .background(Color.white.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 .accessibilityHidden(true)
-            Text(подпись)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.текст)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(п("soc_hero"))
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(п("soc_hero_s"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.right")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.white)
+                .flipsForRightToLeftLayoutDirection(true)
+                .accessibilityHidden(true)
         }
+        .padding(16)
         .frame(maxWidth: .infinity)
+        .background(LinearGradient(gradient: градиент, startPoint: UnitPoint(x: 0, y: 0.2), endPoint: UnitPoint(x: 1, y: 0.8)),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .contentShape(Rectangle())
     }
 
-    private func открытьЧерез(_ основа: String, _ параметры: [URLQueryItem]) {
-        guard var части = URLComponents(string: основа) else { return }
-        части.queryItems = параметры
-        if let адрес = части.url { открытьСсылку(адрес) }
+    /// Плитка .soc-quick: --card, кромка --line, скругление 14, высота 70, значок 20 и 12/700.
+    private func быстрая(_ подпись: String, значок: String, краска: Color, _ нажато: @escaping () -> Void) -> some View {
+        Button(action: нажато) {
+            VStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(краска)
+                    .accessibilityHidden(true)
+                Text(подпись)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, minHeight: 70)
+            .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
     }
 
     private func скопировать(_ ссылка: URL) {
@@ -252,24 +342,6 @@ struct ЭкранПослеПодачи: View {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             скопировано = false
-        }
-    }
-
-    // MARK: - Куда дальше
-
-    private var кнопки: some View {
-        VStack(spacing: 10) {
-            if опубликовано && !id.isEmpty {
-                КнопкаПодачи(т("view")) { действие(.посмотреть) }
-            }
-            КнопкаПодачиВторая(т("mine")) { действие(.мои) }
-            Button { действие(.ещё) } label: {
-                Label(т("more"), systemImage: "plus.circle")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.акцент)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.plain)
         }
     }
 }

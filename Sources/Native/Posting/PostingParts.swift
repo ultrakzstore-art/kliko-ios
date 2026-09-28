@@ -4,32 +4,96 @@ import UIKit
 /**
  ПОДАЧА — ОБЩИЕ ДЕТАЛИ ЭКРАНА, ЭТАП 42 (владелец 26.09.2026: «всё одно и то же, просто код разный»).
 
- Краска и формы — из CSS кабинета сайта (css/cabinet.css, css/cabinet-parts.min.css): белая карточка .card со
- скруглением --r-md и кромкой --line, поле .inp с кромкой 1.5 px, чипы .chip (выбранный — мятный с зелёной кромкой),
- переключатель .sw-row, плитки стартового окна .rw2-tile, зелёная кнопка .btn-g с градиентом. Цвета — Theme: светлая и
- тёмная тема сами.
+ Краска и формы — из CSS кабинета сайта (css/cabinet.css, css/cabinet-parts.min.css): фон страницы --bg, карточка .ecard
+ (--card, скругление 14, кромка --line 1 px, лёгкая тень), поле .inp (--surf2, кромка 1 px, скругление 12), select —
+ на --card со стрелкой вниз, чипы .chip (выбранный — --g с белым), строка-переключатель .sw-row, кнопки .ast-next,
+ .ast-back и .btn-g. Цвета — КраскаПодачи: токены кабинета, светлая и тёмная тема (в тёмной карточка светлее фона,
+ поле — ещё светлее).
  */
 
-/// Карточка шага (.card): заголовок и содержимое.
+/// Токены кабинета (css/cabinet.css :root и [data-theme=dark]) — у кабинета своя краска, не витрины.
+enum КраскаПодачи {
+    /// --bg
+    static let фон = Theme.цвет(0xEEF3F0, 0x101017)
+    /// Зелёное сияние сверху страницы (radial-gradient body).
+    static let сияние = Theme.цвет(светлый: Theme.hex(0x1D7D4A, 0.10), тёмный: Theme.hex(0x34C997, 0.10))
+    /// --card
+    static let карточка = Theme.цвет(0xFFFFFF, 0x1C1C26)
+    /// --surf2 (заливка .inp)
+    static let поле = Theme.цвет(0xF6FAF8, 0x23232F)
+    /// --line
+    static let линия = Theme.цвет(светлый: Theme.hex(0xE6EFE9), тёмный: Theme.hex(0xFFFFFF, 0.10))
+    /// --ink
+    static let текст = Theme.цвет(0x0F1712, 0xEAF3EE)
+    /// --acc-on
+    static let акцентТекст = Theme.цвет(0x0F5132, 0x5CD39A)
+    /// Тень .ecard — только в светлой теме.
+    static let тень = Theme.цвет(светлый: Theme.hex(0x0D1B14, 0.05), тёмный: Theme.hex(0x000000, 0))
+    /// --tint-ok / --on-ok
+    static let хорошоФон = Theme.цвет(светлый: Theme.hex(0xE7F6EE), тёмный: Theme.hex(0x34C997, 0.14))
+    static let хорошоТекст = Theme.цвет(0x0F7A44, 0x5CD39A)
+    /// --tint-warn / --on-warn, кромка #add-ver-bar
+    static let вниманиеФон = Theme.цвет(светлый: Theme.hex(0xFFF4E5), тёмный: Theme.hex(0xE0BD5E, 0.15))
+    static let вниманиеТекст = Theme.цвет(0x92400E, 0xE0BD5E)
+    static let вниманиеКромка = Theme.цвет(светлый: Theme.hex(0xFDE68A), тёмный: Theme.hex(0xE0BD5E, 0.34))
+    /// --tint-bad / --on-bad
+    static let плохоФон = Theme.цвет(светлый: Theme.hex(0xFEE2E2), тёмный: Theme.hex(0xFF6168, 0.15))
+    static let плохоТекст = Theme.цвет(0x991B1B, 0xFF8A8F)
+    /// --tint-info / --on-info / --edge-info
+    static let инфоФон = Theme.цвет(светлый: Theme.hex(0xEEF4FF), тёмный: Theme.hex(0x60A5FA, 0.15))
+    static let инфоТекст = Theme.цвет(0x1E40AF, 0x7CB8F5)
+    static let инфоКромка = Theme.цвет(светлый: Theme.hex(0xC7D6F5), тёмный: Theme.hex(0x60A5FA, 0.34))
+}
+
+/// Фон страницы кабинета: --bg и зелёное сияние сверху.
+struct ФонПодачи: View {
+    var body: some View {
+        КраскаПодачи.фон
+            .overlay(alignment: .top) {
+                RadialGradient(colors: [КраскаПодачи.сияние, КраскаПодачи.сияние.opacity(0)],
+                               center: UnitPoint(x: 0.5, y: 0), startRadius: 0, endRadius: 420)
+                    .frame(height: 380)
+                    .allowsHitTesting(false)
+            }
+            .ignoresSafeArea()
+    }
+}
+
+/// Карточка шага (.ecard): заголовок .section-title со значком в мятном квадрате и содержимое.
 struct КарточкаПодачи<Содержимое: View>: View {
     let заголовок: String?
     let подпись: String?
+    let значок: String?
     let содержимое: Содержимое
 
-    init(_ заголовок: String? = nil, подпись: String? = nil, @ViewBuilder содержимое: () -> Содержимое) {
+    init(_ заголовок: String? = nil, подпись: String? = nil, значок: String? = nil,
+         @ViewBuilder содержимое: () -> Содержимое) {
         self.заголовок = заголовок
         self.подпись = подпись
+        self.значок = значок
         self.содержимое = содержимое()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             if let заголовок {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(заголовок)
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
-                        .accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
+                        if let значок {
+                            Image(systemName: значок)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Theme.акцент)
+                                .frame(width: 33, height: 33)
+                                .background(Theme.оттенокАкцента,
+                                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                                .accessibilityHidden(true)
+                        }
+                        Text(заголовок)
+                            .font(.system(size: 14, weight: .heavy))
+                            .kerning(-0.2)
+                            .foregroundStyle(КраскаПодачи.текст)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     if let подпись {
                         Text(подпись)
                             .font(.system(size: 13))
@@ -40,37 +104,45 @@ struct КарточкаПодачи<Содержимое: View>: View {
             }
             содержимое
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+                .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
         }
+        .shadow(color: КраскаПодачи.тень, radius: 6, y: 2)
     }
 }
 
-/// Подпись поля (.field label): «Описание * обязательно», «Ваша цена · необязательно».
+/// Подпись поля: .field-lbl (15/700, чернила) или мелкая .field-sub (13/600, серая); «* обязательно», «· необязательно».
 struct ПодписьПоля: View {
     let текст: String
     let обязательно: Bool
     let необязательно: Bool
+    let мелкая: Bool
 
-    init(_ текст: String, обязательно: Bool = false, необязательно: Bool = false) {
+    init(_ текст: String, обязательно: Bool = false, необязательно: Bool = false, мелкая: Bool = false) {
         self.текст = текст
         self.обязательно = обязательно
         self.необязательно = необязательно
+        self.мелкая = мелкая
     }
 
     var body: some View {
         HStack(spacing: 4) {
             Text(текст)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Theme.текст)
+                .font(.system(size: мелкая ? 13 : 15, weight: мелкая ? Font.Weight.semibold : Font.Weight.bold))
+                .foregroundStyle(мелкая ? Theme.текстВторой : КраскаПодачи.текст)
             if обязательно {
-                Text("* " + ПодачаText.т("form_required"))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.ценаСкидка)
+                HStack(spacing: 3) {
+                    Text("*")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.плохоТекст)
+                    Text(ПодачаText.т("form_required"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.текстВторой)
+                }
             }
             if необязательно {
                 Text("· " + ПодачаText.т("form_optional"))
@@ -143,6 +215,7 @@ struct ПолеПодачи: View {
         HStack(spacing: 6) {
             TextField(подсказка, text: ограниченный)
                 .font(.system(size: 16))
+                .foregroundStyle(заблокировано ? Theme.текстВторой : КраскаПодачи.текст)
                 .keyboardType(клавиатура)
                 .textInputAutocapitalization(заглавные)
                 .disabled(заблокировано)
@@ -154,13 +227,12 @@ struct ПолеПодачи: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .frame(minHeight: 46)
-        .background(заблокировано ? Theme.поверхность2 : Theme.поверхность,
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(ошибка ? Theme.ценаСкидка : КраскаПодачи.линия, lineWidth: ошибка ? 2 : 1)
         }
     }
 }
@@ -178,7 +250,7 @@ struct СчётчикЗнаковПодачи: View {
     }
 }
 
-/// Многострочное поле (textarea описания) с подсказкой внутри; ошибка — красная кромка.
+/// Многострочное поле (textarea описания, rows=6: высота 174, отступ 14, строка 24) с подсказкой внутри.
 struct ТекстПодачи: View {
     let подсказка: String
     @Binding var текст: String
@@ -202,24 +274,26 @@ struct ТекстПодачи: View {
             if текст.isEmpty {
                 Text(подсказка)
                     .font(.system(size: 16))
+                    .lineSpacing(5)
                     .foregroundStyle(Theme.текстВторой.opacity(0.8))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
+                    .padding(14)
                     .accessibilityHidden(true)
             }
             TextEditor(text: ограниченный)
                 .font(.system(size: 16))
+                .lineSpacing(5)
+                .foregroundStyle(КраскаПодачи.текст)
                 .scrollContentBackground(.hidden)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .frame(minHeight: 130)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .frame(minHeight: 174)
                 .accessibilityLabel(подсказка)
                 .modifier(ФокусПоля(фокус: фокус, ключ: ключ))
         }
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                .strokeBorder(ошибка ? Theme.ценаСкидка : Theme.линия, lineWidth: ошибка ? 2 : 1.5)
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(ошибка ? Theme.ценаСкидка : КраскаПодачи.линия, lineWidth: ошибка ? 2 : 1)
         }
     }
 
@@ -233,7 +307,7 @@ struct ТекстПодачи: View {
     }
 }
 
-/// Чип .chip / .rw2-chip: выбранный — мятный с зелёной кромкой.
+/// Чип .chip: 13/600 серым, кромка --line, скругление 14; выбранный — --g с белым текстом.
 struct ЧипПодачи: View {
     let текст: String
     let выбран: Bool
@@ -248,14 +322,16 @@ struct ЧипПодачи: View {
     var body: some View {
         Button(action: действие) {
             Text(текст)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(выбран ? Theme.акцент : Theme.текст)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(выбран ? Color.white : Theme.текстВторой)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
-                .frame(minHeight: 38)
-                .background(выбран ? Theme.оттенокАкцента : Theme.поверхность, in: Capsule())
+                .padding(.vertical, 10)
+                .background(выбран ? Theme.зелёный : КраскаПодачи.карточка,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 .overlay {
-                    Capsule().strokeBorder(выбран ? Theme.акцент : Theme.линия, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(выбран ? Theme.зелёный : КраскаПодачи.линия, lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -263,7 +339,98 @@ struct ЧипПодачи: View {
     }
 }
 
-/// Строка-переключатель .sw-row: заголовок, подпись, системный Toggle в краске сайта.
+/// Пресет часов .hours-preset: высота 38, кромка --line, скругление 12, 13/700 и значок 15 (shuffle / clock);
+/// выбранный — --acc-on с белым.
+struct ЧипЧасовПодачи: View {
+    let текст: String
+    let значок: String
+    let выбран: Bool
+    let действие: () -> Void
+
+    init(_ текст: String, значок: String, выбран: Bool, действие: @escaping () -> Void) {
+        self.текст = текст
+        self.значок = значок
+        self.выбран = выбран
+        self.действие = действие
+    }
+
+    var body: some View {
+        Button(action: действие) {
+            HStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 13, weight: .semibold))
+                    .opacity(0.85)
+                    .accessibilityHidden(true)
+                Text(текст)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(выбран ? Color.white : КраскаПодачи.текст)
+            .padding(.horizontal, 14)
+            .frame(height: 38)
+            .background(выбран ? КраскаПодачи.акцентТекст : КраскаПодачи.карточка,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(выбран ? КраскаПодачи.акцентТекст : КраскаПодачи.линия, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(выбран ? .isSelected : [])
+    }
+}
+
+/// «Посуточно / Помесячно» (.rent-seg): на --card с кромкой 1.5 и отступом 4; выбранная — градиент --g → --g2.
+struct СегментАрендыПодачи: View {
+    let варианты: [ВариантПоля]
+    @Binding var значение: String
+
+    init(_ варианты: [ВариантПоля], значение: Binding<String>) {
+        self.варианты = варианты
+        self._значение = значение
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(варианты, id: \.self) { в in
+                кнопка(в)
+            }
+        }
+        .padding(4)
+        .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(КраскаПодачи.линия, lineWidth: 1.5)
+        }
+    }
+
+    private func кнопка(_ в: ВариантПоля) -> some View {
+        let выбран = значение == в.ключ
+        return Button {
+            значение = в.ключ
+            ОткликСайта.выбор()
+        } label: {
+            Text(в.подпись)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(выбран ? Color.white : Theme.текстВторой)
+                .lineLimit(1)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background {
+                    if выбран {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous)
+                            .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(выбран ? .isSelected : [])
+    }
+}
+
+/// Строка-переключатель .sw-row: рамка на --card, включённая — на --tint-ok с кромкой --acc-on.
 struct ПереключательПодачи: View {
     let заголовок: String
     let подпись: String?
@@ -282,29 +449,43 @@ struct ПереключательПодачи: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(заголовок)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.текст)
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let подпись, !подпись.isEmpty {
                     Text(подпись)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.текстВторой)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .tint(Theme.зелёныйЯркий)
+        .tint(Theme.зелёный2)
         .disabled(заблокировано)
+        .padding(.leading, 14)
+        .padding(.trailing, 12)
+        .padding(.vertical, 10)
+        .frame(minHeight: 50)
+        .background(включено ? КраскаПодачи.хорошоФон : КраскаПодачи.карточка,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(включено ? КраскаПодачи.акцентТекст : КраскаПодачи.линия, lineWidth: 1)
+        }
     }
 }
 
-/// Строка-кнопка выбора (select сайта): подпись и значение, стрелка; открывает список.
+/// Строка-кнопка выбора (select.inp сайта): значение и стрелка вниз; открывает список. Раздел и характеристики — на
+/// --card, бренд — на --surf2.
 struct СтрокаВыбора: View {
     let значение: String
     let подсказка: String
+    let заливка: Color
     let действие: () -> Void
 
-    init(_ значение: String, подсказка: String, действие: @escaping () -> Void) {
+    init(_ значение: String, подсказка: String, заливка: Color = КраскаПодачи.карточка, действие: @escaping () -> Void) {
         self.значение = значение
         self.подсказка = подсказка
+        self.заливка = заливка
         self.действие = действие
     }
 
@@ -313,20 +494,20 @@ struct СтрокаВыбора: View {
             HStack(spacing: 8) {
                 Text(значение.isEmpty ? подсказка : значение)
                     .font(.system(size: 16))
-                    .foregroundStyle(значение.isEmpty ? Theme.текстВторой : Theme.текст)
+                    .foregroundStyle(значение.isEmpty ? Theme.текстВторой : КраскаПодачи.текст)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
             .frame(minHeight: 46)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(заливка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
             }
             .contentShape(Rectangle())
         }
@@ -446,7 +627,7 @@ struct ЛистВыбора: View {
     }
 }
 
-/// Главная зелёная кнопка (.btn-g): градиент, белый жирный текст; занята — колёсико.
+/// Кнопка отправки (#submit-btn.btn-g): градиент --g → --g2 по диагонали, 15/700, высота 46; занята — колёсико.
 struct КнопкаПодачи: View {
     let текст: String
     let занято: Bool
@@ -465,21 +646,49 @@ struct КнопкаПодачи: View {
                     SiteSpinner.белый
                 }
                 Text(текст)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .leading, endPoint: .trailing),
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                       endPoint: .bottomTrailing),
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .shadow(color: Color(uiColor: Theme.hex(0x0F5132, 0.45)), radius: 6, y: 6)
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         .disabled(занято)
     }
 }
 
-/// Вторичная кнопка (.btn-o): светлая с кромкой.
+/// «Далее →» (.ast-next): заливка --acc-on, белый 16/800, высота 46, скругление 14, мягкая тень.
+struct КнопкаДалееПодачи: View {
+    let текст: String
+    let действие: () -> Void
+
+    init(_ текст: String, действие: @escaping () -> Void) {
+        self.текст = текст
+        self.действие = действие
+    }
+
+    var body: some View {
+        Button(action: действие) {
+            Text(текст)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(КраскаПодачи.акцентТекст, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .shadow(color: Color(uiColor: Theme.hex(0x0F5132, 0.28)), radius: 8, y: 10)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+    }
+}
+
+/// Вторичная кнопка (как .ast-back): --surf2 с кромкой, 16/800, высота 46.
 struct КнопкаПодачиВторая: View {
     let текст: String
     let действие: () -> Void
@@ -492,22 +701,22 @@ struct КнопкаПодачиВторая: View {
     var body: some View {
         Button(action: действие) {
             Text(текст)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.текст)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(КраскаПодачи.текст)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                        .strokeBorder(Theme.линия, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
                 }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 }
 
-/// Цветная заметка (.pc-esc-note, плашки tint-ok / tint-warn / tint-info сайта).
+/// Цветная заметка (плашки --tint-ok / --tint-warn / --tint-info / --tint-bad кабинета; серая — --surf2 с кромкой).
 struct ЗаметкаПодачи: View {
     enum Тон { case хорошо, внимание, инфо, плохо, серый }
 
@@ -529,33 +738,40 @@ struct ЗаметкаПодачи: View {
                     .accessibilityHidden(true)
             }
             Text(текст)
-                .font(.system(size: 13))
+                .font(.system(size: тон == .серый ? 12 : 13))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .foregroundStyle(передний)
-        .padding(10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            if тон == .серый {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
+            }
+        }
     }
 
     private var передний: Color {
         switch тон {
-        case .хорошо: return КраскаОбъявлений.хорошоТекст
-        case .внимание: return КраскаОбъявлений.предупреждениеТекст
-        case .инфо: return КраскаОбъявлений.инфоТекст
-        case .плохо: return КраскаОбъявлений.плохоТекст
+        case .хорошо: return КраскаПодачи.хорошоТекст
+        case .внимание: return КраскаПодачи.вниманиеТекст
+        case .инфо: return КраскаПодачи.инфоТекст
+        case .плохо: return КраскаПодачи.плохоТекст
         case .серый: return Theme.текстВторой
         }
     }
 
     private var фон: Color {
         switch тон {
-        case .хорошо: return КраскаОбъявлений.хорошоФон
-        case .внимание: return КраскаОбъявлений.предупреждениеФон
-        case .инфо: return КраскаОбъявлений.инфоФон
-        case .плохо: return КраскаОбъявлений.плохоФон
-        case .серый: return Theme.поверхность2
+        case .хорошо: return КраскаПодачи.хорошоФон
+        case .внимание: return КраскаПодачи.вниманиеФон
+        case .инфо: return КраскаПодачи.инфоФон
+        case .плохо: return КраскаПодачи.плохоФон
+        case .серый: return КраскаПодачи.поле
         }
     }
 }

@@ -23,11 +23,13 @@ import UniformTypeIdentifiers
 struct ШагиПодачи: View {
     @ObservedObject var модель: ПодачаМодель
     let открытьСайт: (String) -> Void
+    let закрыть: () -> Void
     @FocusState private var фокус: String?
 
-    init(модель: ПодачаМодель, открытьСайт: @escaping (String) -> Void) {
+    init(модель: ПодачаМодель, открытьСайт: @escaping (String) -> Void, закрыть: @escaping () -> Void) {
         self.модель = модель
         self.открытьСайт = открытьСайт
+        self.закрыть = закрыть
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
@@ -39,13 +41,13 @@ struct ШагиПодачи: View {
                     Color.clear
                         .frame(height: 0)
                         .id("верх")
-                    if модель.страница.нуженEgov && !модель.правка && (модель.шаг == .фото || модель.шаг == .проверка) {
-                        плашкаEgov
-                    }
-                    if !модель.правка && модель.шаг == .фото { полосаТипа }
+                    ГеройПодачи(правка: модель.правка, закрыть: закрыть)
+                    if модель.страница.нуженEgov && !модель.правка { плашкаEgov }
+                    if !модель.правка { полосаТипа }
+                    полоса
                     шаг
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -71,43 +73,40 @@ struct ШагиПодачи: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) { полоса }
         .safeAreaInset(edge: .bottom, spacing: 0) { низ }
     }
 
     // MARK: Шапка шага
 
-    /// «Шаг 2 из 5 · Данные товара» и тонкая полоса хода; в правке — ряд шагов с точкой у изменённых.
+    /// .add-steps: семь полосок .ast-line (пройденные, текущая, впереди) и «Фото  1 / 7»; в правке — ряд шагов.
     private var полоса: some View {
-        let н = модель.номерШага
+        let всего = ШагПодачи.allCases.count
+        let пройдено = Theme.цвет(светлый: Theme.hex(0x85A897), тёмный: Theme.hex(0x6ED8A5, 0.51))
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(String(format: т("step_of"), н.номер, н.всего))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                Text("·")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
+            HStack(spacing: 6) {
+                ForEach(ШагПодачи.allCases) { ш in
+                    Capsule()
+                        .fill(ш.rawValue < модель.шаг.rawValue ? пройдено
+                              : (ш == модель.шаг ? КраскаПодачи.акцентТекст : КраскаПодачи.линия))
+                        .frame(height: 4)
+                }
+            }
+            .animation(ДвижениеСайта.шаг, value: модель.шаг)
+            .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(модель.шаг.название)
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(КраскаПодачи.текст)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                Text(String(модель.шаг.rawValue + 1) + " / " + String(всего))
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(Theme.текстВторой)
                 Spacer(minLength: 0)
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
-            ProgressView(value: Double(н.номер), total: Double(н.всего))
-                .tint(Theme.зелёныйЯркий)
-                .animation(ДвижениеСайта.шаг, value: н.номер)
-                .accessibilityHidden(true)
             if модель.правка { полосаПравки }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Theme.поверхность)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.линия).frame(height: 1)
         }
     }
 
@@ -140,64 +139,142 @@ struct ШагиПодачи: View {
                         .accessibilityHidden(true)
                 }
             }
-            .foregroundStyle(текущий ? Theme.акцент : Theme.текстВторой)
+            .foregroundStyle(текущий ? КраскаПодачи.хорошоТекст : Theme.текстВторой)
             .padding(.horizontal, 10)
             .frame(minHeight: 30)
-            .background(текущий ? Theme.оттенокАкцента : Theme.поверхность2, in: Capsule())
+            .background(текущий ? КраскаПодачи.хорошоФон : КраскаПодачи.карточка, in: Capsule())
+            .overlay { Capsule().strokeBorder(текущий ? Color.clear : КраскаПодачи.линия, lineWidth: 1) }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(текущий ? .isSelected : [])
         .accessibilityValue(изменён ? т("edited") : "")
     }
 
-    /// #add-ver-bar: без верификации объявление ждёт в кабинете.
+    /// #add-ver-bar (.avb-in): без верификации объявление ждёт в кабинете. «Пройти eGov» — сама проверка,
+    /// «Что это даёт» — окно «Стать продавцом» (verPromo).
     private var плашкаEgov: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(т("ver_bar_t"))
-                .font(.system(size: 14, weight: .bold))
-            Text(т("ver_bar_s"))
-                .font(.system(size: 13))
-                .fixedSize(horizontal: false, vertical: true)
-            Button(т("ver_bar_go")) { ВерификацияПоверх.показать() }
-                .font(.system(size: 14, weight: .bold))
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.зелёный)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(КраскаПодачи.вниманиеТекст)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(т("ver_bar_t"))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(т("ver_bar_s"))
+                        .font(.system(size: 13))
+                        .lineSpacing(3)
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 6) {
+                Button {
+                    пройтиEgov()
+                } label: {
+                    Text(т("ver_bar_go"))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(КраскаПодачи.вниманиеТекст,
+                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                Button {
+                    ВерификацияПоверх.показать()
+                } label: {
+                    Text(т("ver_bar_why"))
+                        .font(.system(size: 13, weight: .bold))
+                        .underline()
+                        .foregroundStyle(КраскаПодачи.вниманиеТекст)
+                        .lineLimit(1)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-        .padding(12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(КраскаПодачи.вниманиеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(КраскаПодачи.вниманиеКромка, lineWidth: 1)
+        }
     }
 
-    /// Полоса выбранного типа с «Изменить» (_AFT_META сайта).
+    /// requestVerification сайта: eGov листом поверх мастера (черновик остаётся); выключен — окно «Стать продавцом».
+    @MainActor
+    private func пройтиEgov() {
+        if ОкноEgov.включено {
+            ОкноEgov.открыть(Config.страницаСайта("cabinet.php?go=verify"))
+        } else {
+            ВерификацияПоверх.показать()
+        }
+    }
+
+    /// Полоса выбранного типа #aft-bar: значок, тип и подпись плитки, «Изменить» — на всех шагах.
     private var полосаТипа: some View {
-        HStack(spacing: 10) {
-            ЗначокРазделаПодачи(корень: модель.корень)
+        HStack(spacing: 12) {
+            Image(systemName: значокТипа)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(КраскаПодачи.хорошоТекст)
+                .frame(width: 34, height: 34)
+                .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(названиеТипа)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(КраскаПодачи.текст)
                     .lineLimit(1)
-                if let топ = модель.форма.топ {
-                    Text(String(format: т("top_bar"), топ.подпись))
+                if let подпись = модель.форма.плиткаПодпись, !подпись.isEmpty {
+                    Text(подпись)
                         .font(.system(size: 12))
-                        .foregroundStyle(Theme.золото)
+                        .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 4)
-            Button(т("change")) { модель.сменитьТип() }
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Theme.акцент)
+            Button { модель.сменитьТип() } label: {
+                Text(т("change"))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 28)
+                    .overlay { Capsule().strokeBorder(КраскаПодачи.линия, lineWidth: 1) }
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(10)
-        .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
+        }
     }
 
     private var названиеТипа: String {
         let раздел = модель.справочники.имя(модель.форма.раздел)
         if !модель.форма.плитка.isEmpty { return модель.форма.плитка }
         return раздел.isEmpty ? т("as_goods") : раздел
+    }
+
+    /// Значок .b-ic по корню раздела; раздел ещё не выбран — коробка.
+    private var значокТипа: String {
+        модель.корень.isEmpty ? "shippingbox" : ЗначокРазделаПодачи.символ(модель.корень)
     }
 
     @ViewBuilder
@@ -215,42 +292,46 @@ struct ШагиПодачи: View {
 
     // MARK: Низ
 
-    /// Низ всегда на экране (над полосой «домой»): «‹ Назад» и главная кнопка; с клавиатурой — «↑ ↓ Готово».
+    /// Низ всегда на экране (над полосой «домой»), на цвете страницы, как .add-stepnav: «Назад» и главная кнопка;
+    /// с клавиатурой — «↑ ↓ Готово».
     private var низ: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(Theme.линия).frame(height: 1)
-            Group {
-                if фокус != nil {
-                    панельКлавиатуры
-                } else {
-                    кнопкиШагов
-                }
+        Group {
+            if фокус != nil {
+                панельКлавиатуры
+            } else {
+                кнопкиШагов
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, фокус != nil ? 6 : 10)
         }
-        .background(Theme.поверхность.ignoresSafeArea(edges: .bottom))
+        .padding(.horizontal, 14)
+        .padding(.vertical, фокус != nil ? 6 : 10)
+        .background(КраскаПодачи.фон.ignoresSafeArea(edges: .bottom))
     }
 
     @ViewBuilder
     private var кнопкиШагов: some View {
         let первый = модель.видимыеШаги.first == модель.шаг
         let последний = модель.шаг == .проверка
-        HStack(spacing: 10) {
-            if !первый {
-                КнопкаНазадПодачи {
-                    модель.назад()
+        if !модель.правка && последний {
+            /* #submit-btn во всю ширину, «Назад» — под ним. */
+            VStack(spacing: 10) {
+                КнопкаПодачи(кнопкаОтправки, занято: модель.отправляем) { модель.выставить() }
+                if !первый {
+                    КнопкаНазадПодачи { модель.назад() }
                 }
             }
-            if модель.правка {
-                if !последний {
-                    КнопкаПодачиВторая(т("next")) { модель.далее() }
+        } else {
+            HStack(spacing: 10) {
+                if !первый {
+                    КнопкаНазадПодачи { модель.назад() }
                 }
-                КнопкаПодачи(т(модель.отправляем ? "saving" : "save"), занято: модель.отправляем) { модель.сохранить() }
-            } else if последний {
-                КнопкаПодачи(кнопкаОтправки, занято: модель.отправляем) { модель.выставить() }
-            } else {
-                КнопкаПодачи(т("next")) { модель.далее() }
+                if модель.правка {
+                    if !последний {
+                        КнопкаПодачиВторая(т("next")) { модель.далее() }
+                    }
+                    КнопкаПодачи(т(модель.отправляем ? "saving" : "save"), занято: модель.отправляем) { модель.сохранить() }
+                } else {
+                    КнопкаДалееПодачи(т("next")) { модель.далее() }
+                }
             }
         }
     }
@@ -310,9 +391,9 @@ struct ШагиПодачи: View {
         switch модель.шаг {
         case .данные:
             if модель.режим != .авто { п.append("title") }
-            if модель.брендВиден && модель.бренды.isEmpty { п.append("brand") }
             п.append("desc")
         case .характеристики:
+            if модель.брендВиден && модель.бренды.isEmpty { п.append("brand") }
             switch модель.режим {
             case .авто:
                 п.append(contentsOf: ["mileage", "engine"])
@@ -336,9 +417,7 @@ struct ШагиПодачи: View {
         case .адрес:
             if модель.городВводом { п.append("city") }
             п.append("address")
-        case .дополнительно:
-            if !модель.правка && модель.строкиДополнительно.contains("del") { п.append("deldays") }
-        case .фото, .проверка:
+        case .дополнительно, .фото, .проверка:
             break
         }
         return п
@@ -361,13 +440,13 @@ struct ШагФото: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            КарточкаПодачи(т("form_add_photo"), подпись: подпись) {
+            КарточкаПодачи(т("step_photo"), подпись: подпись, значок: "camera") {
                 if модель.плитки.isEmpty {
-                    большаяПлитка
+                    зона
                 } else {
                     сетка
+                    if КамераПодачи.есть && модель.местоФото > 0 { кнопкаКамеры }
                 }
-                if КамераПодачи.есть && модель.местоФото > 0 { кнопкаКамеры }
                 if модель.местоФото == 0 {
                     ПодсказкаПоля(String(format: т("photo_cap_full"), модель.лимитФото))
                 }
@@ -389,41 +468,75 @@ struct ШагФото: View {
         }
     }
 
-    /// «2 из 5 фото · первое — обложка, перетащите, чтобы поменять порядок».
-    private var подпись: String {
-        if модель.плитки.isEmpty { return String(format: т("form_photo_hint"), модель.лимитФото) }
+    /// Пусто — подсказки нет (она в зоне); есть фото — «2 из 5 фото · первое — обложка, перетащите…».
+    private var подпись: String? {
+        if модель.плитки.isEmpty { return nil }
         let счёт = String(format: т("photo_count"), модель.плитки.count, модель.лимитФото)
         return счёт + " · " + т("photo_order_hint")
     }
 
-    /// Пусто — одна большая плитка «Добавить фото» (галерея).
-    private var большаяПлитка: some View {
-        PhotosPicker(selection: $выбор, maxSelectionCount: max(1, модель.местоФото), selectionBehavior: .ordered,
-                     matching: .images) {
-            VStack(spacing: 8) {
-                Image(systemName: "photo.badge.plus")
-                    .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(Theme.акцент)
-                    .accessibilityHidden(true)
-                Text(т("add_photo_big"))
-                    .font(.system(size: 18, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                Text(т("add_photo_sub"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+    /// .photo-zone: пунктир --line 2 px на --surf2, значок, «Добавьте фото», «Галерея» (--g) и «Камера» (--tint-info),
+    /// «до 5 фото · jpg/png/webp».
+    private var зона: some View {
+        VStack(spacing: 0) {
+            Image(systemName: "camera")
+                .font(.system(size: 32, weight: .regular))
+                .foregroundStyle(Theme.текстВторой)
+                .accessibilityHidden(true)
+            Text(т("form_add_photo"))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+            HStack(spacing: 8) {
+                PhotosPicker(selection: $выбор, maxSelectionCount: max(1, модель.местоФото), selectionBehavior: .ordered,
+                             matching: .images) {
+                    кнопкаЗоны(т("form_gallery"), значок: "folder", главная: true)
+                }
+                .buttonStyle(.plain)
+                if КамераПодачи.есть {
+                    Button { камера = true } label: {
+                        кнопкаЗоны(т("form_camera"), значок: "camera", главная: false)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 190)
-            .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(Theme.акцент.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-            }
-            .contentShape(Rectangle())
+            Text(String(format: т("form_photo_hint"), модель.лимитФото))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текстВторой)
+                .padding(.top, 8)
         }
-        .accessibilityLabel(т("add_photo_big"))
+        .padding(.vertical, 28)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(КраскаПодачи.линия, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+        }
+    }
+
+    /// .photo-btn: высота 38, 13/700, скругление 12; .pri — --g с белым, .alt — --tint-info с кромкой --edge-info.
+    private func кнопкаЗоны(_ подпись: String, значок: String, главная: Bool, широкая: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: значок)
+                .font(.system(size: 13, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(подпись)
+                .font(.system(size: 13, weight: .bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(главная ? Color.white : КраскаПодачи.инфоТекст)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: широкая ? .infinity : nil)
+        .frame(height: 38)
+        .background(главная ? Theme.зелёный : КраскаПодачи.инфоФон,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(главная ? Color.clear : КраскаПодачи.инфоКромка, lineWidth: 1.5)
+        }
+        .contentShape(Rectangle())
     }
 
     /// Сетка: плитки переносятся пальцем (долгое нажатие), последняя клетка — «+ Добавить».
@@ -454,20 +567,20 @@ struct ШагФото: View {
                      matching: .images) {
             VStack(spacing: 4) {
                 Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 20, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(т("add_photo_short"))
                     .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(Theme.акцент)
+            .foregroundStyle(Theme.текстВторой)
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
-            .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(Theme.акцент.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             }
             .contentShape(Rectangle())
         }
@@ -478,11 +591,7 @@ struct ШагФото: View {
         Button {
             камера = true
         } label: {
-            Label(т("form_camera"), systemImage: "camera")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.акцент)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            кнопкаЗоны(т("form_camera"), значок: "camera", главная: false, широкая: true)
         }
         .buttonStyle(.plain)
     }
@@ -501,7 +610,7 @@ struct ШагФото: View {
     }
 }
 
-/// Плитка фото (.photo-thumb): картинка, «Обложка» у первой, «✕», кольцо загрузки, ошибка с «повторить».
+/// Плитка фото (.photo-thumb): картинка, «★ главное» у первой, «✕», кольцо загрузки, ошибка с «повторить».
 struct ПлиткаФотоВид: View {
     let плитка: ПлиткаФото
     let главная: Bool
@@ -523,35 +632,43 @@ struct ПлиткаФотоВид: View {
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
     var body: some View {
-        картинка
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+        return картинка
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .overlay(alignment: .bottom) {
+                /* .main-photo::after — полоса «★ главное» по низу плитки. */
+                if главная && плитка.готова {
+                    Text("★ " + т("main_photo"))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                        .background(Color(uiColor: Theme.hex(0x34C997, 0.78)))
+                        .accessibilityHidden(true)
+                }
+            }
+            .clipShape(форма)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(главная ? т("cover") : т("photo"))
             .accessibilityAddTraits(.isImage)
             .accessibilityAction(named: Text(т("photo_left"))) { сдвинуть(-1) }
             .accessibilityAction(named: Text(т("photo_right"))) { сдвинуть(1) }
             .overlay {
+                форма
+                    .strokeBorder(главная ? Theme.зелёный2 : КраскаПодачи.линия, lineWidth: 1.5)
+                    .allowsHitTesting(false)
+            }
+            .background {
                 if главная {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                        .strokeBorder(Theme.зелёныйЯркий, lineWidth: 2.5)
-                        .allowsHitTesting(false)
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md + 2, style: .continuous)
+                        .fill(Color(uiColor: Theme.hex(0x0F5132, 0.25)))
+                        .padding(-2)
                 }
             }
+            .shadow(color: Color(uiColor: Theme.hex(0x0F5132, 0.07)), radius: 2, y: 1)
             .overlay { состояние }
-            .overlay(alignment: .bottomLeading) {
-                if главная && плитка.готова {
-                    Text(т("cover"))
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Theme.зелёный, in: Capsule())
-                        .padding(6)
-                        .accessibilityHidden(true)
-                }
-            }
             .overlay(alignment: .topTrailing) {
                 Button(action: удалить) {
                     Image(systemName: "xmark")
@@ -565,7 +682,7 @@ struct ПлиткаФотоВид: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(т("delete"))
             }
-            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .contentShape(форма)
             .contextMenu {
                 if !главная && плитка.готова {
                     Button(т("make_cover"), systemImage: "star") { главной() }
@@ -611,7 +728,7 @@ struct ПлиткаФотоВид: View {
                 Color.black.opacity(0.4)
                 КольцоЗагрузки(этап: плитка.этап)
             }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         } else if let ошибка = плитка.ошибка {
             VStack(spacing: 4) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -633,7 +750,7 @@ struct ПлиткаФотоВид: View {
             .padding(4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.red.opacity(0.55))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
     }
 }
@@ -643,7 +760,6 @@ struct ПлиткаФотоВид: View {
 struct ШагДанные: View {
     @ObservedObject var модель: ПодачаМодель
     let фокус: FocusState<String?>.Binding
-    @State private var список: СписокВыбора? = nil
     @State private var разделы = false
 
     init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding) {
@@ -654,18 +770,11 @@ struct ШагДанные: View {
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            КарточкаПодачи(т(модель.режим == .услуга ? "card_what_service" : "card_what")) {
-                название
-                раздел
-                if модель.брендВиден { бренд }
-            }
-            КарточкаПодачи {
-                описание
-            }
-        }
-        .sheet(item: $список) { с in
-            ЛистВыбора(список: с)
+        /* #add-card-data — одна карточка: название, раздел, описание (бренд — первым в характеристиках). */
+        КарточкаПодачи(т(модель.режим == .услуга ? "card_what_service" : "step_what"), значок: "shippingbox") {
+            название
+            раздел
+            описание
         }
         .sheet(isPresented: $разделы) {
             ЛистРазделов(справочники: модель.справочники, выбрано: модель.форма.раздел, выбрать: { ключ in
@@ -677,16 +786,17 @@ struct ШагДанные: View {
     private var название: some View {
         let авто = модель.режим == .авто
         let ошибка = модель.ошибка("title")
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                ПодписьПоля(т(модель.режим == .услуга ? "e_model_service" : "form_name"), обязательно: !авто)
+                ПодписьПоля(т(модель.режим == .услуга ? "e_model_service" : "form_name"))
                 if модель.заполненоИИ {
+                    /* #ai-name-badge: 11/600, --tint-ok / --on-ok, скругление 6. */
                     Text(т("form_ai_badge"))
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.акцент)
-                        .padding(.horizontal, 6)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(КраскаПодачи.хорошоТекст)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(Theme.оттенокАкцента, in: Capsule())
+                        .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
             }
             ПолеПодачи(авто ? т("auto_title_ph") : т("form_name_ph"), текст: $модель.форма.название,
@@ -697,11 +807,11 @@ struct ШагДанные: View {
         }
     }
 
-    /// Раздел — одна строка со значком и путём; нажатие — лист с поиском и крупными строками.
+    /// Раздел — select.inp на --card; нажатие — лист с поиском и крупными строками, путь — под строкой.
     private var раздел: some View {
         let ошибка = модель.ошибка("category")
-        return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("form_category"), обязательно: true)
+        return VStack(alignment: .leading, spacing: 8) {
+            ПодписьПоля(т("form_category"))
             СтрокаРазделаПодачи(справочники: модель.справочники, раздел: модель.форма.раздел, ошибка: ошибка != nil) {
                 фокус.wrappedValue = nil
                 разделы = true
@@ -711,33 +821,12 @@ struct ШагДанные: View {
         .id("category")
     }
 
-    /// Бренд: список BRAND_LIST раздела с «Другой — вписать» или просто поле.
-    private var бренд: some View {
-        let бренды = модель.бренды
-        return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("form_brand"), необязательно: true)
-            if бренды.isEmpty {
-                ПолеПодачи(т("form_brand_ph"), текст: $модель.форма.бренд, заглавные: .words, фокус: фокус, ключ: "brand",
-                           предел: ПределыПодачи.короткое)
-            } else {
-                СтрокаВыбора(модель.форма.бренд, подсказка: т("form_brand_pick")) {
-                    let м = модель
-                    фокус.wrappedValue = nil
-                    список = СписокВыбора(заголовок: т("form_brand"),
-                                          варианты: бренды.map { ВариантПоля(ключ: $0, подпись: $0) },
-                                          своё: т("form_brand_other"), сброс: т("spec_unset")) { значение in
-                        м.форма.бренд = значение
-                    }
-                }
-            }
-        }
-    }
-
+    /// Описание (label.field-sub): «* обязательно» — только здесь, как на сайте.
     private var описание: some View {
         let ошибка = модель.ошибка("desc")
         let длина = модель.форма.описание.count
         return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("form_description"), обязательно: true)
+            ПодписьПоля(т("form_description"), обязательно: true, мелкая: true)
             ТекстПодачи(т(модель.режим == .услуга ? "desc_ph_service" : "form_desc_ph"), текст: $модель.форма.описание,
                         фокус: фокус, ключ: "desc", ошибка: ошибка != nil)
             HStack(alignment: .top, spacing: 8) {
@@ -780,7 +869,7 @@ struct ШагХарактеристики: View {
             case .запчасти:
                 ПоляЗапчасти(модель: модель, фокус: фокус, показатьСписок: { с in список = с })
             case .товар, .услуга, .работа:
-                if !модель.характеристики.isEmpty { характеристики }
+                if !модель.характеристики.isEmpty || модель.брендВиден { характеристики }
             }
             if модель.vinРазрешён { vin }
         }
@@ -789,14 +878,80 @@ struct ШагХарактеристики: View {
         }
     }
 
-    /// E_SPECS: сегмент, меню или лист с «— не указано —» и «Другое (вписать)…», число — числовым полем;
+    /// Панель #specs-toggle + #specs-panel: шапка с ключом на --surf2, под ней бренд и поля E_SPECS по два в ряд
+    /// (div.two); списки — select (меню или лист с «— не указано —» и «Другое (вписать)…»), число — полем;
     /// пишется в cpu/gpu/ram/storage/year.
     private var характеристики: some View {
-        КарточкаПодачи(т("form_specs"), подпись: т("specs_sub")) {
-            ForEach(модель.характеристики) { поле in
-                VStack(alignment: .leading, spacing: 6) {
-                    ПодписьПоля(поле.подпись)
-                    полеХарактеристики(поле)
+        let поля = модель.характеристики
+        let рядов = (поля.count + 1) / 2
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "wrench.adjustable")
+                    .font(.system(size: 13))
+                    .accessibilityHidden(true)
+                Text(т("form_specs"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(КраскаПодачи.текст)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .background(КраскаПодачи.поле,
+                        in: UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.ms, topTrailingRadius: Theme.Радиус.ms,
+                                                   style: .continuous))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(КраскаПодачи.линия).frame(height: 1)
+            }
+            VStack(alignment: .leading, spacing: 14) {
+                if модель.брендВиден { бренд }
+                if рядов > 0 {
+                    Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 14) {
+                        ForEach(0..<рядов, id: \.self) { р in
+                            GridRow(alignment: .bottom) {
+                                ячейка(поля[р * 2])
+                                if р * 2 + 1 < поля.count {
+                                    ячейка(поля[р * 2 + 1])
+                                } else {
+                                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+        }
+        .overlay { форма.strokeBorder(КраскаПодачи.линия, lineWidth: 1) }
+    }
+
+    private func ячейка(_ поле: ПолеХарактеристики) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ПодписьПоля(поле.подпись, мелкая: true)
+                .fixedSize(horizontal: false, vertical: true)
+            полеХарактеристики(поле)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Бренд (label.field-sub): список BRAND_LIST раздела на --surf2 с «Другой — вписать» или просто поле.
+    private var бренд: some View {
+        let бренды = модель.бренды
+        return VStack(alignment: .leading, spacing: 6) {
+            ПодписьПоля(т("form_brand"), необязательно: true, мелкая: true)
+            if бренды.isEmpty {
+                ПолеПодачи(т("form_brand_ph"), текст: $модель.форма.бренд, заглавные: .words, фокус: фокус, ключ: "brand",
+                           предел: ПределыПодачи.короткое)
+            } else {
+                СтрокаВыбора(модель.форма.бренд, подсказка: т("form_brand_pick"), заливка: КраскаПодачи.поле) {
+                    let м = модель
+                    фокус.wrappedValue = nil
+                    список = СписокВыбора(заголовок: т("form_brand"),
+                                          варианты: бренды.map { ВариантПоля(ключ: $0, подпись: $0) },
+                                          своё: т("form_brand_other"), сброс: т("spec_unset")) { значение in
+                        м.форма.бренд = значение
+                    }
                 }
             }
         }
@@ -811,12 +966,6 @@ struct ШагХарактеристики: View {
         } else if поле.варианты.isEmpty {
             ПолеПодачи(поле.подпись, текст: связь, клавиатура: .numberPad, фокус: фокус, ключ: "sp_" + поле.поле,
                        предел: ПределыПодачи.короткое)
-        } else if ВыборСегментом.влезет(варианты) {
-            ВыборСегментом(варианты, значение: связь, можноСнять: true)
-            Button(т("spec_other_write")) { вписать(поле, связь) }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.акцент)
-                .buttonStyle(.plain)
         } else if варианты.count <= 15 {
             МенюВыбора(варианты, значение: связь, подсказка: т("spec_unset"), сброс: т("spec_unset"),
                        своё: { вписать(поле, связь) })
@@ -1051,10 +1200,10 @@ struct ПолеМастераВид: View {
         })
     }
 
-    /// Подпись с «* обязательно»; единица у числа — справа в самом поле.
+    /// Подпись .field-sub (13/600 серым) с «* обязательно»; единица у числа — справа в самом поле.
     private var подпись: some View {
         let единица = (поле.вид == "num" || поле.единица.isEmpty) ? "" : ", " + поле.единица
-        return ПодписьПоля(поле.подпись + единица, обязательно: поле.обязательно)
+        return ПодписьПоля(поле.подпись + единица, обязательно: поле.обязательно, мелкая: true)
     }
 
     /// Числа — только цифры и точка/запятая: «85 000 км» отбор витрины прочитал бы как ноль.
