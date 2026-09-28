@@ -1,0 +1,154 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Codemagic — те же две сборки, что и в .github/workflows (Actions на аккаунте выключены).
+#
+# Один раз в Codemagic → Teams → Global variables (или приложение → Environment variables):
+#   группа appstore — APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (те же значения,
+#                     что в секретах GitHub; ASC_KEY_P8 — весь файл .p8 или только тело ключа);
+#   группа github   — GH_TOKEN: токен GitHub с правом Contents: write на kliko-ios
+#                     (релизы, из которых ПК-приложение берёт обновления).
+# Все переменные — с галочкой Secret.
+# ─────────────────────────────────────────────────────────────────────────────
+workflows:
+  # iPhone: вручную — Start new build → «OLX Watch · TestFlight». Собирает и сразу
+  # заливает в TestFlight. Версия витрины — переменная VERSION при запуске (пусто — из project.yml).
+  olx-watch-testflight:
+    name: OLX Watch · TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    working_directory: olx-watch-ios
+    environment:
+      groups:
+        - appstore
+      xcode: latest
+      vars:
+        VERSION: ""
+    scripts:
+      - name: Проверить переменные
+        script: |
+          missing=""
+          [ -z "${APPLE_TEAM_ID:-}" ] && missing="$missing APPLE_TEAM_ID"
+          [ -z "${ASC_KEY_ID:-}" ] && missing="$missing ASC_KEY_ID"
+          [ -z "${ASC_ISSUER_ID:-}" ] && missing="$missing ASC_ISSUER_ID"
+          [ -z "${ASC_KEY_P8:-}" ] && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "Не заведены переменные:$missing — группа appstore в Codemagic"; exit 1
+          fi
+          echo "Переменные на месте."
+          echo "KEY_DIR=$CM_BUILD_DIR/build/keys" >> "$CM_ENV"
+          echo "ARCHIVE_PATH=$CM_BUILD_DIR/build/OLXWatch.xcarchive" >> "$CM_ENV"
+          echo "EXPORT_DIR=$CM_BUILD_DIR/build/export" >> "$CM_ENV"
+
+      - name: Xcode и SDK
+        # App Store принимает только сборки с iOS SDK 26 и выше.
+        script: |
+          xcodebuild -version
+          major=$(xcodebuild -version | awk 'NR==1{split($2,a,"."); print a[1]}')
+          if [ "$major" -lt 26 ]; then echo "Xcode ниже 26 — App Store такую сборку не примет"; exit 1; fi
+
+      - name: XcodeGen и проект
+        script: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+
+      - name: Ключ App Store Connect
+        script: ci/asc_key.sh
+
+      - name: Отозвать сертификаты разработки прошлых сборок
+        # Сбой не валит сборку: если подпись всё равно упадёт, скажет следующий шаг.
+        script: |
+          KID="$ASC_KEY_ID" ISS="$ASC_ISSUER_ID" python3 ci/revoke_dev_certs.py || echo "Не вышло — идём дальше."
+
+      - name: Собрать архив
+        # Архив подписан локально (ad-hoc), настоящую подпись ставит экспорт облачным
+        # сертификатом распространения — новых сертификатов разработки не появляется.
+        # Номер сборки — 1000 + номер Codemagic: на GitHub последний был 91, а TestFlight
+        # не принимает номер, который уже был.
+        script: |
+          set -o pipefail
+          keychain initialize
+          extra=""
+          [ -n "${VERSION:-}" ] && extra="MARKETING_VERSION=$VERSION"
+          xcodebuild archive \
+            -project OLXWatch.xcodeproj \
+            -scheme OLXWatch \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            CURRENT_PROJECT_VERSION=$((1000 + BUILD_NUMBER)) \
+            $extra
+
+      - name: Экспорт и заливка в TestFlight
+        script: |
+          set -o pipefail
+          mkdir -p "$EXPORT_DIR"
+          cat > "$EXPORT_DIR/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$EXPORT_DIR/ExportOptions.plist" \
+            -exportPath "$EXPORT_DIR" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          rm -rf "$KEY_DIR"
+          echo "Сборка $((1000 + BUILD_NUMBER)) ушла в App Store Connect — через 5–15 минут появится в TestFlight."
+
+  # ПК: на каждый пуш, меняющий olx-watcher/, и вручную. Версия 1.0.<100 + номер сборки>,
+  # выкладывается в GitHub Releases — установленное приложение обновится само.
+  # Машина Windows в Codemagic — только с включённой оплатой (Billing), поминутно.
+  olx-watcher-windows:
+    name: OLX Watcher · Windows
+    instance_type: windows_x2
+    max_build_duration: 45
+    working_directory: olx-watcher
+    environment:
+      groups:
+        - github
+      node: 22
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: '*'
+          include: true
+          source: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'olx-watcher/**'
+          - 'codemagic.yaml'
+    scripts:
+      - name: Зависимости
+        script: npm ci
+      - name: Проверка синтаксиса
+        script: npm run check
+      - name: Тесты
+        script: npm test
+      - name: Версия сборки
+        script: node ci/version.js
+      - name: Установщик и релиз на GitHub
+        script: npx electron-builder --win --x64 --publish always
+    artifacts:
+      - dist/*.exe
+      - olx-watcher/dist/*.exe
