@@ -571,6 +571,8 @@ final class МодельСтудииРоликов: ObservableObject {
         показатьТост(т("pro_need"), секунд: 2)
     }
 
+    /// Не ASWebAuthenticationSession: сессия kliko_cab живёт только в WKWebsiteDataStore.default(), а лист входа
+    /// берёт куки Safari — там человек не вошёл; передать сессию параметром сайт не умеет. Поэтому — страница сайта.
     private func подключить(_ ключ: String, _ имя: String) {
         показатьТост(String(format: т("connecting"), имя), секунд: 2)
         guard let адрес = Config.страницаСайта("social_connect.php?platform=\(ключ)&do=start") else { return }
