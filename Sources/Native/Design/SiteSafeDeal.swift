@@ -133,9 +133,10 @@ struct ОкноБезопаснойСделки: View {
     private static let шаги: [(String, String)] = [("s1_t", "s1_d"), ("s2_t", "s2_d"), ("s3_t", "s3_d"), ("s4_t", "s4_d")]
 
     var body: some View {
-        VStack(spacing: 0) {
-            шапка
-            ScrollView {
+        /* Лист по высоте содержимого — без пустого низа (владелец: «везде пустота снизу»). */
+        ScrollView {
+            VStack(spacing: 0) {
+                шапка
                 VStack(alignment: .leading, spacing: 14) {
                     строкаТовара
                     суммы
@@ -143,12 +144,13 @@ struct ОкноБезопаснойСделки: View {
                     раскрывашкаШагов
                 }
                 .padding(16)
+                низ
             }
-            низ
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .листПоВысоте()
     }
 
     // MARK: Шапка (.mk-eco-head)

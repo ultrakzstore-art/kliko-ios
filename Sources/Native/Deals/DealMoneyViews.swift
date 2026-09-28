@@ -33,26 +33,20 @@ struct СлойДенегСделки: ViewModifier {
             .sheet(item: $деньги.лист, onDismiss: { деньги.листЗакрыт() }) { лист in
                 листДенег(лист)
             }
-            .alert(заголовокВопроса, isPresented: вопросНаЭкране, presenting: деньги.вопрос) { в in
-                let слова = деньги.текст(в)
-                if слова.толькоПонятно {
-                    Button(слова.кнопка, role: .cancel) {}
-                } else {
-                    Button(слова.кнопка, role: слова.опасная ? ButtonRole.destructive : nil) { деньги.подтвердить(в) }
-                    Button(СделкиText.т("btn_cancel"), role: .cancel) {}
-                }
-            } message: { в in
-                Text(деньги.текст(в).текст)
+            /* Вопросы о деньгах — оформленным листом по высоте (cabConfirm сайта), а не системным окном. */
+            .background {
+                Color.clear
+                    .sheet(item: $деньги.вопрос) { в in
+                        ОкноВопросаДенег(вопрос: в, слова: деньги.текст(в), подтвердить: { подтвердитьПозже(в) },
+                                         отмена: { деньги.вопрос = nil })
+                    }
             }
-            .confirmationDialog(ДеньгиСделкиText.т("shp_add_t"), isPresented: тарифыНаЭкране, titleVisibility: .visible,
-                                presenting: деньги.тарифы) { цена in
-                Button(ЦенаКурьера.подпись(цена.основной)) { деньги.выбратьТариф(цена.основной) }
-                if let другой = цена.другой {
-                    Button(ЦенаКурьера.подпись(другой)) { деньги.выбратьТариф(другой) }
-                }
-                Button(СделкиText.т("btn_cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(ДеньгиСделкиText.т("shp_tariff_m"))
+            .background {
+                Color.clear
+                    .sheet(item: $деньги.тарифы) { цена in
+                        ОкноТарифовКурьера(цена: цена, выбрать: { вариант in выбратьТарифПозже(вариант) },
+                                           отмена: { деньги.тарифы = nil })
+                    }
             }
             .overlay {
                 if let ход = деньги.ход {
@@ -80,21 +74,25 @@ struct СлойДенегСделки: ViewModifier {
             }
     }
 
-    private var заголовокВопроса: String {
-        guard let в = деньги.вопрос else { return "" }
-        return деньги.текст(в).заголовок
+    /// Лист вопроса сперва уезжает, потом — действие: следом может открыться лист банка или eGov.
+    @MainActor
+    private func подтвердитьПозже(_ в: ДеньгиСделкиМодель.Вопрос) {
+        let м = деньги
+        м.вопрос = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            м.подтвердить(в)
+        }
     }
 
-    private var вопросНаЭкране: Binding<Bool> {
-        Binding(get: { деньги.вопрос != nil }, set: { показан in
-            if !показан { деньги.вопрос = nil }
-        })
-    }
-
-    private var тарифыНаЭкране: Binding<Bool> {
-        Binding(get: { деньги.тарифы != nil }, set: { показан in
-            if !показан { деньги.тарифы = nil }
-        })
+    @MainActor
+    private func выбратьТарифПозже(_ вариант: ЦенаКурьера.Вариант) {
+        let м = деньги
+        м.тарифы = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            м.выбратьТариф(вариант)
+        }
     }
 
     /// Возврат со страницы банка по ссылке (?topup=…&deal=<эта сделка>) — задание из ящика.
@@ -141,6 +139,190 @@ struct СлойДенегСделки: ViewModifier {
         ЗаданияДенегСделок.shared.положить(.шлюз(итог))
         NativeRouter.shared.цель = .сделка(id: итог.сделка)
     }
+}
+
+// MARK: - Вопрос о деньгах (cabConfirm сайта: значок, заголовок, текст, «Возврат и обратная доставка», две кнопки)
+
+struct ОкноВопросаДенег: View {
+    let вопрос: ДеньгиСделкиМодель.Вопрос
+    let слова: ДеньгиСделкиМодель.ТекстВопроса
+    let подтвердить: () -> Void
+    let отмена: () -> Void
+
+    init(вопрос: ДеньгиСделкиМодель.Вопрос, слова: ДеньгиСделкиМодель.ТекстВопроса,
+         подтвердить: @escaping () -> Void, отмена: @escaping () -> Void) {
+        self.вопрос = вопрос
+        self.слова = слова
+        self.подтвердить = подтвердить
+        self.отмена = отмена
+    }
+
+    /// Сумма заморозки — только у «Заморозить средства?».
+    private var суммаЗаморозки: Int? {
+        if case .заморозить(let сумма) = вопрос { return сумма }
+        return nil
+    }
+
+    private var символ: String {
+        switch вопрос {
+        case .заморозить: return "lock.fill"
+        case .договорились, .возврат: return "checkmark.shield.fill"
+        case .вернуть, .платнаяОтмена: return "exclamationmark.triangle.fill"
+        case .код: return "number"
+        case .курьер, .заберуСам: return "car.fill"
+        case .картойЗаКурьера: return "creditcard.fill"
+        case .ожидание: return "clock.fill"
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                шапка
+                текст
+                if суммаЗаморозки != nil { УсловияВозврата() }
+                кнопки
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Theme.фонСтраницы.ignoresSafeArea())
+        .листПоВысоте()
+    }
+
+    private var шапка: some View {
+        /* .confirm-icon + .confirm-title: значок в круглой плашке, заголовок 20/800. */
+        HStack(spacing: 12) {
+            Image(systemName: символ)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(слова.опасная ? КраскаСделокКабинета.плохоТекст : КраскаСделокКабинета.хорошоТекст)
+                .frame(width: 40, height: 40)
+                .background(слова.опасная ? КраскаСделокКабинета.плохоФон : КраскаСделокКабинета.хорошоФон, in: Circle())
+                .accessibilityHidden(true)
+            Text(слова.заголовок)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    @ViewBuilder
+    private var текст: some View {
+        if let сумма = суммаЗаморозки {
+            /* «Заморозим <b>N ₸</b> на платформе…» — сумма жирным, правила возврата — отдельным блоком ниже. */
+            ТекстСделки.сЖирным(ДеньгиСделкиText.т("fz_m", n: СделкиФормат.тенге(сумма)))
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.текстВторой)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if !слова.текст.isEmpty {
+            Text(слова.текст)
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.текстВторой)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var кнопки: some View {
+        VStack(spacing: 8) {
+            if слова.толькоПонятно {
+                КнопкаСделки(слова.кнопка, вид: .главная) { отмена() }
+            } else {
+                if let сумма = суммаЗаморозки {
+                    КнопкаСделки(слова.кнопка, вид: .главная, символ: "lock", сумма: СделкиФормат.тенге(сумма)) {
+                        подтвердить()
+                    }
+                } else {
+                    КнопкаСделки(слова.кнопка, вид: слова.опасная ? .опасная : .главная) { подтвердить() }
+                }
+                КнопкаСделки(СделкиText.т("btn_cancel"), вид: .вторая) { отмена() }
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+// MARK: - Выбор тарифа курьера (shpTariffChoice сайта)
+
+struct ОкноТарифовКурьера: View {
+    let цена: ЦенаКурьера
+    let выбрать: (ЦенаКурьера.Вариант) -> Void
+    let отмена: () -> Void
+
+    init(цена: ЦенаКурьера, выбрать: @escaping (ЦенаКурьера.Вариант) -> Void, отмена: @escaping () -> Void) {
+        self.цена = цена
+        self.выбрать = выбрать
+        self.отмена = отмена
+    }
+
+    private var варианты: [ЦенаКурьера.Вариант] {
+        var список = [цена.основной]
+        if let другой = цена.другой { список.append(другой) }
+        return список
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(ДеньгиСделкиText.т("shp_add_t"), systemImage: "car.fill")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+                Text(ДеньгиСделкиText.т("shp_tariff_m"))
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(варианты, id: \.q) { в in
+                    Button { выбрать(в) } label: { строка(в) }
+                        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                }
+                КнопкаСделки(СделкиText.т("btn_cancel"), вид: .вторая) { отмена() }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Theme.фонСтраницы.ignoresSafeArea())
+        .листПоВысоте()
+    }
+
+    private func строка(_ в: ЦенаКурьера.Вариант) -> some View {
+        let пеший = в.тариф == "courier"
+        return HStack(spacing: 12) {
+            Image(systemName: пеший ? "figure.walk" : "car.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                .frame(width: 38, height: 38)
+                .background(КраскаСделокКабинета.хорошоФон,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .accessibilityHidden(true)
+            Text(ДеньгиСделкиText.т(пеший ? "co_ship_walk" : "co_ship_exp"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.текст)
+            Spacer(minLength: 8)
+            Text(СделкиФормат.тенге(в.цена))
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(Theme.зелёный)
+        }
+        .padding(12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension ЦенаКурьера: Identifiable {
+    var id: String { основной.q + "|" + (другой?.q ?? "") }
 }
 
 // MARK: - Крышка «запрос в пути»
@@ -285,9 +467,11 @@ struct ОкноБаллов: View {
                 КнопкаСделки(СделкиText.т("btn_cancel"), вид: .тихая) { отмена() }
             }
             .padding(20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.фонСтраницы.ignoresSafeArea())
-        .presentationDetents([.large])
+        .листПоВысоте()
     }
 
     private func строка(_ подпись: String, _ значение: String) -> some View {
@@ -345,27 +529,34 @@ struct ОкноОтменыСделки: View {
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(т("cn_t"), systemImage: "xmark.circle")
-                .font(.system(size: 20, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-            if послеОтправки {
-                ЗаметкаСделки(ТекстСделки.сЖирным(т("cn_after")), вид: .предупреждение, символ: "exclamationmark.triangle")
-            } else {
-                Text(т("cn_full"))
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.текстВторой)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Label(т("cn_t"), systemImage: "xmark.circle")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+                if послеОтправки {
+                    ЗаметкаСделки(ТекстСделки.сЖирным(т("cn_after")), вид: .предупреждение, символ: "exclamationmark.triangle")
+                } else {
+                    Text(т("cn_full"))
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.текстВторой)
+                }
+                TextField(т("cn_ph"), text: $причина, axis: .vertical)
+                    .lineLimit(2...4)
+                    .modifier(ПолеДенегСделки())
+                КнопкаСделки(т(послеОтправки ? "cn_btn_fee" : "cn_btn"), вид: .опасная, символ: "xmark") { отменить(причина) }
+                КнопкаСделки(СделкиText.т("btn_cancel"), вид: .тихая) { закрыть() }
             }
-            TextField(т("cn_ph"), text: $причина, axis: .vertical)
-                .lineLimit(2...4)
-                .modifier(ПолеДенегСделки())
-            КнопкаСделки(т(послеОтправки ? "cn_btn_fee" : "cn_btn"), вид: .опасная, символ: "xmark") { отменить(причина) }
-            КнопкаСделки(СделкиText.т("btn_cancel"), вид: .тихая) { закрыть() }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+            .мерилоЛиста()
         }
-        .padding(20)
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
         .background(Theme.фонСтраницы.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
+        /* Лист по высоте содержимого — без пустоты снизу (владелец, TestFlight: «Отмена сделки»). */
+        .листПоВысоте()
     }
 }
 
@@ -421,9 +612,12 @@ struct ОкноПриёмки: View {
                 КнопкаСделки(т("acc_later"), вид: .тихая) { позже() }
             }
             .padding(20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
         .background(Theme.фонСтраницы.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
+        .листПоВысоте()
     }
 }
 

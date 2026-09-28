@@ -38,9 +38,19 @@ struct ТочкаНаКартеСделки: Identifiable, Equatable {
     }
 }
 
+/// Адрес, выбранный в окне карты без сделки (оформление новой сделки): адрес, точка, дверь в виде _apkDoorVal.
+struct АдресИзКарты {
+    let адрес: String
+    let точка: CLLocationCoordinate2D?
+    let дверь: [String: Any]
+    let уПодъезда: Bool
+}
+
 struct ЛистТочкиСделки: View {
     let цель: ТочкаНаКартеСделки
-    @ObservedObject var модель: КарточкаСделкиМодель
+    /// Сделка, куда сохранить (set_pickup); nil — окно только выбирает адрес и отдаёт его в выбрано.
+    let модель: КарточкаСделкиМодель?
+    let выбрано: ((АдресИзКарты) -> Void)?
 
     @Environment(\.dismiss) private var закрыть
     @StateObject private var место = МестоТелефона()
@@ -65,9 +75,10 @@ struct ЛистТочкиСделки: View {
     /// Центр Казахстана и масштаб страны — [48.02, 66.92], zoom 5 у сайта.
     private static let центрСтраны = CLLocationCoordinate2D(latitude: 48.02, longitude: 66.92)
 
-    init(цель: ТочкаНаКартеСделки, модель: КарточкаСделкиМодель) {
+    init(цель: ТочкаНаКартеСделки, модель: КарточкаСделкиМодель?, выбрано: ((АдресИзКарты) -> Void)? = nil) {
         self.цель = цель
         self.модель = модель
+        self.выбрано = выбрано
         let д = цель.дверь ?? ДверьСделки()
         _адрес = State(initialValue: цель.адрес)
         _уПодъезда = State(initialValue: д.уПодъезда)
@@ -429,8 +440,16 @@ struct ЛистТочкиСделки: View {
             return
         }
         ошибка = nil
+        if let выбрано {
+            /* Новая сделка: адрес уходит в окно оформления, сервер получит его вместе с create. */
+            выбрано(АдресИзКарты(адрес: String(текст.prefix(300)), точка: координата, дверь: значениеДвери(),
+                                 уПодъезда: уПодъезда))
+            закрыть()
+            return
+        }
+        guard let м = модель else { return }
         сохраняем = true
-        var тело: [String: Any] = ["deal_id": модель.id, "addr": String(текст.prefix(300))]
+        var тело: [String: Any] = ["deal_id": м.id, "addr": String(текст.prefix(300))]
         if let к = координата {
             тело["lat"] = к.latitude
             тело["lon"] = к.longitude
@@ -439,7 +458,6 @@ struct ЛистТочкиСделки: View {
             тело["lon"] = NSNull()
         }
         тело["door"] = значениеДвери()
-        let м = модель
         Task { @MainActor in
             defer { сохраняем = false }
             do {

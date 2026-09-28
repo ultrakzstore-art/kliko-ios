@@ -47,9 +47,11 @@ struct СлойЗаданийСделок: ViewModifier {
         }
     }
 
-    struct КодИзСсылки: Equatable {
+    struct КодИзСсылки: Equatable, Identifiable {
         let встреча: Bool
         let токен: String
+
+        var id: String { токен }
     }
 
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
@@ -64,11 +66,13 @@ struct СлойЗаданийСделок: ViewModifier {
                     ОкноЗаказаУслуги(товар: товар, открыть: открыть, создана: { создана($0) })
                 }
             }
-            .alert(т("pin_b_ask"), isPresented: кодНаЭкране, presenting: код) { к in
-                Button(т("pin_b_ask_ok")) { отправитьКод(к) }
-                Button(СделкиText.т("btn_cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(т("pin_b_ask_m"))
+            /* «Вы точно получили товар?» — код отпускает деньги продавцу: оформленным листом, как вопросы о деньгах. */
+            .background {
+                Color.clear
+                    .sheet(item: $код) { к in
+                        ОкноВопросаДенег(вопрос: .код(""), слова: словаКода, подтвердить: { подтвердитьКод(к) },
+                                         отмена: { код = nil })
+                    }
             }
             .alert(итогКода ?? "", isPresented: итогНаЭкране) {
                 Button(СделкиText.т("hnd_lock_ok"), role: .cancel) {}
@@ -77,10 +81,15 @@ struct СлойЗаданийСделок: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: ЗаданияДенегСделок.пришло)) { _ in забрать() }
     }
 
-    private var кодНаЭкране: Binding<Bool> {
-        Binding(get: { код != nil }, set: { показан in
-            if !показан { код = nil }
-        })
+    private var словаКода: ДеньгиСделкиМодель.ТекстВопроса {
+        ДеньгиСделкиМодель.ТекстВопроса(заголовок: т("pin_b_ask"), текст: т("pin_b_ask_m"), кнопка: т("pin_b_ask_ok"),
+                                        опасная: false, толькоПонятно: false)
+    }
+
+    /// Лист уезжает, потом — запрос (после него может открыться карточка сделки).
+    private func подтвердитьКод(_ к: КодИзСсылки) {
+        код = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { отправитьКод(к) }
     }
 
     private var итогНаЭкране: Binding<Bool> {
@@ -162,6 +171,8 @@ final class НоваяСделкаМодель: ObservableObject {
         var полная: Int = 0
         var заморозка: Int = 0
         var продавец: String = ""
+        /// ship_free: доставку оплачивает продавец.
+        var доставкаБесплатно = false
     }
 
     enum Этап: Equatable {
@@ -183,6 +194,12 @@ final class НоваяСделкаМодель: ObservableObject {
     @Published var сообщение: String? = nil
     @Published private(set) var ставки = СтавкиСделки()
     @Published private(set) var идёт = false
+    /// «Как получить» и «Куда привезти» (только товар) — своя модель, её окно наблюдает отдельно.
+    let доставка: ДоставкаНовойСделки
+
+    init() {
+        доставка = ДоставкаНовойСделки()
+    }
 
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
 
@@ -203,7 +220,11 @@ final class НоваяСделкаМодель: ObservableObject {
                 этап = .верификация
                 return
             }
-            этап = .готово(Self.разобрать(p, продавец: (j["seller"] as? [String: Any]) ?? [:]))
+            let готовый = Self.разобрать(p, продавец: (j["seller"] as? [String: Any]) ?? [:])
+            этап = .готово(готовый)
+            if готовый.вид == "goods" {
+                await доставка.начать(товар: товар, бесплатная: готовый.доставкаБесплатно)
+            }
         } catch {
             этап = .ошибка(т("ep_conn"))
         }
@@ -224,6 +245,7 @@ final class НоваяСделкаМодель: ObservableObject {
         т.полная = (полная == nil || полная is NSNull) ? т.цена : A.целое(полная)
         т.заморозка = (заморозка == nil || заморозка is NSNull) ? т.цена : A.целое(заморозка)
         т.продавец = A.строка(s["name"])
+        т.доставкаБесплатно = A.да(p["ship_free"])
         return т
     }
 
@@ -271,6 +293,11 @@ final class НоваяСделкаМодель: ObservableObject {
             }
             let e = СделкиAPI.строка(j["error"])
             let m = СделкиAPI.строка(j["message"])
+            if e == "ship_quote" && self.доставка.включена {
+                /* Цена доставки устарела (или пункт выдачи не подходит) — как mkEcoPay: текст и новый расчёт. */
+                self.сообщение = self.доставка.ценаУстарела(причина: СделкиAPI.строка(j["reason"]))
+                return
+            }
             if e == "need_verification" {
                 self.сообщение = m.isEmpty ? self.т("sd_need_ver") : m
                 return
@@ -344,6 +371,8 @@ struct ОкноНовойСделки: View {
 
     @StateObject private var модель = НоваяСделкаМодель()
     @Environment(\.dismiss) private var закрыть
+    /// Окно карты «Куда доставить».
+    @State private var точкаДоставки: ТочкаНаКартеСделки? = nil
 
     init(товар: String, оплата: String, срок: Int, открыть: @escaping (URL) -> Void, создана: @escaping (String) -> Void) {
         self.товар = товар
@@ -356,27 +385,60 @@ struct ОкноНовойСделки: View {
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                содержимое
-                    .padding(.bottom, 24)
+        /* Лист по высоте содержимого (.mk-eco-box сайта): без пустого низа; закрыть — крестиком в углу. */
+        ScrollView {
+            содержимое
+                .padding(.bottom, 8)
+                .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Theme.фонСтраницы.ignoresSafeArea())
+        .overlay(alignment: .topTrailing) {
+            Button { закрыть() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.поверхность2, in: Circle())
+                    .contentShape(Circle())
             }
-            .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(СделкиText.т("close")) { закрыть() }
-                }
-            }
+            .buttonStyle(.plain)
+            .padding(12)
+            .accessibilityLabel(СделкиText.т("close"))
         }
         .overlay {
             if let ход = модель.ход { ХодДенегВид(ход: ход, закрыть: {}) }
         }
-        .sheet(item: $модель.условия) { у in
-            ОкноСоглашения(редакция: у.редакция, пункты: у.пункты, принято: { модель.условия = nil },
-                           выйти: { модель.условия = nil }, нуженВход: { модель.условия = nil })
+        .background {
+            Color.clear
+                .sheet(item: $модель.условия) { у in
+                    ОкноСоглашения(редакция: у.редакция, пункты: у.пункты, принято: { модель.условия = nil },
+                                   выйти: { модель.условия = nil }, нуженВход: { модель.условия = nil })
+                }
         }
+        .background {
+            Color.clear
+                .sheet(item: $точкаДоставки) { цель in
+                    ЛистТочкиСделки(цель: цель, модель: nil, выбрано: { модель.доставка.выбран($0) })
+                }
+        }
+        .листПоВысоте()
         .task { await модель.загрузить(товар: товар, нетТовара: т("sd_nf")) }
+    }
+
+    /// «Изменить адрес»: окно карты без сделки — адрес уходит в расчёт доставки и в create.
+    private func изменитьАдрес() {
+        let а = модель.доставка.адрес
+        var дверь = ДверьСделки()
+        if let д = а?.дверь {
+            дверь.уПодъезда = СделкиAPI.да(д["out"])
+            дверь.квартира = СделкиAPI.строка(д["flat"])
+            дверь.подъезд = СделкиAPI.строка(д["porch"])
+            дверь.этаж = СделкиAPI.строка(д["floor"])
+            дверь.домофон = СделкиAPI.строка(д["code"])
+            дверь.комментарий = СделкиAPI.строка(д["note"])
+        }
+        точкаДоставки = ТочкаНаКартеСделки(сторона: "to", адрес: а?.текст ?? "", точка: а?.точка, дверь: дверь)
     }
 
     @ViewBuilder
@@ -395,8 +457,9 @@ struct ОкноНовойСделки: View {
         case .верификация:
             НужнаВерификацияСделки(пройти: { пройтиВерификацию() }, позже: { закрыть() })
         case .готово(let т):
-            ПодтверждениеНовойСделки(товар: т, ставки: модель.ставки, сообщение: модель.сообщение, идёт: модель.идёт,
-                                     оформить: { оформить(т) })
+            ПодтверждениеНовойСделки(товар: т, ставки: модель.ставки, доставка: модель.доставка,
+                                     сообщение: модель.сообщение, идёт: модель.идёт,
+                                     изменитьАдрес: { изменитьАдрес() }, оформить: { оформить(т) })
         }
     }
 
@@ -411,6 +474,14 @@ struct ОкноНовойСделки: View {
         if т.вид == "deposit" || т.вид == "rent" { тело["amount"] = т.заморозка }
         if !оплата.isEmpty { тело["pay_method"] = оплата }
         if срок > 0 { тело["pay_term"] = срок }
+        if т.вид == "goods" {
+            /* Доставка, как mkEcoPay сайта: не посчитана или межгород без ТК — сначала подсказка, create не уходит. */
+            if let ошибка = модель.доставка.ошибкаПередОформлением() {
+                модель.сообщение = ошибка
+                return
+            }
+            модель.доставка.дополнить(&тело)
+        }
         let шаги: [ШагХода] = [ШагХода(текст: self.т("sd_ep_s1"), процент: 35, мс: 750),
                                ШагХода(текст: self.т("sd_ep_s2"), процент: 75, мс: 700)]
         модель.создать(тело: тело, заголовок: self.т("sd_ep_t"), шаги: шаги, готово: self.т("sd_ep_ok"),
@@ -422,9 +493,22 @@ struct ОкноНовойСделки: View {
 struct ПодтверждениеНовойСделки: View {
     let товар: НоваяСделкаМодель.Товар
     let ставки: СтавкиСделки
+    @ObservedObject var доставка: ДоставкаНовойСделки
     let сообщение: String?
     let идёт: Bool
+    let изменитьАдрес: () -> Void
     let оформить: () -> Void
+
+    init(товар: НоваяСделкаМодель.Товар, ставки: СтавкиСделки, доставка: ДоставкаНовойСделки, сообщение: String?,
+         идёт: Bool, изменитьАдрес: @escaping () -> Void, оформить: @escaping () -> Void) {
+        self.товар = товар
+        self.ставки = ставки
+        self.доставка = доставка
+        self.сообщение = сообщение
+        self.идёт = идёт
+        self.изменитьАдрес = изменитьАдрес
+        self.оформить = оформить
+    }
 
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
 
@@ -457,8 +541,11 @@ struct ПодтверждениеНовойСделки: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if доставка.включена {
+                БлокДоставкиНовойСделки(доставка: доставка, изменитьАдрес: изменитьАдрес)
+            }
             суммы
-            метки
+            МеткиГарантииСделки(подписи: [1, 2, 3].map { т("sd_c_" + приставка + String($0)) })
             if let ошибка = сообщение {
                 ЗаметкаСделки(Text(ошибка), вид: .плохо, символ: "exclamationmark.triangle")
             }
@@ -496,26 +583,16 @@ struct ПодтверждениеНовойСделки: View {
                 СтрокаСуммыСделки(подпись: т("sd_full"), значение: СделкиФормат.тенге(товар.полная))
             }
             СтрокаСуммыСделки(подпись: т("sd_fee"), значение: "+" + СделкиФормат.тенге(сбор))
+            if доставка.цена > 0 {
+                /* #mk-eco-shiprow: цена выбранной доставки входит в сумму к заморозке. */
+                СтрокаСуммыСделки(подпись: доставка.подписьЦены, значение: "+" + СделкиФормат.тенге(доставка.цена))
+            }
             Divider()
-            СтрокаСуммыСделки(подпись: т("sd_total"), значение: СделкиФормат.тенге(товар.заморозка + сбор), главная: true)
+            СтрокаСуммыСделки(подпись: т("sd_total"), значение: СделкиФормат.тенге(товар.заморозка + сбор + доставка.цена),
+                               главная: true)
         }
         .padding(12)
         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-    }
-
-    private var метки: some View {
-        HStack(spacing: 6) {
-            ForEach(1...3, id: \.self) { n in
-                Label(т("sd_c_" + приставка + String(n)), systemImage: "checkmark.shield")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(КраскаСделокКабинета.хорошоФон, in: Capsule())
-            }
-        }
     }
 }
 
@@ -550,18 +627,27 @@ struct ОкноЗаказаУслуги: View {
     private var процент: Int { Int(аванс.rounded()) }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                содержимое
-                    .padding(20)
+        /* Лист по высоте содержимого, закрыть — крестиком в углу (как окно «Безопасная сделка»). */
+        ScrollView {
+            содержимое
+                .padding(20)
+                .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .background(Theme.фонСтраницы.ignoresSafeArea())
+        .overlay(alignment: .topTrailing) {
+            Button { закрыть() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.поверхность2, in: Circle())
+                    .contentShape(Circle())
             }
-            .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(СделкиText.т("close")) { закрыть() }
-                }
-            }
+            .buttonStyle(.plain)
+            .padding(12)
+            .accessibilityLabel(СделкиText.т("close"))
         }
         .overlay {
             if let ход = модель.ход { ХодДенегВид(ход: ход, закрыть: {}) }
@@ -570,6 +656,7 @@ struct ОкноЗаказаУслуги: View {
             ОкноСоглашения(редакция: у.редакция, пункты: у.пункты, принято: { модель.условия = nil },
                            выйти: { модель.условия = nil }, нуженВход: { модель.условия = nil })
         }
+        .листПоВысоте()
         .task { await модель.загрузить(товар: товар, нетТовара: т("so_nf")) }
     }
 

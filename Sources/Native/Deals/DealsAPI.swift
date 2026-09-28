@@ -942,6 +942,9 @@ extension Сделка {
         if let к = курьер, к.яндекс || !к.статусЯндекса.isEmpty { return true }
         if !ссылкаСлежения.isEmpty { return true }
         if let м = межгородДанные, !м.трек.isEmpty { return true }
+        /* Отправка транспортной компанией (handover_mode carrier): карточка ждёт трек-номер ТК — продавец добавит его
+           здесь же («Добавить трек»), покупатель увидит статус, как только номер появится. */
+        if способПередачи == "carrier" && ["held", "shipped", "delivered"].contains(статус) { return true }
         return false
     }
 

@@ -749,8 +749,9 @@ final class ДеньгиСделкиМодель: ObservableObject {
     private func курьерЯндекса() {
         guard let с = сделка else { return }
         guard let точка = с.точкаКуда else {
-            /* Сайт ещё открывает окно точки на карте; у приложения его нет — точку ставят на странице сделки. */
+            /* Как у сайта: подсказка и сразу окно точки на карте (ЛистТочкиСделки). */
             показать(т("shp_need_pt"))
+            карточка?.просьбаТочкиКуда += 1
             return
         }
         guard !идёт else { return }
@@ -782,6 +783,8 @@ final class ДеньгиСделкиМодель: ObservableObject {
     private func ошибкаЦены(_ j: [String: Any], сделка с: Сделка) -> String {
         let причина = СделкиAPI.строка(j["reason"])
         if причина == "intercity" {
+            /* Товар в другом городе: выбор способа дальше — только транспортная компания. */
+            карточка?.межгородУзнали = true
             if с.видДоставки == "carrier" {
                 return т("shp_e_intercity_car").replacingOccurrences(of: "{name}", with: с.перевозчик.имя)
             }

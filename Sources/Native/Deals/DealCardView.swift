@@ -45,7 +45,11 @@ struct ЭкранСделки: View {
             .task { await модель.появилась() }
             .onDisappear { модель.исчезла() }
             .overlay(alignment: .bottom) { плашкаВнизу }
-            .overlay(alignment: .bottomTrailing) { кнопкаСвязи }
+            .onChange(of: модель.просьбаТочкиКуда) { _, _ in
+                /* Курьеру нужна точка «куда везти» — окно карты, как hovAddrOpen сайта после подсказки. */
+                guard let с = модель.сделка, точкаНаКарте == nil else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { точкаНаКарте = ТочкаНаКартеСделки.куда(с) }
+            }
             /* Этап 44: окна денег (баллы, отмена, приёмка, eGov, банк, ход) — живут только за Config.деньгиСделок. */
             .modifier(СлойДенегСделки(деньги: модель.деньги, спор: $спорОткрыт, открыть: открыть))
             .sheet(isPresented: $спорОткрыт) {
@@ -167,13 +171,24 @@ struct ЭкранСделки: View {
                        подпись: CabinetText.т("signed_out_sub"), кнопка: CabinetText.т("login"),
                        действие: { войти() })
         } else if let с = модель.сделка {
-            ScrollView {
-                КарточкаСделки(сделка: с, модель: модель, открыть: открыть, действие: { нажато($0) })
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 90)
+            ScrollViewReader { прокрутка in
+                ScrollView {
+                    КарточкаСделки(сделка: с, модель: модель, открыть: открыть, действие: { нажато($0) })
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 24)
+                }
+                .refreshable { await модель.загрузить() }
+                .onChange(of: с.шаги.текущий) { старый, новый in
+                    /* Шаг сменился (заморозили, отправили…): не прыгаем куда попало — ведём к новому шагу, как сайт. */
+                    guard старый != новый else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        прокрутка.scrollTo(МастерСделки.якорьШага, anchor: .top)
+                    }
+                }
+                /* Кнопка связи — своей нижней полосой: содержимое кончается над ней и никогда под неё не уходит. */
+                .safeAreaInset(edge: .bottom, spacing: 0) { полосаСвязи }
             }
-            .refreshable { await модель.загрузить() }
         } else if let ошибка = модель.ошибка {
             ПустоСайта(значок: "exclamationmark.triangle", заголовок: ошибка, кнопка: т("retry"),
                        действие: { Task { await модель.загрузить() } })
@@ -204,45 +219,59 @@ struct ЭкранСделки: View {
                     .transition(.opacity)
                     .accessibilityHidden(true)
             }
-            /* Место под плавающую «Связь с …», чтобы плашка её не закрывала. */
+            /* Место под полосу «Связь с …»: плашка встаёт над ней, а не на кнопку. */
             if let с = модель.сделка, чатОткрыт(с) {
-                Color.clear.frame(height: 46)
+                Color.clear.frame(height: Self.высотаПолосы)
             }
         }
-        .padding(.bottom, 18)
+        .padding(.bottom, 12)
         .allowsHitTesting(false)
     }
 
-    /// Плавающая «Связь с покупателем / продавцом» (#dm-chat-fab): справа внизу, 16 от края и 18 от низа.
+    /// Высота полосы связи: кнопка 46 и поля 10 + 8.
+    private static let высотаПолосы: CGFloat = 64
+
+    /// «Связь с покупателем / продавцом» (#dm-chat-fab) — закреплённой полосой внизу (safeAreaInset), как нижняя панель
+    /// сайта: карточка прокручивается над ней, шаги и «Деньги и документы» не прячутся под кнопкой.
     @ViewBuilder
-    private var кнопкаСвязи: some View {
-        Group {
-            if let с = модель.сделка, чатОткрыт(с) {
+    private var полосаСвязи: some View {
+        if let с = модель.сделка, чатОткрыт(с) {
+            Group {
                 if Config.нативныйЧат {
                     NavigationLink(value: ЧатЦель.продавец(id: с.собеседник.id, имя: имяСобеседника(с), объявление: с.товар)) {
                         ярлыкСвязи(с)
                     }
-                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 } else {
                     /* Своей переписки нет (рубильник чата выключен) — чат сделки на её странице сайта. */
                     Button { нажато(.наСайт) } label: { ярлыкСвязи(с) }
-                        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+                        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity)
+            .background {
+                Theme.поверхность
+                    .opacity(0.97)
+                    .ignoresSafeArea(edges: .bottom)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Theme.линия).frame(height: 1)
+                    }
+            }
         }
-        .padding(.trailing, 16)
-        .padding(.bottom, 18)
     }
 
     private func ярлыкСвязи(_ с: Сделка) -> some View {
         Label(т(с.продавец ? "dl_link_buyer" : "dl_link_seller"), systemImage: "bubble.left.and.bubble.right")
-            .font(.system(size: 14, weight: .heavy))
+            .font(.system(size: 15, weight: .heavy))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 46)
             .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
                                        endPoint: .bottomTrailing), in: Capsule())
-            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 8)
+            .shadow(color: КраскаСделокКабинета.теньКнопки.opacity(0.5), radius: 8, x: 0, y: 4)
+            .contentShape(Capsule())
     }
 
     /// Чат по сделке: есть собеседник, чат не закрыт, сделка не закончена.
@@ -629,7 +658,11 @@ struct МастерСделки: View {
         }
         .padding(.top, 4)
         .padding(.bottom, 10)
+        .id(Self.якорьШага)
     }
+
+    /// Якорь текущего шага — к нему карточка прокручивает, когда шаг сменился.
+    static let якорьШага = "deal-step-current"
 
     private func строка(_ i: Int, подпись: String, пройден: Bool) -> some View {
         HStack(alignment: .top, spacing: 10) {
