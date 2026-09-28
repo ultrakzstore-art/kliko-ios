@@ -144,6 +144,7 @@ struct ЛистУведомлений: View {
     var body: some View {
         VStack(spacing: 0) {
             шапка
+                .частьЛистаВнеПрокрутки()
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(уведомления) { у in
@@ -159,12 +160,14 @@ struct ЛистУведомлений: View {
                         }
                     }
                 }
+                .мерилоЛиста()
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .background(ИнбоксКраска.карточка.ignoresSafeArea())
         .presentationBackground(ИнбоксКраска.карточка)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* Мало уведомлений — лист по ним, много — большой с прокруткой. */
+        .листПоВысоте()
         .presentationCornerRadius(20)
     }
 
@@ -643,10 +646,13 @@ struct ОкноЗапросаДанных: View {
                 .padding(.top, 16)
                 .padding(.bottom, 20)
             }
+            .мерилоЛиста()
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(ИнбоксКраска.карточка.ignoresSafeArea())
         .presentationBackground(ИнбоксКраска.карточка)
+        /* По высоте карточки — без пустоты под «Закрыть». */
+        .листПоВысоте()
         .presentationCornerRadius(24)
     }
 

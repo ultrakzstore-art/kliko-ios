@@ -157,6 +157,24 @@ struct ГеройПодачи: View {
 
 // MARK: - Стартовый экран «Что размещаете?»
 
+/// Высота содержимого стартового экрана подачи (для растяжки плиток на высоких телефонах).
+struct ВысотаСодержимогоСтартаПодачиКлюч: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Высота сетки плиток стартового экрана подачи.
+struct ВысотаСеткиСтартаПодачиКлюч: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct СтартПодачи: View {
     @ObservedObject var модель: ПодачаМодель
     let работа: () -> Void
@@ -181,9 +199,49 @@ struct СтартПодачи: View {
         let значок: String
     }
 
+    /// Высота окна прокрутки под шапкой.
+    @State private var высотаОкна: CGFloat = 0
+    /// Высота содержимого и одного ряда плиток без растяжки (замер минус текущая добавка).
+    @State private var естСодержимое: CGFloat = 0
+    @State private var естРяд: CGFloat = 0
+
+    /// Сколько прибавить к высоте каждого ряда плиток, чтобы экран был заполнен без пустоты снизу:
+    /// не больше 40 % ряда (плитка до 1,4 ×); не влезает (iPhone SE) — ноль и прокрутка.
+    private var добавка: CGFloat {
+        let рядов = CGFloat((плитки.count + 1) / 2)
+        guard рядов > 0, естРяд > 1, естСодержимое > 1, высотаОкна > 1 else { return 0 }
+        let свободно: CGFloat = высотаОкна - естСодержимое
+        let наРяд: CGFloat = max(0, свободно / рядов)
+        return min(наРяд, естРяд * 0.4).rounded(.down)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             шапка
+            GeometryReader { окно in
+                прокрутка
+                    .onAppear { высотаОкна = окно.size.height }
+                    .onChange(of: окно.size.height) { _, новое in высотаОкна = новое }
+            }
+        }
+    }
+
+    /// Замер содержимого без растяжки: из высоты вычитается текущая добавка всех рядов.
+    private func замеритьСодержимое(_ высота: CGFloat) {
+        let рядов = CGFloat((плитки.count + 1) / 2)
+        let ест: CGFloat = высота - рядов * добавка
+        if abs(ест - естСодержимое) > 0.5 { естСодержимое = ест }
+    }
+
+    private func замеритьСетку(_ высота: CGFloat) {
+        let рядов = CGFloat((плитки.count + 1) / 2)
+        guard рядов > 0 else { return }
+        let промежутки: CGFloat = (рядов - 1) * 10
+        let ряд: CGFloat = (высота - рядов * добавка - промежутки) / рядов
+        if abs(ряд - естРяд) > 0.5 { естРяд = ряд }
+    }
+
+    private var прокрутка: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(вопрос)
@@ -199,15 +257,26 @@ struct СтартПодачи: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
                     сетка
+                        .background(
+                            GeometryReader { г in
+                                Color.clear.preference(key: ВысотаСеткиСтартаПодачиКлюч.self, value: г.size.height)
+                            }
+                        )
                         .padding(.top, 14)
                     if модель.старт == .аренда { срокАренды }
                     if модель.старт == .корень { переносСсылкой }
                 }
                 .padding(EdgeInsets(top: 16, leading: 20, bottom: 20, trailing: 20))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    GeometryReader { г in
+                        Color.clear.preference(key: ВысотаСодержимогоСтартаПодачиКлюч.self, value: г.size.height)
+                    }
+                )
             }
             .background(КраскаПодачи.поле)
-        }
+            .onPreferenceChange(ВысотаСодержимогоСтартаПодачиКлюч.self) { новое in замеритьСодержимое(новое) }
+            .onPreferenceChange(ВысотаСеткиСтартаПодачиКлюч.self) { новое in замеритьСетку(новое) }
     }
 
     // MARK: Шапка .rw2-hd
@@ -319,7 +388,8 @@ struct СтартПодачи: View {
                         .padding(.top, 2)
                 }
             }
-            .padding(.vertical, 16)
+            /* Добавка поровну сверху и снизу: значок и текст остаются по центру плитки. */
+            .padding(.vertical, 16 + добавка / 2)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
@@ -577,8 +647,18 @@ struct ГостьПодачи: View {
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
+    /// Карточка по центру экрана: на высоком телефоне без пустоты снизу, на маленьком — прокрутка.
     var body: some View {
-        ScrollView {
+        GeometryReader { окно in
+            ScrollView {
+                карточка
+                    .padding(14)
+                    .frame(minHeight: окно.size.height)
+            }
+        }
+    }
+
+    private var карточка: some View {
             КарточкаПодачи {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(т("guest_t"))
@@ -632,8 +712,6 @@ struct ГостьПодачи: View {
                     .padding(.top, 14)
                 }
             }
-            .padding(14)
-        }
     }
 }
 

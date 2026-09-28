@@ -429,8 +429,6 @@ struct НастройкиКабинета: ViewModifier {
             }
             .sheet(item: $модель.применить) { поле in
                 ОкноПрименения(поле: поле)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
             }
             .sheet(item: $модель.мастер) { мастер in
                 ЛистНачалаРаботы(авто: мастер.авто, открыть: открыть)
@@ -550,14 +548,16 @@ struct ОкноПрименения: View {
     }
 
     var body: some View {
-        /* Длинные kk/ar тексты на iPhone SE не влезают в половину экрана — прокрутка, лист тянется до полного. */
+        /* Лист по высоте содержимого; длинные kk/ar тексты на iPhone SE — прокрутка, лист до полного. */
         ScrollView {
             содержимое
+                .мерилоЛиста()
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.фонСтраницы)
         .interactiveDismissDisabled(этап == .идёт)
+        .листПоВысоте()
     }
 
     private var содержимое: some View {

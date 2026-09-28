@@ -250,14 +250,16 @@ struct ЛистОтзывовПродавца: View {
             .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 16)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         .overlay(alignment: .bottom) {
             ПлашкиВЛистеПродавца(закрытьЛист: { закрыть() })
         }
         .presentationBackground(Theme.поверхность)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* По высоте отзывов: мало — лист низкий, много — до полного с прокруткой. */
+        .листПоВысоте()
         .task(id: продавецID) { await загрузить() }
     }
 

@@ -80,9 +80,13 @@ struct ОкноСоглашения: View {
                     .disabled(идёт)
             }
             .padding(22)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         .presentationBackground(Theme.поверхность)
+        /* По высоте содержимого, без пустоты снизу; смахнуть нельзя — без полоски. */
+        .листПоВысоте(полоска: false)
         .interactiveDismissDisabled(true)
     }
 

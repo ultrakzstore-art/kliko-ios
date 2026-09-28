@@ -1044,9 +1044,13 @@ private struct ЛистДоступа: View {
                     .frame(maxWidth: .infinity, minHeight: 46)
             }
             .padding(22)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         .presentationBackground(Theme.поверхность)
+        /* По высоте содержимого; смахнуть нельзя — без полоски. */
+        .листПоВысоте(полоска: false)
         .interactiveDismissDisabled(true)
         .sheet(isPresented: $делимся) {
             ЛистПоделиться(предметы: [файл]) { сохранили in
@@ -1161,6 +1165,7 @@ private struct ЛистСравнения: View {
                         .padding(.top, 6)
                 }
                 .padding(20)
+                .мерилоФормы()
             }
             .background(КраскаВходаСайта.карточка.ignoresSafeArea())
             .toolbar {
@@ -1169,6 +1174,8 @@ private struct ЛистСравнения: View {
                 }
             }
         }
+        /* По высоте таблицы и кнопок — без пустоты снизу. */
+        .листПоВысоте()
     }
 
     /// .gw-head: 11/800 прописными, разрядка .06em, по центру; правая колонка — --acc-on.

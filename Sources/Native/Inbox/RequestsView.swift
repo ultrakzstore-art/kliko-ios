@@ -852,6 +852,17 @@ struct ОкноОтзываЗаявки: View {
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
 
     var body: some View {
+        ScrollView {
+            содержимое
+                .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        /* По высоте содержимого, без пустоты снизу; смахнуть нельзя — без полоски. */
+        .листПоВысоте(полоска: false)
+        .interactiveDismissDisabled(true)
+    }
+
+    private var содержимое: some View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark")
                 .font(.system(size: 24, weight: .bold))
@@ -900,8 +911,6 @@ struct ОкноОтзываЗаявки: View {
             .disabled(отправляем)
         }
         .padding(20)
-        .presentationDetents([.medium])
-        .interactiveDismissDisabled(true)
     }
 
     private func ответить(_ состоялась: Bool) {

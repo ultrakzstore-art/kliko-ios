@@ -197,6 +197,7 @@ struct ЛистВерификации: View {
                     }
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .navigationTitle(тО(проверен ? "ver_done_t" : "vp_title"))
@@ -207,6 +208,8 @@ struct ЛистВерификации: View {
                 }
             }
         }
+        /* По высоте содержимого — без пустоты снизу. */
+        .листПоВысоте()
     }
 
     private var готово: some View {
@@ -348,6 +351,7 @@ struct ЛистУдаленияАккаунта: View {
                     }
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.фонСтраницы.ignoresSafeArea())
@@ -360,6 +364,8 @@ struct ЛистУдаленияАккаунта: View {
                 }
             }
         }
+        /* По высоте шага — без пустоты снизу. */
+        .листПоВысоте()
         .interactiveDismissDisabled(идёт)
         .sheet(item: $окноEgov) { окно in
             ОкноEGov(запрос: окно.запрос, готово: {
@@ -729,6 +735,7 @@ struct ЛистОбращения: View {
                     }
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.фонСтраницы.ignoresSafeArea())
@@ -741,6 +748,8 @@ struct ЛистОбращения: View {
                 }
             }
         }
+        /* По высоте формы обращения — без пустоты снизу. */
+        .листПоВысоте()
         .interactiveDismissDisabled(идёт)
     }
 

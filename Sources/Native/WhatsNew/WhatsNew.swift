@@ -110,7 +110,9 @@ struct ЭкранЧтоНового: View {
                 .padding(.bottom, 20)
                 .frame(maxWidth: 560)                   // на iPad строки не растягиваются во всю ширину листа
                 .frame(maxWidth: .infinity)
+                .мерилоЛиста()
             }
+            .scrollBounceBehavior(.basedOnSize)
             Button {
                 закрыть()
             } label: {
@@ -126,8 +128,11 @@ struct ЭкранЧтоНового: View {
             .padding(.horizontal, 28)
             .padding(.top, 8)
             .padding(.bottom, 16)
+            .частьЛистаВнеПрокрутки()
         }
         .background(Color(.systemBackground))
+        /* По высоте списка и кнопки — без пустоты снизу; длинный — до полного с прокруткой. */
+        .листПоВысоте()
         /* Виденной версия считается здесь — и когда лист открыли строкой в кабинете: второй раз тот же список сам не
            всплывёт. */
         .onAppear { ЧтоНового.shared.показали() }

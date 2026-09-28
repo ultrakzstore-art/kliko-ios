@@ -498,11 +498,13 @@ struct ЛистЗапросаИсполнителям: View {
             .padding(.horizontal, 16)
             .padding(.top, 20)
             .padding(.bottom, 24)
+            .мерилоЛиста()
         }
         .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        /* По высоте содержимого, без пустоты под кнопкой. */
+        .листПоВысоте()
         .alert(тДост("bc_confirm_t"), isPresented: $спросить) {
             Button(тДост("send_request")) { отправить() }
             Button(тДост("cancel"), role: .cancel) {}

@@ -669,11 +669,13 @@ struct ЛистПроверкиСайта: View {
                 }
             }
             .padding(20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
         .presentationBackground(Theme.поверхность)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* По высоте отчёта: короткий (замок, пусто) — без пустоты снизу, полный — до большого с прокруткой. */
+        .листПоВысоте()
     }
 
     private var шапка: some View {

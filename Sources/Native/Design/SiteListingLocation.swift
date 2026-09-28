@@ -815,10 +815,12 @@ struct ЛистМаршрутаСайта: View {
             .padding(.horizontal, 16)
             .padding(.top, 20)
             .padding(.bottom, 24)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* По высоте списка приложений — целиком, без пустоты снизу. */
+        .листПоВысоте()
     }
 
     /// Как onclick="mkRouteClose()" у ссылок сайта: приложение открылось — лист закрыт.
@@ -1074,11 +1076,13 @@ struct ЛистКурьераСайта: View {
             .padding(.horizontal, 16)
             .padding(.top, 20)
             .padding(.bottom, 24)
+            .мерилоЛиста()
         }
         .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность.ignoresSafeArea())
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        /* По высоте содержимого; не влезает — до полного с прокруткой. */
+        .листПоВысоте()
     }
 
     /// Две точки с линией между ними — .mk-courier-row / .mk-courier-line.

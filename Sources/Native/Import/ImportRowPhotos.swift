@@ -49,6 +49,7 @@ struct ФотоСтрокиИмпорта: View {
                     загруженные
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .navigationTitle(т("ph_t"))
@@ -67,8 +68,8 @@ struct ФотоСтрокиИмпорта: View {
             }
         }
         .tint(Theme.акцент)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* По высоте содержимого: мало фото — лист ниже, много — до полного. */
+        .листПоВысоте()
         .onChange(of: выбор) { _, элементы in
             guard !элементы.isEmpty else { return }
             читаем = true

@@ -1154,6 +1154,7 @@ struct NativeFeedView: View {
         NavigationStack {
             List {
                 РазделСохранённыхПоисков(уведомления: nil)
+                    .мерилоФормы()
             }
             .navigationTitle(ВитринаТекст.т("sub_h"))
             .navigationBarTitleDisplayMode(.inline)
@@ -1163,6 +1164,8 @@ struct NativeFeedView: View {
                 }
             }
         }
+        /* Мало подписок — лист по списку, много — большой с прокруткой. */
+        .листПоВысоте()
     }
 
     /// Чип «Категории» полосы разделов — тот же полноэкранный экран категорий, что у кнопки панели (NativeTabsView).

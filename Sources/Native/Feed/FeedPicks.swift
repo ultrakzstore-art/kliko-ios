@@ -457,10 +457,12 @@ struct ЛистГарантСделки: View {
                     .padding(.top, 12)
                     .padding(.bottom, 24)
             }
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.поверхность)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        /* По высоте четырёх шагов и кнопки — без пустоты снизу. */
+        .листПоВысоте()
     }
 
     private var шапка: some View {

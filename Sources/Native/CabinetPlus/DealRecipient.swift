@@ -85,6 +85,7 @@ private struct ЛистПолучателя: View {
                 Section {
                     TextField(т("co_rcp_name"), text: $имя)
                         .textContentType(.name)
+                        .мерилоФормы()
                     TextField("+7 (7__) ___-__-__", text: $телефон)
                         .keyboardType(.phonePad)
                         .textContentType(.telephoneNumber)
@@ -116,6 +117,8 @@ private struct ЛистПолучателя: View {
             }
         }
         .tint(Theme.акцент)
+        /* Три поля — лист по высоте формы, без пустоты снизу. */
+        .листПоВысоте()
     }
 
     private func сохранить() {

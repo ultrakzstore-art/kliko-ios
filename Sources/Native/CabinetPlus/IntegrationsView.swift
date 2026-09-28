@@ -772,6 +772,7 @@ private struct ЛистНовогоКлюча: View {
                     Text(т("ig_allow"))
                 } footer: {
                     Text(т("ig_allow_h"))
+                        .мерилоФормы()
                 }
             }
             .navigationTitle(т("ig_key_new_t"))
@@ -788,6 +789,8 @@ private struct ЛистНовогоКлюча: View {
             }
         }
         .tint(Theme.акцент)
+        /* По высоте формы — без пустоты снизу. */
+        .листПоВысоте()
     }
 }
 
@@ -895,11 +898,14 @@ private struct ЛистОдинРаз: View {
                     КнопкаБизнеса(подпись: т("ig_copied")) { готово() }
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .navigationTitle(данные.заголовок)
             .navigationBarTitleDisplayMode(.inline)
         }
+        /* По высоте содержимого; смахнуть нельзя — без полоски. */
+        .листПоВысоте(полоска: false)
         .interactiveDismissDisabled()
     }
 }

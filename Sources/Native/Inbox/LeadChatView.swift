@@ -1054,10 +1054,12 @@ struct ОкноЖалобыНаПокупателя: View {
             .padding(.horizontal, 20)
             .padding(.top, 24)
             .padding(.bottom, 20)
+            .мерилоЛиста()
         }
+        .scrollBounceBehavior(.basedOnSize)
         .background(ИнбоксКраска.карточка)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        /* По высоте причин и кнопок — без пустоты снизу. */
+        .листПоВысоте()
     }
 
     private func отправить() {

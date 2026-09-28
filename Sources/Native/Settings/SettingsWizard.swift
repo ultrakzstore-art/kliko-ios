@@ -50,7 +50,6 @@ struct ЛистНачалаРаботы: View {
         }
         .sheet(item: $применить, onDismiss: { вперёд() }) { поле in
             ОкноПрименения(поле: поле)
-                .presentationDetents([.medium])
         }
     }
 

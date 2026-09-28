@@ -787,6 +787,7 @@ struct ШагДополнительно: View {
                     }
                 }
                 .padding(14)
+                .мерилоФормы()
             }
             .background(КраскаПодачи.фон)
             .scrollDismissesKeyboard(.interactively)
@@ -799,7 +800,8 @@ struct ШагДополнительно: View {
             }
         }
         .tint(Theme.акцент)
-        .presentationDetents([.medium, .large])
+        /* По высоте полей настройки — без пустоты снизу; длинная — до полного. */
+        .листПоВысоте()
     }
 
     private var заголовокНастройки: String {
