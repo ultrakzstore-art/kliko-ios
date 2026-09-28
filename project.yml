@@ -46,6 +46,11 @@ targets:
         com.apple.developer.associated-domains:
           - applinks:kliko.kz
           - webcredentials:kliko.kz
+        # ВХОД ЧЕРЕЗ APPLE НАТИВНО (ВходApple, Sources/Native/Auth). Возможность Sign in with Apple у App ID включает
+        # сама сборка (-allowProvisioningUpdates). Нет её в профиле — лист Apple не поднимется, и приложение само
+        # откроет прежнюю страницу сайта apple_auth.php?action=start.
+        com.apple.developer.applesignin:
+          - Default
     info:
       path: Kliko-Info.plist
       properties:

@@ -559,11 +559,32 @@ struct ОкноПоделитьсяКабинета: View {
         показатьТост(т("pro_need"), секунд: 2)
     }
 
-    /// socialConnect: «Переходим к подключению …» и social_connect.php?platform=&do=start страницей сайта.
-    /// Не ASWebAuthenticationSession: сессия kliko_cab живёт только в WKWebsiteDataStore.default(), а лист входа
-    /// берёт куки Safari — там человек не вошёл; передать сессию параметром сайт не умеет. Поэтому — страница сайта.
+    /// socialConnect: «Переходим к подключению …», затем нативно — одноразовая ссылка сервера и лист входа соцсети
+    /// (ПодключениеСоцсети); по возврату — social_status заново. Сервер ещё не умеет — прежняя страница сайта.
     private func подключить(_ ключ: String, _ имя: String) {
         показатьТост(String(format: т("connecting"), имя), секунд: 2)
+        Task { @MainActor in
+            let итог = await ПодключениеСоцсети.подключить(ключ, имя: имя)
+            switch итог {
+            case .наСайт:
+                подключитьНаСайте(ключ)
+                return
+            case .подключено:
+                ОткликСайта.успех()
+                показатьТост(ПодключениеСоцсети.текстУспеха(имя), секунд: 2.5)
+            case .ошибка(let слова):
+                ОткликСайта.предупреждение()
+                показатьТост(слова, секунд: 4)
+            case .отменено:
+                break
+            }
+            await загрузитьСоцсети()
+        }
+    }
+
+    /// Прежний путь: social_connect.php?platform=&do=start страницей сайта поверх (сессия kliko_cab живёт только в
+    /// WKWebsiteDataStore.default(), у листа входа — куки Safari).
+    private func подключитьНаСайте(_ ключ: String) {
         guard let адрес = Config.страницаСайта("social_connect.php?platform=\(ключ)&do=start") else { return }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 700_000_000)

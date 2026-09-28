@@ -571,10 +571,39 @@ final class МодельСтудииРоликов: ObservableObject {
         показатьТост(т("pro_need"), секунд: 2)
     }
 
-    /// Не ASWebAuthenticationSession: сессия kliko_cab живёт только в WKWebsiteDataStore.default(), а лист входа
-    /// берёт куки Safari — там человек не вошёл; передать сессию параметром сайт не умеет. Поэтому — страница сайта.
+    /// Нативно: одноразовая ссылка сервера и лист входа соцсети (ПодключениеСоцсети); по возврату — social_status
+    /// заново. Сервер ещё не умеет — прежняя страница сайта.
     private func подключить(_ ключ: String, _ имя: String) {
         показатьТост(String(format: т("connecting"), имя), секунд: 2)
+        Task { [weak self] in
+            let итог = await ПодключениеСоцсети.подключить(ключ, имя: имя)
+            guard let self else { return }
+            switch итог {
+            case .наСайт:
+                self.подключитьНаСайте(ключ)
+                return
+            case .подключено:
+                ОткликСайта.успех()
+                self.показатьТост(ПодключениеСоцсети.текстУспеха(имя), секунд: 2.5)
+            case .ошибка(let слова):
+                ОткликСайта.предупреждение()
+                self.показатьТост(слова, секунд: 4)
+            case .отменено:
+                break
+            }
+            await self.перечитатьСоцсети()
+        }
+    }
+
+    /// social_status заново (загрузитьСоцсети читает только первый раз).
+    private func перечитатьСоцсети() async {
+        соцсети = nil
+        await загрузитьСоцсети()
+    }
+
+    /// Прежний путь: страница сайта поверх (сессия kliko_cab живёт только в WKWebsiteDataStore.default(), у листа
+    /// входа — куки Safari).
+    private func подключитьНаСайте(_ ключ: String) {
         guard let адрес = Config.страницаСайта("social_connect.php?platform=\(ключ)&do=start") else { return }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)

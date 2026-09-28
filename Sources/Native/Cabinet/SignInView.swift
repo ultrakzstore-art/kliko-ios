@@ -21,8 +21,9 @@ import UIKit
  Пароль — чувствительные данные (§1.9): никуда не сохраняется сам, только по нажатию «Сохранить и продолжить» — в
  системном листе «Поделиться», как у сайта.
 
- «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — страницей сайта (callback Apple в файлах сайта не виден, §1.2.6); Telegram сайт
- скрыл по правилу App Store 4.8 — его нет и здесь.
+ «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — нативным листом Apple (ВходApple, apple_auth.php?action=native);
+ пока сервер его не умеет — прежней страницей сайта apple_auth.php?action=start (§1.2.6). Telegram сайт скрыл по правилу
+ App Store 4.8 — его нет и здесь.
  */
 struct ЭкранВхода: View {
     enum Шаг: Equatable { case ворота, формы }
@@ -51,6 +52,8 @@ struct ЭкранВхода: View {
     @State private var ошибкаНомераРег: String? = nil
     @State private var ошибкаВхода: String? = nil
     @State private var ошибкаРег: String? = nil
+    /// Ошибка входа через Apple — у кнопки Apple (она видна и на воротах, где формы входа нет).
+    @State private var ошибкаApple: String? = nil
     @State private var идёт = false
     @State private var окно: ОкноВхода? = nil
     @State private var доступ: ДоступАккаунта? = nil
@@ -229,7 +232,7 @@ struct ЭкранВхода: View {
 
     // MARK: - Вход через сервисы
 
-    /// «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — страницей сайта; ниже — согласие и примечание о номере, как у сайта.
+    /// «или войдите через»: eGov — листом поверх (ОкноEgov), Apple — нативно (откат — страница сайта); ниже — согласие и примечание о номере, как у сайта.
     private var способы: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -247,8 +250,9 @@ struct ЭкранВхода: View {
             КнопкаСервиса(подпись: т("auth_via_egov"), значок: "checkmark.shield", тёмная: false) {
                 eGov("cabinet.php?egov=1")
             }
+            if let ошибка = ошибкаApple { ОшибкаФормы(текст: ошибка) }
             КнопкаСервиса(подпись: т("auth_via_apple"), значок: "apple.logo", тёмная: true) {
-                наСайт(Config.url("/apple_auth.php?action=start"))
+                черезApple()
             }
             Text(т("auth_phone_note"))
                 .font(.system(size: 12))
@@ -435,6 +439,36 @@ struct ЭкранВхода: View {
             /* Сначала уходит лист «Аккаунт создан», потом этот: два листа разом SwiftUI закрывает ненадёжно. */
             try? await Task.sleep(nanoseconds: 400_000_000)
             закрыть()
+        }
+    }
+
+    /**
+     Вход через Apple: нативный лист Apple и apple_auth.php?action=native (ВходApple). Вошёл — как вход паролем (сеанс уже
+     перечитан в ВходApple через КабинетСайта.послеВхода); сервер ещё не умеет — прежняя страница сайта.
+     */
+    private func черезApple() {
+        guard !идёт else { return }
+        ошибкаApple = nil
+        ошибкаВхода = nil
+        идёт = true
+        Task { @MainActor in
+            let итог = await ВходApple.войти()
+            идёт = false
+            switch итог {
+            case .вошёл:
+                вошли()
+                закрыть()
+            case .отменено:
+                break
+            case .удалён(let причина):
+                окно = .удалён(причина: причина)
+            case .нуженEgov:
+                eGov("cabinet.php?egov_confirm=1")
+            case .ошибка(let текст):
+                ошибкаApple = текст
+            case .наСайт:
+                наСайт(Config.url("/apple_auth.php?action=start"))
+            }
         }
     }
 
