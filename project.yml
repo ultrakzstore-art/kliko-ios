@@ -27,6 +27,10 @@ targets:
     sources:
       - Sources
       - Shared                      # общие с виджетом типы (DealActivityAttributes)
+      # МАНИФЕСТ ПРИВАТНОСТИ для App Store: причины для UserDefaults и дат файлов кэша, собираемые данные, без
+      # слежки. Лежит вне Sources и подключён ресурсом явно — чтобы не зависеть от того, как XcodeGen понимает .xcprivacy.
+      - path: Privacy/Kliko/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - target: KlikoWidgets        # встраиваем виджет-расширение в приложение
     # Схема Kliko (её же собирает CI: -scheme Kliko). Своё здесь одно — файл StoreKit для запуска из Xcode.
