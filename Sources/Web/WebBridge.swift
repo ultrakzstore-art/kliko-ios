@@ -65,6 +65,11 @@ final class WebBridge: ObservableObject {
             лентаВидна = true
             if ПереходыКабинета.перехватить(адрес) { return }
         }
+        /* /cabinet.php?order_seller=<id> — переход на профиль продавца (карта кабинета §0.10): своя витрина. */
+        if Config.нативныеСсылки && вкладкиЕсть, let продавец = продавецКабинета(адрес) {
+            лентаВидна = true
+            if ОкноПродавца.открыть(id: продавец) { return }
+        }
         if Config.нативныеСсылки && вкладкиЕсть, let куда = NativeRouter.распознать(адрес) {
             лентаВидна = true                       // слой — на экран; страница под ним остаётся, где была
             NativeRouter.shared.цель = куда
@@ -76,6 +81,17 @@ final class WebBridge: ObservableObject {
             if ОкноПродавца.перехватить(адрес) { return }
         }
         pendingURL = адрес
+    }
+
+    /// Номер продавца из адреса кабинета сайта с ?order_seller=<id>; иначе nil.
+    private func продавецКабинета(_ адрес: URL) -> String? {
+        let полный = адрес.absoluteURL
+        guard Config.deepLink(полный) != nil,
+              let части = URLComponents(url: полный, resolvingAgainstBaseURL: false),
+              АдресаКабинета.кабинет(части.path),
+              let номер = части.queryItems?.first(where: { $0.name == "order_seller" })?.value,
+              ВитринаПродавцаAPI.годный(номер) else { return nil }
+        return номер
     }
 
     /// Быстрое действие с иконки (этап 10) — экран приложения, у которого своего адреса на сайте нет (поиск,

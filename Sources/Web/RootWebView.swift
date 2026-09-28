@@ -42,7 +42,7 @@ struct RootWebView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()      // strip под статус-баром + низ, фикс., авто-тема
+            Theme.фонСтраницы.ignoresSafeArea()      // под статус-баром и низ — var(--mk-surf2) сайта
 
             WebContainer(bridge: bridge)
                 /* ВО ВЕСЬ ЭКРАН (владелец 14.09.2026: «почему не полный экран на версии 1.2?»).

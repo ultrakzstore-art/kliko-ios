@@ -107,10 +107,23 @@ final class NativeRouter: ObservableObject {
             return значение.isEmpty ? nil : значение
         }
 
-        switch части.path {
+        /* Язык в пути (/kz/ru/marketplace, /kz/kz/…) — те же адреса, что без него. */
+        let путь = части.path.replacingOccurrences(of: "^/[a-z]{2}/[a-z]{2}(?=/)", with: "",
+                                                   options: .regularExpression)
+        /* ЧПУ объявления: /toyota-camry-pb61110afe145/ (так делится SiteShare), ?p= — номер фото. */
+        if Config.нативнаяКарточка, параметры.allSatisfy({ $0.name == "p" }),
+           путь.range(of: "^/[a-z0-9-]+-p[0-9a-f]{8,20}/?$", options: .regularExpression) != nil,
+           let r = путь.range(of: "p[0-9a-f]{8,20}(?=/?$)", options: .regularExpression) {
+            return .объявление(id: String(путь[r]))
+        }
+
+        switch путь {
         case "/marketplace", "/marketplace/", "/marketplace.php":
-            guard Config.нативнаяКарточка, let номер = единственный("item"),
-                  номер.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil else { return nil }
+            /* ?item=<номер>&p=<фото> и ?ret= не мешают; прочие параметры (chat=1 и т.п.) — сайтом. */
+            let своё = параметры.filter { $0.name != "p" && $0.name != "ret" }
+            guard Config.нативнаяКарточка, своё.count == 1, let п = своё.first, п.name == "item" else { return nil }
+            let номер = (п.value ?? "").trimmingCharacters(in: .whitespaces)
+            guard номер.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil else { return nil }
             return .объявление(id: номер)
         case "/cabinet.php":
             /* Этап 40: адреса кабинета разбирает АдресаКабинета (все параметры §0.10 карты кабинета). */
@@ -144,6 +157,8 @@ final class NativeRouter: ObservableObject {
         }
         let ленты = "^(/[a-z]{2}/[a-z]{2})?(/|/index\\.php|/marketplace/?|/marketplace\\.php)?$"
         guard путь.range(of: ленты, options: .regularExpression) != nil, значение("item").isEmpty else { return nil }
+        /* Нижняя панель сайта: /kz/ru/marketplace?fav=1 — избранное. */
+        if значение("fav") == "1" && Config.избранное { return .избранное }
         let раздел = значение("cat")
         let текст = значение("q")
         if раздел.lowercased() == "jobs" {

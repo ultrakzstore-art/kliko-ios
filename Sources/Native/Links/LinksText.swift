@@ -10,12 +10,12 @@ enum LinksText {
 
     private static let тексты: [String: [String: String]] = [
         "ru": ["opening": "Открываем объявление", "failed": "Не удалось открыть объявление",
-               "failed_sub": "Возможно, его уже сняли или пропала связь. Попробуйте ещё раз или откройте на сайте."],
+               "failed_sub": "Возможно, его уже сняли или пропала связь. Попробуйте ещё раз."],
         "kk": ["opening": "Хабарландыру ашылуда", "failed": "Хабарландыру ашылмады",
-               "failed_sub": "Мүмкін, ол алынып тасталған немесе байланыс үзілген. Қайталап көріңіз немесе сайтта ашыңыз."],
+               "failed_sub": "Мүмкін, ол алынып тасталған немесе байланыс үзілген. Қайталап көріңіз."],
         "en": ["opening": "Opening the listing", "failed": "Couldn't open the listing",
-               "failed_sub": "It may have been removed, or the connection dropped. Try again or open it on the website."],
+               "failed_sub": "It may have been removed, or the connection dropped. Try again."],
         "ar": ["opening": "جارٍ فتح الإعلان", "failed": "تعذّر فتح الإعلان",
-               "failed_sub": "ربما أُزيل الإعلان أو انقطع الاتصال. حاول مرة أخرى أو افتحه في الموقع."]
+               "failed_sub": "ربما أُزيل الإعلان أو انقطع الاتصال. حاول مرة أخرى."]
     ]
 }

@@ -141,8 +141,8 @@ extension СтатьяСайта {
    · Есть разобранная за этот запуск или копия на диске — показывается сразу, без крутилки.
    · Следом, в фоне, страница качается заново; изменилась — статья на экране тихо заменяется, копия на диске
      обновляется. Не чаще раза в «свежести» за запуск (потянуть вниз — всегда заново).
-   · Сети нет: показана копия — пометка «сохранённая копия»; копии нет — встроенная заглушка с «Повторить» и
-     «Открыть на сайте» (текстов справки в приложении нет — их правит команда сайта).
+   · Сети нет: показана копия — пометка «сохранённая копия»; копии нет — встроенная заглушка с «Повторить»
+     (текстов справки в приложении нет — их правит команда сайта).
  */
 @MainActor
 final class ЗагрузкаСтатьи: ObservableObject {
@@ -333,6 +333,10 @@ struct ЭкранСтраницыСайта: View {
     /// Якорь адреса и <details open> уже учтены (при обновлении статьи не прыгаем заново).
     @State private var начатоС: Bool = false
     @State private var поиск = ""
+    /// Размеры, растущие с Dynamic Type вместе с текстом статьи (HelpBlocks): h1 не мельче абзацев.
+    @ScaledMetric(relativeTo: .title) private var размерH1: CGFloat = 24
+    @ScaledMetric(relativeTo: .footnote) private var размерЧипа: CGFloat = 13
+    @ScaledMetric(relativeTo: .body) private var размерТекста: CGFloat = 15
 
     init(страница: СтраницаСайта, перейти: @escaping (СтраницаСайта) -> Void, открыть: @escaping (URL) -> Void,
          написать: @escaping () -> Void) {
@@ -387,20 +391,15 @@ struct ЭкранСтраницыСайта: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ошибка:
-            if страница.тарифы {
-                /* «Тарифы» на сайте — с ценами и оплатой: кнопки «Открыть на сайте» здесь нет. */
-                ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("fail_t"), подпись: т("fail_s"),
-                           кнопка: т("retry"), действие: { Task { await загрузка.загрузить(заново: true) } })
-            } else {
-                ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("fail_t"), подпись: т("fail_s"),
-                           кнопка: т("retry"), действие: { Task { await загрузка.загрузить(заново: true) } },
-                           вторая: т("on_site"), второеДействие: { наСайт() })
-            }
+            /* Кнопки «на сайт» нет: адрес этой страницы снова открыл бы это же окно. */
+            ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("fail_t"), подпись: т("fail_s"),
+                       кнопка: т("retry"), действие: { Task { await загрузка.загрузить(заново: true) } })
         case .пусто:
             if страница.тарифы {
                 ПустоСайта(значок: "lock", заголовок: страница.заголовок, подпись: т("no_digital"))
             } else {
-                ПустоСайта(значок: "doc.text", заголовок: т("empty_t"), кнопка: т("on_site"), действие: { наСайт() })
+                ПустоСайта(значок: "doc.text", заголовок: т("empty_t"), кнопка: т("retry"),
+                           действие: { Task { await загрузка.загрузить(заново: true) } })
             }
         case .готово(let статья, let изКопии):
             статьяВид(статья, изКопии: изКопии)
@@ -455,7 +454,7 @@ struct ЭкранСтраницыСайта: View {
     private func статьяЦеликом(_ статья: СтатьяСайта) -> some View {
         if let первый = статья.первыйЗаголовок, показатьЗаголовок(первый.простой) {
             Text(первый.текст)
-                .font(.system(size: 24, weight: .heavy))
+                .font(.system(size: размерH1, weight: .heavy))
                 .foregroundStyle(Theme.текст)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -487,7 +486,7 @@ struct ЭкранСтраницыСайта: View {
     private func оглавление(_ статья: СтатьяСайта) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(т("toc"))
-                .font(.system(size: 13, weight: .heavy))
+                .font(.system(size: размерЧипа, weight: .heavy))
                 .foregroundStyle(Theme.текстВторой)
                 .padding(.horizontal, 4)
                 .accessibilityAddTraits(.isHeader)
@@ -498,7 +497,7 @@ struct ЭкранСтраницыСайта: View {
                             прокрутить = раздел.id
                         } label: {
                             Text(раздел.простой)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: размерЧипа, weight: .semibold))
                                 .lineLimit(1)
                                 .foregroundStyle(Theme.текстПункта)
                                 .padding(.horizontal, 12)
@@ -583,7 +582,7 @@ struct ЭкранСтраницыСайта: View {
                     .background(Theme.мята, in: Circle())
                     .accessibilityHidden(true)
                 Text(т("support_s"))
-                    .font(.system(size: 15))
+                    .font(.system(size: размерТекста))
                     .foregroundStyle(Theme.текст)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -645,10 +644,5 @@ struct ЭкранСтраницыСайта: View {
         for блок in статья.блоки where блок.id == цель {
             if case .вопрос = блок.вид { раскрытые.insert(цель) }
         }
-    }
-
-    private func наСайт() {
-        guard !страница.тарифы, let адрес = страница.адресСЯкорем else { return }
-        открыть(адрес)
     }
 }

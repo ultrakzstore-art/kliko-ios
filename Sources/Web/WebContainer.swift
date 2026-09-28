@@ -119,11 +119,14 @@ struct WebContainer: UIViewRepresentable {
         web.uiDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true             // свайп «назад», как в браузере
         web.scrollView.contentInsetAdjustmentBehavior = .never
-        // Авто-тема: фон под цвет системы (иначе белая вспышка в тёмной теме до отрисовки).
+        // Фон до отрисовки — как body сайта: var(--mk-surf2), #f4f8f6 и #1c1c26 (Theme.фонСтраницы), без белой или
+        // чёрной вспышки. Край при оттягивании WebKit красит фоном самой страницы (underPageBackgroundColor не задаём).
         web.isOpaque = false
-        web.backgroundColor = .systemBackground
-        web.scrollView.backgroundColor = .systemBackground
-        if #available(iOS 15.0, *) { web.underPageBackgroundColor = .systemBackground }
+        let фон = UIColor { черта in
+            черта.userInterfaceStyle == .dark ? Theme.hex(0x1C1C26) : Theme.hex(0xF4F8F6)
+        }
+        web.backgroundColor = фон
+        web.scrollView.backgroundColor = фон
         // Своей темы нет — берём тему окна (prefers-color-scheme): iPhone или выбранную в кабинете (этап 15, ВыборТемы).
         web.overrideUserInterfaceStyle = .unspecified
         #if DEBUG

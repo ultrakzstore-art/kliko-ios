@@ -179,16 +179,17 @@ struct LockView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Theme.фонСтраницы.ignoresSafeArea()          // фон страницы сайта: var(--mk-surf2)
             VStack(spacing: 14) {
                 Spacer()
                 KlikoLogoIcon(size: 84)
                 Text(AppLock.т("title"))
                     .font(.title3.weight(.bold))
+                    .foregroundStyle(Theme.текст)
                     .padding(.top, 10)
                 Text(AppLock.т("sub"))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
                 Spacer()
                 if lock.locked {
@@ -196,11 +197,11 @@ struct LockView: View {
                         lock.unlock(force: true)
                     } label: {
                         Label(String(format: AppLock.т("open"), AppLock.имяСпособа(lock.kind())), systemImage: значок)
-                            .font(.headline)
+                            .font(.subheadline.weight(.bold))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
+                            .padding(.vertical, 14)
                             .foregroundStyle(.white)
-                            .background(Theme.green2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                            .background(кнопкаФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .padding(.bottom, 12)
@@ -209,6 +210,12 @@ struct LockView: View {
             .padding(.horizontal, 32)
             .padding(.bottom, 24)
         }
+    }
+
+    /// Главная кнопка сайта (.cab-help-card button): linear-gradient(135deg, #16a34a, #0f7a44).
+    private var кнопкаФон: LinearGradient {
+        LinearGradient(colors: [Color(uiColor: Theme.hex(0x16A34A)), Color(uiColor: Theme.hex(0x0F7A44))],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private var значок: String {

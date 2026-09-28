@@ -103,9 +103,12 @@ struct SplashView: View {
 // MARK: - Значок: brand_logo_icon() в системе координат 48×48, с анимациями сайта.
 struct KlikoLogoIcon: View {
     let size: CGFloat
+    /// «Уменьшить движение» — как @media(prefers-reduced-motion) у прелоадера сайта: значок стоит.
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
 
     var body: some View {
-        TimelineView(.animation) { tl in
+        /* 30 кадров в секунду хватает кольцу и стрелке; шапка ленты не перерисовывается на каждом кадре ProMotion. */
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: безДвижения)) { tl in
             Canvas { ctx, cs in
                 let s = cs.width / 48
                 func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
@@ -122,7 +125,7 @@ struct KlikoLogoIcon: View {
                 // непрозрачность .85 → 0 к 70%.
                 let ph = t.truncatingRemainder(dividingBy: 2.1) / 2.1
                 let sc = 0.4 + 1.15 * kEaseOut(ph)
-                let op = 0.85 * max(0, 1 - ph / 0.7)
+                let op = безДвижения ? 0 : 0.85 * max(0, 1 - ph / 0.7)
                 let rr = 8 * sc * s
                 ctx.stroke(Path(ellipseIn: CGRect(x: 24 * s - rr, y: 19.5 * s - rr, width: 2 * rr, height: 2 * rr)),
                            with: .color(.white.opacity(0.5 * op)), lineWidth: 2 * sc * s)
@@ -146,7 +149,7 @@ struct KlikoLogoIcon: View {
                 ctx.stroke(hh, with: .color(.white), style: StrokeStyle(lineWidth: 1.5 * s, lineCap: .round))
 
                 // Минутная — полный оборот за 6 с (klk-spin).
-                let ang = (t.truncatingRemainder(dividingBy: 6) / 6) * 2 * .pi
+                let ang = безДвижения ? 0 : (t.truncatingRemainder(dividingBy: 6) / 6) * 2 * .pi
                 var mh = Path(); mh.move(to: P(24, 19.5)); mh.addLine(to: P(27, 16.9))
                 let rot = CGAffineTransform(translationX: 24 * s, y: 19.5 * s)
                     .rotated(by: ang).translatedBy(x: -24 * s, y: -19.5 * s)
@@ -172,6 +175,8 @@ struct KlikoWordmark: View {
     var надпись: Color? = nil
     /// Цвет «.kz»; nil — родные краски картинки. На зелёной шапке сайта — мятный #a3dcc0 (.klk-wm tspan).
     var домен: Color? = nil
+    /// «Уменьшить движение»: маяк без кольца, точка горит ровно.
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
 
     var body: some View {
         let s = height / 74
@@ -187,20 +192,20 @@ struct KlikoWordmark: View {
                     .frame(width: w, height: height)
             }
             // Маяк рисуем с запасом над надписью: кольцо растёт выше строки и не должно обрезаться.
-            TimelineView(.animation) { tl in
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: безДвижения)) { tl in
                 Canvas { ctx, _ in
                     let t = tl.date.timeIntervalSinceReferenceDate
                     let c = CGPoint(x: 79 * s, y: (15 + 20) * s)
                     // Кольцо r 10, штрих 2.4 — klk-ring 2.1 с.
                     let ph = t.truncatingRemainder(dividingBy: 2.1) / 2.1
                     let sc = 0.4 + 1.15 * kEaseOut(ph)
-                    let op = 0.85 * max(0, 1 - ph / 0.7)
+                    let op = безДвижения ? 0 : 0.85 * max(0, 1 - ph / 0.7)
                     let rr = 10 * sc * s
                     ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: 2 * rr, height: 2 * rr)),
                                with: .color(kBeacon.opacity(op)), lineWidth: 2.4 * sc * s)
                     // Точка r 6.2 — klk-blink 1.5 с: 1 → .28 → 1.
                     let bp = t.truncatingRemainder(dividingBy: 1.5) / 1.5
-                    let dop = 0.28 + 0.72 * (0.5 + 0.5 * cos(2 * Double.pi * bp))
+                    let dop = безДвижения ? 1 : 0.28 + 0.72 * (0.5 + 0.5 * cos(2 * Double.pi * bp))
                     let dr = 6.2 * s
                     ctx.fill(Path(ellipseIn: CGRect(x: c.x - dr, y: c.y - dr, width: 2 * dr, height: 2 * dr)),
                              with: .color(kBeacon.opacity(dop)))
@@ -268,21 +273,37 @@ private struct LoadProgressBar: View {
 /// Экран «нет связи» — вместо белого WebView при обрыве сети (важно для App Store 4.2).
 struct OfflineView: View {
     var retry: () -> Void
+
+    /// Тексты на языке телефона — как подпись LoadProgressBar.
+    private var тексты: (заголовок: String, подпись: String, кнопка: String) {
+        switch String((Locale.preferredLanguages.first ?? "ru").prefix(2)) {
+        case "kk": return ("Байланыс жоқ", "Интернетті тексеріп, қайта көріңіз.", "Қайталау")
+        case "en": return ("No connection", "Check your internet connection and try again.", "Retry")
+        case "ar": return ("لا يوجد اتصال", "تحقّق من الإنترنت وحاول مرة أخرى.", "إعادة المحاولة")
+        default:   return ("Нет соединения", "Проверьте интернет и попробуйте снова.", "Повторить")
+        }
+    }
+
     var body: some View {
+        let т = тексты
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            /* Фон — как body сайта: var(--mk-surf2). */
+            Theme.фонСтраницы.ignoresSafeArea()
             VStack(spacing: 16) {
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 46, weight: .regular))
-                    .foregroundStyle(.secondary)
-                Text("Нет соединения")
+                    .foregroundStyle(Theme.текстВторой)
+                Text(т.заголовок)
                     .font(.title3.weight(.semibold))
-                Text("Проверьте интернет и попробуйте снова.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
+                Text(т.подпись)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button(action: retry) {
-                    Text("Повторить")
+                    Text(т.кнопка)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 26).padding(.vertical, 12)
