@@ -20,7 +20,7 @@ enum StorefrontText {
             "no_reviews": "Отзывов пока нет", "loading": "Загружаем витрину…", "fail": "Не удалось загрузить витрину",
             "no_conn": "Нет соединения", "retry": "Повторить", "empty": "Пока нет объявлений",
             "empty_sub": "Подпишитесь — сообщим, когда продавец выложит новое.", "close": "Закрыть",
-            "share": "Поделиться", "on_site": "Открыть на сайте", "since": "На Kliko с %@",
+            "share": "Поделиться", "since": "На Kliko с %@",
             "deals": "сделок", "rating": "оценка", "followers": "подписчиков",
             "more_goods": "Показаны последние объявления продавца"
         ],
@@ -30,7 +30,7 @@ enum StorefrontText {
             "all_reviews": "Барлық пікірлер", "no_reviews": "Әзірге пікір жоқ", "loading": "Витрина жүктелуде…",
             "fail": "Витринаны жүктеу мүмкін болмады", "no_conn": "Байланыс жоқ", "retry": "Қайталау",
             "empty": "Әзірге хабарландыру жоқ", "empty_sub": "Жазылыңыз — сатушы жаңасын қосқанда хабарлаймыз.",
-            "close": "Жабу", "share": "Бөлісу", "on_site": "Сайтта ашу", "since": "Kliko-да %@ бастап",
+            "close": "Жабу", "share": "Бөлісу", "since": "Kliko-да %@ бастап",
             "deals": "мәміле", "rating": "баға", "followers": "жазылушы",
             "more_goods": "Сатушының соңғы хабарландырулары көрсетілген"
         ],
@@ -40,7 +40,7 @@ enum StorefrontText {
             "no_reviews": "No reviews yet", "loading": "Loading the storefront…", "fail": "Couldn't load the storefront",
             "no_conn": "No connection", "retry": "Retry", "empty": "No listings yet",
             "empty_sub": "Follow — we'll let you know when the seller posts something new.", "close": "Close",
-            "share": "Share", "on_site": "Open on the website", "since": "On Kliko since %@",
+            "share": "Share", "since": "On Kliko since %@",
             "deals": "deals", "rating": "rating", "followers": "followers",
             "more_goods": "Showing the seller's latest listings"
         ],
@@ -50,7 +50,7 @@ enum StorefrontText {
             "no_reviews": "لا توجد تقييمات بعد", "loading": "جارٍ تحميل المتجر…", "fail": "تعذّر تحميل المتجر",
             "no_conn": "لا يوجد اتصال", "retry": "إعادة المحاولة", "empty": "لا توجد إعلانات بعد",
             "empty_sub": "تابِع البائع وسنخبرك عندما ينشر جديدًا.", "close": "إغلاق",
-            "share": "مشاركة", "on_site": "فتح على الموقع", "since": "على Kliko منذ %@",
+            "share": "مشاركة", "since": "على Kliko منذ %@",
             "deals": "صفقات", "rating": "التقييم", "followers": "متابعون",
             "more_goods": "تُعرض أحدث إعلانات البائع"
         ]

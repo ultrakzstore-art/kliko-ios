@@ -225,11 +225,6 @@ struct ЭкранВакансий: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    Picker("", selection: $резюме) {
-                        Text(т("vac")).tag(false)
-                        Text(т("res")).tag(true)
-                    }
-                    .pickerStyle(.segmented)
                     чипы
                     содержимое
                 }
@@ -259,30 +254,40 @@ struct ЭкранВакансий: View {
         }
     }
 
-    /// Чипы занятости (mkJobsEmp): нажатая ещё раз — снять.
+    /// «Вакансии / Резюме» (.mk-qchip.mk-qcolor, data-jkind — выбранный цветом раздела) и чипы занятости
+    /// (mkJobsEmp, .mk-qchip): нажатая ещё раз — снять.
     private var чипы: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                чип(т("vac"), вкл: !резюме, заливка: КраскиВакансий.индиго) { резюме = false }
+                чип(т("res"), вкл: резюме, заливка: КраскиВакансий.индиго) { резюме = true }
                 ForEach(Self.виды, id: \.self) { вид in
                     let вкл = занятость == вид
-                    Button {
+                    чип(DesignText.т("emp_" + вид), вкл: вкл, заливка: Theme.зелёный) {
                         занятость = вкл ? "" : вид
-                    } label: {
-                        Text(DesignText.т("emp_" + вид))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(вкл ? Color.white : Theme.текст)
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 34)
-                            .background(вкл ? Theme.зелёный2 : Theme.поверхность, in: Capsule())
-                            .overlay {
-                                Capsule().strokeBorder(вкл ? Color.clear : Theme.линия, lineWidth: 1)
-                            }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(вкл ? .isSelected : [])
                 }
             }
         }
+    }
+
+    /// .mk-qchip: 12/600, поля 8/16, пилюля, рамка 1,5 --mk-line; выбранный — заливка и белый текст.
+    private func чип(_ текст: String, вкл: Bool, заливка: Color, действие: @escaping () -> Void) -> some View {
+        Button(action: действие) {
+            Text(текст)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(вкл ? Color.white : Theme.текст)
+                .lineLimit(1)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(вкл ? заливка : Theme.поверхность, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(вкл ? заливка : Theme.линия, lineWidth: 1.5)
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(вкл ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -297,16 +302,10 @@ struct ЭкранВакансий: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         } else if вакансии.isEmpty && ошибка {
-            VStack(spacing: 10) {
-                Text(т("fail"))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                Button(т("retry")) { заново() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.зелёный)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 36)
+            ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("fail"), кнопка: т("retry"),
+                       действие: { заново() })
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 36)
         } else if вакансии.isEmpty {
             VStack(spacing: 6) {
                 Image(systemName: "briefcase")
@@ -382,39 +381,54 @@ private struct СтрокаВакансии: View {
     var body: some View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
         let зарплата = вакансия.зарплата
-        return VStack(alignment: .leading, spacing: 5) {
-            if вакансия.топ { МеткаТопГлавной() }
+        return VStack(alignment: .leading, spacing: 4) {
+            if вакансия.топ {
+                МеткаТопВакансии()
+                    .padding(.bottom, 4)
+            }
             Text(вакансия.название)
-                .font(.system(size: 16, weight: .heavy))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
             Text(зарплата ?? DesignText.т("sal_none"))
-                .font(.system(size: зарплата == nil ? 14 : 16, weight: зарплата == nil ? .semibold : .heavy))
+                .font(.system(size: 16, weight: зарплата == nil ? .bold : .heavy))
+                .tracking(-0.16)
                 .foregroundStyle(зарплата == nil ? Theme.текстВторой : Theme.текст)
+                .lineLimit(1)
             if !вакансия.компания.isEmpty {
                 Text(вакансия.компания)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
             if !вакансия.описание.isEmpty {
                 Text(вакансия.описание.replacingOccurrences(of: "\n", with: " "))
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
             Text(подвал)
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundStyle(Theme.текстВторой)
                 .lineLimit(1)
+                .padding(.top, 2)
         }
-        .padding(14)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(вакансия.топ ? Theme.топФон : Theme.поверхность, in: форма)
+        .background(вакансия.топ ? Theme.топФон : Theme.поверхность)
+        // .vx-c--job: черта 3px цветом раздела (55 %) у начала карточки
+        .overlay(alignment: .leading) {
+            КраскиВакансий.черта
+                .frame(width: 3)
+                .accessibilityHidden(true)
+        }
+        .clipShape(форма)
         .overlay {
-            форма.strokeBorder(вакансия.топ ? Theme.топРамка : Theme.линия, lineWidth: 1)
+            форма.strokeBorder(вакансия.топ ? Theme.топРамка : КраскиВакансий.рамка, lineWidth: 1)
         }
         .теньКарточкиСайта()
         .contentShape(форма)
@@ -426,6 +440,33 @@ private struct СтрокаВакансии: View {
         if !вакансия.создано.isEmpty { части.append(Listing.датаСайта(вакансия.создано)) }
         return части.filter { !$0.isEmpty }.joined(separator: " · ")
     }
+}
+
+/// .vx-jtop: «★ ТОП» на золотом, тёмный текст.
+private struct МеткаТопВакансии: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 11))
+            Text(FeedText.т("top").uppercased())
+                .font(.system(size: 10, weight: .heavy))
+        }
+        .foregroundStyle(Color(uiColor: Theme.hex(0x3A2A06)))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(Color(uiColor: Theme.hex(0xD9B24C)),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+/// Цвет раздела «Работа» сайта (--vc #4F46E5 в MK_HOME_V jobs): чип вида, черта и рамка строки.
+private enum КраскиВакансий {
+    static let индиго = Color(uiColor: Theme.hex(0x4F46E5))
+    static let черта = Color(uiColor: Theme.hex(0x4F46E5, 0.55))
+    /// color-mix(#4F46E5 22 %, --mk-line).
+    static let рамка = Theme.цвет(светлый: Theme.смесь(Theme.hex(0x4F46E5), Theme.hex(0xE3ECE7), 0.22),
+                                  тёмный: Theme.смесь(Theme.hex(0x4F46E5), Theme.hex(0xFFFFFF, 0.10), 0.22))
 }
 
 // MARK: - Карточка вакансии (_mkJobSheet)
@@ -465,7 +506,7 @@ struct ЛистВакансии: View {
                             .padding(.vertical, 40)
                     }
                 }
-                .padding(16)
+                .padding(20)
             }
             .background(Theme.поверхность.ignoresSafeArea())
             .safeAreaInset(edge: .bottom) {
@@ -486,43 +527,54 @@ struct ЛистВакансии: View {
 
     private func карточка(_ в: ВакансияСайта) -> some View {
         let зарплата = в.зарплата
-        return VStack(alignment: .leading, spacing: 8) {
-            if в.топ { МеткаТопГлавной() }
+        // .jb-t, .jb-sal (+8), .jb-co и .jb-meta (+4), .jb-ds (+14) — без значков и разделителя, как у сайта
+        return VStack(alignment: .leading, spacing: 0) {
+            if в.топ {
+                МеткаТопВакансии()
+                    .padding(.bottom, 8)
+            }
             Text(в.название)
-                .font(.system(size: 22, weight: .heavy))
+                .font(.system(size: 16, weight: .heavy))
                 .foregroundStyle(Theme.текст)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text(зарплата ?? DesignText.т("sal_none"))
-                .font(.system(size: зарплата == nil ? 15 : 19, weight: зарплата == nil ? .semibold : .heavy))
-                .foregroundStyle(зарплата == nil ? Theme.текстВторой : Theme.зелёный2)
+                .font(.system(size: зарплата == nil ? 14 : 19, weight: зарплата == nil ? .bold : .heavy))
+                .foregroundStyle(зарплата == nil ? Theme.текстВторой : Theme.текст)
+                .padding(.top, 8)
             if !в.компания.isEmpty {
-                Label(в.компания, systemImage: в.резюме ? "person" : "building.2")
-                    .font(.system(size: 15, weight: .semibold))
+                Text(в.компания)
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
             }
             if !в.подпись.isEmpty {
-                Label(в.подпись, systemImage: "mappin.and.ellipse")
-                    .font(.system(size: 13))
+                Text(в.подпись)
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
             }
             if !в.описание.isEmpty {
-                Divider().padding(.vertical, 4)
                 Text(в.описание)
-                    .font(.system(size: 15))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текст)
-                    .lineSpacing(3)
+                    .lineSpacing(4.5)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 14)
             }
             if let сообщение {
                 Text(сообщение)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
-                    .padding(.top, 6)
+                    .padding(.top, 14)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// .jb-ft: «Откликнуться» (у резюме — «Написать») на всю ширину.
@@ -534,14 +586,15 @@ struct ЛистВакансии: View {
                 if шлём { SiteSpinner.белый }
                 Text(т(в.резюме ? "write" : "apply"))
             }
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 14, weight: .heavy))
             .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .opacity(шлём ? 0.6 : 1)
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         .disabled(шлём)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(Theme.поверхность)
     }

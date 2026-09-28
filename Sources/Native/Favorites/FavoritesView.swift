@@ -61,6 +61,11 @@ struct FavoritesView: View {
                     VStack(spacing: 16) {
                         /* Этап 30: заголовок ряда, как «• Раздел N» главной сайта: точка-сердце и число. */
                         if Config.дизайнКакНаСайте { заголовокСайта }
+                        /* .mk-favsubs сайта: «Мои подписки» — поиски и продавцы — над сеткой избранного. */
+                        if Config.подпискиССайтом {
+                            ПодпискиВИзбранном()
+                                .padding(.horizontal, 16)
+                        }
                         /* Этап 49: зазор и поля — как у сетки ленты (у сайта избранное — та же сетка витрины). */
                         LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: ListingCard.зазор) {
                             ForEach(избранное.товары) { товар in
@@ -145,19 +150,16 @@ struct FavoritesView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Этап 30: «♥ Избранное 3» — как заголовок ряда «Рекомендуем» главной сайта (точка краской, жирное название, число).
+    /// «Избранное 3» — #mk-feed-head сайта (feed_favs): на телефоне 14/800, -.01em; число серым.
     private var заголовокСайта: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "heart.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.сердце)
-                .accessibilityHidden(true)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(FavoritesText.т("title"))
-                .font(.system(.title3, weight: .heavy))
+                .font(.system(size: 14, weight: .heavy))
+                .tracking(-0.14)
                 .foregroundStyle(Theme.текст)
                 .accessibilityAddTraits(.isHeader)
             Text(DesignText.число(избранное.товары.count))
-                .font(.system(.caption, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
             Spacer(minLength: 0)
         }
@@ -291,7 +293,8 @@ struct КнопкаИзбранного: View {
                             .contentShape(Rectangle())
                     }
                 }
-                .buttonStyle(.plain)
+                // .mk-fav:active — scale(.85)
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.85))
             } else if место == .фото {
                 Button { избранное.переключить(товар) } label: {
                     сердце
@@ -312,6 +315,127 @@ struct КнопкаИзбранного: View {
     private var сердце: some View {
         Image(systemName: сохранено ? "heart.fill" : "heart")
             .symbolEffect(.bounce, value: сохранено)
+    }
+}
+
+/**
+ .mk-favsubs сайта (mkRenderFavSubs): колокольчик и «Мои подписки», группы «ПОИСКИ» и «ПРОДАВЦЫ» чипами с «×»; подписок нет —
+ пояснение. Поиск — лента с ним (с городом подписки), «×» — удалить; продавец — своя витрина, «×» — отписаться.
+ */
+private struct ПодпискиВИзбранном: View {
+    @ObservedObject private var поиски = SavedSearchStore.shared
+    @ObservedObject private var подписки = СинхронПодписок.shared
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "bell")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный)
+                    .accessibilityHidden(true)
+                Text(FavoritesText.т("subs_title"))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .padding(.bottom, 10)
+            if поиски.поиски.isEmpty && подписки.продавцы.isEmpty {
+                Text(FavoritesText.т("subs_empty"))
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                if !поиски.поиски.isEmpty {
+                    подзаголовок(FavoritesText.т("subs_searches"))
+                    ПереносСтрок(промежуток: 8, междуСтрок: 8) {
+                        ForEach(Array(поиски.поиски.enumerated()), id: \.element.id) { пара in
+                            ЧипПодпискиИзбранного(подпись: пара.element.название, значок: nil,
+                                                  убратьПодпись: FavoritesText.т("subs_delete"),
+                                                  открыть: { СинхронПодписок.открыть(пара.element) },
+                                                  убрать: { поиски.убрать(места: IndexSet(integer: пара.offset)) })
+                        }
+                    }
+                }
+                if !подписки.продавцы.isEmpty {
+                    подзаголовок(FavoritesText.т("subs_sellers"))
+                    ПереносСтрок(промежуток: 8, междуСтрок: 8) {
+                        ForEach(подписки.продавцы) { продавец in
+                            ЧипПодпискиИзбранного(подпись: продавец.имя.isEmpty ? SubsText.т("seller") : продавец.имя,
+                                                  значок: "storefront",
+                                                  убратьПодпись: SubsText.т("unfollow"),
+                                                  открыть: { ОкноПродавца.открыть(id: продавец.id, имя: продавец.имя) },
+                                                  убрать: { подписки.отписаться(продавец) })
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.поверхность, in: форма)
+        .overlay {
+            форма.strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+        .padding(.top, 2)
+    }
+
+    /// .mk-favsubs-sub: 11/700 заглавными, серым, поля 8 сверху и снизу.
+    private func подзаголовок(_ текст: String) -> some View {
+        Text(текст.uppercased())
+            .font(.system(size: 11, weight: .bold))
+            .tracking(0.44)
+            .foregroundStyle(Theme.текстВторой)
+            .padding(.vertical, 8)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// .mk-fschip: пилюля с рамкой 1,5, 13/600, поля 6 8 6 14; «×» — кружок 19 на --mk-surf2.
+private struct ЧипПодпискиИзбранного: View {
+    let подпись: String
+    let значок: String?
+    let убратьПодпись: String
+    let открыть: () -> Void
+    let убрать: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: открыть) {
+                HStack(spacing: 8) {
+                    if let значок {
+                        Image(systemName: значок)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.текстВторой)
+                            .accessibilityHidden(true)
+                    }
+                    Text(подпись)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Button(action: убрать) {
+                Text("×")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 19, height: 19)
+                    .background(Theme.поверхность2, in: Circle())
+                    .contentShape(Circle().inset(by: -8))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(убратьПодпись + ": " + подпись)
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 6)
+        .background(Theme.поверхность, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
     }
 }
 

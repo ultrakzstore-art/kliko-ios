@@ -73,12 +73,14 @@ struct ЭкранКарты: View {
     var body: some View {
         GeometryReader { рамка in
             VStack(spacing: 0) {
-                ВерхКарты(счёт: модель.подписьСчёта, занята: модель.занята, закрыть: { закрыть() })
+                ВерхКарты(счёт: рамка.size.width > 520 ? модель.подписьСчёта : nil, занята: модель.занята,
+                          закрыть: { закрыть() })
                 if !разделы.isEmpty {
                     ПолосаРазделовКарты(разделы: разделы, выбран: лента.раздел,
                                         выбрать: { ключ in лента.выбратьРаздел(ключ) })
                 }
-                телоКарты(рамка.size)
+                телоКарты(рамка.size, высотаОкна: рамка.size.height + рамка.safeAreaInsets.top
+                          + рамка.safeAreaInsets.bottom)
             }
         }
         .background(Theme.фонСтраницы.ignoresSafeArea())
@@ -104,7 +106,7 @@ struct ЭкранКарты: View {
 
     /// .mk-map-body: холст и список столбиком; на широком экране — рядом, список справа.
     @ViewBuilder
-    private func телоКарты(_ размер: CGSize) -> some View {
+    private func телоКарты(_ размер: CGSize, высотаОкна: CGFloat) -> some View {
         if размер.width >= 700 {
             HStack(spacing: 12) {
                 холст
@@ -116,7 +118,8 @@ struct ЭкранКарты: View {
             VStack(spacing: 12) {
                 холст
                 панель
-                    .frame(height: max(180, размер.height * 0.38))
+                    // 38vh сайта — от всей высоты окна, не от места под шапкой
+                    .frame(height: max(180, высотаОкна * 0.38))
             }
             .padding(12)
         }
@@ -217,7 +220,7 @@ struct ЭкранКарты: View {
     private var панель: some View {
         ScrollViewReader { прокрутка in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     Color.clear
                         .frame(height: 0)
                         .id(Self.верхСписка)
@@ -232,6 +235,11 @@ struct ЭкранКарты: View {
         }
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
         .теньКарточкиСайта(радиус: Theme.Радиус.lg)
     }
 
@@ -432,8 +440,9 @@ private struct ВерхКарты: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: закрыть) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
+                // .mk-map-x сайта — знак «×» 21px обычного начертания
+                Text("×")
+                    .font(.system(size: 21, weight: .regular))
                     .foregroundStyle(Color.white)
                     .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.12),
@@ -487,6 +496,15 @@ private struct ПолосаРазделовКарты: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
+        /* mask-image сайта: у конца полосы мягкое затухание 26px (в RTL — у левого края). */
+        .mask {
+            HStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 26)
+                    .flipsForRightToLeftLayoutDirection(true)
+            }
+        }
         .background(Theme.поверхность)
         .overlay(alignment: .bottom) {
             Theme.линия
@@ -510,6 +528,8 @@ private struct ПолосаРазделовКарты: View {
                 .overlay {
                     Capsule().strokeBorder(вкл ? Color.clear : Theme.линия, lineWidth: 1)
                 }
+                // .mk-map-cat.on: 0 6px 14px -8px rgba(15,81,50,.8)
+                .shadow(color: вкл ? Color(uiColor: Theme.hex(0x0F5132, 0.5)) : .clear, radius: 5, x: 0, y: 4)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -527,7 +547,7 @@ private struct ПузырьГорода: View {
     var body: some View {
         Button(action: нажать) {
             Text(ПодписиКарты.коротко(город.число))
-                .font(.system(size: 14, weight: .heavy))
+                .font(.system(size: 13, weight: .heavy))
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .fixedSize()
@@ -661,23 +681,47 @@ private struct КнопкаРядом: View {
 
     var body: some View {
         Button(action: действие) {
-            ZStack {
-                if ищем {
-                    SiteSpinner.мелкий
-                } else {
-                    Image(systemName: "location.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(включена ? Color.white : Theme.текстВторой)
+            Image(systemName: "location.fill")
+                .font(.system(size: 17, weight: .semibold))
+                // .mk-geoloc.locating — иконка зелёная, пока ищем
+                .foregroundStyle(включена && !ищем ? Color.white : (ищем ? Theme.зелёный : Theme.текстВторой))
+                .frame(width: 44, height: 44)
+                .background(включена && !ищем ? Theme.зелёный : Theme.поверхность, in: Circle())
+                .shadow(color: Color.black.opacity(0.28), radius: 6, x: 0, y: 3)
+                .overlay {
+                    if включена || ищем {
+                        КольцоРядом(длительность: ищем ? 1 : 1.7)
+                            .id(ищем)
+                    }
                 }
-            }
-            .frame(width: 44, height: 44)
-            .background(включена ? Theme.зелёный : Theme.поверхность, in: Circle())
-            .shadow(color: Color.black.opacity(0.28), radius: 6, x: 0, y: 3)
-            .contentShape(Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(MapText.т("here"))
         .accessibilityAddTraits(включена ? .isSelected : [])
+    }
+}
+
+/// .mk-geoloc::after: кольцо на 4 шире кнопки, 2px зелёным, расходится (mkGeoPulse: .92→1.6, .7→0).
+private struct КольцоРядом: View {
+    let длительность: Double
+    @State private var пульс = false
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
+
+    var body: some View {
+        Circle()
+            .strokeBorder(Theme.зелёный, lineWidth: 2)
+            .padding(-4)
+            .scaleEffect(безДвижения ? 1 : (пульс ? 1.6 : 0.92))
+            .opacity(безДвижения ? 0.4 : (пульс ? 0 : 0.7))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear {
+                guard !безДвижения else { return }
+                withAnimation(.easeOut(duration: длительность).repeatForever(autoreverses: false)) {
+                    пульс = true
+                }
+            }
     }
 }
 
@@ -798,20 +842,20 @@ private struct КарточкаГородаКарты: View {
                     .foregroundStyle(Color.white)
                     .frame(width: 54, height: 54)
                     .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(город.город)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(1)
                     Text(DesignText.предложений(город.число))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Theme.зелёный)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(Theme.текстВторой)
             }
             .padding(8)
@@ -835,10 +879,10 @@ private struct СтрокаОбъявленияКарты: View {
         Button(action: открыть) {
             HStack(alignment: .center, spacing: 10) {
                 миниатюра
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     заголовок
                     Text(ПодписиКарты.цена(строка.товар))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Theme.зелёный)
                         .lineLimit(1)
                     if !подробности.isEmpty {
@@ -847,8 +891,9 @@ private struct СтрокаОбъявленияКарты: View {
                             .foregroundStyle(Theme.текстВторой)
                             .lineLimit(1)
                     }
+                    // .mk-mc-acts: margin-top 6 (5 + зазор столбика 1)
                     ПилюляОткрыть()
-                        .padding(.top, 4)
+                        .padding(.top, 5)
                 }
                 Spacer(minLength: 0)
             }
@@ -881,15 +926,16 @@ private struct СтрокаОбъявленияКарты: View {
         HStack(spacing: 5) {
             if строка.топ {
                 Text(MapText.т("top"))
-                    .font(.system(size: 9, weight: .heavy))
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(0.2)
                     .foregroundStyle(Color(uiColor: Theme.hex(0x7A4F05)))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
                     .background(Color(uiColor: Theme.hex(0xF6C453)),
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
             }
             Text(строка.товар.title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(1)
         }
@@ -921,9 +967,9 @@ private struct СтрокаОбъявленияКарты: View {
 /// .mk-mc-act «Открыть»: рамка, зелёная стрелка. Нажимается вся строка — пилюля только показывает, куда она ведёт.
 private struct ПилюляОткрыть: View {
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: "arrow.up.right")
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.акцент)
             Text(MapText.т("open"))
                 .font(.system(size: 11, weight: .bold))
@@ -931,7 +977,7 @@ private struct ПилюляОткрыть: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
-        .frame(height: 26)
+        .frame(height: 28)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)

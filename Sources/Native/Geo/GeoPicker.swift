@@ -491,8 +491,10 @@ private struct ЧипГорода: View {
             .frame(height: 38)
             .background(выбран ? КраскиГео.выбранныйЧип : КраскиГео.фонЧипа, in: Capsule())
             .overlay {
-                Capsule().strokeBorder(выбран ? Color.clear : Theme.линия, lineWidth: 1)
+                Capsule().strokeBorder(выбран ? Color.clear : Theme.линия.opacity(0.6), lineWidth: 1)
             }
+            // .mk-geo-chip.on: 0 6px 14px -8px rgba(15,81,50,.8)
+            .shadow(color: выбран ? Color(uiColor: Theme.hex(0x0F5132, 0.5)) : .clear, radius: 5, x: 0, y: 4)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -552,7 +554,7 @@ private struct СтрокаМеста: View {
                             .foregroundStyle(Theme.текстВторой)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: уровень == .регион ? 36 : nil, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -563,7 +565,8 @@ private struct СтрокаМеста: View {
         }
         .padding(.leading, уровень == .вложенное ? 36 : 16)
         .padding(.trailing, уровень == .регион ? 12 : 16)
-        .padding(.vertical, уровень == .вложенное ? 7 : 9)
+        // .mk-city-opt 12/16, .mk-city-reg 10 (под кнопку раскрытия 36), .mk-city-sub 10
+        .padding(.vertical, уровень == .всё ? 12 : 10)
         .background(выбрана ? Theme.оттенокАкцента : Color.clear)
         .overlay(alignment: .leading) { черта }
         .overlay(alignment: .top) { линияСверху }

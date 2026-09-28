@@ -205,8 +205,8 @@ struct СтрокаДействийПродавца: View {
  загрузить отзывы» или «7 сделок · 5 отзывов» (число сделок жирным, нет сделок — только отзывы); отзывы есть — плашка
  .mksr-top: крупная оценка «4.8», звёзды ★☆, «5 отзывов», справа полосы «5…1» с числами; ниже — отзывы (.mksr-rv: буква
  в мятном квадрате, имя, звёзды, дата справа, текст, товар) или «Отзывов пока нет» с пояснением; внизу «Закрыть». От
- себя: «Подписаться на продавца» этапа 36 под шапкой (не на своём) и «Профиль» — страница продавца на сайте, куда ведёт
- карточка сайта (seller.php?id=).
+ себя: «Подписаться на продавца» этапа 36 под шапкой (не на своём) и «Профиль» — своя витрина продавца (вместо
+ seller.php?id= сайта).
  */
 struct ЛистОтзывовПродавца: View {
     let продавецID: String
@@ -248,7 +248,7 @@ struct ЛистОтзывовПродавца: View {
                 низ
             }
             .padding(.horizontal, 16)
-            .padding(.top, 22)
+            .padding(.top, 18)
             .padding(.bottom, 16)
         }
         .background(Theme.поверхность.ignoresSafeArea())
@@ -286,7 +286,7 @@ struct ЛистОтзывовПродавца: View {
                             .font(.system(size: 12, weight: .bold))
                             .accessibilityHidden(true)
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.зелёный2)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
@@ -298,7 +298,7 @@ struct ЛистОтзывовПродавца: View {
                 закрыть()
             } label: {
                 Text(SellerText.т("close"))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
@@ -316,14 +316,14 @@ private struct ШапкаОтзывов: View {
     let повторить: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(имя.isEmpty ? SellerText.т("seller") : имя)
-                .font(.system(size: 21, weight: .heavy))
+                .font(.system(size: 16, weight: .heavy))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(2)
                 .accessibilityAddTraits(.isHeader)
             подпись
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(Theme.текстВторой)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,8 +387,10 @@ private struct СодержимоеОтзывов: View {
 }
 
 /// .mksr-top: слева крупная оценка, звёзды и «N отзывов» (min 74), справа полосы 5…1 (.mksr-dist).
-private struct ИтогОценок: View {
+struct ИтогОценок: View {
     let сводка: ОтзывыПродавца.Сводка
+    /// Фон плашки: в листе --mk-surf2, в витрине — поверхность.
+    var фон: Color = КраскиОтзывов.фонБлока
 
     /// Самая длинная полоса — во всю ширину (l = max(1, …) у сайта).
     private var наибольшее: Int {
@@ -421,7 +423,7 @@ private struct ИтогОценок: View {
             .frame(maxWidth: .infinity)
         }
         .padding(14)
-        .background(КраскиОтзывов.фонБлока, in: форма)
+        .background(фон, in: форма)
         .overlay {
             форма.strokeBorder(Theme.линия, lineWidth: 1)
         }
@@ -483,8 +485,10 @@ private struct ЗвёздыОтзыва: View {
 }
 
 /// .mksr-rv: буква имени в мятном квадрате 34 (--r-ms), имя жирным, звёзды, дата справа, текст, товар серым.
-private struct СтрокаОтзыва: View {
+struct СтрокаОтзыва: View {
     let отзыв: ОтзывыПродавца.Отзыв
+    /// Фон плашки: в листе --mk-surf2, в витрине — поверхность.
+    var фон: Color = КраскиОтзывов.фонБлока
 
     /// Имени нет — «Покупатель», буква — «?», как у сайта.
     private var имя: String { отзыв.имя.isEmpty ? SellerText.т("buyer") : отзыв.имя }
@@ -495,14 +499,14 @@ private struct СтрокаОтзыва: View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
         return HStack(alignment: .top, spacing: 12) {
             Text(буква)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Theme.зелёный2)
                 .frame(width: 34, height: 34)
                 .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(имя)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(1)
                     ЗвёздыОтзыва(оценка: отзыв.оценка, размер: 13)
@@ -517,9 +521,9 @@ private struct СтрокаОтзыва: View {
                 }
                 if let текст = отзыв.текст {
                     Text(текст)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.текст)
-                        .lineSpacing(3)
+                        .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let товар = отзыв.товар {
@@ -533,7 +537,7 @@ private struct СтрокаОтзыва: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(КраскиОтзывов.фонБлока, in: форма)
+        .background(фон, in: форма)
         .overlay {
             форма.strokeBorder(Theme.линия, lineWidth: 1)
         }
@@ -557,12 +561,12 @@ private struct ПустоОтзывов: View {
     var body: some View {
         VStack(spacing: 6) {
             Text(SellerText.т("none"))
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.текст)
             Text(SellerText.т("none_sub"))
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(Theme.текстВторой)
-                .lineSpacing(3)
+                .lineSpacing(4.5)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -575,7 +579,7 @@ private struct ПустоОтзывов: View {
 
 /// Краски листа отзывов из CSS сайта (.mksr-*): звёзды #b45309 / #fbbf24, полосы #d97706 / #f59e0b, плашки —
 /// --mk-surf2, в тёмной — белый 3 %.
-private enum КраскиОтзывов {
+enum КраскиОтзывов {
     static let звезда = Theme.цвет(0xB45309, 0xFBBF24)
     static let полоса = Theme.цвет(0xD97706, 0xF59E0B)
     static let фонБлока = Theme.цвет(светлый: Theme.hex(0xF4F8F6), тёмный: Theme.hex(0xFFFFFF, 0.03))

@@ -22,10 +22,7 @@ enum ОкноПродавца {
     static func открыть(id: String, имя: String = "") -> Bool {
         let номер = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ВитринаПродавцаAPI.годный(номер) else { return false }
-        let запасной = ВитринаПродавцаAPI.адрес(номер)
-        ПоверхВсего.показать(неВышло: {
-            if let запасной { WebBridge.shared.pendingURL = запасной }
-        }) { закрыть in
+        ПоверхВсего.показать { закрыть in
             ЭкранВитриныПродавца(продавецID: номер, имя: имя, закрыть: закрыть)
         }
         return true
@@ -99,8 +96,10 @@ struct ЭкранВитриныПродавца: View {
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .refreshable { await загрузить(заново: true) }
-            .navigationTitle(показИмени)
+            // имя уже крупно в шапке — в полосе окна не повторяем
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.поверхность, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("close")) { закрыть() }
@@ -148,21 +147,10 @@ struct ЭкранВитриныПродавца: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         case .ошибка:
-            VStack(spacing: 10) {
-                Image(systemName: "wifi.exclamationmark")
-                    .font(.system(size: 28))
-                    .foregroundStyle(Theme.текстВторой)
-                    .accessibilityHidden(true)
-                Text(т("fail"))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                Button(т("retry")) { Task { @MainActor in await загрузить(заново: true) } }
-                    .font(.system(size: 15, weight: .bold))
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.зелёный)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 36)
+            ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("fail"), кнопка: т("retry"),
+                       действие: { Task { @MainActor in await загрузить(заново: true) } })
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 36)
         case .готово:
             блокОбъявлений
             блокОтзывов
@@ -223,9 +211,9 @@ struct ЭкранВитриныПродавца: View {
             VStack(alignment: .leading, spacing: 10) {
                 ЗаголовокБлокаВитрины(текст: т("reviews"), число: сводка?.отзывов)
                 if let сводка, сводка.отзывов > 0 || !сводка.отзывы.isEmpty {
-                    ИтогОтзывовВитрины(сводка: сводка)
+                    ИтогОценок(сводка: сводка, фон: Theme.поверхность)
                     ForEach(сводка.отзывы.prefix(3)) { отзыв in
-                        ОтзывВитрины(отзыв: отзыв)
+                        СтрокаОтзыва(отзыв: отзыв, фон: Theme.поверхность)
                     }
                     Button {
                         отзывыОткрыты = true
@@ -494,129 +482,5 @@ private struct ЗаголовокБлокаВитрины: View {
             }
             Spacer(minLength: 0)
         }
-    }
-}
-
-/// Сводка отзывов: крупная оценка, звёзды, «N отзывов» и полосы 5…1.
-private struct ИтогОтзывовВитрины: View {
-    let сводка: ОтзывыПродавца.Сводка
-
-    private var наибольшее: Int {
-        max(1, (1...5).map { сводка.распределение[$0] ?? 0 }.max() ?? 1)
-    }
-
-    var body: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-        return HStack(spacing: 16) {
-            VStack(spacing: 4) {
-                Text(String(format: "%.1f", сводка.оценка))
-                    .font(.system(size: 30, weight: .heavy))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.текст)
-                Text(ListingPageText.число(сводка.отзывов, "reviews"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(minWidth: 74)
-            .accessibilityElement(children: .combine)
-            VStack(spacing: 4) {
-                ForEach([5, 4, 3, 2, 1], id: \.self) { звёзд in
-                    полоса(звёзд)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-        }
-        .padding(14)
-        .background(Theme.поверхность, in: форма)
-        .overlay {
-            форма.strokeBorder(Theme.линия, lineWidth: 1)
-        }
-    }
-
-    private func полоса(_ звёзд: Int) -> some View {
-        let число = сводка.распределение[звёзд] ?? 0
-        let доля = CGFloat(Double(число) / Double(наибольшее))
-        return HStack(spacing: 8) {
-            Text(String(звёзд))
-                .frame(width: 10, alignment: .trailing)
-            Capsule()
-                .fill(Theme.линия)
-                .frame(height: 6)
-                .overlay(alignment: .leading) {
-                    GeometryReader { рамка in
-                        Capsule()
-                            .fill(Theme.оранжевый)
-                            .frame(width: рамка.size.width * доля)
-                    }
-                }
-            Text(String(число))
-                .frame(minWidth: 18, alignment: .trailing)
-                .fixedSize()
-        }
-        .font(.system(size: 12).monospacedDigit())
-        .foregroundStyle(Theme.текстВторой)
-    }
-}
-
-/// Один отзыв в витрине: буква, имя, звёзды, дата, текст и товар.
-private struct ОтзывВитрины: View {
-    let отзыв: ОтзывыПродавца.Отзыв
-
-    private var имя: String { отзыв.имя.isEmpty ? SellerText.т("buyer") : отзыв.имя }
-
-    var body: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-        let полных = Int(min(5, max(0, отзыв.оценка)).rounded())
-        return HStack(alignment: .top, spacing: 12) {
-            Text(String((отзыв.имя.isEmpty ? "?" : отзыв.имя).prefix(1)).uppercased())
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(Theme.зелёный2)
-                .frame(width: 34, height: 34)
-                .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    Text(имя)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                        .lineLimit(1)
-                    Text(String(repeating: "★", count: полных) + String(repeating: "☆", count: 5 - полных))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.звезда)
-                        .fixedSize()
-                    Spacer(minLength: 4)
-                    if let дата = отзыв.дата {
-                        Text(Listing.датаСайта(дата))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.текстВторой)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                }
-                if let текст = отзыв.текст {
-                    Text(текст)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Theme.текст)
-                        .lineLimit(5)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let товар = отзыв.товар {
-                    Text(товар)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: форма)
-        .overlay {
-            форма.strokeBorder(Theme.линия, lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
     }
 }

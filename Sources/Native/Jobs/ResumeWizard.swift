@@ -228,13 +228,16 @@ struct МастерРезюме: View {
     }
 
     private func вопрос(_ заголовок: String, _ подпись: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // .rw2-q (16/800, -.2px, отступ 4) и .rw2-sub (12, строка 1.45)
+        VStack(alignment: .leading, spacing: 4) {
             Text(заголовок)
-                .font(.system(size: 21, weight: .heavy))
+                .font(.system(size: 16, weight: .heavy))
+                .tracking(-0.2)
                 .foregroundStyle(Theme.текст)
                 .accessibilityAddTraits(.isHeader)
             Text(подпись)
-                .font(.system(size: 13.5))
+                .font(.system(size: 12))
+                .lineSpacing(3)
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -242,20 +245,7 @@ struct МастерРезюме: View {
 
     private func поле(_ подпись: String, _ значение: Binding<String>, подсказка: String = "",
                       числа: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(подпись)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Theme.текстВторой)
-            TextField(подсказка, text: значение)
-                .keyboardType(числа ? .numberPad : .default)
-                .font(.system(size: 16))
-                .padding(12)
-                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                        .strokeBorder(Theme.линия, lineWidth: 1)
-                }
-        }
+        ПолеМастераРезюме(подпись: подпись, значение: значение, подсказка: подсказка, числа: числа)
     }
 
     private func текстовоеПоле(_ значение: Binding<String>, высота: CGFloat) -> some View {
@@ -264,10 +254,10 @@ struct МастерРезюме: View {
             .frame(minHeight: высота)
             .scrollContentBackground(.hidden)
             .padding(8)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскиМастераРезюме.рамкаПоля, lineWidth: 1.5)
             }
     }
 
@@ -407,11 +397,19 @@ struct МастерРезюме: View {
                 }
             }
             if резюме {
+                // .rw2-sw: 13/600, поля 12/14, рамка 1,5; включён — мятный фон и зелёная рамка
                 Toggle(т("jw_relocate"), isOn: $запись.переезд)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
                     .tint(Theme.акцент)
-                    .padding(12)
-                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                    .background(запись.переезд ? Theme.мята : Theme.поверхность,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(запись.переезд ? Theme.акцент : Theme.линия, lineWidth: 1.5)
+                    }
             }
         }
     }
@@ -428,27 +426,26 @@ struct МастерРезюме: View {
             .foregroundStyle(Theme.текст)
     }
 
-    /// .rw2-chips: чипы с одним выбранным.
+    /// .rw2-chips: чипы с одним выбранным, с переносом строк; выбранный — мятный с зелёным текстом (.rw2-chip.on).
     private func чипы(_ значения: [String], выбрано: String, подпись: @escaping (String) -> String,
                       выбрать: @escaping (String) -> Void) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(значения, id: \.self) { значение in
-                    let включён = значение == выбрано
-                    Button {
-                        выбрать(значение)
-                    } label: {
-                        Text(подпись(значение))
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(включён ? Color.white : Theme.текстПункта)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .background(включён ? Theme.акцент : Theme.фонПункта, in: Capsule())
-                            .overlay { Capsule().strokeBorder(включён ? Color.clear : Theme.рамкаПункта, lineWidth: 1) }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(включён ? [.isSelected] : [])
+        ПереносСтрок(промежуток: 8, междуСтрок: 8) {
+            ForEach(значения, id: \.self) { значение in
+                let включён = значение == выбрано
+                Button {
+                    выбрать(значение)
+                } label: {
+                    Text(подпись(значение))
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(включён ? Theme.акцент : Theme.текст)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 8)
+                        .background(включён ? Theme.мята : Theme.поверхность, in: Capsule())
+                        .overlay { Capsule().strokeBorder(включён ? Theme.акцент : Theme.линия, lineWidth: 1.5) }
+                        .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(включён ? [.isSelected] : [])
             }
         }
     }
@@ -632,12 +629,17 @@ struct МастерРезюме: View {
                     закрыть()
                 }
             } label: {
+                // .rw2-back: поля 14/16, рамка 1,5, --surf2, радиус 12
                 Text(т("back"))
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.акцент)
-                    .padding(.vertical, 13)
-                    .padding(.horizontal, 18)
-                    .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .foregroundStyle(Theme.текст)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1.5)
+                    }
             }
             .buttonStyle(.plain)
             Button {
@@ -646,7 +648,7 @@ struct МастерРезюме: View {
                 HStack(spacing: 6) {
                     if сохраняем { SiteSpinner.белый }
                     Text(последний ? (номер == nil ? т("publish") : т("save")) : т("next"))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 15, weight: .heavy))
                     if !последний {
                         Image(systemName: "chevron.right")
                             .flipsForRightToLeftLayoutDirection(true)
@@ -654,18 +656,30 @@ struct МастерРезюме: View {
                             .accessibilityHidden(true)
                     }
                 }
-                .foregroundStyle(Color.white)
+                .foregroundStyle(можноДальше ? Color.white : Theme.текстВторой)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(Theme.акцент, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .padding(.vertical, 14)
+                .background(фонДалее, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .shadow(color: можноДальше ? Color(uiColor: Theme.hex(0x22A05B, 0.35)) : .clear, radius: 8, x: 0, y: 8)
             }
             .buttonStyle(.plain)
             .disabled(!можноДальше || сохраняем)
-            .opacity(можноДальше ? 1 : 0.5)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.bar)
+        .padding(.vertical, 13)
+        .background(Theme.поверхность)
+        .overlay(alignment: .top) {
+            Theme.линия
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// .rw2-next: градиент --g → --g2; неактивная — --surf2 без тени.
+    private var фонДалее: AnyShapeStyle {
+        guard можноДальше else { return AnyShapeStyle(Theme.поверхность2) }
+        return AnyShapeStyle(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2],
+                                            startPoint: .topLeading, endPoint: .bottomTrailing))
     }
 
     private func дальше() {
@@ -734,6 +748,64 @@ struct МастерРезюме: View {
         }
         .padding(20)
     }
+}
+
+/// .rw2-f: подпись внутри поля сверху (10/700, заглавными), значение 14/700, рамка 1,5; в фокусе — зелёная рамка и
+/// кольцо 3px.
+private struct ПолеМастераРезюме: View {
+    let подпись: String
+    @Binding var значение: String
+    let подсказка: String
+    let числа: Bool
+    @FocusState private var вФокусе: Bool
+
+    init(подпись: String, значение: Binding<String>, подсказка: String, числа: Bool) {
+        self.подпись = подпись
+        _значение = значение
+        self.подсказка = подсказка
+        self.числа = числа
+    }
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return ZStack(alignment: .topLeading) {
+            TextField(подсказка, text: $значение)
+                .keyboardType(числа ? .numberPad : .default)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.текст)
+                .focused($вФокусе)
+                .padding(.top, 24)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+                .accessibilityLabel(подпись)
+            Text(подпись.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.4)
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .padding(.top, 9)
+                .padding(.horizontal, 14)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .background(Theme.поверхность, in: форма)
+        .overlay {
+            форма.strokeBorder(вФокусе ? Theme.акцент : КраскиМастераРезюме.рамкаПоля, lineWidth: 1.5)
+        }
+        .background {
+            форма
+                .stroke(Color(uiColor: Theme.hex(0x22A05B, 0.14)), lineWidth: 6)
+                .opacity(вФокусе ? 1 : 0)
+        }
+        .contentShape(форма)
+        .onTapGesture { вФокусе = true }
+    }
+}
+
+/// Рамка полей мастера: color-mix(--ink 11 %, --line).
+private enum КраскиМастераРезюме {
+    static let рамкаПоля = Theme.цвет(светлый: Theme.смесь(Theme.hex(0x13211B), Theme.hex(0xE3ECE7), 0.11),
+                                      тёмный: Theme.смесь(Theme.hex(0xEAF3EE), Theme.hex(0xFFFFFF, 0.10), 0.11))
 }
 
 /// Чипы с переносом строк (навыки .jw-rows сайта).

@@ -3,7 +3,7 @@ import SwiftUI
 /**
  ОКНО ЖАЛОБЫ — ЭТАП 37 (владелец 25.09.2026: «почти 100% похоже на сайт»).
 
- Как #mk-report-scrim страницы объявления сайта (.mk-report-box в css/marketplace.min.css): «Пожаловаться» 21 pt жирным
+ Как #mk-report-scrim страницы объявления сайта (.mk-report-box в css/marketplace.min.css): «Пожаловаться» 16 pt жирным
  и «×» в квадрате 34 на --mk-surf2; «Выберите причину — жалоба уйдёт модераторам.»; причины — пилюли .mk-rr (рамка 1,5
  --mk-line, выбранная — зелёная заливка и белый текст); поле «Комментарий — по желанию» на три строки (рамка 1,5, в фокусе
  --mk-green2, до 600 знаков, как maxlength); красная «Отправить жалобу» (#dc2626) на всю ширину, в пути — «Отправляю…»
@@ -20,6 +20,9 @@ struct ЛистЖалобы: View {
     @State private var комментарий = ""
     @State private var вопрос = false
     @FocusState private var вПоле: Bool
+    /// Высота содержимого: лист по высоте окна, как .mk-report-box сайта (по центру, не на весь экран).
+    @State private var высота: CGFloat = 440
+    @State private var ступень: PresentationDetent = .height(464)
     @Environment(\.dismiss) private var закрыть
 
     /// Явный init: окно открывает блок продавца из другого файла.
@@ -36,7 +39,7 @@ struct ЛистЖалобы: View {
             VStack(alignment: .leading, spacing: 0) {
                 шапка
                 Text(SellerText.т("report_sub"))
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
@@ -48,6 +51,13 @@ struct ЛистЖалобы: View {
                     .padding(.top, 14)
             }
             .padding(20)
+            .background {
+                GeometryReader { рамка in
+                    Color.clear
+                        .onAppear { мерить(рамка.size.height) }
+                        .onChange(of: рамка.size.height) { _, новая in мерить(новая) }
+                }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.поверхность.ignoresSafeArea())
@@ -55,7 +65,7 @@ struct ЛистЖалобы: View {
             ПлашкиВЛистеПродавца(закрытьЛист: { закрыть() })
         }
         .presentationBackground(Theme.поверхность)
-        .presentationDetents([.large])
+        .presentationDetents([.height(высота + 24), .large], selection: $ступень)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(действия.жалобаВПути)
         .alert(SellerText.т("report_q"), isPresented: $вопрос) {
@@ -71,11 +81,19 @@ struct ЛистЖалобы: View {
         }
     }
 
+    /// Новая высота окна; лист раскрыт на весь экран — там и остаётся.
+    private func мерить(_ новая: CGFloat) {
+        guard новая > 0, abs(новая - высота) > 0.5 else { return }
+        let поВысоте = ступень != .large
+        высота = новая
+        if поВысоте { ступень = .height(новая + 24) }
+    }
+
     /// .mk-report-head: заголовок и «×».
     private var шапка: some View {
         HStack(spacing: 12) {
             Text(SellerText.т("report"))
-                .font(.system(size: 21, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Theme.текст)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
@@ -112,7 +130,7 @@ struct ЛистЖалобы: View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
         return TextField(SellerText.т("comment"), text: $комментарий, axis: .vertical)
             .lineLimit(3...6)
-            .font(.system(size: 15))
+            .font(.system(size: 16))
             .foregroundStyle(Theme.текст)
             .focused($вПоле)
             .padding(12)
@@ -129,9 +147,9 @@ struct ЛистЖалобы: View {
             нажалиОтправить()
         } label: {
             Text(SellerText.т(идёт ? "report_sending" : "report_send"))
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity, minHeight: 48)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(КраскиЖалобы.кнопка,
                             in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 .opacity(идёт ? 0.6 : 1)
@@ -172,7 +190,7 @@ private struct ЧипПричины: View {
     var body: some View {
         Button(action: выбрать) {
             Text(подпись)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(выбран ? Color.white : Theme.текст)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)

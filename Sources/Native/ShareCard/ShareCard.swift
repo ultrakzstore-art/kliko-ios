@@ -97,7 +97,7 @@ struct КарточкаДляОтправки: View {
                 if !товар.city.isEmpty {
                     Label(товар.city, systemImage: "mappin.and.ellipse")
                         .font(.system(size: 14))
-                        .foregroundStyle(Theme.muted)
+                        .foregroundStyle(Color(uiColor: Theme.hex(0x5F6C63)))
                         .lineLimit(1)
                 }
                 HStack(alignment: .center) {
@@ -105,7 +105,7 @@ struct КарточкаДляОтправки: View {
                     Spacer(minLength: 8)
                     Text(ShareCardText.т("site"))
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.green2)
+                        .foregroundStyle(Color(uiColor: Theme.hex(0x1D7D4A)))
                 }
                 .padding(.top, 10)
             }
@@ -129,7 +129,7 @@ struct КарточкаДляОтправки: View {
                 Theme.mint
                 Image(systemName: "photo")
                     .font(.system(size: 44))
-                    .foregroundStyle(Theme.green2.opacity(0.5))
+                    .foregroundStyle(Color(uiColor: Theme.hex(0x1D7D4A)).opacity(0.5))
             }
         }
     }
