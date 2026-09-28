@@ -229,19 +229,29 @@ struct ФормаНомера: View {
             }
             if !профиль.варианты.isEmpty {
                 Section {
+                    /* У сайта под заголовком — только select со значением (#cp-pol), без второй подписи. */
                     Picker(тН("phv_title"), selection: политикаВыбор) {
                         ForEach(профиль.варианты) { вариант in
                             Text(вариант.подпись).tag(вариант.ключ)
                         }
                     }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .disabled(политикаИдёт)
                 } header: {
                     Text(тН("phv_title"))
                 } footer: {
+                    /* Две строки .cpc-hint сайта: пояснение и под ним, через 4 pt, счётчик недели (#cp-polstat) —
+                       один шрифт и цвет; снизу отступ до «Способы связи», как margin-top у .cpc-eyebrow. */
                     VStack(alignment: .leading, spacing: 4) {
                         Text(тН("phv_hint"))
                         Text(статистика)
                     }
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
                 }
             }
             Section {
@@ -312,21 +322,28 @@ struct ФормаНомера: View {
         }
     }
 
+    /**
+     «Сменить номер через eGov» — как у сайта: лист номера закрывается (cpmClose), затем requestVerification() →
+     bioKycOpen: форма ИИН и номера из CAB_USER → kyc.php flow_create → окно biometric.kz → flow_result; после удачи
+     сервер берёт номер из eGov, bioAfterOk перезагружает кабинет. Окно «Стать продавцом» (ЛистВерификации) здесь не
+     годится: верифицированному оно лишь показывает статус. Поэтому сразу окно eGov с ровно этим потоком сайта
+     (cabinet.php?go=verify), а после его закрытия профиль перечитывается — в настройках уже новый номер.
+     */
     private func перейтиКВерификации() {
         guard профиль.eGovВкл else {
             НастройкиМодель.shared.показать(тН("ver_off"))
             return
         }
-        готово()
-        /* Сначала своё окно «Стать продавцом» (ЛистВерификации) — когда этот лист уедет; слоя окон нет — страница. */
-        let адрес = Config.страницаСайта("cabinet?go=verify")
-        if ОкнаПриложения.shared.показать(.верификация, задержка: 650_000_000, запасной: адрес) { return }
-        if let адрес {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 450_000_000)
-                ОткрытьСтраницуНастроек.открыть(адрес)
-            }
+        guard let адрес = Config.страницаСайта("cabinet.php?go=verify") else {
+            НастройкиМодель.shared.показать(тН("err_net"))
+            return
         }
+        готово()
+        ОкноEgov.открытьПоток(.адрес(адрес), закрыто: {
+            Task { @MainActor in
+                await НастройкиМодель.shared.загрузить()
+            }
+        })
     }
 
     /**

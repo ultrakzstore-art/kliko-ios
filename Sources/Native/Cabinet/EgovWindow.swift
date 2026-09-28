@@ -299,13 +299,30 @@ struct ВебEgov: UIViewRepresentable {
         }
 
         /// Кто на странице: KlikoUser.id и IS_VERIFIED / CAB_IS_VERIFIED (const и let страницы видны по имени).
+        /// ok — прошлая страница в этом листе дошла до bioAfterOk («Готово» после удачной проверки): у уже
+        /// верифицированного (смена номера через eGov) флаг проверки не меняется, и конец видно только так. Обёртка
+        /// над bioAfterOk ставит метку в sessionStorage листа, следующая загрузка её читает и стирает.
         private static let проверка = """
         (function(){
-          var u = '', v = false;
+          var u = '', v = false, ok = false;
           try { u = (window.KlikoUser && window.KlikoUser.id) ? String(window.KlikoUser.id) : ''; } catch (e) {}
           try { if (typeof IS_VERIFIED !== 'undefined' && IS_VERIFIED === true) v = true; } catch (e) {}
           try { if (typeof CAB_IS_VERIFIED !== 'undefined' && CAB_IS_VERIFIED === true) v = true; } catch (e) {}
-          return JSON.stringify({u: u, v: v});
+          try {
+            if (sessionStorage.getItem('klk_app_bio_ok') === '1') { ok = true; sessionStorage.removeItem('klk_app_bio_ok'); }
+          } catch (e) {}
+          try {
+            var f = window.bioAfterOk;
+            if (typeof f === 'function' && !f.__klkApp) {
+              var g = function () {
+                try { sessionStorage.setItem('klk_app_bio_ok', '1'); } catch (e) {}
+                return f.apply(this, arguments);
+              };
+              g.__klkApp = true;
+              window.bioAfterOk = g;
+            }
+          } catch (e) {}
+          return JSON.stringify({u: u, v: v, ok: ok});
         })()
         """
 
@@ -343,10 +360,12 @@ struct ВебEgov: UIViewRepresentable {
             guard !закончено else { return }
             var uid = ""
             var проверен = false
+            var пройдено = false
             if let данные = ответ.data(using: .utf8),
                let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] {
                 uid = (объект["u"] as? String) ?? ""
                 проверен = (объект["v"] as? Bool) ?? false
+                пройдено = (объект["ok"] as? Bool) ?? false
             }
             guard let начало else {
                 self.начало = (uid, проверен)
@@ -354,7 +373,9 @@ struct ВебEgov: UIViewRepresentable {
             }
             let вошли = начало.uid.isEmpty && !uid.isEmpty
             let прошли = !начало.проверен && проверен
-            if вошли || прошли {
+            /* Повторная проверка уже верифицированного (номер из eGov): bioAfterOk перезагрузил кабинет. */
+            let повторно = пройдено && !uid.isEmpty
+            if вошли || прошли || повторно {
                 закончено = true
                 конец(.готово(uid: uid))
                 return
