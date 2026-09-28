@@ -57,10 +57,13 @@ struct ЭкранКомпании: View {
                 Text(т("split_s3_d"))
             }
             .alert(т("pxd_eyebrow"), isPresented: $нуженПРО) {
-                /* PRO в приложении не продаётся: только сведения, без перехода на оплату. */
+                /* PRO — окно покупки App Store, только при Config.цифровыеПокупки; иначе одни сведения, без оплаты. */
+                if Config.цифровыеПокупки {
+                    Button(т("cab_get_pro")) { ЛистУслугиApple.показать(.про) }
+                }
                 Button(т("close"), role: .cancel) {}
             } message: {
-                Text(т("pro_h2") + "\n" + т("no_digital"))
+                Text(Config.цифровыеПокупки ? т("pro_h2") : т("pro_h2") + "\n" + т("no_digital"))
             }
             .overlay(alignment: .bottom) {
                 if let текст = модель.плашка { ПлашкаКошелька(текст: текст) }

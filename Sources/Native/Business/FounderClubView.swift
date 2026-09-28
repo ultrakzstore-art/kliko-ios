@@ -13,8 +13,8 @@ import CoreImage.CIFilterBuiltins
  WhatsApp и Telegram — теми же адресами, что clubWa / clubTg. «Картинка с QR для поста» (clubIg / clubTt,
  _clubBuildCard сайта): подпись со ссылкой — в буфер, тост «Подпись скопирована — …», картинка 1080×1920 с тем же
  рисунком, что canvas сайта, QR — CoreImage (qrCodeGenerator) по ссылке клуба, и системный лист (файл + подпись).
- Промокода (redeem_coupon) нет: сайт прячет его вместе с покупками (klkAppNoDigital), а платные услуги в приложении
- не продаются.
+ Промокод (redeem_coupon) — только при Config.цифровыеПокупки и ПродуктыApple.промокодКлуба (сайт прячет его вместе
+ с покупками, klkAppNoDigital); выключено — карточки промокода нет вовсе, без ссылок на сайт.
  */
 struct ЭкранКлуба: View {
     let открыть: (URL) -> Void
@@ -22,12 +22,25 @@ struct ЭкранКлуба: View {
     @ObservedObject private var модель = БизнесМодель.shared
     @State private var входОткрыт = false
     @State private var листПоста: ЛистПостаКлуба? = nil
+    @State private var промокод = ""
+    @State private var применяем = false
+    @State private var итог: ИтогПромокода? = nil
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
     }
 
     private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
+
+    /// Окно результата промокода (clubPromoResult сайта).
+    struct ИтогПромокода: Identifiable {
+        let id = UUID()
+        let заголовок: String
+        let текст: String
+    }
+
+    /// Промокод виден только при покупках через App Store.
+    private var естьПромокод: Bool { Config.цифровыеПокупки && ПродуктыApple.промокодКлуба }
 
     var body: some View {
         содержимое
@@ -45,6 +58,9 @@ struct ЭкранКлуба: View {
             }
             .sheet(item: $листПоста) { лист in
                 ЛистПоделитьсяКабинета(предметы: [лист.картинка, лист.подпись])
+            }
+            .alert(item: $итог) { окно in
+                Alert(title: Text(окно.заголовок), message: Text(окно.текст), dismissButton: .default(Text(т("close"))))
             }
     }
 
@@ -77,6 +93,7 @@ struct ЭкранКлуба: View {
                 if к.акцииИдут {
                     ГеройКлуба(клуб: к)
                     ссылка(к)
+                    if естьПромокод { промо }
                 } else {
                     ГеройБезАкций()
                 }
@@ -265,6 +282,77 @@ struct ЭкранКлуба: View {
         }
         UIPasteboard.general.string = ссылка
         модель.показать(т("copied_excl"))
+    }
+
+    // MARK: - Промокод (Config.цифровыеПокупки и ПродуктыApple.промокодКлуба)
+
+    private var промо: some View {
+        КарточкаБизнеса(т("club_promo_label"), значок: "ticket") {
+            HStack(spacing: 8) {
+                TextField(т("club_promo_placeholder"), text: $промокод)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled(true)
+                    .font(.system(size: 15, weight: .bold))
+                    .padding(10)
+                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1)
+                    }
+                    .onChange(of: промокод) { _, стало in
+                        let верх = стало.uppercased()
+                        if верх != стало { промокод = верх }
+                    }
+                КнопкаБизнеса(подпись: т("club_promo_apply"), занято: применяем) { применить() }
+                    .frame(width: 130)
+            }
+        }
+    }
+
+    /// clubApplyPromo → redeem_coupon {csrf, code}: только по нажатию «Применить», один запрос за раз.
+    private func применить() {
+        let код = промокод.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !код.isEmpty else {
+            модель.показать(т("club_promo_empty"))
+            return
+        }
+        guard !применяем else { return }
+        применяем = true
+        Task { @MainActor in
+            let j = await модель.применитьПромокод(код)
+            применяем = false
+            итог = разобрать(j)
+            if МоиОбъявленияAPI.да(j["ok"]) {
+                промокод = ""
+                await модель.загрузитьКлуб()
+            }
+        }
+    }
+
+    /// clubPromoResult: успех — «Промокод активирован!», «−N%», «Действует до …»; отказ — по reason
+    /// (used / expired / limit / notfound) или «К сожалению, не получилось» и текст сервера.
+    private func разобрать(_ j: [String: Any]) -> ИтогПромокода {
+        typealias A = МоиОбъявленияAPI
+        if A.да(j["ok"]) {
+            var текст = "−" + КлубОснователей.процент(A.число(j["pct"])) + "% " + т("club_promo_ok_scope")
+            if let дата = СделкиФормат.дата(A.строка(j["until"])) {
+                let ф = DateFormatter()
+                ф.locale = Locale(identifier: "ru_RU")
+                ф.dateFormat = "dd.MM.yyyy"
+                текст += "\n" + БизнесText.т("club_promo_ok_until", ["date": ф.string(from: дата),
+                                                                    "days": String(A.целое(j["days"]))])
+            }
+            return ИтогПромокода(заголовок: т("club_promo_ok_title"), текст: текст)
+        }
+        let причина = A.строка(j["reason"])
+        switch причина {
+        case "used", "expired", "limit", "notfound":
+            return ИтогПромокода(заголовок: т("club_promo_" + причина + "_title"), текст: т("club_promo_" + причина + "_sub"))
+        default:
+            let ошибка = A.строка(j["error"])
+            return ИтогПромокода(заголовок: т("club_promo_err_title"),
+                                 текст: ошибка.isEmpty ? т("club_promo_apply_failed") : ошибка)
+        }
     }
 
     private func войти() {

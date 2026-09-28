@@ -18,9 +18,10 @@ import UIKit
    · запись без денег, только по нажатию, каждая за своим рубильником: save_company {csrf, company, invoice_tpl}
      (Config.реквизитыКомпании) и split_submit {csrf} (Config.заявкаМагазина). Тела — как у сайта.
 
- Платные услуги в приложении не продаются (решение владельца: без покупок Apple, правило App Store 3.1.1):
- promote_item / promote_bulk, buy_slots, buy_combo, buy_pro / buy_pro_card, buy_ai_package, start_trial, ai_scan_pay
- и промокод redeem_coupon здесь не вызываются вовсе, ссылок на их оплату нет.
+ Платные услуги в приложении — только через App Store (правило 3.1.1, Purchases/StoreKitStore.swift, за
+ Config.цифровыеПокупки). Кошелёк сайта — promote_item / promote_bulk, buy_slots, buy_combo, buy_pro / buy_pro_card,
+ buy_ai_package, start_trial, ai_scan_pay — здесь не вызывается никогда, ссылок на оплату на сайте нет. Единственная
+ запись за этим рубильником — промокод клуба (redeem_coupon): денег он не списывает.
 
  Всё личное — в памяти модели; выход стирает (ВыходНачисто), ответ, пришедший после выхода, не примется (поколение).
  */
@@ -541,6 +542,20 @@ final class БизнесМодель: ObservableObject {
         } catch {
             guard моё == поколение else { return }
             if клуб == nil { клубЗагрузка = .ошибка(т("no_conn")) }
+        }
+    }
+
+    /**
+     Промокод клуба (clubApplyPromo → redeem_coupon {csrf, code}). Только при Config.цифровыеПокупки и
+     ПродуктыApple.промокодКлуба: сайт прячет его вместе с покупками (klkAppNoDigital). Денег не списывает — обычная
+     запись с одним повтором на «csrf». Ответ сервера целиком (окно результата разбирает used / expired / limit / notfound).
+     */
+    func применитьПромокод(_ код: String) async -> [String: Any] {
+        guard Config.цифровыеПокупки && ПродуктыApple.промокодКлуба else { return ["ok": false, "error": т("no_digital")] }
+        do {
+            return try await МоиОбъявленияAPI.отправить("cabinet.php?action=redeem_coupon", тело: ["code": код])
+        } catch {
+            return ["ok": false, "error": т("no_conn")]
         }
     }
 

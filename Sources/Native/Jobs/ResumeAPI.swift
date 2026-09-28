@@ -13,7 +13,8 @@ import UIKit
    · POST /api/jobs.php?action=ai_resume           — JSON {csrf, role, exp} → {ok, title, about, skills[], msg};
    · фото 3×4 — POST cabinet.php?action=upload_photo (КабинетСайта.загрузитьФото, как у аватара — без водяного знака:
      сайт шлёт файл как есть) → url || thumb.
- «В ТОП» резюме (/api/jobs.php?action=promote) — платно, в приложении не продаётся и не вызывается.
+ «В ТОП» резюме (/api/jobs.php?action=promote — кошелёк сайта) здесь не вызывается никогда: в приложении ТОП резюме —
+ только покупка App Store (ВидУслугиApple.топРезюме, за Config.цифровыеПокупки), услугу включает сайт по чеку Apple.
  */
 
 enum ВидРаботы: String {

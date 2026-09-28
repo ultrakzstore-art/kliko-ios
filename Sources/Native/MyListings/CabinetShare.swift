@@ -14,8 +14,8 @@ import UIKit
      галочка (опубликовано) с задержкой .4 с, всё «выпрыгивает» (.45 с); заголовок «Поделитесь объявлением» /
      «Опубликовано! Поделитесь роликом» (подзаголовок .soc-sub сайт прячет);
    · .soc-prev: фото 44, название в две строки, цена зелёным или «Договорная»;
-   · только «опубликовано» и ТОП уже есть — «ТОП уже подключён» (блок «Продвиньте» сайта в приложении не показывается:
-     платные услуги здесь не продаются);
+   · только «опубликовано»: ТОП уже есть — «ТОП уже подключён»; нет — promoUpsellHTML «Продвиньте — продайте быстрее»
+     с покупкой через App Store, только при Config.цифровыеПокупки (выключено — блока нет);
    · .soc-orshare — «или расскажите о нём» (у share пусто, остаётся отступ);
    · .soc-hero — «Сделать видео и поделиться» на градиенте Instagram (у сайта — студия роликов openReelForListing);
    · .soc-quick — WhatsApp, Telegram, «Ссылка» (socialQuickShare: «Название — 12 000 ₸» и адрес /marketplace.php?item=
@@ -30,7 +30,8 @@ import UIKit
  модуля reel сайта (openReelForListing): стили, фото объявления, звук, запись 1080 × 1920 и отправка в Reels, Stories,
  TikTok и автопостинг.
 
- Платные услуги (продвижение, PRO для автопостинга) в приложении не продаются и не ведут на оплату: только сведения.
+ Платные услуги (продвижение, PRO для автопостинга) — только через App Store при Config.цифровыеПокупки; выключено —
+ одни сведения. Ссылок на оплату на сайте нет никогда.
  */
 enum ВидЛистаКабинета: Equatable {
     /// advShare — «Мои объявления».
@@ -70,6 +71,7 @@ struct ОкноПоделитьсяКабинета: View {
     @State private var появился = false
     @State private var круг = false
     @State private var знак = false
+    @State private var полосы = false
 
     init(данные: ДанныеОтправкиСайта, вид: ВидЛистаКабинета = .поделиться, топ: Bool = false, подписьТопа: String = "",
          закрыть: (() -> Void)? = nil, высота: ((CGFloat) -> Void)? = nil) {
@@ -89,7 +91,7 @@ struct ОкноПоделитьсяКабинета: View {
                 шапка
                 превью
                     .padding(.vertical, 10)
-                if вид == .опубликовано && топ {
+                if вид == .опубликовано && (топ || Config.цифровыеПокупки) {
                     продвижение
                         .padding(.top, 2)
                     Text(т("or_share"))
@@ -217,9 +219,20 @@ struct ОкноПоделитьсяКабинета: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: ТОП уже подключён (promoUpsellHTML, только сведения)
+    // MARK: Продвижение (promoUpsellHTML)
 
+    /// ТОП уже есть — «ТОП уже подключён» (сведения). Нет ТОПа — блок «Продвиньте» с покупкой через App Store, только
+    /// при Config.цифровыеПокупки (выключено — блока нет вовсе).
+    @ViewBuilder
     private var продвижение: some View {
+        if топ {
+            топУжеЕсть
+        } else if Config.цифровыеПокупки {
+            предложениеТопа
+        }
+    }
+
+    private var топУжеЕсть: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(т("pu_done"), systemImage: "checkmark")
                 .font(.system(size: 16, weight: .heavy))
@@ -236,6 +249,75 @@ struct ОкноПоделитьсяКабинета: View {
             RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
                 .strokeBorder(Theme.акцент, lineWidth: 1.5)
         }
+    }
+
+    /// «Продвиньте — продайте быстрее»: полосы ×1 и до ×7, пояснение и «Продвинуть объявление» — окно App Store.
+    private var предложениеТопа: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(т("pu_h"), systemImage: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+            VStack(spacing: 10) {
+                полоса(т("pu_lo"), "×1", доля: 0.16, горячая: false)
+                полоса(т("pu_hi"), т("pu_x7"), доля: 1, горячая: true)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(т("pu_lo")) ×1, \(т("pu_hi")) \(т("pu_x7"))")
+            Text(т("pu_note"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+            КнопкаПокупкиApple(подпись: т("pu_cta"), значок: "arrow.up") { продвинуть() }
+        }
+        .padding(14)
+        .background(LinearGradient(colors: [Theme.мята, Theme.поверхность], startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.акцент, lineWidth: 1.5)
+        }
+        .onAppear {
+            withAnimation(ДвижениеСайта.мягко(.timingCurve(0.2, 0.85, 0.25, 1, duration: 1).delay(0.07))) {
+                полосы = true
+            }
+        }
+    }
+
+    /// .pu-bar: подпись 104 справа, дорожка 15, значение 48.
+    private func полоса(_ подпись: String, _ значение: String, доля: CGFloat, горячая: Bool) -> some View {
+        HStack(spacing: 10) {
+            Text(подпись)
+                .font(.system(size: 12, weight: горячая ? .bold : .semibold))
+                .foregroundStyle(горячая ? Theme.текст : Theme.текстВторой)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(width: 104, alignment: .trailing)
+            GeometryReader { г in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Theme.поверхность2)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(горячая
+                              ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий],
+                                                             startPoint: .leading, endPoint: .trailing))
+                              : AnyShapeStyle(Theme.цвет(0xC2CCC7, 0x55625B)))
+                        .frame(width: г.size.width * (полосы ? доля : 0))
+                }
+            }
+            .frame(height: 15)
+            Text(значение)
+                .font(.system(size: 14, weight: .heavy).monospacedDigit())
+                .foregroundStyle(горячая ? Theme.акцент : Theme.текстВторой)
+                .lineLimit(1)
+                .frame(width: 48, alignment: .leading)
+        }
+    }
+
+    /// openPromote: окно покупки App Store для этого объявления (только при Config.цифровыеПокупки).
+    private func продвинуть() {
+        let номер = данные.id
+        закрыть()
+        ЛистУслугиApple.показать(.продвижение, цель: номер)
     }
 
     /// «Объявление сразу в верху выдачи · до 12.10. Ничего доплачивать не нужно.»
@@ -556,9 +638,16 @@ struct ОкноПоделитьсяКабинета: View {
         return страница.естьФункция("autopost")
     }
 
-    /// showProOffer: PRO в приложении не продаётся — только подсказка, без перехода на оплату.
+    /// showProOffer: подсказка; при Config.цифровыеПокупки — затем окно покупки PRO через App Store. Выключено —
+    /// только подсказка, без перехода на оплату.
     private func нуженПРО() {
         показатьТост(т("pro_need"), секунд: 2)
+        guard Config.цифровыеПокупки else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            закрыть()
+            ЛистУслугиApple.показать(.про)
+        }
     }
 
     /// socialConnect: «Переходим к подключению …», затем нативно — одноразовая ссылка сервера и лист входа соцсети

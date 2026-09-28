@@ -25,6 +25,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Этап 12: обработчик фоновой проверки сохранённых поисков — строго до конца запуска, иначе iOS роняет
         // приложение при первом же фоновом запуске задания.
         ПроверкаПоисков.зарегистрировать()
+        // Покупки App Store (StoreKit 2): слушатель Transaction.updates — с самого запуска, чтобы продления PRO, одобренные
+        // «Попросить купить» и незакрытые покупки дошли до сайта. Выключен Config.цифровыеПокупки — StoreKit не трогаем.
+        if Config.цифровыеПокупки {
+            Task { @MainActor in ПокупкиApple.shared.запустить() }
+        }
         requestPushAuthorization()
         // Холодный старт по тапу на уведомление.
         if let notif = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
