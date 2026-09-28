@@ -38,8 +38,7 @@ struct ЭкранПополнения: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationTitle(т("topup_title"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т("topup_title")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("close")) { закрыть() }
@@ -61,41 +60,98 @@ struct ЭкранПополнения: View {
 
     // MARK: - Форма (.wal-pay)
 
+    /// --g3 кабинета: третий цвет градиентов шапки формы и кнопки.
+    private static let зелёный3 = Theme.цвет(0x22A05B, 0x5CD39A)
+    /// rgba(52,201,151,.15): кольцо выбранной суммы.
+    private static let кольцо = Color(red: 52 / 255, green: 201 / 255, blue: 151 / 255).opacity(0.15)
+
+    /// .wal-pay: --card, рамка 1.5 --line, радиус 18, мягкая зелёная тень; шапка — градиент, тело — поля 16/20/20.
     private var форма: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(т("topup_pick"))
-                    .font(.system(size: 13, weight: .bold))
+        VStack(alignment: .leading, spacing: 0) {
+            шапкаФормы
+            VStack(alignment: .leading, spacing: 12) {
+                чипы
+                своя
+                Text(т("topup_limits"))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.текстВторой)
-                Spacer(minLength: 8)
-                Text(модель.выбрано > 0 ? КошелёкФормат.тенге(модель.выбрано) : "—")
-                    .font(.system(size: 17, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .monospacedDigit()
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, -2)
+                кнопкаОплаты
+                Text(согласие)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.текстВторой)
+                    .tint(Theme.акцент)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .accessibilityElement(children: .combine)
-            чипы
-            своя
-            Text(т("topup_limits"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
-            КнопкаСделки(модель.подписьКнопки, вид: .главная, символ: "creditcard",
-                         доступна: модель.выбрано > 0 && модель.идёт == nil) {
-                полеВФокусе = false
-                модель.пополнить()
-            }
-            Text(согласие)
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.текстВторой)
-                .tint(Theme.акцент)
-                .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(Theme.поверхность)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
                 .strokeBorder(Theme.линия, lineWidth: 1.5)
         }
+        .shadow(color: Color(red: 52 / 255, green: 201 / 255, blue: 151 / 255).opacity(0.3), radius: 12, x: 0, y: 12)
+    }
+
+    /// .wal-pay-head: градиент --g → --g2 60% → --g3, белый текст, поля 16/20.
+    private var шапкаФормы: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(т("topup_pick"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.9))
+            Spacer(minLength: 8)
+            Text(модель.выбрано > 0 ? КошелёкФормат.тенге(модель.выбрано) : "—")
+                .font(.system(size: 21, weight: .black))
+                .tracking(-0.3)
+                .foregroundStyle(Color.white)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 20)
+        .background(LinearGradient(stops: [.init(color: Theme.зелёный, location: 0), .init(color: Theme.зелёный2, location: 0.6),
+                                           .init(color: Self.зелёный3, location: 1)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// .wal-cta: градиент --g2 → --g3, радиус 14, 16/800; выключена — --surf2 и серый текст, без прозрачности.
+    private var кнопкаОплаты: some View {
+        let можно = модель.выбрано > 0 && модель.идёт == nil
+        return Button {
+            полеВФокусе = false
+            модель.пополнить()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 16))
+                    .accessibilityHidden(true)
+                Text(модель.подписьКнопки)
+                    .font(.system(size: 16, weight: .heavy))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(можно ? Color.white : Theme.текстВторой)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background {
+                if можно {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .fill(LinearGradient(colors: [Theme.зелёный2, Self.зелёный3], startPoint: .topLeading,
+                                             endPoint: .bottomTrailing))
+                } else {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .fill(Theme.поверхность2)
+                }
+            }
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .disabled(!можно)
     }
 
     /// Согласие со ссылками: «Условия оплаты и возврата» (oplata.php на языке сайта) и Freedom Pay.
@@ -106,24 +162,37 @@ struct ЭкранПополнения: View {
     }
 
     private var чипы: some View {
-        let колонки: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8),
-                                   GridItem(.flexible(), spacing: 8)]
-        return LazyVGrid(columns: колонки, spacing: 8) {
+        let колонки: [GridItem] = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10),
+                                   GridItem(.flexible(), spacing: 10)]
+        return LazyVGrid(columns: колонки, spacing: 10) {
             ForEach(ПополнениеМодель.суммы, id: \.self) { сумма in
                 let выбран = модель.выбрано == сумма && !модель.своёПоле
                 Button {
                     полеВФокусе = false
                     модель.выбрать(сумма)
                 } label: {
-                    Text(КошелёкФормат.тенге(сумма))
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(выбран ? Color.white : Theme.текст)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(выбран ? Theme.зелёный2 : Theme.поверхность2,
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    /* .wal-amt: 13/700 --on-ok, «₸» мельче и бледнее; .on — --tint-ok, рамка --acc-on и кольцо 3px. */
+                    (Text(КошелёкФормат.деньги(сумма))
+                        + Text(" ₸").font(.system(size: 11, weight: .bold))
+                            .foregroundColor(КраскаСделокКабинета.хорошоТекст.opacity(0.6)))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 6)
+                        .frame(maxWidth: .infinity, minHeight: 41)
+                        .background(выбран ? КраскаСделокКабинета.хорошоФон : Theme.поверхность,
+                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                                .strokeBorder(выбран ? Theme.зелёный2 : Theme.линия, lineWidth: 1.5)
+                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                .strokeBorder(выбран ? КраскаСделокКабинета.акцент : Theme.линия, lineWidth: 1.5)
+                        }
+                        .background {
+                            if выбран {
+                                RoundedRectangle(cornerRadius: Theme.Радиус.ms + 3, style: .continuous)
+                                    .fill(Self.кольцо)
+                                    .padding(-3)
+                            }
                         }
                 }
                 .buttonStyle(.plain)
@@ -138,21 +207,23 @@ struct ЭкранПополнения: View {
             TextField(т("topup_custom_ph"), text: $модель.своя)
                 .keyboardType(.numberPad)
                 .focused($полеВФокусе)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 16, weight: .heavy))
                 .monospacedDigit()
             Text("₸")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 16, weight: .heavy))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
             кнопкаШага("minus", подпись: т("topup_less"), шаг: -1000)
             кнопкаШага("plus", подпись: т("topup_more"), шаг: 1000)
         }
+        /* .wal-custom input: высота 48, --surf2, радиус 12, рамка 1.5. */
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .frame(minHeight: 48)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                .strokeBorder(модель.своёПоле && модель.выбрано > 0 ? Theme.зелёный2 : Theme.линия, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(модель.своёПоле && модель.выбрано > 0 ? КраскаСделокКабинета.акцент : Theme.линия,
+                              lineWidth: 1.5)
         }
     }
 
@@ -160,11 +231,18 @@ struct ЭкранПополнения: View {
         Button {
             модель.шаг(шаг)
         } label: {
+            /* .wc-sb: 30×30, радиус 8, рамка 1.5 --line на --card, --on-ok 16/700. */
             Image(systemName: значок)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Theme.акцент)
+                .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                .frame(width: 30, height: 30)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1.5)
+                }
                 .frame(width: 36, height: 36)
-                .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(подпись)
@@ -172,27 +250,34 @@ struct ЭкранПополнения: View {
 
     /// .wal-trust.
     private var плашки: some View {
-        HStack(spacing: 8) {
-            плашка("percent", т("topup_t1"))
+        HStack(alignment: .top, spacing: 10) {
+            плашка("checkmark.circle", т("topup_t1"))
             плашка("bolt", т("topup_t2"))
-            плашка("lock.shield", т("topup_t3"))
+            плашка("shield", т("topup_t3"))
         }
     }
 
+    /// .wal-trust: плитка --card, рамка 1.5, радиус 14, поля 12/8, значок 19 --acc-on, 11/700.
     private func плашка(_ значок: String, _ подпись: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 8) {
             Image(systemName: значок)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.акцент)
+                .font(.system(size: 17))
+                .foregroundStyle(КраскаСделокКабинета.акцент)
                 .accessibilityHidden(true)
             Text(подпись)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Theme.текст)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
         .accessibilityElement(children: .combine)
     }
 }

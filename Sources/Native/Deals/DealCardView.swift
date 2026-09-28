@@ -22,6 +22,7 @@ struct ЭкранСделки: View {
     @State private var спроситьОтклонить = false
     @State private var спроситьСмену = false
     @State private var способЗаперт = false
+    @State private var спроситьСпорВозврата = false
     @State private var навигатор: ВыборНавигатора? = nil
     @State private var входОткрыт = false
     /// Окно «Откуда забрать» / «Куда доставить» (DealPickupMap.swift).
@@ -37,11 +38,12 @@ struct ЭкранСделки: View {
     var body: some View {
         содержимое
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.фонСтраницы.ignoresSafeArea())
+            .background(Theme.поверхность.ignoresSafeArea())
             .modifier(ШапкаСделок(заголовок: модель.id))
             .task { await модель.появилась() }
             .onDisappear { модель.исчезла() }
-            .overlay(alignment: .bottom) { низ }
+            .overlay(alignment: .bottom) { плашкаВнизу }
+            .overlay(alignment: .bottomTrailing) { кнопкаСвязи }
             /* Этап 44: окна денег (баллы, отмена, приёмка, eGov, банк, ход) — живут только за Config.деньгиСделок. */
             .modifier(СлойДенегСделки(деньги: модель.деньги, спор: $спорОткрыт, открыть: открыть))
             .sheet(isPresented: $спорОткрыт) {
@@ -56,6 +58,11 @@ struct ЭкранСделки: View {
             }
             .sheet(item: $точкаНаКарте) { цель in
                 ЛистТочкиСделки(цель: цель, модель: модель)
+            }
+            .sheet(isPresented: eGovТалонаНаЭкране) {
+                if let запрос = модель.eGovТалона {
+                    ОкноEGov(запрос: запрос, готово: { модель.послеEGovТалона() }, закрыть: { модель.eGovТалона = nil })
+                }
             }
             .sheet(isPresented: $входОткрыт) {
                 ЭкранВхода(eGovВключён: true, открыть: открыть, вошли: {
@@ -73,6 +80,12 @@ struct ЭкранСделки: View {
                 Button(т("btn_cancel"), role: .cancel) {}
             } message: {
                 Text(т("hnd_switch_q2"))
+            }
+            .alert(т("ret_disp_t"), isPresented: $спроситьСпорВозврата) {
+                Button(т("ret_disp_ok")) { спорВозврата() }
+                Button(т("btn_cancel"), role: .cancel) {}
+            } message: {
+                Text(т("ret_disp_m"))
             }
             .alert(т("hnd_lock_t"), isPresented: $способЗаперт) {
                 Button(т("hnd_lock_ok"), role: .cancel) {}
@@ -104,6 +117,23 @@ struct ЭкранСделки: View {
         })
     }
 
+    private var eGovТалонаНаЭкране: Binding<Bool> {
+        Binding(get: { модель.eGovТалона != nil }, set: { показано in
+            if !показано { модель.eGovТалона = nil }
+        })
+    }
+
+    /// clocalReturnDispute: спор return_fault без текста; ок — «Передали модератору…» вместо общего dsp_ok.
+    private func спорВозврата() {
+        модель.открытьСпор(код: "return_fault", текст: "", фото: nil) { ошибка in
+            if ошибка == nil {
+                модель.показать(т("ret_disp_done"))
+            } else if let e = ошибка, !e.isEmpty {
+                модель.показать(e)
+            }
+        }
+    }
+
     private var навигаторНаЭкране: Binding<Bool> {
         Binding(get: { навигатор != nil }, set: { показан in
             if !показан { навигатор = nil }
@@ -121,8 +151,8 @@ struct ЭкранСделки: View {
         } else if let с = модель.сделка {
             ScrollView {
                 КарточкаСделки(сделка: с, модель: модель, открыть: открыть, действие: { нажато($0) })
-                    .padding(.horizontal, 12)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
                     .padding(.bottom, 90)
             }
             .refreshable { await модель.загрузить() }
@@ -140,9 +170,9 @@ struct ЭкранСделки: View {
         }
     }
 
-    /// Плашка сайта (toast) и плавающая «Связь с покупателем / продавцом» (dmChatSync).
+    /// Плашка сайта (toast) — по центру внизу.
     @ViewBuilder
-    private var низ: some View {
+    private var плашкаВнизу: some View {
         VStack(spacing: 10) {
             if let текст = модель.плашка {
                 Text(текст)
@@ -156,6 +186,19 @@ struct ЭкранСделки: View {
                     .transition(.opacity)
                     .accessibilityHidden(true)
             }
+            /* Место под плавающую «Связь с …», чтобы плашка её не закрывала. */
+            if let с = модель.сделка, чатОткрыт(с) {
+                Color.clear.frame(height: 46)
+            }
+        }
+        .padding(.bottom, 18)
+        .allowsHitTesting(false)
+    }
+
+    /// Плавающая «Связь с покупателем / продавцом» (#dm-chat-fab): справа внизу, 16 от края и 18 от низа.
+    @ViewBuilder
+    private var кнопкаСвязи: some View {
+        Group {
             if let с = модель.сделка, чатОткрыт(с) {
                 if Config.нативныйЧат {
                     NavigationLink(value: ЧатЦель.продавец(id: с.собеседник.id, имя: имяСобеседника(с), объявление: с.товар)) {
@@ -169,17 +212,19 @@ struct ЭкранСделки: View {
                 }
             }
         }
-        .padding(.bottom, 16)
+        .padding(.trailing, 16)
+        .padding(.bottom, 18)
     }
 
     private func ярлыкСвязи(_ с: Сделка) -> some View {
         Label(т(с.продавец ? "dl_link_buyer" : "dl_link_seller"), systemImage: "bubble.left.and.bubble.right")
-            .font(.system(size: 15, weight: .bold))
+            .font(.system(size: 14, weight: .heavy))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 18)
-            .frame(minHeight: 46)
-            .background(Theme.зелёный, in: Capsule())
-            .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 3)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                       endPoint: .bottomTrailing), in: Capsule())
+            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 8)
     }
 
     /// Чат по сделке: есть собеседник, чат не закрыт, сделка не закончена.
@@ -215,6 +260,10 @@ struct ЭкранСделки: View {
             спроситьОтклонить = true
         case .попроситьТалон:
             модель.попроситьТалон()
+        case .подписатьТалон:
+            модель.подписатьТалон()
+        case .спорВозврата:
+            спроситьСпорВозврата = true
         case .способ(let режим):
             модель.способ(режим)
         case .сменитьСпособ:
@@ -321,15 +370,18 @@ struct КарточкаСделки: View {
             }
             if let м = сделка.межгородДанные { межгород(м) }
             блокировкаАктивации
-            ДеньгиИДокументы(сделка: сделка, модель: модель, открыть: открыть, действие: действие)
-            ИсторияСделки(сделка: сделка)
+            /* .dmf подряд: margin-bottom 8. */
+            VStack(alignment: .leading, spacing: 8) {
+                ДеньгиИДокументы(сделка: сделка, модель: модель, открыть: открыть, действие: действие)
+                ИсторияСделки(сделка: сделка)
+            }
         }
     }
 
     // MARK: Шапка
 
     private var шапка: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             КартинкаЛенты(Config.url(сделка.фото), пунктов: 56) {
                 ZStack {
                     Theme.поверхность2
@@ -341,22 +393,25 @@ struct КарточкаСделки: View {
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(сделка.строкаРоли)
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
                 if let выбор = выборОплаты {
                     (Text(т("pw_chose") + ": ") + Text(выбор).bold().foregroundColor(Theme.текст))
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
                 }
                 плашкаСтатуса
+                    .padding(.top, 2)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.bottom, 2)
         .accessibilityElement(children: .combine)
     }
 
@@ -370,32 +425,56 @@ struct КарточкаСделки: View {
         return название + (сделка.срокОплаты > 0 ? ", " + String(сделка.срокОплаты) + " " + т("pw_mo") : "")
     }
 
+    /// Статус в шапке renderDeal: серая подложка #f3f4f6 (при возврате #fff4e5) в обеих темах и свой цвет текста.
     private var плашкаСтатуса: some View {
-        let вид: ВидСтатусаСделки = сделка.идётВозврат ? .предупреждение : ВидСтатусаСделки.для(сделка.статус).вид
-        return Text(сделка.заголовокСтатуса)
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(вид.текст)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(вид.фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
-            .fixedSize(horizontal: false, vertical: true)
+        let символ = сделка.идётВозврат ? "arrow.uturn.backward" : ВидСтатусаСделки.для(сделка.статус).символ
+        let фон: UInt32 = сделка.идётВозврат ? 0xFFF4E5 : 0xF3F4F6
+        return HStack(spacing: 4) {
+            Image(systemName: символ)
+                .font(.system(size: 11, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(сделка.заголовокСтатуса)
+                .font(.system(size: 12, weight: .bold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(Color(uiColor: Theme.hex(краскаСтатуса)))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        .background(Color(uiColor: Theme.hex(фон)),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
+    }
+
+    /// Цвета текста статуса из renderDeal — одни и те же в обеих темах (подложка светлая).
+    private var краскаСтатуса: UInt32 {
+        if сделка.идётВозврат { return 0x9A6A10 }
+        switch сделка.статус {
+        case "proposed", "pending", "shipped": return 0x92400E
+        case "accepted", "held":               return 0x1E40AF
+        case "delivered":                      return 0x166534
+        case "disputed":                       return 0x991B1B
+        case "cancelled":                      return 0x6B7280
+        default:                               return 0x374151
+        }
     }
 
     /// #dm-strip: «Спор · решение за 24–48 ч».
     private var полосаСпора: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13))
                 .accessibilityHidden(true)
-            Text(т("dl_dsp_strip"))
-                .font(.system(size: 14, weight: .heavy))
+            Text(т("dl_dsp_strip").uppercased())
+                .font(.system(size: 12, weight: .heavy))
+                .tracking(0.6)
             Spacer(minLength: 4)
             Text(т("dl_dsp_strip_r"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
+                .opacity(0.9)
         }
-        .foregroundStyle(Color.white)
-        .padding(.horizontal, 14)
+        .foregroundStyle(Theme.цвет(0xFFFFFF, 0xFFE3E3))
+        .padding(.horizontal, 20)
         .padding(.vertical, 10)
-        .background(КраскаОбъявлений.плохоТекст, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .background(Theme.цвет(0xB32222, 0x7F1D1D), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 
@@ -450,7 +529,7 @@ struct МастерСделки: View {
 
     var body: some View {
         let шаги = сделка.шаги
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(шаги.подписи.enumerated()), id: \.offset) { пара in
                 let i = пара.offset
                 if i == шаги.текущий && !шаги.всеПройдены {
@@ -462,11 +541,13 @@ struct МастерСделки: View {
             if шаги.всеПройдены {
                 работаШага
                     .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                            .strokeBorder(Theme.линия, lineWidth: 1)
+                            .strokeBorder(КраскаСделокКабинета.хорошоКромка, lineWidth: 1.5)
                     }
+                    .padding(.top, 8)
             }
         }
     }
@@ -482,17 +563,33 @@ struct МастерСделки: View {
     }
 
     private func текущий(_ i: Int, подпись: String, всего: Int, пауза: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            /* Цепочка из семи «+» не укладывалась во время проверки типов (Codemagic, 26.09.2026) — склейка массивом. */
-            Text([т("dw_step"), String(i + 1), т("dw_of"), String(всего)].joined(separator: " "))
-                .font(.system(size: 12, weight: .heavy))
-                .foregroundStyle(Theme.акцент)
-            Text(подпись)
-                .font(.system(size: 19, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                /* Цепочка из семи «+» не укладывалась во время проверки типов (Codemagic, 26.09.2026) — склейка массивом. */
+                Text([т("dw_step"), String(i + 1), т("dw_of"), String(всего)].joined(separator: " ").uppercased())
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(0.66)
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                Text(подпись)
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+                    .accessibilityAddTraits(.isHeader)
+            }
             if !пауза.isEmpty {
-                ЗаметкаСделки(Text(пауза), вид: сделка.статус == "disputed" ? .плохо : .предупреждение)
+                /* .dwz-frozen: и пауза, и спор — жёлтая плашка. */
+                Text(пауза)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(КраскаСделокКабинета.предупреждениеТекст)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(КраскаСделокКабинета.предупреждениеФон,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(КраскаСделокКабинета.предупреждениеКромка, lineWidth: 1.5)
+                    }
             }
             работаШага
         }
@@ -501,23 +598,30 @@ struct МастерСделки: View {
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(сделка.статус == "disputed" ? КраскаОбъявлений.плохоКромка : Theme.акцент, lineWidth: 1.5)
+                .strokeBorder(КраскаСделокКабинета.хорошоКромка, lineWidth: 1.5)
         }
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
 
     private func строка(_ i: Int, подпись: String, пройден: Bool) -> some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             Text(пройден ? "✓" : String(i + 1))
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(пройден ? Color.white : Theme.текстВторой)
-                .frame(width: 26, height: 26)
-                .background(пройден ? Theme.зелёный : Theme.поверхность2, in: Circle())
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(пройден ? КраскаСделокКабинета.хорошоТекст : Theme.текстВторой)
+                .frame(width: 22, height: 22)
+                .background(пройден ? КраскаСделокКабинета.хорошоФон : Theme.поверхность2, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(пройден ? КраскаСделокКабинета.хорошоКромка : Theme.линия, lineWidth: 1.5)
+                }
             Text(подпись)
-                .font(.system(size: 15, weight: пройден ? .semibold : .regular))
-                .foregroundStyle(пройден ? Theme.текст : Theme.текстВторой)
+                .font(.system(size: 13))
+                .foregroundStyle(пройден ? Theme.текст.opacity(0.62) : Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 22)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
         .accessibilityValue(пройден ? т("a11y_step_done") : "")
     }
@@ -536,17 +640,20 @@ struct КонтактыСделки: View {
 
     var body: some View {
         if !п.id.isEmpty && (!п.телефон.isEmpty || !п.whatsApp.isEmpty || !п.telegram.isEmpty) {
-            БлокСделки {
+            /* .dm-peer: рамка 1.5, поля 12/14, радиус 14. */
+            VStack(alignment: .leading, spacing: 10) {
                 Text(т(сделка.продавец ? "dl_link_buyer" : "dl_link_seller"))
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Theme.текст)
                     .accessibilityAddTraits(.isHeader)
                 HStack(spacing: 10) {
                     Text(String(имя.prefix(1)).uppercased())
-                        .font(.system(size: 17, weight: .heavy))
+                        .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(Color.white)
-                        .frame(width: 40, height: 40)
-                        .background(Theme.зелёный, in: Circle())
+                        .frame(width: 42, height: 42)
+                        .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                                   endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(имя)
@@ -554,7 +661,8 @@ struct КонтактыСделки: View {
                             .foregroundStyle(Theme.текст)
                         if !п.телефон.isEmpty {
                             Text(п.телефон)
-                                .font(.system(size: 14))
+                                .font(.system(size: 13))
+                                .monospacedDigit()
                                 .foregroundStyle(Theme.текстВторой)
                         }
                     }
@@ -564,9 +672,15 @@ struct КонтактыСделки: View {
                             действие(.скопировать(п.телефон))
                         } label: {
                             Image(systemName: "doc.on.doc")
-                                .font(.system(size: 16))
-                                .foregroundStyle(Theme.акцент)
-                                .frame(width: 40, height: 40)
+                                .font(.system(size: 15))
+                                .foregroundStyle(Theme.текстВторой)
+                                .frame(width: 36, height: 36)
+                                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms,
+                                                                                    style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                        .strokeBorder(Theme.линия, lineWidth: 1.5)
+                                }
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(т("hov_copy"))
@@ -578,19 +692,40 @@ struct КонтактыСделки: View {
                         /* Витрина собеседника — своим экраном поверх сделки; номер не годится — страница сайта. */
                         if !ОкноПродавца.открыть(id: п.id, имя: п.имя) { открыть(адрес) }
                     } label: {
-                        HStack {
-                            Label(т(п.роль == "seller" ? "hov_prof_seller" : "hov_prof_buyer"), systemImage: "person.crop.circle")
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 16))
+                                .accessibilityHidden(true)
+                            Text(т(п.роль == "seller" ? "hov_prof_seller" : "hov_prof_buyer"))
                             Spacer(minLength: 4)
                             Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.текстВторой)
                                 .flipsForRightToLeftLayoutDirection(true)
                                 .accessibilityHidden(true)
                         }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                .strokeBorder(Theme.линия, lineWidth: 1.5)
+                        }
                     }
                     .buttonStyle(.plain)
+                    .padding(.top, -2)
                 }
                 if п.чатЗакрыт { ПодписьСделки(т("hov_closed")) }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
             }
         }
     }
@@ -602,42 +737,63 @@ struct КонтактыСделки: View {
             if !п.чатЗакрыт {
                 if Config.нативныйЧат {
                     NavigationLink(value: ЧатЦель.продавец(id: п.id, имя: имя, объявление: сделка.товар)) {
-                        ярлык(т("hov_chat"), "bubble.left", главный: true)
+                        ярлык(т("hov_chat"), "bubble.left", вид: .главный)
                     }
                     .buttonStyle(.plain)
                 } else {
-                    Button { действие(.наСайт) } label: { ярлык(т("hov_chat"), "bubble.left", главный: true) }
+                    Button { действие(.наСайт) } label: { ярлык(т("hov_chat"), "bubble.left", вид: .главный) }
                         .buttonStyle(.plain)
                 }
             }
             if !п.телефон.isEmpty, let звонок = URL(string: "tel:" + п.телефон.filter { $0.isNumber || $0 == "+" }) {
-                Button { действие(.ссылка(звонок)) } label: { ярлык(т("hov_call"), "phone", главный: false) }
+                Button { действие(.ссылка(звонок)) } label: { ярлык(т("hov_call"), "phone", вид: .обычный) }
                     .buttonStyle(.plain)
             }
             if let wa = URL(string: п.whatsApp), !п.whatsApp.isEmpty {
-                Button { действие(.ссылка(wa)) } label: { ярлык("WhatsApp", "message", главный: false) }
+                Button { действие(.ссылка(wa)) } label: { ярлык("WhatsApp", "message", вид: .whatsApp) }
                     .buttonStyle(.plain)
             }
             if let tg = URL(string: п.telegram), !п.telegram.isEmpty {
-                Button { действие(.ссылка(tg)) } label: { ярлык("Telegram", "paperplane", главный: false) }
+                Button { действие(.ссылка(tg)) } label: { ярлык("Telegram", "paperplane", вид: .telegram) }
                     .buttonStyle(.plain)
             }
         }
     }
 
-    private func ярлык(_ текст: String, _ символ: String, главный: Bool) -> some View {
-        VStack(spacing: 4) {
+    /// Плитки .hov-t: .pri — градиент, .wa и .tg — свой цвет текста и рамки.
+    private enum ВидЯрлыка { case главный, обычный, whatsApp, telegram }
+
+    private func ярлык(_ текст: String, _ символ: String, вид: ВидЯрлыка) -> some View {
+        let главный = вид == .главный
+        let краска: Color
+        let рамка: Color
+        switch вид {
+        case .главный:  краска = Color.white; рамка = Color.clear
+        case .обычный:  краска = Theme.текст; рамка = Theme.линия
+        case .whatsApp: краска = Color(uiColor: Theme.hex(0x1F9D55)); рамка = Color(uiColor: Theme.hex(0xBDE5CD))
+        case .telegram: краска = Color(uiColor: Theme.hex(0x2481CC)); рамка = Color(uiColor: Theme.hex(0xBCDCF4))
+        }
+        let фон: AnyShapeStyle = главный
+            ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                           endPoint: .bottomTrailing))
+            : AnyShapeStyle(Theme.поверхность)
+        return VStack(spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18))
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
-        .foregroundStyle(главный ? Color.white : Theme.текст)
-        .frame(maxWidth: .infinity, minHeight: 54)
-        .background(главный ? Theme.зелёный : Theme.поверхность2,
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .foregroundStyle(краска)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(рамка, lineWidth: 1.5)
+        }
     }
 }

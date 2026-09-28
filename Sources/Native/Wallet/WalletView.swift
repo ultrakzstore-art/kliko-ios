@@ -42,8 +42,7 @@ struct ЭкранКошелька: View {
     var body: some View {
         содержимое
             .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationTitle(т("title"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т("title")))
             .task { await показан() }
             .onReceive(NotificationCenter.default.publisher(for: ЗаданияКошелька.пришло)) { _ in
                 Task { await выполнитьЗадание() }
@@ -95,7 +94,8 @@ struct ЭкранКошелька: View {
 
     private var список: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            /* Поле страницы кабинета — 14, блоки через 14 (margin-top var(--m-3h)). */
+            LazyVStack(alignment: .leading, spacing: 14) {
                 КарточкаКошелька(кошелёк: кошелёк, пополнить: { пополнить() }, вывести: { вывести() })
                 if !Config.деньгиКошелька {
                     Label(т("site_note"), systemImage: "info.circle")
@@ -124,7 +124,7 @@ struct ЭкранКошелька: View {
                 }
                 история
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
         }
         .refreshable { await кошелёк.загрузить() }
@@ -132,12 +132,20 @@ struct ЭкранКошелька: View {
 
     /// .wal-card «История операций»: весь transactions[] одного ответа — пагинации у сайта нет.
     private var история: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(т("history"), systemImage: "clock.arrow.circlepath")
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .padding(.bottom, 4)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 0) {
+            /* .wal-card-t: 13/800, значок-часы 16 в --acc-on, отступ снизу 14. */
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 15))
+                    .foregroundStyle(КраскаСделокКабинета.акцент)
+                    .accessibilityHidden(true)
+                Text(т("history"))
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Theme.текст)
+            }
+            .padding(.bottom, 10)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
             let операции = кошелёк.сведения?.операции ?? []
             if операции.isEmpty {
                 Text(т(кошелёк.сведения == nil ? "loading" : "tx_none"))
@@ -150,14 +158,20 @@ struct ЭкранКошелька: View {
                     СтрокаОперации(операция: о, чекГрузится: кошелёк.чекГрузится == о.сделка && !о.сделка.isEmpty,
                                    сделка: { номер in открытьСделку(номер) },
                                    чек: { номер in кошелёк.открытьЧек(номер) })
-                    if о.id != операции.last?.id { Divider() }
+                    if о.id != операции.last?.id {
+                        Rectangle()
+                            .fill(Theme.линия)
+                            .frame(height: 1)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        /* .wal-card: поля 20, радиус 18, рамка 1.5 --line. */
+        .padding(20)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
                 .strokeBorder(Theme.линия, lineWidth: 1.5)
         }
     }
@@ -324,6 +338,9 @@ private struct ОкнаЭкранаКошелька: ViewModifier {
             .overlay {
                 if let итог = кошелёк.итогВыплаты { окноВыплаты(итог) }
             }
+            /* Итог выплаты — модальный слой сайта (.wdr-ov): пока он на экране, «Назад» и нижняя панель не нажимаются. */
+            .navigationBarBackButtonHidden(кошелёк.итогВыплаты != nil)
+            .toolbar(кошелёк.итогВыплаты != nil ? .hidden : .automatic, for: .tabBar)
     }
 
     private var вопросСнять: Binding<Bool> {
@@ -342,7 +359,7 @@ private struct ОкнаЭкранаКошелька: ViewModifier {
                                  текст: т(итог.отправлено ? "out_paid_s" : "out_fail_s"),
                                  кнопки: [ОкноИтогаКошелька.Кнопка(подпись: т("ok"), главная: true, действие: {
                                      кошелёк.итогВыплаты = nil
-                                 })])
+                                 })], снизу: true)
     }
 }
 
@@ -371,7 +388,7 @@ struct РазделКошелька: View {
                 .listRowBackground(Color.clear)
             if let выплата = кошелёк.сведения?.выплаты.first {
                 /* Баннер под шапкой (#payout-ready-hero): «Указать карту» — на экране кошелька или сайте. */
-                БаннерВыплаты(выплата: выплата, открываем: false, указать: { нажато(.показать) })
+                БаннерВыплаты(выплата: выплата, открываем: false, указать: { нажато(.показать) }, подШапкой: true)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
             }

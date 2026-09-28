@@ -216,6 +216,8 @@ final class КарточкаСделкиМодель: ObservableObject {
     /// покупателя (#deal-pin-in) — ввод на карточке, опрос его не стирает.
     @Published var заметкаИсполнителя = ""
     @Published var кодПродавца = ""
+    /// Окно eGov для подписи гарантийного талона (warranty_sign → need_otp): денег не двигает.
+    @Published var eGovТалона: ЗапросEGov? = nil
     /// Этап 44: денежные действия карточки — только за Config.деньгиСделок (ДеньгиСделкиМодель).
     let деньги: ДеньгиСделкиМодель
 
@@ -469,8 +471,9 @@ final class КарточкаСделкиМодель: ObservableObject {
                                                              "image": картинка])
                 guard self.живой else { return }
                 if СделкиAPI.да(j["ok"]) {
-                    итог(nil)
+                    /* Сначала общая плашка, потом итог: вызывающий может сменить её своей (ret_disp_done). */
                     self.показать(self.т("dsp_ok"))
+                    итог(nil)
                     await self.загрузить()
                     return
                 }
@@ -579,6 +582,56 @@ final class КарточкаСделкиМодель: ObservableObject {
                  },
                  ошибка: { j in ТекстыОшибокСделки.ulx(j) },
                  сеть: т("err_no_conn"))
+    }
+
+    // MARK: - Гарантийный талон: подпись продавца (warranty_sign)
+
+    /**
+     dealWarrantySign сайта: /escrow.php?action=warranty_sign {id}. need_otp — окно eGov (otpStepOpen с wc_otp_t и
+     wc_otp_h), после проверки подпись уходит ещё раз; ok — «Талон подписан…» и сделка заново. Денег не двигает.
+     */
+    func подписатьТалон() {
+        guard !занято else { return }
+        занято = true
+        Task { @MainActor in
+            defer { self.занято = false }
+            do {
+                let j = try await СделкиAPI.отправить("/escrow.php?action=warranty_sign", тело: ["id": self.id],
+                                                      отКорня: true)
+                guard self.живой else { return }
+                if СделкиAPI.да(j["need_otp"]) {
+                    let назначение = СделкиAPI.строка(j["purpose"])
+                    let ссылка = СделкиAPI.строка(j["ref"])
+                    /* после: — только потому, что его требует ЗапросEGov; итог разбирает послеEGovТалона. */
+                    self.eGovТалона = ЗапросEGov(назначение: назначение.isEmpty ? "warranty_sign" : назначение,
+                                                 ссылка: ссылка.isEmpty ? self.id : ссылка,
+                                                 заголовок: self.т("wc_otp_t"), подсказка: self.т("wc_otp_h"),
+                                                 после: .оплатить)
+                    return
+                }
+                if СделкиAPI.да(j["ok"]) {
+                    self.показать(self.т("wc_signed_toast"))
+                    await self.загрузить()
+                    return
+                }
+                if МоиОбъявленияAPI.нетСессии(j) {
+                    self.нуженВход = true
+                    return
+                }
+                self.показать(ТекстыОшибокСделки.ulx(j))
+            } catch {
+                self.показать(self.т("err_no_conn"))
+            }
+        }
+    }
+
+    /// eGov пройден — подпись ещё раз, как колбэк otpStepOpen сайта.
+    func послеEGovТалона() {
+        eGovТалона = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            self.подписатьТалон()
+        }
     }
 
     // MARK: - Передача: способ, отслеживание, курьер, перевозчик

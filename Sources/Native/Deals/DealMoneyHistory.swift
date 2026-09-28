@@ -35,10 +35,10 @@ struct ДеньгиИДокументы: View {
     private static let показаннаяДоля = 0.019
 
     var body: some View {
-        DisclosureGroup(isExpanded: $открыт) {
+        СвёрткаСделки(заголовок: т("fold_money"), символ: "creditcard", открыт: $открыт) {
             VStack(alignment: .leading, spacing: 10) {
                 if !сделка.товар.isEmpty {
-                    ссылка(т("dl_view_listing"), символ: "tag", путь: "/marketplace.php?item=" + СделкиAPI.вАдрес(сделка.товар))
+                    кнопкаОбъявления
                 }
                 суммы
                 документы
@@ -50,19 +50,33 @@ struct ДеньгиИДокументы: View {
                                   поЦентру: true)
                 }
             }
-            .padding(.top, 8)
+        }
+    }
+
+    /// a.dmb.lnk «Посмотреть объявление»: во всю ширину, --tint-ok и --on-ok, рамка 1.5 --line, радиус 12, 14/700.
+    private var кнопкаОбъявления: some View {
+        Button {
+            if let адрес = Config.url("/marketplace.php?item=" + СделкиAPI.вАдрес(сделка.товар)) { открыть(адрес) }
         } label: {
-            Label(т("fold_money"), systemImage: "creditcard")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Theme.текст)
+            HStack(spacing: 8) {
+                Image(systemName: "eye")
+                    .font(.system(size: 15))
+                    .accessibilityHidden(true)
+                Text(т("dl_view_listing"))
+                    .font(.system(size: 14, weight: .bold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(КраскаСделокКабинета.хорошоФон,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+            }
         }
-        .tint(Theme.акцент)
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 
     // MARK: Суммы
@@ -79,9 +93,24 @@ struct ДеньгиИДокументы: View {
             }
             if сделка.продавец { продавцу } else { покупателю }
         }
-        .padding(12)
+        /* Финансовый блок renderDeal: --surf2, рамка 1.5 --line, радиус 12, поля 12/14. */
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+    }
+
+    /// Черта над итогом: border-top 1px --line, отступ сверху 4 (с зазором строк — 10).
+    private var черта: some View {
+        Rectangle()
+            .fill(Theme.линия)
+            .frame(height: 1)
+            .padding(.top, 4)
+            .accessibilityHidden(true)
     }
 
     private var первая: String {
@@ -114,8 +143,8 @@ struct ДеньгиИДокументы: View {
             let подпись = сделка.черезПеревозчика ? String(format: т("co_ship_row_car"), сделка.перевозчик.имя) : т("co_ship_row")
             строка(подпись, "+" + СделкиФормат.тенге(сделка.доставка))
         }
-        Divider()
-        строка(т("promo_total"), СделкиФормат.тенге(сделка.кОплате), жирная: true, краска: КраскаОбъявлений.инфоТекст)
+        черта
+        строка(т("promo_total"), СделкиФормат.тенге(сделка.кОплате), жирная: true, краска: КраскаСделокКабинета.синий)
         if сделка.услуга && естьАванс {
             строка(String(format: т("dl_adv_to_exec"), сделка.авансПроцент), СделкиФормат.тенге(сделка.аванс), мелкая: true)
             строка(т("dl_rest_after_accept"), СделкиФормат.тенге(остаток), мелкая: true)
@@ -124,7 +153,7 @@ struct ДеньгиИДокументы: View {
             let вернётся = сделка.услуга ? остаток : сделка.кОплате
             let пометка = сделка.услуга && естьАванс ? т("dl_rest_adv_kept") : т("dl_full_no_fee")
             строка(т("dl_on_cancel_back"), СделкиФормат.тенге(вернётся) + " " + пометка, мелкая: true,
-                   краска: КраскаОбъявлений.хорошоТекст)
+                   краска: КраскаСделокКабинета.хорошоТекст)
         } else if !сделка.услуга && ["shipped", "delivered"].contains(сделка.статус) {
             строка(т("dl_cancel_after_ship"), т("dl_cancel_fee") + " " + т("dl_better_dispute"), мелкая: true, серое: true)
         }
@@ -133,11 +162,11 @@ struct ДеньгиИДокументы: View {
     @ViewBuilder
     private var продавцу: some View {
         сбор(сделка.сборПродавца, подпись: т("dl_platform_comm"), знак: "−")
-        Divider()
+        черта
         if сделка.статус == "cancelled" {
             строка(т("dl_seller_payout"), "0 ₸", жирная: true, серое: true)
         } else {
-            строка(т("dl_you_get"), СделкиФормат.тенге(сделка.продавецПолучит), жирная: true, краска: КраскаОбъявлений.хорошоТекст)
+            строка(т("dl_you_get"), СделкиФормат.тенге(сделка.продавецПолучит), жирная: true, краска: КраскаСделокКабинета.хорошоТекст)
         }
         if сделка.услуга && естьАванс {
             строка(т("dl_of_which_adv"), СделкиФормат.тенге(сделка.аванс), мелкая: true)
@@ -149,11 +178,11 @@ struct ДеньгиИДокументы: View {
                         серое: Bool = false, краска: Color? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(подпись)
-                .font(.system(size: мелкая ? 12 : 14, weight: жирная ? .bold : .regular))
+                .font(.system(size: мелкая ? 12 : 13, weight: жирная ? .bold : .regular))
                 .foregroundStyle(жирная ? Theme.текст : Theme.текстВторой)
             Spacer(minLength: 8)
             Text(значение)
-                .font(.system(size: мелкая ? 12 : 14, weight: .bold))
+                .font(.system(size: мелкая ? 12 : 13, weight: .bold))
                 .foregroundStyle(краска ?? (серое ? Theme.текстВторой : Theme.текст))
                 .multilineTextAlignment(.trailing)
         }
@@ -206,7 +235,7 @@ struct ДеньгиИДокументы: View {
                 if !пометка.isEmpty {
                     Text(пометка)
                         .font(.system(size: 12))
-                        .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+                        .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "doc.viewfinder")
@@ -241,43 +270,36 @@ struct ИсторияСделки: View {
     ]
 
     var body: some View {
-        DisclosureGroup(isExpanded: $открыт) {
-            VStack(alignment: .leading, spacing: 10) {
+        СвёрткаСделки(заголовок: т("fold_history"), символ: "clock", открыт: $открыт) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(т("dl_history").uppercased())
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.5)
                     .foregroundStyle(Theme.текстВторой)
+                    .padding(.bottom, 2)
                 ForEach(сделка.история) { событие in
                     HStack(alignment: .top, spacing: 8) {
                         Circle()
-                            .fill(КраскаОбъявлений.инфоТекст)
+                            .fill(КраскаСделокКабинета.синий)
                             .frame(width: 8, height: 8)
-                            .padding(.top, 6)
+                            .padding(.top, 4)
                             .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(подпись(событие))
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Theme.текст)
                             Text(СделкиФормат.сВременем(событие.когда))
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                                 .foregroundStyle(Theme.текстВторой)
                         }
                     }
                     .accessibilityElement(children: .combine)
                 }
-                if !сделка.доказательства.isEmpty { доказательства }
+                if !сделка.доказательства.isEmpty {
+                    доказательства
+                        .padding(.top, 8)
+                }
             }
-            .padding(.top, 8)
-        } label: {
-            Label(т("fold_history"), systemImage: "clock")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Theme.текст)
-        }
-        .tint(Theme.акцент)
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
         }
     }
 
@@ -288,14 +310,16 @@ struct ИсторияСделки: View {
     }
 
     private var доказательства: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(т("dl_evidence_word").uppercased())
-                .font(.system(size: 11, weight: .heavy))
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.5)
                 .foregroundStyle(Theme.текстВторой)
+                .padding(.bottom, 2)
             ForEach(сделка.доказательства) { д in
                 VStack(alignment: .leading, spacing: 6) {
                     (Text(т(д.покупатель ? "dl_role_buyer" : "dl_role_seller") + ": ").bold() + Text(д.заметка))
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.текст)
                         .fixedSize(horizontal: false, vertical: true)
                     /* data/evidence/<img> — относительный путь страницы кабинета: /kz/<язык>/data/evidence/. */
@@ -308,7 +332,8 @@ struct ИсторияСделки: View {
                         .accessibilityLabel(т("a11y_evidence"))
                     }
                 }
-                .padding(10)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             }
@@ -351,11 +376,11 @@ struct ЧекСделки: View {
                     шапка
                     VStack(alignment: .leading, spacing: 14) {
                         Text(статус)
-                            .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(завершена ? КраскаОбъявлений.хорошоТекст : КраскаОбъявлений.предупреждениеТекст)
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(завершена ? КраскаСделокКабинета.хорошоТекст : КраскаСделокКабинета.предупреждениеТекст)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
-                            .background(завершена ? КраскаОбъявлений.хорошоФон : КраскаОбъявлений.предупреждениеФон, in: Capsule())
+                            .background(завершена ? КраскаСделокКабинета.хорошоФон : КраскаСделокКабинета.предупреждениеФон, in: Capsule())
                             .frame(maxWidth: .infinity)
                         товар
                         деньги
@@ -381,8 +406,7 @@ struct ЧекСделки: View {
                 .padding(16)
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationTitle(т("rc_t"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т("rc_t")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("close")) { закрыть() }
@@ -392,52 +416,116 @@ struct ЧекСделки: View {
     }
 
     private var шапка: some View {
+        /* Шапка чека: градиент #0f7a44 → #1d9e5e в обеих темах, поля 24/20/20. */
         VStack(spacing: 4) {
-            Image(systemName: "doc.text.fill")
+            Image(systemName: "doc.plaintext")
                 .font(.system(size: 32))
                 .accessibilityHidden(true)
             Text(т("rc_t"))
-                .font(.system(size: 20, weight: .heavy))
+                .font(.system(size: 19, weight: .heavy))
             Text(т("rc_s"))
-                .font(.system(size: 13))
-                .opacity(0.85)
+                .font(.system(size: 12))
+                .opacity(0.8)
         }
         .foregroundStyle(Color.white)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .padding(.top, 24)
+        .padding(.bottom, 20)
+        .padding(.horizontal, 20)
+        .background(LinearGradient(colors: [Color(uiColor: Theme.hex(0x0F7A44)), Color(uiColor: Theme.hex(0x1D9E5E))],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing))
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.xl, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
                                           topTrailingRadius: Theme.Радиус.xl, style: .continuous))
     }
 
     private var товар: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.текст)
-            Text(сделка.продавец ? String(format: т("rc_buyer"), сделка.имяПокупателя.isEmpty ? "—" : сделка.имяПокупателя)
-                                 : т("rc_mine"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
+        HStack(spacing: 12) {
+            КартинкаЛенты(Config.url(сделка.фото), пунктов: 54) {
+                ZStack {
+                    Theme.поверхность2
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.текстВторой)
+                }
+            }
+            .frame(width: 54, height: 54)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                Text(сделка.продавец ? String(format: т("rc_buyer"), сделка.имяПокупателя.isEmpty ? "—" : сделка.имяПокупателя)
+                                     : т("rc_mine"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+            }
+            Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
     }
 
+    /// Таблица денег чека: рамка 1.5 --line, радиус 12, строки 10/14 через черту 1px; итог — на --tint-ok.
     private var деньги: some View {
-        VStack(spacing: 8) {
-            строка(т("rc_price"), СделкиФормат.тенге(сделка.сумма))
-            строка(т("rc_fee"), (сделка.продавец ? "− " : "+ ") + СделкиФормат.тенге(сбор))
+        VStack(spacing: 0) {
+            ячейка(т("rc_price"), СделкиФормат.тенге(сделка.сумма))
+            ячейка(т("rc_fee"), (сделка.продавец ? "− " : "+ ") + СделкиФормат.тенге(сбор),
+                   краска: КраскаСделокКабинета.плохоТекст)
             if баллыВключены && !сделка.продавец && сделка.баллыСписано > 0 {
-                строка(т("rc_points"), "−" + СделкиФормат.тенге(сделка.баллыСписано))
+                ячейка(т("rc_points"), "−" + СделкиФормат.тенге(сделка.баллыСписано), краска: КраскаСделокКабинета.иИТекст,
+                       подписьКраской: true)
             }
             if баллыВключены && (сделка.баллыПокупателю > 0 || сделка.баллыПродавцу > 0) {
-                строка(т("rc_points_got"), "+" + СделкиФормат.деньги(баллов))
+                ячейка(т("rc_points_got"), "+" + СделкиФормат.деньги(баллов), краска: КраскаСделокКабинета.иИТекст,
+                       подписьКраской: true)
             }
-            Divider()
-            строка(т(сделка.продавец ? "rc_got" : "rc_paid"), СделкиФормат.тенге(итого), жирная: true)
+            HStack(alignment: .firstTextBaseline) {
+                Text(т(сделка.продавец ? "rc_got" : "rc_paid"))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                Spacer(minLength: 8)
+                Text(СделкиФормат.тенге(итого))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(сделка.продавец ? КраскаСделокКабинета.хорошоТекст : КраскаСделокКабинета.инфоТекст)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(КраскаСделокКабинета.хорошоФон)
+            .accessibilityElement(children: .combine)
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+    }
+
+    /// Строка таблицы денег: 13 серым, значение 13 жирным; черта 1px снизу.
+    private func ячейка(_ подпись: String, _ значение: String, краска: Color? = nil, подписьКраской: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(подпись)
+                    .font(.system(size: 13))
+                    .foregroundStyle(подписьКраской ? (краска ?? Theme.текстВторой) : Theme.текстВторой)
+                Spacer(minLength: 8)
+                Text(значение)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(краска ?? Theme.текст)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Rectangle()
+                .fill(Theme.линия)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var детали: some View {

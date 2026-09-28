@@ -449,7 +449,7 @@ struct ПодтверждениеНовойСделки: View {
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Theme.зелёный)
                         .frame(width: 28, height: 28)
-                        .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+                        .background(КраскаСделокКабинета.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
                         .accessibilityHidden(true)
                     ТекстСделки.сЖирным(т("sd_" + приставка + String(n)))
                         .font(.system(size: 14))
@@ -508,12 +508,12 @@ struct ПодтверждениеНовойСделки: View {
             ForEach(1...3, id: \.self) { n in
                 Label(т("sd_c_" + приставка + String(n)), systemImage: "checkmark.shield")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
-                    .background(КраскаОбъявлений.хорошоФон, in: Capsule())
+                    .background(КраскаСделокКабинета.хорошоФон, in: Capsule())
             }
         }
     }

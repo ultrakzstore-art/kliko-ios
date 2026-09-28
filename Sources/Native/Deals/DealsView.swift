@@ -58,14 +58,16 @@ struct МоиСделкиЭкран: View {
 
     private var список: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 Text(т("deals_sub"))
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
+                    .padding(.bottom, 2)
                 ВкладкиСделок(выбрана: модель.роль, выбрать: { модель.выбрать($0) })
+                    .padding(.bottom, 2)
                 строки
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
         }
         .refreshable { await модель.загрузить() }
@@ -106,18 +108,19 @@ struct МоиСделкиЭкран: View {
     private var пусто: some View {
         VStack(spacing: 10) {
             Image(systemName: "person.2")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 36, weight: .regular))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
             Text(т(модель.роль == .seller ? "deal_empty_seller" : "deal_empty_buyer"))
-                .font(.system(size: 16))
+                .font(.system(size: 14))
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
             if модель.роль == .buyer {
                 Text(т("deal_empty_hint"))
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
+                    .padding(.top, -2)
             }
         }
         .frame(maxWidth: .infinity)
@@ -151,22 +154,16 @@ struct ШапкаСделок: ViewModifier {
 
 // MARK: - Вкладки
 
-/// #dtab-seller / #dtab-buyer — две вкладки в одной плашке, выбранная — зелёный градиент.
+/// #dtab-seller / #dtab-buyer — две отдельные кнопки (dealsTab): выбранная — зелёный градиент, другая — серая в рамке.
 struct ВкладкиСделок: View {
     let выбрана: РольСделок
     let выбрать: (РольСделок) -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(РольСделок.allCases, id: \.self) { роль in
                 кнопка(роль)
             }
-        }
-        .padding(4)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
         }
     }
 
@@ -176,16 +173,25 @@ struct ВкладкиСделок: View {
             выбрать(роль)
         } label: {
             Text(роль.название)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .foregroundStyle(активна ? Color.white : Theme.текстВторой)
-                .frame(maxWidth: .infinity, minHeight: 38)
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 37)
                 .background {
                     if активна {
                         RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
                             .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
                                                  endPoint: .bottomTrailing))
+                            .shadow(color: КраскаСделокКабинета.теньКнопки, radius: 4, x: 0, y: 5)
+                    } else {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                            .fill(Theme.поверхность2)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+                            }
                     }
                 }
         }
@@ -197,7 +203,7 @@ struct ВкладкиСделок: View {
 
 // MARK: - Карточка в списке
 
-/// Вид плашки статуса: краски --tint-*/--on-* сайта.
+/// Вид плашки статуса: краски --tint-… и --on-… сайта.
 enum ВидСтатусаСделки {
     case предупреждение
     case инфо
@@ -207,20 +213,20 @@ enum ВидСтатусаСделки {
 
     var фон: Color {
         switch self {
-        case .предупреждение: return КраскаОбъявлений.предупреждениеФон
-        case .инфо:           return КраскаОбъявлений.инфоФон
-        case .хорошо:         return КраскаОбъявлений.хорошоФон
-        case .плохо:          return КраскаОбъявлений.плохоФон
+        case .предупреждение: return КраскаСделокКабинета.предупреждениеФон
+        case .инфо:           return КраскаСделокКабинета.инфоФон
+        case .хорошо:         return КраскаСделокКабинета.хорошоФон
+        case .плохо:          return КраскаСделокКабинета.плохоФон
         case .серый:          return Theme.поверхность2
         }
     }
 
     var текст: Color {
         switch self {
-        case .предупреждение: return КраскаОбъявлений.предупреждениеТекст
-        case .инфо:           return КраскаОбъявлений.инфоТекст
-        case .хорошо:         return КраскаОбъявлений.хорошоТекст
-        case .плохо:          return КраскаОбъявлений.плохоТекст
+        case .предупреждение: return КраскаСделокКабинета.предупреждениеТекст
+        case .инфо:           return КраскаСделокКабинета.инфоТекст
+        case .хорошо:         return КраскаСделокКабинета.хорошоТекст
+        case .плохо:          return КраскаСделокКабинета.плохоТекст
         case .серый:          return Theme.текстВторой
         }
     }
@@ -255,15 +261,15 @@ struct КарточкаВСпискеСделок: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
                 фото
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(1)
                     Text(мета)
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 плашкаСтатуса
@@ -271,8 +277,9 @@ struct КарточкаВСпискеСделок: View {
             строкаДенег
             if let строкаТаймера = таймер {
                 строкаТаймера
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(КраскаСделокКабинета.плохоТекст)
+                    .padding(.top, -4)
             }
             подсказка
         }
@@ -315,19 +322,22 @@ struct КарточкаВСпискеСделок: View {
         let вид: ВидСтатусаСделки = сделка.идётВозврат ? .предупреждение : с.вид
         let текст = сделка.идётВозврат ? т("deal_st_return") : с.текст
         let символ = сделка.идётВозврат ? "arrow.uturn.backward" : с.символ
-        return HStack(spacing: 4) {
+        /* У «Отправлено» сайт красит плашку --edge-warn, а не --tint-warn (карта r.shipped в loadDeals). */
+        let отправлено = сделка.статус == "shipped" && !сделка.идётВозврат
+        /* nowrap сайта на 390pt ломает карточку: здесь плашка переносится в две строки и не шире 150. */
+        return HStack(spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .lineLimit(2)
                 .multilineTextAlignment(.trailing)
         }
         .foregroundStyle(вид.текст)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(вид.фон, in: Capsule())
+        .background(отправлено ? КраскаСделокКабинета.предупреждениеКромка : вид.фон, in: Capsule())
         .frame(maxWidth: 150, alignment: .trailing)
     }
 
@@ -345,7 +355,7 @@ struct КарточкаВСпискеСделок: View {
             текст = Text(т("deal_sum") + " ") + Text(сумма).bold()
                 + Text(" · " + т("deal_fee") + " −" + СделкиФормат.тенге(сделка.сборПродавца) + " · ")
                 + Text(т("deal_get") + " " + СделкиФормат.тенге(сделка.продавецПолучит)).bold()
-                    .foregroundColor(КраскаОбъявлений.хорошоТекст)
+                    .foregroundColor(КраскаСделокКабинета.хорошоТекст)
         } else {
             let сбор = сделка.сборПокупателя > 0 ? сделка.сборПокупателя : max(0, сделка.кОплате - сделка.сумма)
             текст = Text(т("deal_price") + " ") + Text(сумма).bold()
@@ -353,7 +363,7 @@ struct КарточкаВСпискеСделок: View {
                 + Text(т("deal_pay") + " " + СделкиФормат.тенге(сделка.кОплате)).bold()
         }
         return текст
-            .font(.system(size: 14))
+            .font(.system(size: 13))
             .foregroundStyle(Theme.текст)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -389,10 +399,10 @@ struct КарточкаВСпискеСделок: View {
     private func строкаПодсказки(_ текст: String, вид: ВидСтатусаСделки, символ: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 15))
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(вид.текст)
@@ -400,5 +410,6 @@ struct КарточкаВСпискеСделок: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(вид.фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .padding(.top, -2)
     }
 }

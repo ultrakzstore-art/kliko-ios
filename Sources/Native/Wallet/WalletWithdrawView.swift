@@ -48,8 +48,7 @@ struct ЭкранВывода: View {
             .overlay(alignment: .bottom) {
                 if let текст = кошелёк.плашка { ПлашкаКошелька(текст: текст) }
             }
-            .navigationTitle(т("wd_title"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т("wd_title")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     /* Пока withdraw в пути — не закрыть: ответ (заявка, eGov, соглашение) должен дойти до этого листа. */
@@ -72,8 +71,9 @@ struct ЭкранВывода: View {
     private var шаги: some View {
         HStack(spacing: 8) {
             точка(1, т("wd_step_amount"))
-            Rectangle()
-                .fill(модель.шаг > 1 ? Theme.зелёный2 : Theme.линия)
+            /* .wd-st-ln: 2px, радиус 2, всегда --line. */
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(Theme.линия)
                 .frame(height: 2)
             точка(2, т("wd_step_card"))
         }
@@ -81,15 +81,21 @@ struct ЭкранВывода: View {
     }
 
     private func точка(_ n: Int, _ подпись: String) -> some View {
-        let вкл = модель.шаг >= n
+        /* .wd-st: круг 22 в рамке 1.5 --line на --card; .on — --acc-on с белой цифрой; .done — --tint-ok. */
+        let вкл = модель.шаг == n
+        let пройден = модель.шаг > n
+        let фон: Color = вкл ? КраскаСделокКабинета.акцент : (пройден ? КраскаСделокКабинета.хорошоФон : Theme.поверхность)
         return HStack(spacing: 6) {
             Text(String(n))
                 .font(.system(size: 12, weight: .heavy))
-                .foregroundStyle(вкл ? Color.white : Theme.текстВторой)
+                .foregroundStyle(вкл ? Color.white : (пройден ? КраскаСделокКабинета.акцент : Theme.текстВторой))
                 .frame(width: 22, height: 22)
-                .background(вкл ? Theme.зелёный2 : Theme.поверхность2, in: Circle())
+                .background(фон, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(вкл ? КраскаСделокКабинета.акцент : Theme.линия, lineWidth: 1.5)
+                }
             Text(подпись)
-                .font(.system(size: 13, weight: вкл ? .bold : .regular))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(вкл ? Theme.текст : Theme.текстВторой)
                 .lineLimit(1)
         }
@@ -121,15 +127,27 @@ private struct ШагСуммыВывода: View {
                     ПоддержкаПоверх.показать(тема: "payment")
                 })
             }
-            HStack {
-                Label(т("wd_available"), systemImage: "wallet.pass")
-                    .font(.system(size: 14, weight: .semibold))
+            /* .wal-avail: --surf2, рамка 1.5 --line, радиус 14, поля 12/16. */
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(КраскаСделокКабинета.акцент)
+                    .accessibilityHidden(true)
+                Text(т("wd_available"))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                 Spacer(minLength: 8)
                 Text(КошелёкФормат.тенге(правила.доступно))
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.system(size: 16, weight: .black))
                     .foregroundStyle(Theme.текст)
                     .monospacedDigit()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
             }
             .accessibilityElement(children: .combine)
             сумма
@@ -234,8 +252,14 @@ private struct ШагСуммыВывода: View {
                 СтрокаРасчёта(подпись: КошелёкText.т("wd_fee_row", ["p": КошелёкФормат.процент(р.процент)]),
                               значение: "−" + КошелёкФормат.тенге(р.комиссия), сбор: true)
             }
-            Divider()
+            /* .wal-sum-tot: пунктир 1px --line сверху, отступ 12. */
+            ЧертаПунктира()
+                .stroke(Theme.линия, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(height: 1)
+                .padding(.top, 4)
+                .accessibilityHidden(true)
             СтрокаРасчёта(подпись: т("wd_payout"), значение: КошелёкФормат.тенге(р.кЗачислению), итог: true)
+                .padding(.top, 4)
             if let текстПодсказки = подсказка(р) {
                 Text(текстПодсказки)
                     .font(.system(size: 12))
@@ -243,8 +267,13 @@ private struct ШагСуммыВывода: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        /* .wal-sum: --card, рамка 1.5, радиус 18, поля 16. */
+        .padding(16)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
     }
 
     private func подсказка(_ р: РасчётВывода) -> String? {
@@ -276,20 +305,24 @@ private struct ШагКартыВывода: View {
             Button {
                 модель.перейти(1)
             } label: {
+                /* .wd-back: прозрачная строка высотой 40, 12px, серая стрелка 16, «Изменить» 700 в --acc-on. */
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
                         .flipsForRightToLeftLayoutDirection(true)
                         .accessibilityHidden(true)
                     Text(КошелёкText.т("wd_sum_is", n: КошелёкФормат.тенге(модель.число)))
                         .fontWeight(.bold)
                     Spacer(minLength: 6)
                     Text(т("wd_edit_amount"))
-                        .foregroundStyle(Theme.акцент)
+                        .fontWeight(.bold)
+                        .foregroundStyle(КраскаСделокКабинета.акцент)
                 }
-                .font(.system(size: 14))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.текст)
-                .padding(12)
-                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .frame(minHeight: 40)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             способ
@@ -299,7 +332,7 @@ private struct ШагКартыВывода: View {
             if let подсказка = модель.подсказка {
                 Text(подсказка)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
                     .fixedSize(horizontal: false, vertical: true)
             }
             КнопкаСделки(модель.подписьВывести, вид: .главная, символ: "arrow.up.right", доступна: модель.можноВывести) {
@@ -315,27 +348,36 @@ private struct ШагКартыВывода: View {
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Theme.текст)
                 .accessibilityAddTraits(.isHeader)
+            /* .wal-method: рамка 1px --line, радиус 12, поля 10/12, --card; .on — рамка --acc-on на --tint-ok. */
+            let выбран = модель.способ == "card"
             HStack(spacing: 10) {
-                Image(systemName: "creditcard.fill")
-                    .foregroundStyle(Theme.акцент)
-                    .frame(width: 34, height: 34)
-                    .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+                Image(systemName: выбран ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(выбран ? КраскаСделокКабинета.акцент : Theme.текстВторой)
+                    .accessibilityHidden(true)
+                Image(systemName: "creditcard")
+                    .font(.system(size: 15))
+                    .foregroundStyle(КраскаСделокКабинета.акцент)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(т("wd_card"))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                     Text(т("wd_card_note"))
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(Theme.текстВторой)
                 }
                 Spacer(minLength: 6)
-                Image(systemName: модель.способ == "card" ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(модель.способ == "card" ? Theme.зелёный2 : Theme.текстВторой)
-                    .accessibilityHidden(true)
             }
-            .padding(10)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+            .background(выбран ? КраскаСделокКабинета.хорошоФон : Theme.поверхность,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(выбран ? КраскаСделокКабинета.акцент : Theme.линия, lineWidth: 1)
+            }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(модель.способ == "card" ? .isSelected : [])
             Label(т("wd_card_later"), systemImage: "lock")
@@ -351,30 +393,36 @@ private struct ШагКартыВывода: View {
     private var проверка: some View {
         if модель.годна {
             let р = правила.расчёт(модель.число)
-            VStack(alignment: .leading, spacing: 8) {
+            /* .wd-chk: рамка 1px --line, радиус 14, поля 10/12; шапка 11/700 серая, строки 13 по 4. */
+            VStack(alignment: .leading, spacing: 0) {
                 Text(т("wd_check_t"))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .padding(.bottom, 4)
                     .accessibilityAddTraits(.isHeader)
-                СтрокаРасчёта(подпись: т("wd_sum_amt"), значение: КошелёкФормат.тенге(модель.число))
+                СтрокаРасчёта(подпись: т("wd_sum_amt"), значение: КошелёкФормат.тенге(модель.число), проверка: true)
                 if р.сборБанка > 0 {
-                    СтрокаРасчёта(подпись: т("wd_bank_fee"), значение: "−" + КошелёкФормат.тенге(р.сборБанка), сбор: true)
+                    СтрокаРасчёта(подпись: т("wd_bank_fee"), значение: "−" + КошелёкФормат.тенге(р.сборБанка), сбор: true,
+                                  проверка: true)
                 }
                 if р.комиссия > 0 {
                     СтрокаРасчёта(подпись: КошелёкText.т("wd_fee_pct", ["p": КошелёкФормат.процент(р.процент)]),
-                                  значение: "−" + КошелёкФормат.тенге(р.комиссия), сбор: true)
+                                  значение: "−" + КошелёкФормат.тенге(р.комиссия), сбор: true, проверка: true)
                 }
-                СтрокаРасчёта(подпись: т("wd_payout"), значение: КошелёкФормат.тенге(р.кЗачислению), итог: true)
+                СтрокаРасчёта(подпись: т("wd_payout"), значение: КошелёкФормат.тенге(р.кЗачислению), итог: true,
+                              проверка: true)
                 Text(т("wd_chk_note"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
             }
-            .padding(14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(Theme.зелёный2.opacity(0.4), lineWidth: 1.5)
+                    .strokeBorder(Theme.линия, lineWidth: 1)
             }
         }
     }
@@ -390,18 +438,32 @@ private struct ШагКартыВывода: View {
             if счёт && !с.автоМаска.isEmpty { подпись += " · " + с.автоМаска }
         }
         let привязка = Binding<Bool>(get: { модель.сведения.автоВывод }, set: { новое in модель.переключитьАвто(новое) })
+        /* .wal-auto: --card, рамка 1.5, радиус 18, поля 16, зазор 14; значок 40×40 на --surf2 в рамке 1px. */
         return VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: привязка) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(т("wd_auto_t"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                    Text(подпись)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.текстВторой)
+                HStack(spacing: 14) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 18))
+                        .foregroundStyle(КраскаСделокКабинета.акцент)
+                        .frame(width: 40, height: 40)
+                        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                .strokeBorder(Theme.линия, lineWidth: 1)
+                        }
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(т("wd_auto_t"))
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(Theme.текст)
+                        Text(подпись)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.текстВторой)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            .tint(Theme.green2)
+            .tint(Theme.зелёный2)
             .disabled(модель.автоИдёт)
             if с.автоВывод {
                 Text(КошелёкText.т("wd_auto_hint", n: "16 000"))
@@ -410,8 +472,12 @@ private struct ШагКартыВывода: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(16)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
     }
 
     /// .wal-terms: три условия; второе со ставкой — строка T страницы.
@@ -420,56 +486,109 @@ private struct ШагКартыВывода: View {
         let второе = комиссия.isEmpty
             ? КошелёкText.т("wd_term2_s", ["p": КошелёкФормат.процент(модель.сведения.комиссияПроц)])
             : комиссия
-        return VStack(alignment: .leading, spacing: 10) {
-            условие("checkmark.shield", т("wd_term1_t"), т("wd_term1_s"))
-            условие("percent", т("wd_term2_t"), второе)
+        /* .wal-terms: одна карточка (рамка 1.5, радиус 18), три строки через черту 1px --line. */
+        return VStack(alignment: .leading, spacing: 0) {
+            условие("clock", т("wd_term1_t"), т("wd_term1_s"))
+            черта
+            условие("checkmark.circle", т("wd_term2_t"), второе)
+            черта
             условие("bell", т("wd_term3_t"), т("wd_term3_s"))
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+    }
+
+    private var черта: some View {
+        Rectangle()
+            .fill(Theme.линия)
+            .frame(height: 1)
+            .accessibilityHidden(true)
     }
 
     private func условие(_ значок: String, _ заголовок: String, _ подпись: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: значок)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.акцент)
-                .frame(width: 22)
+                .font(.system(size: 16))
+                .foregroundStyle(КраскаСделокКабинета.акцент)
+                .frame(width: 34, height: 34)
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(заголовок)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.текст)
                 Text(подпись)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
+                    .lineSpacing(2)
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
     }
 }
 
 // MARK: - Строка расчёта (.wal-sum-row)
 
+/// .wal-sum (13, итог 16: подпись 800, сумма 900 в --on-ok) и .wd-chk (проверка: 13, значения 600, итог 15/800).
+/// Строки сборов (.fee) — целиком --on-warn.
 private struct СтрокаРасчёта: View {
     let подпись: String
     let значение: String
     var сбор = false
     var итог = false
+    var проверка = false
+
+    /* Размеры, толщина и краски — отдельными свойствами: вложенные тернарники в .font тяжелы для проверки типов. */
+    private var шрифтПодписи: Font {
+        if !итог { return .system(size: 13) }
+        return проверка ? .system(size: 13, weight: .bold) : .system(size: 16, weight: .heavy)
+    }
+
+    private var шрифтЗначения: Font {
+        if !итог { return .system(size: 13, weight: .semibold) }
+        return проверка ? .system(size: 15, weight: .heavy) : .system(size: 16, weight: .black)
+    }
+
+    private var краскаПодписи: Color {
+        if итог { return Theme.текст }
+        return сбор ? КраскаСделокКабинета.предупреждениеТекст : Theme.текстВторой
+    }
+
+    private var краскаЗначения: Color {
+        if итог { return КраскаСделокКабинета.хорошоТекст }
+        return сбор ? КраскаСделокКабинета.предупреждениеТекст : Theme.текст
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(подпись)
-                .font(.system(size: 14, weight: итог ? .bold : .regular))
-                .foregroundStyle(итог ? Theme.текст : Theme.текстВторой)
+                .font(шрифтПодписи)
+                .foregroundStyle(краскаПодписи)
             Spacer(minLength: 8)
             Text(значение)
-                .font(.system(size: итог ? 16 : 14, weight: .heavy))
-                .foregroundStyle(сбор ? КраскаОбъявлений.предупреждениеТекст : Theme.текст)
+                .font(шрифтЗначения)
+                .foregroundStyle(краскаЗначения)
                 .monospacedDigit()
         }
+        .padding(.vertical, проверка ? 4 : 0)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Горизонтальная черта для пунктира итога.
+private struct ЧертаПунктира: Shape {
+    func path(in rect: CGRect) -> Path {
+        var путь = Path()
+        путь.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        путь.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return путь
     }
 }
 
@@ -504,10 +623,10 @@ private struct КарточкаСтупени: View {
                 if ступень.снижена {
                     Text(т("lad_penalty"))
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                        .foregroundStyle(КраскаСделокКабинета.плохоТекст)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(КраскаОбъявлений.плохоФон, in: Capsule())
+                        .background(КраскаСделокКабинета.плохоФон, in: Capsule())
                 }
             }
             HStack(spacing: 10) {
@@ -622,8 +741,8 @@ private struct ОкнаВывода: ViewModifier {
                 закрыть()
             }))
         }
-        return ОкноИтогаКошелька(вид: .хорошо, заголовок: т("wd_res_t") + "\n" + т("wd_res_s"),
+        return ОкноИтогаКошелька(вид: .хорошо, заголовок: т("wd_res_t"),
                                  сумма: КошелёкФормат.тенге(итог.кЗачислению), строки: строки, текст: текст,
-                                 кнопки: кнопки)
+                                 кнопки: кнопки, подзаголовок: т("wd_res_s"), снизу: true)
     }
 }

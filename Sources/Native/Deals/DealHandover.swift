@@ -152,30 +152,38 @@ struct БлокПередачи: View {
                          нажать: @escaping () -> Void) -> some View {
         Button(action: нажать) {
             HStack(alignment: .center, spacing: 12) {
+                /* .clc-oi: 38×38, радиус 12, --tint-ok и --on-ok. */
                 Image(systemName: символ)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.акцент)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.мята, in: Circle())
+                    .font(.system(size: 17))
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                    .frame(width: 38, height: 38)
+                    .background(КраскаСделокКабинета.хорошоФон,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(заголовок)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                     Text(подпись)
                         .font(.system(size: 13))
+                        .lineSpacing(2)
                         .foregroundStyle(Theme.текстВторой)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: наСайт ? "arrow.up.right.square" : "chevron.right")
                     .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
-            .padding(10)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            /* .clc-opt: поля 12, рамка 1.5 --line, радиус 14, фон --card. */
+            .padding(12)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+            }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         .disabled(модель.занято)
@@ -279,7 +287,7 @@ struct БлокПередачи: View {
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(Color.white)
                 .frame(width: 22, height: 22)
-                .background(буква == "A" ? Theme.зелёный : КраскаОбъявлений.плохоТекст, in: Circle())
+                .background(буква == "A" ? Theme.зелёный : КраскаСделокКабинета.плохоТекст, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(подпись)

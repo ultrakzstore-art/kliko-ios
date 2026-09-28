@@ -130,8 +130,7 @@ struct ЛистТочкиСделки: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationTitle(т(цель.откуда ? "t_from" : "t_to"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т(цель.откуда ? "t_from" : "t_to")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("cancel")) { закрыть() }
@@ -154,7 +153,8 @@ struct ЛистТочкиСделки: View {
     // MARK: - Карта
 
     private var карта: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+        /* .clc-map: высота 220, радиус 12, рамка 1px --line. */
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
         return MapReader { прокси in
             Map(position: $камера, interactionModes: .all) {
                 if let координата, !двигали {
@@ -191,7 +191,7 @@ struct ЛистТочкиСделки: View {
                 }
             }
         }
-        .frame(height: 280)
+        .frame(height: 220)
         .clipShape(форма)
         .overlay {
             форма.strokeBorder(Theme.линия, lineWidth: 1)
@@ -204,23 +204,41 @@ struct ЛистТочкиСделки: View {
             Button {
                 место.запросить()
             } label: {
-                Label(т("locate"), systemImage: "location.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                ярлыкКнопки(т("locate"), символ: "location")
             }
-            .buttonStyle(.bordered)
-            .tint(Theme.акцент)
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
             .disabled(место.ищет)
+            .opacity(место.ищет ? 0.55 : 1)
+            let пустойАдрес = адрес.trimmingCharacters(in: .whitespacesAndNewlines).count < 3
             Button {
                 найти()
             } label: {
-                Label(т("find"), systemImage: "magnifyingglass")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                ярлыкКнопки(т("find"), символ: "magnifyingglass")
             }
-            .buttonStyle(.bordered)
-            .tint(Theme.акцент)
-            .disabled(ищем || адрес.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            .disabled(ищем || пустойАдрес)
+            .opacity(ищем || пустойАдрес ? 0.55 : 1)
+        }
+    }
+
+    /// .clc-geo: --acc-tint, текст --acc-on, рамка 1.5 --line, радиус 12, 13/800, значок 16.
+    private func ярлыкКнопки(_ текст: String, символ: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: символ)
+                .font(.system(size: 15, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(текст)
+                .font(.system(size: 13, weight: .heavy))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(КраскаСделокКабинета.акцент)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 42)
+        .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
         }
     }
 

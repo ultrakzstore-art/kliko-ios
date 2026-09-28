@@ -205,7 +205,7 @@ struct ХодДенегВид: View {
         switch ход.итог {
         case .идёт, .готово: return Theme.зелёный
         case .занято: return Theme.оранжевый
-        case .ошибка: return КраскаОбъявлений.плохоТекст
+        case .ошибка: return КраскаСделокКабинета.плохоТекст
         }
     }
 
@@ -702,8 +702,7 @@ struct ОкноEGov: View {
         NavigationStack {
             содержимое
                 .background(Theme.фонСтраницы.ignoresSafeArea())
-                .navigationTitle(модель.запрос.заголовок.isEmpty ? т("otp_title") : модель.запрос.заголовок)
-                .navigationBarTitleDisplayMode(.inline)
+                .modifier(ШапкаСделок(заголовок: модель.запрос.заголовок.isEmpty ? т("otp_title") : модель.запрос.заголовок))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(СделкиText.т("close")) { закрыть() }
@@ -735,7 +734,7 @@ struct ОкноEGov: View {
             VStack(spacing: 14) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 30))
-                    .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                    .foregroundStyle(КраскаСделокКабинета.плохоТекст)
                     .accessibilityHidden(true)
                 Text(текст)
                     .font(.system(size: 15))
@@ -772,7 +771,7 @@ struct ОкноEGov: View {
                 if let подсказка = модель.подсказка {
                     Text(подсказка)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                        .foregroundStyle(КраскаСделокКабинета.плохоТекст)
                 }
                 КнопкаСделки(модель.этап == .запуск ? т("bio_starting") : т("bio_continue"), вид: .главная,
                              доступна: модель.этап == .форма) {
@@ -905,6 +904,10 @@ struct БлокВозвратаПродавцу: View {
                 КнопкаСделки(т("ret_s_agree"), вид: .главная, символ: "arrow.uturn.backward") {
                     действие(.деньги(.возвратПринят(сВиной: true)))
                 }
+                /* Не согласен с причиной — спор return_fault своим запросом (денег не двигает). */
+                КнопкаСделки(СделкиText.т("ret_s_disagree"), вид: .вторая, символ: "person.badge.shield.checkmark") {
+                    действие(.спорВозврата)
+                }
             } else {
                 let безПричины = названиеПричины == nil ? т("ret_s_noreason") + " " : ""
                 let кто = дорога > 0 ? безПричины + ДеньгиСделкиText.т("ret_s_bpays", n: СделкиФормат.тенге(дорога)) + " " : ""
@@ -914,8 +917,6 @@ struct БлокВозвратаПродавцу: View {
                     действие(.деньги(.возвратПринят(сВиной: false)))
                 }
             }
-            /* «Не согласен с причиной — к модератору» (dispute return_fault) и остальное по возврату — страница сделки. */
-            КнопкаСделки(СделкиText.т("site_deal"), вид: .вторая, наСайт: true) { действие(.наСайт) }
         }
     }
 }

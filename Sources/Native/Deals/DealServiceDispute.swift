@@ -103,7 +103,7 @@ struct ДействияУслуги: View {
         VStack(spacing: 2) {
             Text(т("dl_pay_escrow_note"))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+                .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
             Text(т("dl_amount_word") + " " + сумма + " + " + т("dl_service_fee"))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
@@ -233,7 +233,7 @@ struct БлокСпора: View {
                             .lineLimit(1)
                     }
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(модель.фотоДоказательства == nil ? Theme.текстВторой : КраскаОбъявлений.хорошоТекст)
+                    .foregroundStyle(модель.фотоДоказательства == nil ? Theme.текстВторой : КраскаСделокКабинета.хорошоТекст)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, minHeight: 42)
                     .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -273,7 +273,7 @@ struct БлокСпора: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: символ)
                 .font(.system(size: 14))
-                .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                .foregroundStyle(КраскаСделокКабинета.плохоТекст)
                 .accessibilityHidden(true)
             текст
                 .font(.system(size: 14))
@@ -362,7 +362,7 @@ struct ОкноСпора: View {
                             Text(фото == nil ? т("dsp_photo") : т("ev_picked"))
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(фото == nil ? Theme.акцент : КраскаОбъявлений.хорошоТекст)
+                        .foregroundStyle(фото == nil ? Theme.акцент : КраскаСделокКабинета.хорошоТекст)
                         .frame(maxWidth: .infinity, minHeight: 42)
                         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     }
@@ -370,7 +370,7 @@ struct ОкноСпора: View {
                     if let ошибка {
                         Text(ошибка)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                            .foregroundStyle(КраскаСделокКабинета.плохоТекст)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     HStack(spacing: 10) {
@@ -381,8 +381,7 @@ struct ОкноСпора: View {
                 .padding(16)
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
-            .navigationTitle(т("dsp_t"))
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(ШапкаСделок(заголовок: т("dsp_t")))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(т("dsp_cancel")) { закрыть() }
@@ -409,7 +408,7 @@ struct ОкноСпора: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: выбрана ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(выбрана ? КраскаОбъявлений.плохоТекст : Theme.текстВторой)
+                    .foregroundStyle(выбрана ? КраскаСделокКабинета.плохоТекст : Theme.текстВторой)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(п.название)
@@ -423,7 +422,7 @@ struct ОкноСпора: View {
                 Spacer(minLength: 0)
             }
             .padding(10)
-            .background(выбрана ? КраскаОбъявлений.плохоФон : Theme.поверхность,
+            .background(выбрана ? КраскаСделокКабинета.плохоФон : Theme.поверхность,
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -460,10 +459,7 @@ struct РедакторОценкиСделки: View {
     private func т(_ ключ: String) -> String { СделкиText.т(ключ) }
 
     var body: some View {
-        БлокСделки {
-            Text(т(оцениваюПокупателя ? "dl_rate_buyer_t" : "dl_your_rating"))
-                .font(.system(size: 12, weight: .heavy))
-                .foregroundStyle(Theme.текстВторой)
+        КоробкаОценкиСделки(заголовок: т(оцениваюПокупателя ? "dl_rate_buyer_t" : "dl_your_rating")) {
             ЗвёздыСделки(звёзд: звёзды, размер: 30, выбрать: { звёзды = $0 })
             if звёзды >= 1 { реакция }
             if звёзды >= 1 { подсказки }
@@ -499,22 +495,36 @@ struct РедакторОценкиСделки: View {
             Text(т(хорошо ? "dl_fb_ask_pos" : "dl_fb_ask_neg"))
                 .font(.system(size: 11, weight: .heavy))
                 .foregroundStyle(Theme.текстВторой)
-            ForEach(фразы, id: \.self) { фраза in
-                let вкл = выбраны.contains(фраза)
-                Button {
-                    отзыв = ОтзывСделки.переключить(фраза, в: отзыв)
-                } label: {
-                    Text(фраза)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(вкл ? Color.white : Theme.текст)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(вкл ? Theme.зелёный : Theme.поверхность2, in: Capsule())
+            /* .dm-chips: flex-wrap, зазор 8. */
+            ПотокЧипов(зазор: 8) {
+                ForEach(фразы, id: \.self) { фраза in
+                    фишка(фраза, вкл: выбраны.contains(фраза))
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(вкл ? .isSelected : [])
             }
         }
+    }
+
+    /// .dm-chip: пилюля в рамке; выбранная — градиент --g2 → #0f7a44 с белым текстом.
+    private func фишка(_ фраза: String, вкл: Bool) -> some View {
+        let фон: AnyShapeStyle = вкл
+            ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный2, Color(uiColor: Theme.hex(0x0F7A44))],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing))
+            : AnyShapeStyle(Theme.поверхность)
+        return Button {
+            отзыв = ОтзывСделки.переключить(фраза, в: отзыв)
+        } label: {
+            Text(фраза)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(вкл ? Color.white : Theme.текст)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(фон, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(вкл ? Color.clear : Theme.линия, lineWidth: 1.5)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(вкл ? .isSelected : [])
     }
 }
 

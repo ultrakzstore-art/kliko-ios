@@ -30,15 +30,33 @@ struct КарточкаКошелька: View {
         self.вывести = вывести
     }
 
+    @Environment(\.colorScheme) private var схема
+
     private func т(_ ключ: String) -> String { КошелёкText.т(ключ) }
 
+    /* .hero: 135deg --g 0% → --g 52% → --g2 100%; в тёмной теме сверху слой rgba(6,10,14,.42 → .52). */
+    private var градиент: LinearGradient {
+        LinearGradient(stops: [.init(color: Theme.зелёный, location: 0), .init(color: Theme.зелёный, location: 0.52),
+                               .init(color: Theme.зелёный2, location: 1)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private static let тьма = Color(red: 6 / 255, green: 10 / 255, blue: 14 / 255)
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        /* До 420pt (любой iPhone, кроме самых широких) пилюля «Пополнить | Вывести» — своей строкой под подписью. */
+        VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 8) {
-                Label(т("title").uppercased(), systemImage: "wallet.pass")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .accessibilityAddTraits(.isHeader)
+                HStack(spacing: 6) {
+                    Image(systemName: "creditcard")
+                        .font(.system(size: 13))
+                        .accessibilityHidden(true)
+                    Text(т("title").uppercased())
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(0.44)
+                }
+                .foregroundStyle(Color.white.opacity(0.72))
+                .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
                 Button {
                     кошелёк.переключитьСкрытие()
@@ -52,20 +70,29 @@ struct КарточкаКошелька: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel(т(кошелёк.скрыто ? "a11y_show" : "a11y_hide"))
             }
-            баланс
-            Text(строкаПод)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.78))
-                .fixedSize(horizontal: false, vertical: true)
             кнопки
+                .padding(.top, 8)
+            баланс
+                .padding(.top, 4)
+            Text(строкаПод)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
         }
-        .padding(16)
-        .background(
-            LinearGradient(colors: [Theme.шапкаВерх, Theme.шапкаСередина, Theme.шапкаНиз], startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-        )
-        .теньКарточкиСайта(радиус: Theme.Радиус.lg)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                градиент
+                if схема == .dark {
+                    LinearGradient(colors: [Self.тьма.opacity(0.42), Self.тьма.opacity(0.52)], startPoint: .top,
+                                   endPoint: .bottom)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        }
+        .теньКарточкиСайта(радиус: Theme.Радиус.md)
     }
 
     @ViewBuilder
@@ -73,6 +100,7 @@ struct КарточкаКошелька: View {
         if let с = кошелёк.сведения {
             Text(кошелёк.показ(с.баланс))
                 .font(.system(size: 26, weight: .heavy))
+                .tracking(-0.52)
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -105,39 +133,42 @@ struct КарточкаКошелька: View {
         return части.isEmpty ? т("sub_app") : части.joined(separator: " · ")
     }
 
-    /// .hero-wpay: белая плашка, «Пополнить» | «Вывести» (второй — с оттенком).
+    /// .hero-wpay: белая плашка радиуса 10 с тенью, «Пополнить» | «Вывести» (второй — с оттенком).
     private var кнопки: some View {
         HStack(spacing: 0) {
             кнопка(т("topup"), значок: "plus", оттенок: false, действие: пополнить)
             Rectangle()
-                .fill(Theme.зелёный2.opacity(0.22))
+                .fill(Color(red: 52 / 255, green: 201 / 255, blue: 151 / 255).opacity(0.22))
                 .frame(width: 1)
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
             кнопка(т("withdraw"), значок: "arrow.up.right", оттенок: true, действие: вывести)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .shadow(color: Color.black.opacity(0.25), radius: 7, x: 0, y: 5)
     }
 
     private func кнопка(_ подпись: String, значок: String, оттенок: Bool, действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
             HStack(spacing: 6) {
                 Image(systemName: значок)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(подпись)
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.system(size: 12, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if !Config.деньгиКошелька {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 11))
                         .accessibilityHidden(true)
                 }
             }
-            .foregroundStyle(Theme.акцент)
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .background(оттенок ? Theme.оттенокАкцента : Color.clear)
+            .foregroundStyle(КраскаСделокКабинета.акцент)
+            .frame(maxWidth: .infinity, minHeight: 38)
+            .background(оттенок ? Color(red: 15 / 255, green: 81 / 255, blue: 50 / 255).opacity(0.1) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
@@ -164,50 +195,51 @@ struct СтрокаОперации: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        /* .tx-row: по центру, зазор 10, поля 10/0; значок 34 в круге (.in — --tint-ok, .out — --tint-bad). */
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: СтрокаОперации.значок(операция.тип))
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(зачисление ? КраскаОбъявлений.хорошоТекст : Theme.текстВторой)
+                .font(.system(size: 16))
+                .foregroundStyle(Theme.текст)
                 .frame(width: 34, height: 34)
-                .background(зачисление ? КраскаОбъявлений.хорошоФон : Theme.поверхность2,
-                            in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .background(зачисление ? КраскаСделокКабинета.хорошоФон : КраскаСделокКабинета.плохоФон, in: Circle())
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(СтрокаОперации.подпись(операция.тип))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
-                let когда = СделкиФормат.сВременем(операция.когда)
-                if !когда.isEmpty {
-                    Text(когда)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.текстВторой)
-                }
+                /* Заметка сайта идёт до даты. */
                 if !операция.заметка.isEmpty {
                     Text(операция.заметка)
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                }
+                let когда = СделкиФормат.сВременем(операция.когда)
+                if !когда.isEmpty {
+                    Text(когда)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.текстВторой)
                 }
                 ссылки
             }
             Spacer(minLength: 6)
             Text(сумма)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(зачисление ? КраскаОбъявлений.хорошоТекст : Theme.текст)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(зачисление ? КраскаСделокКабинета.хорошоТекст : КраскаСделокКабинета.плохоТекст)
                 .monospacedDigit()
                 .accessibilityLabel(т(зачисление ? "a11y_in" : "a11y_out") + " " + КошелёкФормат.тенге(тенгеБезПереполнения(abs(операция.сумма))))
         }
         .padding(.vertical, 10)
-        .padding(.horizontal, операция.гарант ? 10 : 0)
+        .padding(.leading, операция.гарант ? 3 : 0)
         .background {
+            /* Строка гаранта: --tint-ok и полоса 3px --acc-on слева, углы прямые. */
             if операция.гарант {
                 HStack(spacing: 0) {
-                    Theme.зелёныйЯркий.frame(width: 3)
-                    КраскаОбъявлений.хорошоФон
+                    КраскаСделокКабинета.акцент.frame(width: 3)
+                    КраскаСделокКабинета.хорошоФон
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
             }
         }
         .accessibilityElement(children: .contain)
@@ -222,8 +254,8 @@ struct СтрокаОперации: View {
                     сделка(операция.сделка)
                 } label: {
                     Label(т("tx_deal"), systemImage: "arrow.right.circle")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(КраскаОбъявлений.инфоТекст)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(КраскаСделокКабинета.инфоТекст)
                 }
                 .buttonStyle(.borderless)
                 if операция.естьЧек {
@@ -239,8 +271,8 @@ struct СтрокаОперации: View {
                             }
                             Text(т("tx_receipt"))
                         }
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.акцент)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(КраскаСделокКабинета.акцент)
                     }
                     .buttonStyle(.borderless)
                     .disabled(чекГрузится)
@@ -289,77 +321,110 @@ struct БлокЗаморожено: View {
     private func т(_ ключ: String) -> String { КошелёкText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        /* .frz-card: --card, рамка 1px --line, радиус 18, поля 16/14/12. */
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
+                Image(systemName: "lock")
+                    .font(.system(size: 14))
+                    .foregroundStyle(КраскаСделокКабинета.предупреждениеТекст)
                     .accessibilityHidden(true)
                 Text(т("frz_title"))
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Theme.текст)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 6)
                 Text(КошелёкФормат.тенге(заморожено.всего))
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(КраскаСделокКабинета.предупреждениеТекст)
                     .monospacedDigit()
             }
+            .padding(.bottom, 4)
             Text(т("frz_sub"))
                 .font(.system(size: 12))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 12)
             ForEach(заморожено.строки) { строка in
+                /* .frz-row: черта 1px --line сверху у каждой строки, и у первой тоже. */
+                Rectangle()
+                    .fill(Theme.линия)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
                 self.строка(строка)
-                if строка.id != заморожено.строки.last?.id { Divider() }
             }
         }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(.top, 16)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(КраскаОбъявлений.предупреждениеКромка, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
         }
     }
 
     private func строка(_ е: ЗамороженоСтрока) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: е.сделка ? "lock" : "tag")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-                    .frame(width: 30, height: 30)
-                    .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: е.сделка ? "lock" : "tag")
+                .font(.system(size: 16))
+                .foregroundStyle(КраскаСделокКабинета.предупреждениеТекст)
+                .frame(width: 34, height: 34)
+                .background(КраскаСделокКабинета.предупреждениеФон,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .accessibilityHidden(true)
+            /* Кнопки и «почему нельзя» — внутри колонки текста (.frz-btns), не под значком. */
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(е.название.isEmpty ? т("no_title") : е.название)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
-                        .lineLimit(2)
-                    Text(е.сделка ? т("frz_in_deal") + " · " + е.номер : т("frz_in_offer"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.текстВторой)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 6)
+                    Text(КошелёкФормат.тенге(е.сумма))
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(Theme.текст)
+                        .monospacedDigit()
+                        .fixedSize()
                 }
-                Spacer(minLength: 6)
-                Text(КошелёкФормат.тенге(е.сумма))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .monospacedDigit()
-            }
-            кнопки(е)
-            /* .frz-lock: сделку нельзя отменить — почему (незнакомая причина — как «stage»). */
-            if е.сделка && !е.можноОтменить {
-                Label(причина(е.почему), systemImage: "exclamationmark.circle")
+                Text(е.сделка ? т("frz_in_deal") + " · " + е.номер : т("frz_in_offer"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
+                кнопки(е)
+                    .padding(.top, 6)
+                /* .frz-lock: сделку нельзя отменить — почему (незнакомая причина — как «stage»). */
+                if е.сделка && !е.можноОтменить {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 13))
+                            .accessibilityHidden(true)
+                        Text(причина(е.почему))
+                            .font(.system(size: 12))
+                            .lineSpacing(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(КраскаСделокКабинета.инфоТекст)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(КраскаСделокКабинета.инфоФон,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(КраскаСделокКабинета.инфоКромка, lineWidth: 1)
+                    }
+                    .padding(.top, 6)
+                }
             }
         }
+        .padding(.vertical, 12)
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
     private func кнопки(_ е: ЗамороженоСтрока) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             if е.сделка {
                 маленькая(т("frz_open"), опасная: false, наСайт: false, занята: false) { сделка(е.номер) }
                 if е.можноОтменить {
@@ -380,7 +445,7 @@ struct БлокЗаморожено: View {
     private func маленькая(_ подпись: String, опасная: Bool, наСайт: Bool, занята: Bool,
                            действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 if занята { SiteSpinner.крошечный }
                 Text(подпись)
                     .font(.system(size: 12, weight: .bold))
@@ -390,10 +455,15 @@ struct БлокЗаморожено: View {
                         .accessibilityHidden(true)
                 }
             }
-            .foregroundStyle(опасная ? КраскаОбъявлений.плохоТекст : Theme.акцент)
-            .padding(.horizontal, 10)
+            /* .frz-btn: --surf2, рамка 1.5 --line, радиус 10, 12/700; .stop — --on-bad и --edge-bad. */
+            .foregroundStyle(опасная ? КраскаСделокКабинета.плохоТекст : Theme.текст)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(опасная ? КраскаОбъявлений.плохоФон : Theme.оттенокАкцента, in: Capsule())
+            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                    .strokeBorder(опасная ? КраскаСделокКабинета.плохоКромка : Theme.линия, lineWidth: 1.5)
+            }
         }
         .buttonStyle(.borderless)
         .disabled(занята)
@@ -416,6 +486,8 @@ struct БаннерВыплаты: View {
     let выплата: ГотоваяВыплата
     let открываем: Bool
     let указать: () -> Void
+    /// Под карточкой кошелька во вкладке «Кабинет» (#payout-ready-hero): белая, кнопка — во всю ширину снизу.
+    var подШапкой = false
 
     private func т(_ ключ: String) -> String { КошелёкText.т(ключ) }
 
@@ -426,46 +498,68 @@ struct БаннерВыплаты: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(КраскаОбъявлений.хорошоТекст)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(КошелёкText.т("po_ready", n: КошелёкФормат.деньги(выплата.сумма)))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                Text(подпись)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 6)
-            Button(action: указать) {
-                HStack(spacing: 4) {
-                    Text(т(открываем ? "po_opening" : "po_go"))
-                        .font(.system(size: 13, weight: .heavy))
-                    if !Config.деньгиКошелька {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 10))
-                            .accessibilityHidden(true)
-                    }
+        /* .wd-safe.wd-payout: зазор 12, поля 12/16, радиус 14, рамка 1.5 --edge-ok на --tint-ok. */
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 18))
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(КошелёкText.т("po_ready", n: КошелёкФормат.деньги(выплата.сумма)))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Theme.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(подпись)
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Theme.зелёный2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                if !подШапкой {
+                    Spacer(minLength: 6)
+                    кнопка
+                }
             }
-            .buttonStyle(.borderless)
-            .disabled(открываем)
-            .accessibilityHint(Config.деньгиКошелька ? "" : т("a11y_site"))
+            if подШапкой {
+                кнопка
+            }
         }
-        .padding(12)
-        .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(подШапкой ? Theme.поверхность : КраскаСделокКабинета.хорошоФон,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(КраскаОбъявлений.хорошоКромка, lineWidth: 1.5)
+                .strokeBorder(подШапкой ? Theme.линия : КраскаСделокКабинета.хорошоКромка, lineWidth: 1.5)
         }
+    }
+
+    /// .wd-payout-btn: поля 10/16, радиус 10, фон --on-ok, текст --card, 13/700.
+    private var кнопка: some View {
+        Button(action: указать) {
+            HStack(spacing: 4) {
+                Text(т(открываем ? "po_opening" : "po_go"))
+                    .font(.system(size: 13, weight: .bold))
+                if !Config.деньгиКошелька {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 10))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(Theme.поверхность)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: подШапкой ? .infinity : nil)
+            .background(КраскаСделокКабинета.хорошоТекст,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .disabled(открываем)
+        .accessibilityHint(Config.деньгиКошелька ? "" : т("a11y_site"))
     }
 }
 
@@ -478,51 +572,90 @@ struct КарточкаУдержания: View {
     private func т(_ ключ: String) -> String { КошелёкText.т(ключ) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "lock")
-                    .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-                    .accessibilityHidden(true)
-                Text(т("held"))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                Spacer(minLength: 6)
-                Text(КошелёкФормат.тенге(сумма))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .monospacedDigit()
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            ШапкаКарточкиУдержания(символ: "lock", заголовок: т("held"), сумма: сумма)
+                .padding(.bottom, 8)
             ForEach(Array(удержания.enumerated()), id: \.offset) { пара in
                 строка(пара.element)
             }
             Text(т("held_note"))
                 .font(.system(size: 12))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
         }
-        .padding(12)
-        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .modifier(ФонКарточкиУдержания())
     }
 
+    /// .wdh-row: черта --edge-rent сверху, поля 8/0. «освободится через N» сайт прячет до 420px (.wdh-when) — срок первого
+    /// удержания и так в строке под балансом.
     private func строка(_ у: УдержаниеКошелька) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "clock")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(КраскаСделокКабинета.арендаКромка)
+                .frame(height: 1)
                 .accessibilityHidden(true)
-            Text(у.почему.isEmpty ? т("held_why") : у.почему)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.текст)
-            Text(т("held_left") + " " + КошелёкФормат.освободится(у.секунд))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
-            Spacer(minLength: 4)
-            Text(КошелёкФормат.тенге(у.сумма))
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.текст)
-                .monospacedDigit()
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 16))
+                    .foregroundStyle(КраскаСделокКабинета.арендаТекст.opacity(0.75))
+                    .accessibilityHidden(true)
+                Text(у.почему.isEmpty ? т("held_why") : у.почему)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Text(КошелёкФормат.тенге(у.сумма))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текст)
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            .padding(.vertical, 8)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Шапка .wdh: значок 30×30 на --card радиуса 10, заголовок 13/800 и сумма 15/900 в --on-rent.
+private struct ШапкаКарточкиУдержания: View {
+    let символ: String
+    let заголовок: String
+    let сумма: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: символ)
+                .font(.system(size: 15))
+                .frame(width: 30, height: 30)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .accessibilityHidden(true)
+            Text(заголовок)
+                .font(.system(size: 13, weight: .heavy))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Text(КошелёкФормат.тенге(сумма))
+                .font(.system(size: 15, weight: .black))
+                .monospacedDigit()
+                .fixedSize()
+        }
+        .foregroundStyle(КраскаСделокКабинета.арендаТекст)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Фон .wdh: --tint-rent, рамка 1.5 --edge-rent, радиус 18, поля 14.
+private struct ФонКарточкиУдержания: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(КраскаСделокКабинета.арендаФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                    .strokeBorder(КраскаСделокКабинета.арендаКромка, lineWidth: 1.5)
+            }
     }
 }
 
@@ -534,35 +667,30 @@ struct КарточкаПополненияКартой: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "creditcard")
-                    .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-                    .accessibilityHidden(true)
-                Text(т("lock_t"))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                Spacer(minLength: 6)
-                Text(КошелёкФормат.тенге(сумма))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .monospacedDigit()
-            }
+            ШапкаКарточкиУдержания(символ: "creditcard", заголовок: т("lock_t"), сумма: сумма)
             Text(т("lock_note"))
                 .font(.system(size: 12))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
             Button(т("lock_sup"), action: поддержка)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.акцент)
+                .foregroundStyle(КраскаСделокКабинета.арендаТекст)
                 .buttonStyle(.borderless)
         }
-        .padding(12)
-        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .modifier(ФонКарточкиУдержания())
     }
 }
 
 // MARK: - Окно итога (.tpm сайта: tpmOpen; .wdr: wdResultModal, wdOutcomeModal)
 
+/**
+ Два вида окна, как у сайта. .wdr (вывод и итог выплаты, снизу: true) — лист снизу: верх радиуса 20, значок 60×60 радиуса 20,
+ заголовок 19/800, серый подзаголовок, сумма 30/900, строки в рамке 1.5 радиуса 14, кнопка 15/700 радиуса 14.
+ .tpm (пополнение) — карточка по центру радиуса 24: круг 104 со свечением, заголовок 21/800, сумма 30/900 в --g2,
+ баланс строкой 14/700.
+ */
 struct ОкноИтогаКошелька: View {
     enum Вид { case хорошо, плохо, ждём }
 
@@ -578,86 +706,266 @@ struct ОкноИтогаКошелька: View {
     var строки: [(String, String)] = []
     var текст: String? = nil
     var кнопки: [Кнопка] = []
+    /// .wdr-s: серая строка под заголовком (13, межстрочный 1.5).
+    var подзаголовок: String? = nil
+    /// .wdr: лист снизу; иначе — .tpm по центру.
+    var снизу = false
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.45)
+        ZStack(alignment: снизу ? .bottom : .center) {
+            (снизу ? Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255) : Color(red: 8 / 255, green: 16 / 255, blue: 12 / 255))
+                .opacity(0.55)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
-            VStack(spacing: 12) {
-                значок
-                Text(заголовок)
-                    .font(.system(size: 20, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .multilineTextAlignment(.center)
-                    .accessibilityAddTraits(.isHeader)
-                if let сумма {
-                    Text(сумма)
-                        .font(.system(size: 26, weight: .heavy))
-                        .foregroundStyle(вид == .плохо ? Theme.текст : КраскаОбъявлений.хорошоТекст)
-                        .monospacedDigit()
-                }
-                if !строки.isEmpty {
-                    VStack(spacing: 6) {
-                        ForEach(Array(строки.enumerated()), id: \.offset) { пара in
-                            HStack {
-                                Text(пара.element.0)
-                                    .foregroundStyle(Theme.текстВторой)
-                                Spacer(minLength: 8)
-                                Text(пара.element.1)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(Theme.текст)
-                                    .monospacedDigit()
-                            }
-                            .font(.system(size: 14))
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                    .padding(12)
-                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                }
-                if let текст {
-                    Text(текст)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(Array(кнопки.enumerated()), id: \.offset) { пара in
-                    КнопкаСделки(пара.element.подпись, вид: пара.element.главная ? .главная : .вторая,
-                                 действие: пара.element.действие)
-                }
-            }
-            .padding(22)
-            .frame(maxWidth: 380)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
-            .padding(24)
-            .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(.isModal)
+            if снизу { листСнизу } else { карточкаПоЦентру }
         }
     }
 
+    // MARK: .wdr
+
+    private var листСнизу: some View {
+        VStack(spacing: 0) {
+            значокЛиста
+                .padding(.bottom, 14)
+            Text(заголовок)
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.bottom, 4)
+            if let подзаголовок {
+                Text(подзаголовок)
+                    .font(.system(size: 13))
+                    .lineSpacing(4)
+                    .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 16)
+            } else {
+                Color.clear.frame(height: 10)
+            }
+            if let сумма {
+                Text(сумма)
+                    .font(.system(size: 30, weight: .black))
+                    .foregroundStyle(вид == .плохо ? Theme.текст : КраскаСделокКабинета.хорошоТекст)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.bottom, 14)
+            }
+            if !строки.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(строки.enumerated()), id: \.offset) { пара in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(пара.element.0)
+                                .foregroundStyle(Theme.текстВторой)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(пара.element.1)
+                                .fontWeight(.bold)
+                                .foregroundStyle(Theme.текст)
+                                .monospacedDigit()
+                                .fixedSize()
+                        }
+                        .font(.system(size: 14))
+                        .padding(.vertical, 6)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1.5)
+                }
+                .padding(.bottom, 14)
+            }
+            if let текст {
+                Text(текст)
+                    .font(.system(size: 13))
+                    .lineSpacing(4)
+                    .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 14)
+            }
+            VStack(spacing: 8) {
+                ForEach(Array(кнопки.enumerated()), id: \.offset) { пара in
+                    кнопка(пара.element)
+                }
+            }
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: 420)
+        .background {
+            UnevenRoundedRectangle(topLeadingRadius: Theme.Радиус.xl, bottomLeadingRadius: 0, bottomTrailingRadius: 0,
+                                   topTrailingRadius: Theme.Радиус.xl, style: .continuous)
+                .fill(Theme.поверхность)
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+    }
+
     @ViewBuilder
-    private var значок: some View {
+    private var значокЛиста: some View {
         switch вид {
         case .ждём:
             SiteSpinner.крупный
-                .frame(width: 56, height: 56)
-        case .хорошо:
-            Image(systemName: "checkmark")
-                .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(КраскаОбъявлений.хорошоТекст)
-                .frame(width: 56, height: 56)
-                .background(КраскаОбъявлений.хорошоФон, in: Circle())
-                .accessibilityHidden(true)
-        case .плохо:
-            Image(systemName: "xmark")
-                .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(КраскаОбъявлений.плохоТекст)
-                .frame(width: 56, height: 56)
-                .background(КраскаОбъявлений.плохоФон, in: Circle())
+                .frame(width: 60, height: 60)
+        case .хорошо, .плохо:
+            let плохо = вид == .плохо
+            Image(systemName: плохо ? "xmark" : "checkmark")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(плохо ? КраскаСделокКабинета.плохоТекст : КраскаСделокКабинета.хорошоТекст)
+                .frame(width: 60, height: 60)
+                .background(плохо ? КраскаСделокКабинета.плохоФон : КраскаСделокКабинета.хорошоФон,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
                 .accessibilityHidden(true)
         }
+    }
+
+    /// .wdr-btn: градиент --g → --g2, радиус 14, поля 14, 15/700; .wdr-btn2: рамка 1.5 --line, серый 14/600.
+    private func кнопка(_ к: Кнопка) -> some View {
+        Button(action: к.действие) {
+            Text(к.подпись)
+                .font(.system(size: к.главная ? 15 : 14, weight: к.главная ? .bold : .semibold))
+                .foregroundStyle(к.главная ? Color.white : Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: к.главная ? 50 : 44)
+                .background {
+                    if к.главная {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                                 endPoint: .bottomTrailing))
+                            .shadow(color: КраскаСделокКабинета.теньКнопки, radius: 4, x: 0, y: 5)
+                    } else {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1.5)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
+    }
+
+    // MARK: .tpm
+
+    private var карточкаПоЦентру: some View {
+        VStack(spacing: 0) {
+            значокКарточки
+                .padding(.bottom, 14)
+            Text(заголовок)
+                .font(.system(size: 21, weight: .heavy))
+                .tracking(-0.2)
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.bottom, 4)
+            if let сумма {
+                Text(сумма)
+                    .font(.system(size: 30, weight: .black))
+                    .foregroundStyle(Theme.зелёный2)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.bottom, 4)
+            }
+            ForEach(Array(строки.enumerated()), id: \.offset) { пара in
+                Text(пара.element.0 + ": " + пара.element.1)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .monospacedDigit()
+                    .padding(.bottom, 6)
+            }
+            if let текст {
+                Text(текст)
+                    .font(.system(size: 14))
+                    .lineSpacing(5)
+                    .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 6)
+            }
+            if !кнопки.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(Array(кнопки.enumerated()), id: \.offset) { пара in
+                        кнопкаКарточки(пара.element)
+                    }
+                }
+                .padding(.top, 20)
+            }
+        }
+        .padding(.top, 34)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 24)
+        .frame(maxWidth: 390)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.3), radius: 28, x: 0, y: 20)
+        .padding(20)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+    }
+
+    /// .tpm-ic: круг 104 с мягким свечением (--g2 или #e0563a), знак внутри.
+    @ViewBuilder
+    private var значокКарточки: some View {
+        switch вид {
+        case .ждём:
+            SiteSpinner.крупный
+                .frame(width: 104, height: 104)
+        case .хорошо, .плохо:
+            let краска = вид == .плохо ? Color(uiColor: Theme.hex(0xE0563A)) : Theme.зелёный2
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [краска.opacity(0.2), краска.opacity(0)], center: .center,
+                                         startRadius: 0, endRadius: 52))
+                Circle()
+                    .strokeBorder(краска.opacity(0.18), lineWidth: 2)
+                    .padding(8)
+                Image(systemName: вид == .плохо ? "xmark.circle" : "checkmark.circle")
+                    .font(.system(size: 56, weight: .regular))
+                    .foregroundStyle(краска)
+            }
+            .frame(width: 104, height: 104)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// .tpm-btn: радиус 14, поля 14, 15/800; .tpm-pri — градиент, .tpm-gh — --surf2.
+    private func кнопкаКарточки(_ к: Кнопка) -> some View {
+        Button(action: к.действие) {
+            Text(к.подпись)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(к.главная ? Color.white : Theme.текст)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background {
+                    if к.главная {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .fill(вид == .плохо
+                                  ? LinearGradient(colors: [Color(uiColor: Theme.hex(0xE0563A)), Color(uiColor: Theme.hex(0xF0764F))],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                                  : LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                                   endPoint: .bottomTrailing))
+                    } else {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .fill(Theme.поверхность2)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
     }
 }
 

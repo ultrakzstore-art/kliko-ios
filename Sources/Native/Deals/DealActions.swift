@@ -76,7 +76,7 @@ struct ДействияСделки: View {
             VStack(spacing: 2) {
                 Text(т("dl_freeze_note"))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+                    .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
                 Text(т("dl_price") + " " + сумма + " + " + т("dl_service_fee"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
@@ -186,26 +186,33 @@ struct ДействияСделки: View {
     @ViewBuilder
     private var завершена: some View {
         let своя = сделка.статус == "confirmed" && !сделка.продавец && сделка.оценкаПокупателя > 0
-        VStack(spacing: 6) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 26))
+        /* .dmn.ok.ctr: у resolved и expired — весы, у confirmed — галочка в круге. */
+        VStack(spacing: 4) {
+            Image(systemName: сделка.статус == "confirmed" ? "checkmark.circle" : "scale.3d")
+                .font(.system(size: 22))
                 .accessibilityHidden(true)
             Text(т("dl_deal_done"))
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
             if сделка.оценкаПокупателя > 0 && !своя {
                 ЗвёздыСделки(звёзд: сделка.оценкаПокупателя, размер: 14)
             }
             if !сделка.отзывПокупателя.isEmpty && !своя {
                 Text("«" + сделка.отзывПокупателя + "»")
-                    .font(.system(size: 14).italic())
+                    .font(.system(size: 13).italic())
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
+                    .padding(.top, 2)
             }
         }
-        .foregroundStyle(КраскаОбъявлений.хорошоТекст)
-        .padding(14)
+        .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
-        .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .background(КраскаСделокКабинета.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(КраскаСделокКабинета.хорошоКромка, lineWidth: 1.5)
+        }
         КнопкаСделки(т("dl_download_receipt"), вид: .главная, символ: "doc.text") { действие(.чек) }
     }
 
@@ -227,12 +234,13 @@ struct ДействияСделки: View {
             }
         } else if моя == 0 {
             if окно > 0 {
-                БлокСделки {
-                    Text(т(оцениваюПокупателя ? "dl_rate_buyer" : "dl_rate_seller"))
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
-                    ПодписьСделки(т(оцениваюПокупателя ? "dl_rate_late_b" : "dl_rate_late"))
-                    КнопкаСделки(т("dl_rate_now"), вид: .главная, символ: "star") {
+                КоробкаОценкиСделки(заголовок: т(оцениваюПокупателя ? "dl_rate_buyer" : "dl_rate_seller")) {
+                    Text(т(оцениваюПокупателя ? "dl_rate_late_b" : "dl_rate_late"))
+                        .font(.system(size: 13))
+                        .lineSpacing(3)
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                    КнопкаПравкиОценки(надпись: т("dl_rate_now"), символ: "star") {
                         звёзды = 0
                         отзыв = ""
                         правкаОценки = true
@@ -240,19 +248,17 @@ struct ДействияСделки: View {
                 }
             }
         } else {
-            БлокСделки {
-                Text(т(оцениваюПокупателя ? "dl_rate_seller_b" : "dl_your_rating"))
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Theme.текстВторой)
+            КоробкаОценкиСделки(заголовок: т(оцениваюПокупателя ? "dl_rate_seller_b" : "dl_your_rating")) {
                 ЗвёздыСделки(звёзд: моя, размер: 22)
                 if !мойОтзыв.isEmpty {
                     Text(мойОтзыв)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
+                        .lineSpacing(3)
                         .foregroundStyle(Theme.текст)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if окно > 0 {
-                    КнопкаСделки(т("dl_review_change"), вид: .вторая, символ: "pencil") {
+                    КнопкаПравкиОценки(надпись: т("dl_review_change"), символ: "pencil") {
                         звёзды = моя
                         отзыв = мойОтзыв
                         правкаОценки = true
@@ -264,7 +270,7 @@ struct ДействияСделки: View {
 
     // MARK: - Гарантийный талон продавцу (dealWarrantyCta)
 
-    /// Подпись — через eGov (otp_step_*, этап 46) — страница сайта.
+    /// Подпись — warranty_sign; нужен eGov — своё окно ОкноEGov (otp_step_*), денег нет.
     @ViewBuilder
     private var талонПодписать: some View {
         if сделка.гарантияДней > 0 && сделка.режим == "goods" && сделка.продавец && !сделка.талонПодписан
@@ -282,9 +288,71 @@ struct ДействияСделки: View {
                         ПодписьСделки(т("wc_cta_s"))
                     }
                 }
-                КнопкаСделки(т("wc_sign"), вид: .главная, наСайт: true) { действие(.наСайт) }
+                КнопкаСделки(т("wc_sign"), вид: .главная, доступна: !модель.занято) { действие(.подписатьТалон) }
             }
         }
+    }
+}
+
+// MARK: - Коробка оценки (.dm-revbox, .dm-edit-btn)
+
+/// .dm-revbox: серая подложка, рамка 1.5, радиус 18, поля 14; заголовок 11/800 серый с разрядкой.
+struct КоробкаОценкиСделки<Содержимое: View>: View {
+    let заголовок: String
+    let содержимое: Содержимое
+
+    init(заголовок: String, @ViewBuilder _ содержимое: () -> Содержимое) {
+        self.заголовок = заголовок
+        self.содержимое = содержимое()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(заголовок)
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(0.55)
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            содержимое
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+    }
+}
+
+/// .dm-edit-btn: во всю ширину, белая, зелёная рамка и текст.
+struct КнопкаПравкиОценки: View {
+    let надпись: String
+    let символ: String
+    let действие: () -> Void
+
+    var body: some View {
+        Button(action: действие) {
+            HStack(spacing: 8) {
+                Image(systemName: символ)
+                    .font(.system(size: 15))
+                    .accessibilityHidden(true)
+                Text(надпись)
+                    .font(.system(size: 14, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(КраскаСделокКабинета.хорошоТекст)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскаСделокКабинета.хорошоКромка, lineWidth: 1.5)
+            }
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 }
 
