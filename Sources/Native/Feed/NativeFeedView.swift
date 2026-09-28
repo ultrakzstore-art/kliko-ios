@@ -1791,7 +1791,7 @@ struct ListingCard: View {
     private var фотоСайта: some View {
         LinearGradient(colors: [Theme.цвет(0xEEF4F0, 0x1A2A22), Theme.цвет(0xDFEAE3, 0x101914)],
                        startPoint: .top, endPoint: .bottom)
-            .aspectRatio(4 / 3, contentMode: .fit)
+            .наШиринуКарточки(3 / 4)      // 4:3 ровно во всю ширину карточки (SiteCards.swift)
             .overlay {
                 /* Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): не AsyncImage, а
                    КартинкаЛенты — уменьшенная до ячейки, распакованная не на главной очереди и из памяти. */
@@ -1957,11 +1957,15 @@ struct ListingCard: View {
         let путь = гео.точка == nil ? nil : пути.оценка(товар.id)
         return HStack(spacing: 8) {
             if let знак = товар.знакДоверияЛенты {
-                HStack(spacing: 4) {
-                    Image(systemName: знак.щит ? "checkmark.shield" : "checkmark")
-                        .font(.system(size: кегль(11), weight: .bold))
-                    Text(знак.текст)
-                        .lineLimit(1)
+                /* Узкая карточка и длинное место справа: вместо «Гар…» — один значок, текст целиком или никак. */
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        значокДоверия(знак)
+                        Text(знак.текст)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    значокДоверия(знак)
                 }
                 .font(.system(size: кегль(11), weight: .bold))
                 .foregroundStyle(Theme.зелёный2)
@@ -1992,6 +1996,12 @@ struct ListingCard: View {
                 .fill(Theme.линия)
                 .frame(height: 1)
         }
+    }
+
+    /// Щит «Гаранта» или галочка знака доверия (mkVitTrust).
+    private func значокДоверия(_ знак: ЗнакДоверияКарточки) -> some View {
+        Image(systemName: знак.щит ? "checkmark.shield" : "checkmark")
+            .font(.system(size: кегль(11), weight: .bold))
     }
 
     /// Фирменный цвет магазина — полоса сверху и цена (.mk-cbrand); nil — не магазин или цвета нет.

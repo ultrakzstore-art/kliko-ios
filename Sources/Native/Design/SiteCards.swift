@@ -416,7 +416,35 @@ extension Listing {
     }
 }
 
+/**
+ Фото карточки во всю ширину ячейки: высота = ширина × доля, какую бы высоту ни предложили. Владелец 28.09.2026,
+ TestFlight («фото разъехались»): у .aspectRatio(.fit) в карточке, растянутой на высоту ряда, VStack делил высоту
+ пополам между фото и телом (у тела maxHeight: .infinity) — фото по этой высоте сужалось, справа оставалась полоса,
+ а сердце, «Поделиться» и точки уезжали от картинки. Здесь высота жёсткая — ужимается только тело.
+ */
+struct ФотоНаШиринуКарточки: Layout {
+    /// Высота к ширине: 3/4 у ленты (4:3), 1 у квадрата.
+    let доля: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        var ширина: CGFloat = proposal.width ?? 180
+        if !ширина.isFinite { ширина = 180 }
+        return CGSize(width: ширина, height: ширина * доля)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for вид in subviews {
+            вид.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+}
+
 extension View {
+    /// Во всю предложенную ширину, высота — ширина × доля (ФотоНаШиринуКарточки).
+    func наШиринуКарточки(_ доля: CGFloat) -> some View {
+        ФотоНаШиринуКарточки(доля: доля) { self }
+    }
+
     /**
      Строка карточки ровно в одну строку шрифта `шрифт` (владелец 26.09.2026: «размеры объявлений одинаковые должны
      быть»): высоту задаёт невидимый пробел этим шрифтом во всю ширину, а сама строка лежит поверх него слева. Цена
@@ -594,7 +622,7 @@ struct КарточкаГлавной: View {
 
     private var фото: some View {
         Theme.поверхность2
-            .aspectRatio(1, contentMode: .fit)
+            .наШиринуКарточки(1)          // квадрат ровно во всю ширину — VStack не ужмёт его ради тела
             .overlay {
                 КартинкаЛенты(товар.обложка, пунктов: 240) {
                     Image(systemName: "photo")
