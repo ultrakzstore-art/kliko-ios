@@ -58,7 +58,6 @@ struct БлокСтатьиВид: View {
     @Binding var раскрытые: Set<Int>
 
     @ScaledMetric(relativeTo: .body) private var размер: CGFloat = 15
-    @Environment(\.openURL) private var открытьАдрес
 
     var body: some View {
         switch блок.вид {
@@ -107,7 +106,9 @@ struct БлокСтатьиВид: View {
         case .картинка(let адрес, let пропорция):
             КартинкаСтатьи(адрес: адрес, пропорция: пропорция, подпись: блок.простой)
         case .карточка(let адрес):
-            плитка(адрес)
+            ПлиткаСтатьи(блок: блок, адрес: адрес)
+        case .сводка:
+            СводкаПлиток(текст: блок.простой)
         }
     }
 
@@ -119,16 +120,36 @@ struct БлокСтатьиВид: View {
         default: return размер
         }
     }
+}
 
-    /// Ссылка-карточка сайта (плитка раздела справки): заголовок, подпись и стрелка.
-    private func плитка(_ адрес: URL) -> some View {
+/**
+ Плитка раздела справки (ссылка-карточка сайта): значок, название, подпись и стрелка — своей карточкой, как разделы
+ статьи (поверхность, рамка 1.5, скругление 14, поля 16). Нажатие — адрес плитки: якорь этой же страницы прокручивает
+ к разделу, другая статья справки открывается следующим экраном.
+ */
+struct ПлиткаСтатьи: View {
+    let блок: БлокСтатьи
+    let адрес: URL
+
+    @ScaledMetric(relativeTo: .body) private var размер: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var сторонаЗначка: CGFloat = 38
+    @Environment(\.openURL) private var открытьАдрес
+
+    var body: some View {
         Button {
             открытьАдрес(адрес)
         } label: {
             HStack(spacing: 12) {
+                if !блок.значок.isEmpty {
+                    Text(блок.значок)
+                        .font(.system(size: размер + 3))
+                        .frame(width: сторонаЗначка, height: сторонаЗначка)
+                        .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                        .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(блок.текст)
-                        .font(.system(size: размер, weight: .bold))
+                    Text(блок.простой)
+                        .font(.system(size: размер, weight: .semibold))
                         .foregroundStyle(Theme.текст)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -146,12 +167,67 @@ struct БлокСтатьиВид: View {
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
-            .padding(12)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .contentShape(Rectangle())
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isLink)
+    }
+}
+
+/// Сводка над плитками («67 ответов в 14 разделах»): мелко, вторым цветом.
+struct СводкаПлиток: View {
+    let текст: String
+
+    @ScaledMetric(relativeTo: .footnote) private var размер: CGFloat = 13
+
+    var body: some View {
+        Text(текст)
+            .font(.system(size: размер, weight: .semibold))
+            .foregroundStyle(Theme.текстВторой)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Ряд плиток разделов: сводка и плитки, каждая своей карточкой.
+struct РядПлитокСтатьи: View {
+    let блоки: [БлокСтатьи]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(блоки) { блок in
+                БлокРядаПлиток(блок: блок)
+                    .id(блок.id)
+            }
+        }
+    }
+}
+
+/// Один блок ряда плиток: плитка, сводка (с отступом от края, как подписи над карточками) или прочее.
+private struct БлокРядаПлиток: View {
+    let блок: БлокСтатьи
+
+    var body: some View {
+        switch блок.вид {
+        case .карточка(let адрес):
+            ПлиткаСтатьи(блок: блок, адрес: адрес)
+        case .сводка:
+            СводкаПлиток(текст: блок.простой)
+                .padding(.horizontal, 4)
+                .padding(.top, 4)
+        default:
+            Text(блок.простой)
+                .foregroundStyle(Theme.текст)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
