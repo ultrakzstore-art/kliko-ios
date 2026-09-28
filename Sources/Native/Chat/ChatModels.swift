@@ -295,6 +295,8 @@ struct ЧатПереписка: Decodable {
     var товар: ТоварПереписки? = nil
     /// me_verified ответа: false — полоса «Пройдите верификацию» над полем (#dm-verify-bar); нет поля — nil.
     var проверен: Bool? = nil
+    /// thread.label — метка диалога (select #dm-label шапки сайта); нет поля — nil.
+    var метка: String? = nil
 
     private struct Любое: Decodable {
         let значение: ЧатСообщение?
@@ -319,6 +321,7 @@ struct ЧатПереписка: Decodable {
         собеседникID = c.номерСобеседника("peer_id") ?? c.номерСобеседника("peer")
             ?? c.номерСобеседника("other_id") ?? c.номерСобеседника("other") ?? ""
         собеседникУшёл = c.собеседникУшёл("peer")
+        if c.contains(ЧатКлюч("label")) { метка = c.строка("label") ?? "" }
     }
 }
 
@@ -431,8 +434,8 @@ struct ТоварПереписки: Hashable {
 
 /**
  Аренда и обмен в переписке — meta сообщений type rental / exchange (_dmCardRental, _dmCardExchange кабинета): даты,
- стоимость, залог и статус аренды; что предлагают, за что и доплата у обмена. Кнопки продавца («Подтвердить»,
- «Принять») пока на сайте — карточка только показывает.
+ стоимость, залог и статус аренды; что предлагают, за что и доплата у обмена. Кнопки продавца (dmRentalAct,
+ dmExchangeAct) — у продавца (meta.seller_id == я): номер сделки — rental_id / exchange_id.
  */
 struct СделкаВЧате: Hashable {
     let аренда: Bool
@@ -448,9 +451,18 @@ struct СделкаВЧате: Hashable {
     let заВаш: String
     let заВашЦена: Int
     let доплата: Int
+    /// surcharge_dir: buyer — доплата вам, seller — просят вашу доплату.
+    let доплатаКому: String
+    /// rental_id / exchange_id — номер для rentals.php / exchange.php.
+    let номер: String
+    /// seller_id — кнопки видит только продавец.
+    let продавец: String
 
     init(_ m: KeyedDecodingContainer<ЧатКлюч>, аренда: Bool) {
         self.аренда = аренда
+        номер = m.строка(аренда ? "rental_id" : "exchange_id") ?? ""
+        продавец = m.строка("seller_id") ?? ""
+        доплатаКому = (m.строка("surcharge_dir") ?? "").lowercased()
         статус = (m.строка("status") ?? (аренда ? "requested" : "pending")).lowercased()
         начало = m.строка("start") ?? ""
         конец = m.строка("end") ?? ""

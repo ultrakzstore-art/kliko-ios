@@ -78,6 +78,8 @@ final class ChatThreadModel: ObservableObject {
     var можноОткрыть: Bool { !tid.isEmpty || Config.нативныйЧатОтправка }
 
     func начать() async {
+        /* Мой номер (_dmMe) — кнопки продавца в карточках аренды и обмена. */
+        if я.isEmpty { я = await ИнбоксAPI.мойНомер(ждать: false) }
         /* Этап 45: строка инбокса без собеседника (peer_id не пришёл) — open без peer сайт отвергает («Собеседник не
            указан»); номер переписки известен — читаем её опросом, как этап 3. */
         if tid.isEmpty && собеседник.isEmpty && !номерОткрытия.isEmpty { tid = номерОткрытия }
@@ -190,6 +192,7 @@ final class ChatThreadModel: ObservableObject {
         if let новый = переписка.торг, новый != торг { торг = новый }
         if let новый = переписка.товар, новый != товар { товар = новый }
         if let новый = переписка.проверен, новый != проверен { проверен = новый }
+        if let новая = переписка.метка, !меткаМеняется, новая != метка { метка = новая }
         /* Ждущее своё предложение — и на страницу объявления (полоса «Ваше предложение» с той же кнопкой). Только если
            в этой переписке есть свои предложения: переписка без торга не стирает то, что знает чат объявления. */
         let объявлениеТорга = объявлениеПредложения
@@ -313,6 +316,62 @@ final class ChatThreadModel: ObservableObject {
             withAnimation(ДвижениеСайта.уход) { self.плашка = nil }
         }
     }
+
+    // MARK: - Аренда и обмен (dmRentalAct, dmExchangeAct)
+
+    /// Мой номер (_dmMe): кнопки карточки видит продавец (meta.seller_id).
+    @Published private(set) var я = ""
+    /// Номер сделки, по которой идёт запрос, — кнопки её карточки гаснут.
+    @Published private(set) var занятаСделка: String? = nil
+
+    func продавецВ(_ сделка: СделкаВЧате) -> Bool {
+        !я.isEmpty && я == сделка.продавец
+    }
+
+    /**
+     dmRentalAct: POST rentals.php {action, rental_id, csrf, me_id} — confirm/decline уходят action "respond" с decision;
+     dmExchangeAct: POST exchange.php {action:"respond", exchange_id, decision, csrf, me_id}. ok → «Готово ✓» и опрос
+     (dmPollTick), иначе error сайта. Повтора нет: запись могла дойти.
+     */
+    func действиеСделки(_ сделка: СделкаВЧате, _ действие: ДействиеСделкиЧата) async {
+        guard !сделка.номер.isEmpty, занятаСделка == nil else { return }
+        занятаСделка = сделка.номер
+        defer { занятаСделка = nil }
+        let мой = await ИнбоксAPI.мойНомер(ждать: true)
+        var тело: [String: Any] = ["me_id": мой]
+        for (ключ, значение) in действие.поля { тело[ключ] = значение }
+        тело[сделка.аренда ? "rental_id" : "exchange_id"] = сделка.номер
+        do {
+            let j = try await ИнбоксAPI.отправить(сделка.аренда ? "rentals.php" : "exchange.php", тело: тело)
+            if МоиОбъявленияAPI.да(j["ok"]) {
+                показатьПлашку(ИнбоксText.т("dm_done_ok"))
+                await обновить()
+            } else {
+                показатьПлашку(ИнбоксAPI.текстОшибки(j, запасной: ИнбоксText.т("err_generic")))
+            }
+        } catch {
+            показатьПлашку(ИнбоксAPI.текстСбоя(error))
+        }
+    }
+
+    // MARK: - Метка диалога (dmSetLabel)
+
+    /// thread.label — select #dm-label шапки.
+    @Published private(set) var метка = ""
+    @Published private(set) var меткаМеняется = false
+
+    func поставитьМетку(_ ключ: String) async {
+        guard !tid.isEmpty, !меткаМеняется else { return }
+        меткаМеняется = true
+        defer { меткаМеняется = false }
+        switch await ИнбоксAPI.метка(ключ, лид: false, номер: tid) {
+        case .готово:
+            метка = ключ
+            показатьПлашку(ИнбоксText.т("label_saved"))
+        case .ошибка(let текст):
+            показатьПлашку(текст)
+        }
+    }
 }
 
 struct ChatThreadView: View {
@@ -338,6 +397,8 @@ struct ChatThreadView: View {
     /// Окно «Отозвать предложение?» (boostConfirm кабинета).
     @State private var спроситьОтзыв = false
     @ObservedObject private var торгПредложений = ТоргПредложений.shared
+    /// Кнопка продавца в карточке аренды или обмена — лист подтверждения.
+    @State private var вопросСделки: ВопросСделкиЧата? = nil
 
     init(модель: @autoclosure @escaping () -> ChatThreadModel, заголовок: String, открыть: @escaping (URL) -> Void) {
         _модель = StateObject(wrappedValue: модель())
@@ -393,6 +454,11 @@ struct ChatThreadView: View {
         .вопросОтозватьПредложение($спроситьОтзыв) {
             Task { await модель.отозватьПредложение() }
         }
+        .sheet(item: $вопросСделки) { вопрос in
+            ЛистДействияСделкиЧата(вопрос: вопрос) {
+                Task { await модель.действиеСделки(вопрос.сделка, вопрос.действие) }
+            }
+        }
         .overlay(alignment: .bottom) { плашкаТорга }
         /* Этап 16: переписка на экране — просьба оценить её не перебивает (ПросьбаОценить). */
         .onAppear { ПросьбаОценить.shared.делоНаЭкране() }
@@ -441,6 +507,9 @@ struct ChatThreadView: View {
                 ИмяПерепискиКабинета(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
             }
             Spacer(minLength: 0)
+            if Config.нативныеСообщенияКабинета && модель.загружено && !модель.tid.isEmpty {
+                менюМетки
+            }
         }
         .padding(.leading, 8)
         .padding(.trailing, 12)
@@ -452,6 +521,36 @@ struct ChatThreadView: View {
                 .frame(height: 1)
                 .accessibilityHidden(true)
         }
+    }
+
+    /// select #dm-label шапки (dmSetLabel): «Метка» и CHAT_LABELS; выбранная — плашкой её цвета.
+    private var менюМетки: some View {
+        Menu {
+            Button {
+                Task { await модель.поставитьМетку("") }
+            } label: {
+                if модель.метка.isEmpty {
+                    Label(ИнбоксText.т("lbl_pick"), systemImage: "checkmark")
+                } else {
+                    Text(ИнбоксText.т("lbl_pick"))
+                }
+            }
+            ForEach(МеткаДиалога.allCases) { метка in
+                Button {
+                    Task { await модель.поставитьМетку(метка.rawValue) }
+                } label: {
+                    if модель.метка == метка.rawValue {
+                        Label(метка.название, systemImage: "checkmark")
+                    } else {
+                        Text(метка.название)
+                    }
+                }
+            }
+        } label: {
+            ЯрлыкМеткиПереписки(метка: МеткаДиалога(rawValue: модель.метка))
+        }
+        .disabled(модель.меткаМеняется)
+        .accessibilityLabel(ИнбоксText.т("label_title"))
     }
 
     private var лента: some View {
@@ -641,7 +740,12 @@ struct ChatThreadView: View {
         if Config.нативныеСообщенияКабинета, с.тип == "geo", let ш = с.широта, let д = с.долгота {
             КарточкаГеоЧата(моё: с.моё, широта: ш, долгота: д, изTelegram: false)
         } else if Config.нативныеСообщенияКабинета, let сделка = с.сделкаЧата {
-            КарточкаСделкиПереписки(сделка: сделка, моё: с.моё)
+            КарточкаСделкиПереписки(сделка: сделка, моё: с.моё,
+                                    действия: модель.продавецВ(сделка) ? ДействиеСделкиЧата.для(сделка) : [],
+                                    занято: модель.занятаСделка == сделка.номер,
+                                    нажато: { действие in
+                                        вопросСделки = ВопросСделкиЧата(сделка: сделка, действие: действие)
+                                    })
         } else if Config.дизайнКакНаСайте, let фото = с.фото {
             ФотоПерепискиКабинета(адрес: фото, моё: с.моё, время: ЧатВремя.время(с.когда))
                 .accessibilityLabel(с.голос(собеседник: заголовок))
@@ -934,6 +1038,10 @@ struct КарточкаТовараПереписки: View {
 struct КарточкаСделкиПереписки: View {
     let сделка: СделкаВЧате
     let моё: Bool
+    /// Кнопки продавца (.dm-cact); покупателю — пусто.
+    var действия: [ДействиеСделкиЧата] = []
+    var занято: Bool = false
+    var нажато: (ДействиеСделкиЧата) -> Void = { _ in }
 
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
 
@@ -969,13 +1077,14 @@ struct КарточкаСделкиПереписки: View {
                     if сделка.залог > 0 { строка(т("dm_deposit"), СделкиФормат.тенге(сделка.залог)) }
                 } else {
                     строка(т("dm_they_offer"), товар(сделка.предлагают, сделка.предлагаютЦена))
-                    if сделка.доплата > 0 { строка(т("dm_sur"), "+ " + СделкиФормат.тенге(сделка.доплата)) }
+                    if сделка.доплата > 0 { строка(подписьДоплаты, "+ " + СделкиФормат.тенге(сделка.доплата)) }
                     строка(т("dm_for_yours"), товар(сделка.заВаш, сделка.заВашЦена))
                 }
                 Text(статус)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(ИнбоксКраска.текст)
                     .padding(.top, 4)
+                if !действия.isEmpty { кнопки }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -988,11 +1097,62 @@ struct КарточкаСделкиПереписки: View {
             }
             if !моё { Spacer(minLength: 36) }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: действия.isEmpty ? .combine : .contain)
     }
 
     private func товар(_ название: String, _ цена: Int) -> String {
         цена > 0 ? название + " · " + СделкиФормат.тенге(цена) : название
+    }
+
+    /// surcharge_dir: buyer — «Доплата вам», seller — «Просит вашу доплату», иначе «Доплата».
+    private var подписьДоплаты: String {
+        let ключ: String
+        switch сделка.доплатаКому {
+        case "buyer": ключ = "dm_sur_to_you"
+        case "seller": ключ = "dm_sur_asks"
+        default: ключ = "dm_sur"
+        }
+        return т(ключ).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// .dm-cact: .dm-b.pri — --acc-on, .dm-b — карточка с кромкой; пока идёт запрос — колесо.
+    private var кнопки: some View {
+        HStack(spacing: 8) {
+            ForEach(действия) { действие in
+                Button {
+                    нажато(действие)
+                } label: {
+                    HStack(spacing: 5) {
+                        if действие.сГалочкой {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .accessibilityHidden(true)
+                        }
+                        Text(действие.кнопка)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(действие.главное ? ИнбоксКраска.наАкценте : ИнбоксКраска.текст)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 34)
+                    .background(действие.главное ? ИнбоксКраска.акцент : ИнбоксКраска.карточка,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                            .strokeBorder(действие.главное ? Color.clear : ИнбоксКраска.линия, lineWidth: 1)
+                    }
+                    .opacity(занято ? 0.55 : 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(занято)
+            }
+            if занято {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(.top, 8)
     }
 
     /// .dm-row: подпись серым слева, значение 600 справа.
