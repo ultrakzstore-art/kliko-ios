@@ -12,8 +12,10 @@ import SwiftUI
  «Завершить» — sec_end {which: k}, «Выйти на всех других» — sec_end {which: "others"}. Не вышло — переключатель назад и
  текст сервера плашкой.
  🔴 Вход через eGov: включить — sec_set {egov_login: true}, но сначала вопрос с пояснением сайта (sec_egov_s: выключить
- можно только через eGov) — у сайта вопроса нет, а на тестовом аккаунте включать его карта запрещает (§8.8). Выключить
- сайт даёт только после шага eGov (otpStepOpen «sec_login»/«off» → otp_step_*) — это страница сайта.
+ можно только через eGov) — у сайта вопроса нет, а на тестовом аккаунте включать его карта запрещает (§8.8). Выключить —
+ как _secEgov сайта: сначала шаг eGov otpStepOpen("sec_login", "off") — своё окно ОкноEGov (otp_step_create →
+ remote.biometric.kz → otp_step_check), после удачи sec_set {egov_login: false} и список перечитывается. Кабинет сайта
+ для этого больше не открывается.
  */
 struct ЛистУстройств: View {
     let открыть: (URL) -> Void
@@ -23,7 +25,8 @@ struct ЛистУстройств: View {
     @State private var грузится = false
     @State private var занято = false
     @State private var спроситьВключение = false
-    @State private var выключитьНаСайте = false
+    /// Окно шага eGov перед выключением входа через eGov.
+    @State private var шагEgov = false
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
@@ -65,21 +68,20 @@ struct ЛистУстройств: View {
         } message: {
             Text(тН("sec_egov_s"))
         }
-        .alert(тН("sec_egov_t"), isPresented: $выключитьНаСайте) {
-            Button(тН("open_site")) {
-                закрыть()
-                if let адрес = Config.страницаСайта("cabinet.php") {
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 450_000_000)
-                        открыть(адрес)
-                    }
-                }
-            }
-            Button(тН("cancel"), role: .cancel) {}
-        } message: {
-            Text(тН("sec_egov_off_site"))
+        .sheet(isPresented: $шагEgov) {
+            ОкноEGov(запрос: Self.запросВыключения, готово: {
+                шагEgov = false
+                поставитьEgov(false)
+            }, закрыть: {
+                шагEgov = false
+            })
         }
     }
+
+    /// otpStepOpen("sec_login", "off") сайта: заголовок и подсказка — окна по умолчанию, как у сайта. «после» окно не
+    /// читает (его читает только карточка сделки) — здесь оно формальное.
+    private static let запросВыключения = ЗапросEGov(назначение: "sec_login", ссылка: "off", заголовок: "",
+                                                     подсказка: "", после: .оплатить)
 
     @ViewBuilder
     private var содержимое: some View {
@@ -114,7 +116,7 @@ struct ЛистУстройств: View {
             .disabled(занято)
             if д.eGovДоступен || д.eGovВход {
                 Toggle(isOn: Binding(get: { д.eGovВход }, set: { хочет in
-                    if хочет { спроситьВключение = true } else { выключитьНаСайте = true }
+                    if хочет { спроситьВключение = true } else { шагEgov = true }
                 })) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(тН("sec_egov_t")).font(.system(size: 16, weight: .semibold))
@@ -255,7 +257,7 @@ struct ЛистУстройств: View {
         данные = д
     }
 
-    /// Только включение: выключение — через шаг eGov на сайте.
+    /// Включение — после вопроса; выключение — после шага eGov (окно ОкноEGov), как _secEgov сайта.
     private func поставитьEgov(_ значение: Bool) {
         guard !занято else { return }
         занято = true
@@ -269,6 +271,8 @@ struct ЛистУстройств: View {
                         данные = д
                     }
                     НастройкиМодель.shared.показать(тН(значение ? "sec_egov_on" : "sec_egov_off"))
+                    занято = false
+                    await загрузить()
                 } else {
                     НастройкиМодель.shared.показать(НастройкиAPI.ошибка(j))
                 }

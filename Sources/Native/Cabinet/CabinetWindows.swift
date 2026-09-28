@@ -12,14 +12,16 @@ import WebKit
      что даёт проверка, статус, «Отклонено»), и только сама проверка eGov — защищённой страницей сайта (государственный
      поток, так и остаётся);
    · «Удалить аккаунт» — кабинет сайта; теперь свой лист тех же шагов, что acctDelOpen сайта (карта §1.5.7):
-     account_delete_send → пароль / код с экрана → account_delete_confirm → ВыходНачисто. Ветка need_egov (otpStep, eGov)
-     — страницей сайта, с запасным «Подтвердить паролем», если сервер разрешил (can_pass);
+     account_delete_send → пароль / код с экрана → account_delete_confirm → ВыходНачисто. Ветка need_egov — как
+     acctDelConfirm сайта: account_delete_confirm отвечает need_egov → своё окно шага eGov ОкноEGov (otpStepOpen
+     purpose || "delete", "account") → после удачи тот же account_delete_confirm ещё раз; запасное «Подтвердить
+     паролем», если сервер разрешил (can_pass);
    · «Написать в поддержку» (support.php?topic=payment|other) — теперь своя форма: POST support.php?action=create, как
      dataReqSend сайта (тема та же, что в адресе), и после неё — переписка по обращению (?ticket=<id>, этап 45).
 
  Окна висят на слое вкладок (СлойОконПриложения в NativeTabsView) — одно на всё приложение, как лист у сайта. Пока
  открыт другой лист или окно (подача, карточка сделки, алерт), своё поверх не встанет: SwiftUI молча не покажет его. Поэтому
- показать() проверяет это в момент показа и тогда открывает запасную страницу сайта, как было.
+ показать() проверяет это в момент показа и тогда показывает окно поверх верхнего экрана (OverlayWindows.swift).
  */
 @MainActor
 final class ОкнаПриложения: ObservableObject {
@@ -59,7 +61,7 @@ final class ОкнаПриложения: ObservableObject {
     /**
      Показать окно. false — слоя вкладок нет (или вход не свой): вызывающий открывает страницу сайта, как раньше. true —
      окно встанет (через задержку, если её дали: лист или алерт вызывающего ещё уезжает); если в момент показа занято
-     другим окном — откроется запасная страница сайта.
+     другим окном — поверх верхнего экрана (OverlayWindows.swift). запасной больше не открывается.
      */
     @discardableResult
     func показать(_ новое: Окно, задержка: UInt64 = 0, запасной: URL? = nil) -> Bool {
@@ -78,7 +80,13 @@ final class ОкнаПриложения: ObservableObject {
                 case .поддержка(let тема):
                     ПоддержкаПоверх.поверх(тема: тема)
                 case .удалениеАккаунта:
-                    if let запасной { WebBridge.shared.pendingURL = запасной }
+                    /* Свой лист поверх верхнего экрана, не кабинет сайта; запасной больше не нужен. */
+                    ПоверхВсего.показать(смахивается: false) { закрыть in
+                        ЛистУдаленияАккаунта(открыть: { адрес in
+                            закрыть()
+                            ПоверхВсего.открытьАдрес(адрес)
+                        })
+                    }
                 }
                 return
             }
@@ -319,6 +327,8 @@ struct ЛистУдаленияАккаунта: View {
     @State private var причина = ""
     @State private var идёт = false
     @State private var ошибка: String? = nil
+    /// Окно шага eGov (otpStepOpen сайта), пока открыто.
+    @State private var окноEgov: ОкноEGovУдаления? = nil
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
@@ -351,6 +361,15 @@ struct ЛистУдаленияАккаунта: View {
             }
         }
         .interactiveDismissDisabled(идёт)
+        .sheet(item: $окноEgov) { окно in
+            ОкноEGov(запрос: окно.запрос, готово: {
+                /* Как onOk сайта: eGov пройден — acctDelConfirm ещё раз с теми же полями. */
+                окноEgov = nil
+                удалить()
+            }, закрыть: {
+                окноEgov = nil
+            })
+        }
     }
 
     private var шапка: some View {
@@ -428,21 +447,18 @@ struct ЛистУдаленияАккаунта: View {
         }
     }
 
-    /// need_egov: подтверждение — otpStep сайта (eGov), он остаётся страницей сайта. Разрешён пароль — можно им.
+    /// need_egov: «Подтвердить через eGov» — acctDelConfirm сайта, сервер ответит need_egov и откроется окно шага eGov.
+    /// Разрешён пароль — можно им.
     private var шагEgov: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(тО("adl_egov"))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.текст)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(тО("adl_egov_site"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .fixedSize(horizontal: false, vertical: true)
+            TextField(тО("adl_why"), text: $причина)
+                .textFieldStyle(.roundedBorder)
             строкаОшибки
-            главная(тО("adl_ok_egov")) {
-                наСайтПослеЛиста(Config.страницаСайта("cabinet.php"), открыть: открыть, закрыть: закрыть)
-            }
+            главная(тО("adl_ok_egov")) { удалить() }
             if можноПаролем {
                 ссылка(тО("adl_pass_alt")) { перейтиКоВторому(eGov: false, пароль: true) }
             } else {
@@ -606,7 +622,16 @@ struct ЛистУдаленияАккаунта: View {
                     return
                 }
                 if A.да(j["need_egov"]) {
-                    перейтиКоВторому(eGov: true, пароль: false)
+                    /* acctDelConfirm сайта: otpStepOpen(purpose || "delete", "account") со своими заголовком и
+                       подсказкой, после удачи — тот же запрос ещё раз. */
+                    if шаг != .подтверждение(eGov: true, пароль: false) {
+                        перейтиКоВторому(eGov: true, пароль: false)
+                    }
+                    let назначение = A.строка(j["purpose"])
+                    let запрос = ЗапросEGov(назначение: назначение.isEmpty ? "delete" : назначение, ссылка: "account",
+                                            заголовок: ТекстыEgovУдаления.т("adl_egov_t"),
+                                            подсказка: ТекстыEgovУдаления.т("adl_egov_h"), после: .оплатить)
+                    окноEgov = ОкноEGovУдаления(запрос: запрос)
                     return
                 }
                 ошибка = текстОшибки(j, запасной: тО("err_generic"))
@@ -630,6 +655,32 @@ struct ЛистУдаленияАккаунта: View {
         }
         NotificationCenter.default.post(name: ОкнаПриложения.аккаунтУдалён, object: nil)
     }
+}
+
+/// Обёртка запроса eGov для .sheet(item:) листа удаления.
+private struct ОкноEGovУдаления: Identifiable {
+    let запрос: ЗапросEGov
+    var id: String { запрос.назначение + ":" + запрос.ссылка }
+}
+
+/// Заголовок и подсказка окна eGov при удалении (opts otpStepOpen в acctDelConfirm сайта): русские — дословно сайта.
+private enum ТекстыEgovУдаления {
+    static func т(_ ключ: String) -> String {
+        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let словарь = тексты[язык] ?? тексты["ru"] ?? [:]
+        return словарь[ключ] ?? тексты["ru"]?[ключ] ?? ключ
+    }
+
+    private static let тексты: [String: [String: String]] = [
+        "ru": ["adl_egov_t": "Подтверждение удаления",
+               "adl_egov_h": "Удаление аккаунта подтверждается через eGov — как вывод денег. Проверьте ИИН и номер."],
+        "kk": ["adl_egov_t": "Жоюды растау",
+               "adl_egov_h": "Аккаунтты жою eGov арқылы расталады — ақша шығару сияқты. ЖСН мен нөмірді тексеріңіз."],
+        "en": ["adl_egov_t": "Confirm deletion",
+               "adl_egov_h": "Account deletion is confirmed via eGov — like a withdrawal. Check your IIN and phone number."],
+        "ar": ["adl_egov_t": "تأكيد الحذف",
+               "adl_egov_h": "يُؤكَّد حذف الحساب عبر eGov — مثل سحب الأموال. تحقّق من رقم IIN والهاتف."]
+    ]
 }
 
 // MARK: - Обращение в поддержку (dataReqSend сайта)
