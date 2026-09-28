@@ -87,9 +87,7 @@ struct ИнбоксЭкран: View {
                        действие: { войти() })
         } else if модель.ошибка && модель.строки.isEmpty {
             ПустоСайта(значок: "exclamationmark.bubble", заголовок: т("err_load"),
-                       кнопка: ChatText.т("retry"), действие: { Task { await список.загрузить() } },
-                       вторая: ChatText.т("open_site"),
-                       второеДействие: { if let u = Config.страницаСайта("cabinet.php?s=messages") { открыть(u) } })
+                       кнопка: ChatText.т("retry"), действие: { Task { await список.загрузить() } })
         } else {
             лента
         }

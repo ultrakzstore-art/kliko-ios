@@ -75,7 +75,9 @@ final class ОкнаПриложения: ObservableObject {
                     ВходПоверх.показать()
                 case .верификация:
                     ВерификацияПоверх.показать()
-                case .удалениеАккаунта, .поддержка:
+                case .поддержка(let тема):
+                    ПоддержкаПоверх.поверх(тема: тема)
+                case .удалениеАккаунта:
                     if let запасной { WebBridge.shared.pendingURL = запасной }
                 }
                 return
@@ -731,14 +733,7 @@ struct ЛистОбращения: View {
             }
             .buttonStyle(.plain)
             .disabled(идёт)
-            if ошибка != nil {
-                Button(тО("sup_site")) {
-                    наСайтПослеЛиста(Config.url("/support.php?topic=" + чистаяТема), открыть: открыть, закрыть: закрыть)
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .tint(Theme.акцент)
-                .frame(maxWidth: .infinity, minHeight: 44)
-            }
+            /* «Написать на сайте» после ошибки убран (владелец: всё нативно) — «Отправить» можно нажать ещё раз. */
         }
     }
 

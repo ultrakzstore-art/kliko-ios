@@ -828,8 +828,8 @@ struct NativeFeedView: View {
         }
     }
 
-    /// «Работа»: своего экрана вакансий у приложения нет — раздел сайта /?cat=jobs; вакансия — #vac=<номер>, её лист сайт
-    /// открывает сам (mkJobsHash), как по ссылке из ряда главной.
+    /// «Работа»: свой список и карточка вакансии (ОкноВакансий); раздел сайта /?cat=jobs (#vac=<номер>) — только без
+    /// слоя вкладок.
     private func открытьВакансии(_ номер: String?) {
         /* Свой список и своя карточка вакансии поверх ленты (Jobs/JobsView.swift); сайт — только запасной путь. */
         if Config.нижниеВкладки {
@@ -1597,10 +1597,7 @@ struct NativeFeedView: View {
                     .padding(.horizontal, 26).padding(.vertical, 12)
                     .background(Theme.green, in: Capsule())
             }
-            if !нетСети {
-                Button(FeedText.т("site"), action: открытьСайт)
-                    .font(.subheadline.weight(.semibold))
-            }
+            /* «Сайт» убран (владелец: всё нативно) — только «Повторить». */
         }
         .padding(30)
         .frame(maxWidth: .infinity)

@@ -11,6 +11,9 @@ import Foundation
  переписки из пуша (ChatThreadModel.адресПереписки). Номера диалога в адресе переписки приложение не встречало,
  поэтому отдельного «открыть диалог» нет — только список.
 
+ Этап 51: ещё раздел ленты (/?cat=, /marketplace?cat=, /?q=, /?all=1), «Работа» (/?cat=jobs) и форма обращения
+ (/support.php?topic=) — им лишние параметры и #якорь не мешают (цельЛентыИПоддержки).
+
  🔴 ЛИШНИЙ ПАРАМЕТР — НА САЙТ. Ссылка с чем-то ещё, кроме item / s (и меток utm_), или с #якорем может значить то,
  чего нативный экран не умеет (раздел страницы, предложение, сделку). Такую открываем сайтом: там она сработает.
  */
@@ -54,6 +57,10 @@ final class NativeRouter: ObservableObject {
         case кабинет
         /// Раздел меню кабинета сайта своим экраном в стеке «Кабинета» (?s=deliveries, ?s=rentals, ?s=company, …).
         case разделКабинета(КабинетЦель)
+        /// «Работа» — /?cat=jobs, вакансия — #vac=<номер>: свой список и карточка (ОкноВакансий, этап 51).
+        case вакансии(номер: String?)
+        /// Форма обращения — /support.php?topic=<тема> (ЛистОбращения, этап 51).
+        case поддержка(тема: String)
     }
 
     /// Включён ли экран цели своим рубильником. Нет — вход снаружи идёт сайтом (WebBridge.открытьЭкран).
@@ -71,6 +78,8 @@ final class NativeRouter: ObservableObject {
         case .пароль: return Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
         case .кошелёк, .баллы: return Config.нативныйКошелёк && Config.нативныйКабинет
         case .кабинет, .разделКабинета: return Config.нативныйКабинет
+        case .вакансии: return Config.нижниеВкладки
+        case .поддержка: return true
         }
     }
 
@@ -85,8 +94,10 @@ final class NativeRouter: ObservableObject {
         let полный = адрес.absoluteURL                  // путь из пуша приходит относительным к Config.apiBase
         guard let схема = полный.scheme?.lowercased(), схема == "https" || схема == "http",
               Config.deepLink(полный) != nil,          // наш домен — та же проверка, что у внешних ссылок
-              let части = URLComponents(url: полный, resolvingAgainstBaseURL: false),
-              (части.fragment ?? "").isEmpty else { return nil }
+              let части = URLComponents(url: полный, resolvingAgainstBaseURL: false) else { return nil }
+        /* Этап 51: раздел ленты, «Работа» и поддержка — лишние параметры и #якорь им не мешают. */
+        if let своя = цельЛентыИПоддержки(части) { return своя }
+        guard (части.fragment ?? "").isEmpty else { return nil }
 
         let параметры = (части.queryItems ?? []).filter { !$0.name.lowercased().hasPrefix("utm_") }
         /// Значение параметра, если он в адресе единственный (не считая меток utm_).
@@ -111,6 +122,47 @@ final class NativeRouter: ObservableObject {
             guard Config.адресаКабинета, АдресаКабинета.кабинет(части.path) else { return nil }
             return АдресаКабинета.цель(параметры)
         }
+    }
+
+    /**
+     Этап 51 (владелец: «всё нативно»): /?cat=<раздел>, /marketplace?cat=<раздел>, /?q=, /?all=1 — лента с этим
+     разделом или поиском; /?cat=jobs (#vac=<номер>) — «Работа»; /support.php?topic=<тема> — форма обращения.
+     Язык в пути (/kz/<язык>/) и лишние параметры не мешают; объявление (?item=) разбирает распознать.
+     */
+    private static func цельЛентыИПоддержки(_ части: URLComponents) -> Цель? {
+        let путь = части.path
+        let все = части.queryItems ?? []
+        func значение(_ имя: String) -> String {
+            let v = все.first(where: { $0.name == имя })?.value ?? ""
+            return v.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if путь.range(of: "^(/[a-z]{2}/[a-z]{2})?/support(\\.php)?/?$", options: .regularExpression) != nil {
+            /* ?action= (отправка формы) и ?ticket= (переписка) — не форма нового обращения. */
+            guard значение("action").isEmpty, значение("ticket").isEmpty else { return nil }
+            let тема = значение("topic").lowercased().filter { $0.isASCII && $0.isLetter }
+            return .поддержка(тема: тема.isEmpty ? "other" : тема)
+        }
+        let ленты = "^(/[a-z]{2}/[a-z]{2})?(/|/index\\.php|/marketplace/?|/marketplace\\.php)?$"
+        guard путь.range(of: ленты, options: .regularExpression) != nil, значение("item").isEmpty else { return nil }
+        let раздел = значение("cat")
+        let текст = значение("q")
+        if раздел.lowercased() == "jobs" {
+            var номер: String? = nil
+            let якорь = части.fragment ?? ""
+            if якорь.hasPrefix("vac=") {
+                let н = String(якорь.dropFirst(4)).removingPercentEncoding ?? ""
+                if н.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil { номер = н }
+            }
+            return .вакансии(номер: номер)
+        }
+        if !раздел.isEmpty {
+            guard раздел.range(of: "^[A-Za-z0-9_-]{1,60}$", options: .regularExpression) != nil else { return nil }
+            return .найти(ИскомоеЛенты(текст: текст, раздел: раздел))
+        }
+        if !текст.isEmpty || значение("all") == "1" {
+            return .найти(ИскомоеЛенты(текст: текст, раздел: ""))
+        }
+        return nil
     }
 }
 

@@ -682,7 +682,35 @@ struct WebContainer: UIViewRepresentable {
                     UIApplication.shared.open(url); decisionHandler(.cancel); return
                 }
             }
+            if Coordinator.вСвойЭкран(navigationAction, webView: webView) {
+                decisionHandler(.cancel); return
+            }
             decisionHandler(.allow)
+        }
+
+        /**
+         Нажатая ссылка страницы сайта на адрес со своим экраном (витрина продавца, объявление, раздел ленты, «Работа»,
+         поддержка, справка, раздел кабинета) — туда, а страница остаётся, где была (владелец: «всё нативно»). Та же
+         цепочка, что у корня приложения (ПереходыКабинета.своимЭкраном), без eGov: eGov, банк и шлюз идут своим потоком
+         на странице. Только нажатие ссылки (не форма, не редирект, не скрипт) в главном окне, GET, со страницы kliko.kz
+         на kliko.kz.
+         */
+        nonisolated static func вСвойЭкран(_ действие: WKNavigationAction, webView: WKWebView) -> Bool {
+            /* WebKit зовёт делегата на главном потоке. */
+            return MainActor.assumeIsolated { () -> Bool in
+                guard действие.navigationType == .linkActivated,
+                      действие.targetFrame?.isMainFrame ?? true,
+                      (действие.request.httpMethod ?? "GET").uppercased() == "GET",
+                      let адрес = действие.request.url,
+                      let откуда = webView.url,
+                      Config.deepLink(адрес) != nil, Config.deepLink(откуда) != nil,
+                      !ОкноEgov.этоEgov(откуда) else { return false }
+                /* Страницы оплаты и сделки (pay.php, escrow.php) — свой поток сайта, их ссылки не трогаем. */
+                let путьОткуда = откуда.path.lowercased()
+                let денежные = ["pay", "escrow", "payout", "topup"]
+                if денежные.contains(where: { путьОткуда.contains($0) }) { return false }
+                return ПереходыКабинета.своимЭкраном(адрес, egov: false, объявление: true)
+            }
         }
 
         // target="_blank" → открыть в этом же WebView (иначе ссылка «проглатывается»).

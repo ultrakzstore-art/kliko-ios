@@ -283,13 +283,13 @@ struct ЭкранВхода: View {
             }
             Button(т("close"), role: .cancel) {}
         case .удалён:
-            Button(т("deleted_support")) { наСайт(Config.url("/support.php?topic=access")) }
+            Button(т("deleted_support")) { вПоддержку("access") }
             Button(т("close"), role: .cancel) {}
         case .восстановление:
             if eGovВключён {
                 Button(т("reg_recover_egov")) { eGov("cabinet.php?egov=1") }
             } else {
-                Button(т("rec_support")) { наСайт(Config.url("/support.php?topic=access")) }
+                Button(т("rec_support")) { вПоддержку("access") }
             }
             Button(т("close"), role: .cancel) {}
         }
@@ -443,6 +443,12 @@ struct ЭкранВхода: View {
         guard let адрес else { return }
         закрыть()
         открыть(адрес)
+    }
+
+    /// Своя форма обращения (support.php?topic=) — после того, как этот экран закроется.
+    private func вПоддержку(_ тема: String) {
+        закрыть()
+        ПоддержкаПоверх.показать(тема: тема, задержка: 450_000_000)
     }
 
     /// TestFlight 1.10: eGov — листом поверх этого экрана (ОкноEgov), а не вкладкой сайта; удача — как вход паролем.
