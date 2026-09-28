@@ -198,6 +198,10 @@ struct МоёОбъявление: Identifiable, Equatable {
     var склад: Int = 0
     /// sample: демо-объявление — другой набор кнопок.
     var образец: Bool = false
+    /// Для масс-редактора («Таблицей», _ADVT_F сайта): condition ("new" / иное — б/у), city, warranty_days.
+    var состояние: String = ""
+    var город: String = ""
+    var гарантия: Int = 0
 
     init(id: String) {
         self.id = id
@@ -239,6 +243,9 @@ struct МоёОбъявление: Identifiable, Equatable {
         следующееПоднятие = A.число(j["next_free_bump"])
         склад = A.целое(j["stock"])
         образец = A.да(j["sample"])
+        состояние = A.строка(j["condition"])
+        город = A.строка(j["city"])
+        гарантия = A.целое(j["warranty_days"])
         if let с = j["stats"] as? [String: Any] {
             статистика = Self.статистика(с)
         }

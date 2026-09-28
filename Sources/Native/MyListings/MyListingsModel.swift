@@ -58,6 +58,8 @@ final class МоиОбъявленияМодель: ObservableObject {
     @Published private(set) var слоты: СлотыОбъявлений? = nil
     @Published private(set) var работа: [МояРабота] = []
     @Published private(set) var кабинет: КабинетСайта.Состояние? = nil
+    /// Режим «Выбрать» и масс-редактор: что разрешено этому кабинету (MyListingsBulk.swift).
+    @Published private(set) var массовые = ПраваМассовых()
     @Published private(set) var загрузка: Загрузка = .нет
     @Published var вкладка: ВкладкаОбъявлений = .published {
         didSet { UserDefaults.standard.set(вкладка.rawValue, forKey: Self.ключВкладки) }
@@ -124,7 +126,9 @@ final class МоиОбъявленияМодель: ObservableObject {
         if товары.isEmpty { загрузка = .идёт }
         do {
             if страницу {
-                let страница = try await КабинетСайта.состояние()
+                /* Та же страница кабинета, но с текстом: из него — права масс-редактора (IS_PRO, PRO_TIER_CUR). */
+                let прочитано = try await КабинетСайта.страницаКабинета()
+                let страница = прочитано.состояние
                 guard моё == поколение else { return }
                 if страница.вошёл == false {
                     сброситьДанные()
@@ -141,6 +145,7 @@ final class МоиОбъявленияМодель: ObservableObject {
                     uid = страница.uid
                 }
                 кабинет = страница
+                массовые = ПраваМассовых(прочитано.html)
                 МоиОбъявленияAPI.запомнитьТокен(страница.csrf)
             }
             guard let j = try await МоиОбъявленияAPI.получить("cabinet.php?action=my_items") else {
@@ -620,8 +625,8 @@ final class МоиОбъявленияМодель: ObservableObject {
         return текст.isEmpty ? запасной : текст
     }
 
-    /// Сервер сказал «сессии нет» — данные прочь, экран предлагает войти.
-    private func нуженВход() {
+    /// Сервер сказал «сессии нет» — данные прочь, экран предлагает войти (зовёт и масс-редактор).
+    func нуженВход() {
         сброситьДанные()
         загрузка = .нуженВход
     }
@@ -635,6 +640,8 @@ final class МоиОбъявленияМодель: ObservableObject {
         слоты = nil
         работа = []
         кабинет = nil
+        массовые = ПраваМассовых()
+        МассовыйРедактор.shared.сбросить()
         uid = ""
         окно = nil
         занято = []
