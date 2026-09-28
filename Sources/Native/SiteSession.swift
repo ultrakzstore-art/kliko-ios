@@ -58,7 +58,11 @@ enum SiteSession {
     /// CSRF-токен загруженной страницы (этап 35). Страница не загружена или токена нет — nil.
     @MainActor
     static func csrf() async -> String? {
-        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else { return nil }
+        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else {
+            /* Config.нативнаяСессия: страница ещё не загрузилась — токен со страницы кабинета через URLSession. */
+            if Config.нативнаяСессия { return await состояниеБезСтраницы().csrf }
+            return nil
+        }
         let js = "(function(){try{return " + jsТокена + ";}catch(e){return '';}})()"
         guard let строка = try? await web.evaluateJavaScript(js) as? String else { return nil }
         let токен = строка.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,7 +72,10 @@ enum SiteSession {
     /// Вошёл ли человек и его CSRF-токен — спрашиваем у загруженной страницы.
     @MainActor
     static func состояние() async -> Состояние {
-        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else { return Состояние(вошёл: nil, csrf: nil) }
+        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else {
+            if Config.нативнаяСессия { return await состояниеБезСтраницы() }
+            return Состояние(вошёл: nil, csrf: nil)
+        }
         /* v: 1 — вошёл, 0 — гость, -1 — признаков нет (см. шапку). _MK_AUTH у сайта — число 0/1. */
         let js = "(function(){try{var u=window.KlikoUser,id=(u&&u.id!=null)?String(u.id):'';"
             + "var a=(typeof _MK_AUTH!=='undefined')?((_MK_AUTH&&_MK_AUTH!=='0')?1:0):-1;"
@@ -92,5 +99,38 @@ enum SiteSession {
         }
         let номер = (словарь["m"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return Состояние(вошёл: вошёл, csrf: c, пользователь: вошёл == true && !номер.isEmpty ? номер : nil)
+    }
+
+    // MARK: - Config.нативнаяСессия: пока страница не загрузилась
+
+    /// Идущее чтение страницы кабинета — одновременные вызовы ждут его, а не качают страницу заново.
+    @MainActor private static var чтениеБезСтраницы: Task<Состояние, Never>?
+    /// Последний ответ «вошёл» и когда он получен: 20 с не перечитываем.
+    @MainActor private static var последнееБезСтраницы: Состояние?
+    @MainActor private static var когдаБезСтраницы: Date = .distantPast
+
+    /**
+     Страница под слоем ещё не загрузилась (запуск приложения) — «вошёл», токен и номер со страницы кабинета: GET
+     /kz/<язык>/cabinet.php через URLSession с куками WebKit (КабинетСайта.состояние, ждать: false). Не вышло — «не
+     знаем» (nil), как раньше. Только при Config.нативнаяСессия.
+     */
+    @MainActor
+    private static func состояниеБезСтраницы() async -> Состояние {
+        if let последнее = последнееБезСтраницы, Date().timeIntervalSince(когдаБезСтраницы) < 20 { return последнее }
+        if let идёт = чтениеБезСтраницы { return await идёт.value }
+        let задача = Task { @MainActor () -> Состояние in
+            guard let с = try? await КабинетСайта.состояние(ждать: false) else { return Состояние(вошёл: nil, csrf: nil) }
+            let токен: String? = с.csrf.isEmpty ? nil : с.csrf
+            let номер: String? = (с.вошёл == true && !с.uid.isEmpty) ? с.uid : nil
+            return Состояние(вошёл: с.вошёл, csrf: токен, пользователь: номер)
+        }
+        чтениеБезСтраницы = задача
+        let итог = await задача.value
+        чтениеБезСтраницы = nil
+        if итог.вошёл == true {
+            последнееБезСтраницы = итог
+            когдаБезСтраницы = Date()
+        }
+        return итог
     }
 }

@@ -120,24 +120,26 @@ enum ИмпортAPI {
             if let файл {
                 сырьёФайла = ["field": файл.поле, "name": файл.имя, "type": файл.тип, "b64": файл.base64]
             }
-            let web = try await страница()
-            let аргументы: [String: Any] = ["u": путь(хвост), "fields": все, "file": сырьёФайла]
-            let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
-                web.callAsyncJavaScript(скриптФормы, arguments: аргументы, in: nil, in: .defaultClient) { итог in
-                    switch итог {
-                    case .success(let значение):
-                        продолжение.resume(returning: (значение as? String) ?? "")
-                    case .failure(let ошибка):
-                        продолжение.resume(throwing: ошибка)
-                    }
+            /* Config.нативнаяСессия: сначала URLSession (NativeCabinetTransport.swift). Сессию не узнали или связь
+               оборвалась до отправки — прежним путём, через страницу. После отправки не повторяем: разбор тратит квоту
+               Kliko AI, публикация создаёт черновики. */
+            var нативный: String? = nil
+            if Config.нативнаяСессия, let поляФормы = поляНативно(все, файл) {
+                switch await НативныйТранспортКабинета.форма(путь(хвост), поля: поляФормы) {
+                case .ответ(_, let т):
+                    нативный = т
+                case .сеть(let отправлен):
+                    if отправлен { throw Сбой.сеть }
+                case .черезСтраницу:
+                    break
                 }
             }
-            guard let данные = сырой.data(using: .utf8),
-                  let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
-                throw Сбой.приложение
+            let текст: String
+            if let нативный {
+                текст = нативный
+            } else {
+                текст = try await формаСтраницей(путь(хвост), поля: все, файл: сырьёФайла)
             }
-            if let сбой = объект["e"] as? String { throw сбой == "net" ? Сбой.сеть : Сбой.приложение }
-            let текст = (объект["t"] as? String) ?? ""
             guard let тело = текст.data(using: .utf8),
                   let j = (try? JSONSerialization.jsonObject(with: тело)) as? [String: Any] else { return nil }
             if A.строка(j["error"]) == "csrf" && !повторили {
@@ -147,6 +149,45 @@ enum ИмпортAPI {
             }
             return j
         }
+    }
+
+    /// Прежний путь: fetch с FormData изнутри страницы сайта. Итог — текст ответа.
+    private static func формаСтраницей(_ u: String, поля: [String: String], файл: [String: String]) async throws -> String {
+        let web = try await страница()
+        let аргументы: [String: Any] = ["u": u, "fields": поля, "file": файл]
+        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
+            web.callAsyncJavaScript(скриптФормы, arguments: аргументы, in: nil, in: .defaultClient) { итог in
+                switch итог {
+                case .success(let значение):
+                    продолжение.resume(returning: (значение as? String) ?? "")
+                case .failure(let ошибка):
+                    продолжение.resume(throwing: ошибка)
+                }
+            }
+        }
+        guard let данные = сырой.data(using: .utf8),
+              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+            throw Сбой.приложение
+        }
+        if let сбой = объект["e"] as? String { throw сбой == "net" ? Сбой.сеть : Сбой.приложение }
+        return (объект["t"] as? String) ?? ""
+    }
+
+    /// Поля FormData для URLSession: как скрипт формы (csrf первым, файл последним, имя «file» и тип
+    /// application/octet-stream по умолчанию). Файл не раскодировался — nil, тогда прежним путём.
+    private static func поляНативно(_ поля: [String: String], _ файл: Файл?) -> [НативныйТранспортКабинета.ПолеФормы]? {
+        var итог: [НативныйТранспортКабинета.ПолеФормы] = []
+        if let csrf = поля["csrf"] { итог.append(.текст(имя: "csrf", значение: csrf)) }
+        for ключ in поля.keys.sorted() where ключ != "csrf" {
+            итог.append(.текст(имя: ключ, значение: поля[ключ] ?? ""))
+        }
+        if let файл, !файл.base64.isEmpty {
+            guard let байты = Data(base64Encoded: файл.base64, options: .ignoreUnknownCharacters) else { return nil }
+            let тип = файл.тип.isEmpty ? "application/octet-stream" : файл.тип
+            let имя = файл.имя.isEmpty ? "file" : файл.имя
+            итог.append(.файл(имя: файл.поле, файл: имя, тип: тип, данные: байты))
+        }
+        return итог
     }
 
     /// _aiPost сайта: FormData {csrf, payload: JSON(payload + csrf)}.
