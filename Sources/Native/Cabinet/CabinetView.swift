@@ -1069,7 +1069,7 @@ enum ДанныеТелефона {
         }
     }
 
-    /// Тот же запрос, что при первом запуске (AppDelegate): разрешили — регистрируемся в APNs, токен уйдёт в веб-сессию.
+    /// Тот же запрос, что после входа (РазрешениеПушей): разрешили — регистрируемся в APNs, токен уйдёт в веб-сессию.
     static func попроситьУведомления() async {
         let центр = UNUserNotificationCenter.current()
         let разрешили = (try? await центр.requestAuthorization(options: [.alert, .badge, .sound])) ?? false

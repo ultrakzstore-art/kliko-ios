@@ -1,7 +1,7 @@
 import UIKit
 import UserNotifications
 
-/// APNs: спрашиваем разрешение, регистрируемся, отдаём токен в WebBridge (он зальёт его
+/// APNs: регистрируемся (разрешение спрашивает РазрешениеПушей после входа), отдаём токен в WebBridge (он зальёт его
 /// в веб-сессию → api/push_register.php привяжет к юзеру). По тапу на пуш открываем нужный
 /// экран внутри PWA (deep-link). Категории (чат / подписка на объявление / новости-акции)
 /// различает сервер полем "url" в payload — клиент просто ведёт туда.
@@ -30,24 +30,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if Config.цифровыеПокупки {
             Task { @MainActor in ПокупкиApple.shared.запустить() }
         }
-        requestPushAuthorization()
+        /* Окно разрешения — после входа (РазрешениеПушей.послеВхода); здесь только регистрация, если уже разрешено. */
+        РазрешениеПушей.приЗапуске()
         // Холодный старт по тапу на уведомление.
         if let notif = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             handlePayload(notif)
         }
         return true
-    }
-
-    /// Разрешение на пуши (первый запуск). Разрешили → регистрируемся в APNs.
-    func requestPushAuthorization() {
-        #if DEBUG
-        /* Съёмка экранов в CI (этап 23): системное окно разрешения закрывало бы ленту на снимке. */
-        if UserDefaults.standard.bool(forKey: "klikoNoPushPrompt") { return }
-        #endif
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-            guard granted else { return }
-            DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
-        }
     }
 
     func application(_ application: UIApplication,
