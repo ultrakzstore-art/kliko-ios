@@ -147,8 +147,12 @@ enum Theme {
     /// Своё сообщение (.kc-msg.me): --kc-acc = --mk-bright #16a34a; в тёмной — --acc-on #5cd39a под 44 % чёрного
     /// (linear-gradient(rgba(0,0,0,.44)…) — #337656: белый текст на нём читается.
     static let пузырьМой = цвет(0x16A34A, 0x337656)
-    /// Чужое сообщение (.kc-msg.peer): --kc-peer = --mk-surf2.
-    static let пузырьЧужой = цвет(0xF4F8F6, 0x1C1C26)
+    /// Чужое сообщение (.kc-msg.peer): --kc-peer = --mk-surf2, в тёмной — #1f2a24 (chat.min.css).
+    static let пузырьЧужой = цвет(0xF4F8F6, 0x1F2A24)
+    /// Поле ввода переписки (.kc-field): --kc-soft #f6faf8, в тёмной #1a221d.
+    static let полеПереписки = цвет(0xF6FAF8, 0x1A221D)
+    /// Кромка поля переписки: --kc-line #e6efe9, в тёмной #243029.
+    static let кромкаПоляПереписки = цвет(0xE6EFE9, 0x243029)
     /// Счётчик непрочитанных в списке диалогов: --kc-unread #ef4444.
     static let непрочитано = Color(uiColor: hex(0xEF4444))
 

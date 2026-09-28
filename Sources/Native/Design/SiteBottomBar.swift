@@ -34,7 +34,11 @@ struct НижняяПанельСайта: View {
     /// Лента на главной: первая кнопка — «Категории», иначе «Главная».
     let главная: Bool
     let непрочитано: Int
+    /// Счётчик на «Избранном» (.ulx-bb-badge у #ulxbb-fav); 0 — без счётчика.
+    let избранных: Int
     let показатьИзбранное: Bool
+    /// Экран «Категории» (html.mk-cats): первая кнопка — «Главная» со стрелкой назад в зелёной пилюле (.ulx-bb-v-back).
+    let назад: Bool
     let выбрать: (Пункт) -> Void
     /// Кнопка камеры; nil — адреса подачи нет, и кнопки нет.
     let камера: (() -> Void)?
@@ -51,12 +55,14 @@ struct НижняяПанельСайта: View {
 
     /// Явный init, как у ListingCard: панель создаёт другой файл (NativeTabsView), и поэлементный init не должен
     /// зависеть от того, появится ли здесь закрытое свойство.
-    init(выбран: Пункт?, главная: Bool, непрочитано: Int, показатьИзбранное: Bool,
-         выбрать: @escaping (Пункт) -> Void, камера: (() -> Void)?) {
+    init(выбран: Пункт?, главная: Bool, непрочитано: Int, избранных: Int = 0, показатьИзбранное: Bool,
+         назад: Bool = false, выбрать: @escaping (Пункт) -> Void, камера: (() -> Void)?) {
         self.выбран = выбран
         self.главная = главная
         self.непрочитано = непрочитано
+        self.избранных = избранных
         self.показатьИзбранное = показатьИзбранное
+        self.назад = назад
         self.выбрать = выбрать
         self.камера = камера
     }
@@ -95,10 +101,10 @@ struct НижняяПанельСайта: View {
 
     private var ряд: some View {
         HStack(alignment: .center, spacing: 2) {
-            пункт(.категории, значок: главная ? "square.grid.2x2" : "house",
-                  подпись: DesignText.т(главная ? "categories" : "home"))
+            пункт(.категории, значок: главная && !назад ? "square.grid.2x2" : "house",
+                  подпись: DesignText.т(главная && !назад ? "categories" : "home"))
             if показатьИзбранное {
-                пункт(.избранное, значок: "heart", подпись: DesignText.т("favorites"))
+                пункт(.избранное, значок: "heart", подпись: DesignText.т("favorites"), счёт: избранных)
             }
             if let камера {
                 кнопкаКамеры(камера)
@@ -109,21 +115,43 @@ struct НижняяПанельСайта: View {
     }
 
     private func пункт(_ п: Пункт, значок: String, подпись: String, счёт: Int = 0) -> some View {
-        let активен = выбран == п
+        let стрелка = назад && п == .категории
+        let активен = выбран == п && !стрелка
+        let вес: Font.Weight = стрелка ? .heavy : (активен ? .bold : .semibold)
+        let цвет: Color = стрелка ? Theme.цвет(0x0F5132, 0x5CD39A) : (активен ? Theme.акцент : Theme.панельПункт)
+        let значение: String
+        if счёт <= 0 {
+            значение = ""
+        } else if п == .избранное {
+            значение = String(счёт)
+        } else {
+            значение = String(format: DesignText.т("unread"), счёт)
+        }
         return Button {
             нажатий += 1
             выбрать(п)
         } label: {
             VStack(spacing: 3) {
-                Image(systemName: активен ? значок + ".fill" : значок)
-                    .font(.system(size: 19, weight: активен ? Font.Weight.semibold : Font.Weight.regular))
-                    .frame(height: 22)
+                if стрелка {
+                    Image(systemName: "arrow.backward")
+                        .flipsForRightToLeftLayoutDirection(true)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 34, height: 26)
+                        .background(Self.градиентНазад, in: Capsule())
+                        .shadow(color: Color(uiColor: Theme.hex(0x0F5132)).opacity(0.4), radius: 4, x: 0, y: 4)
+                        .frame(height: 22)
+                } else {
+                    Image(systemName: активен ? значок + ".fill" : значок)
+                        .font(.system(size: 19, weight: активен ? Font.Weight.semibold : Font.Weight.regular))
+                        .frame(height: 22)
+                }
                 Text(подпись)
-                    .font(.system(size: 10.5, weight: активен ? Font.Weight.bold : Font.Weight.semibold))
+                    .font(.system(size: 10.5, weight: вес))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            .foregroundStyle(активен ? Theme.акцент : Theme.панельПункт)
+            .foregroundStyle(цвет)
             .frame(maxWidth: .infinity)
             .frame(height: Self.высотаКапсулы - 10)
             .background {
@@ -149,7 +177,7 @@ struct НижняяПанельСайта: View {
         }
         .buttonStyle(НажатиеПанелиСайта())
         .accessibilityLabel(подпись)
-        .accessibilityValue(счёт > 0 ? String(format: DesignText.т("unread"), счёт) : "")
+        .accessibilityValue(значение)
         .accessibilityAddTraits(активен ? .isSelected : [])
     }
 
@@ -164,8 +192,13 @@ struct НижняяПанельСайта: View {
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.9))
         .frame(width: 58)
         .accessibilityLabel(DesignText.т("post"))
-        .accessibilityHint(DesignText.т("on_site"))
+        .accessibilityHint(Config.нативнаяПодача ? "" : DesignText.т("on_site"))
     }
+
+    /// .ulx-bb-v-back: linear-gradient(145deg, #1d7d4a, #0f5132).
+    private static let градиентНазад = LinearGradient(
+        colors: [Color(uiColor: Theme.hex(0x1D7D4A)), Color(uiColor: Theme.hex(0x0F5132))],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
 /**

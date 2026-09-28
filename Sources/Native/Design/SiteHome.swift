@@ -24,7 +24,7 @@ import UIKit
      («Вакансии и резюме»), у светлой пусто; пока ответа нет — мерцающая полоска;
    · слайдов баннера четыре (перенос, продажа, торг, «Деньги ждут у нас»), порядок тасуется раз за загрузку, нажатие
      открывает лист со сведениями (hpOpen) — кнопки листа ведут на страницы сайта, денег нигде нет;
-   · ряд «Работа» — вакансии jobs.items (mhCardJob), их открывает сайт: своего экрана вакансий у приложения нет;
+   · ряд «Работа» — вакансии jobs.items (mhCardJob), их открывает своё окно вакансий (ОкноВакансий);
    · порядок рядов тасуется при каждой загрузке (mkHomeRender), ширина карточки — (W − 32 − 20) / 2,2, как .mh-rs.
  */
 struct РазделГлавной: Identifiable, Hashable {
@@ -38,7 +38,7 @@ struct РазделГлавной: Identifiable, Hashable {
     /// Картинка плитки с сайта — MK_CATPIC: /img/cat-<раздел>.webp, 320 px. Малая (-s, 200 px) на экране 3× мылится.
     var картинка: URL? { Config.url("/img/cat-\(ключ).webp?v=1789893153") }
 
-    /// «Работа»: её объявления — вакансии (api/jobs.php у сайта), нативного экрана для них нет — открывает сайт.
+    /// «Работа»: её объявления — вакансии (api/jobs.php у сайта), их показывает своё окно (ОкноВакансий).
     var вакансии: Bool { ключ == "jobs" }
 
     /// Значок раздела в полосе разделов под шапкой (.mk-vchip-ic) — ближайший SF Symbol к SVG сайта.
@@ -108,8 +108,6 @@ final class ПодборкиГлавной: ObservableObject {
     @Published private(set) var устарело = false
     /// Этап 49: шесть плиток из семи в случайном порядке (MK_HOME_V сервера и _mhHubShuffle сайта).
     @Published private(set) var плитки: [РазделГлавной] = ПодборкиГлавной.новыеПлитки()
-    /// Этап 49: названия подразделов у карточек техники (_mxKind: mkCatName раздела) — со страницы сайта, на её языке.
-    @Published private(set) var подразделы: [String: String] = [:]
     /// Этап 49: слайды баннера в случайном порядке — mhBannerInit тасует их раз за загрузку страницы.
     let слайды: [БаннерГлавной.Слайд] = БаннерГлавной.слайды.shuffled()
 
@@ -288,29 +286,9 @@ final class ПодборкиГлавной: ObservableObject {
         return Array(вакансии.filter { были.insert($0.id).inserted }.prefix(вРяду))
     }
 
-    /// Этап 49: подпись подраздела у карточек техники (_mxKind — mkCatName раздела объявления) — у загруженной страницы
-    /// сайта, на её языке. Страница ещё не загружена — спросим, когда догрузится (NativeFeedView зовёт снова).
-    func спроситьПодразделы() {
-        var нужны = Set<String>()
-        for ряд in ряды where ряд.раздел.ключ == "electronics" {
-            for товар in ряд.товары {
-                if let раздел = товар.категория, подразделы[раздел] == nil { нужны.insert(раздел) }
-            }
-        }
-        for товар in вип where ВидКарточкиГлавной(товара: товар) == .техника {
-            if let раздел = товар.категория, подразделы[раздел] == nil { нужны.insert(раздел) }
-        }
-        guard !нужны.isEmpty else { return }
-        let список = Array(нужны)
-        Task { @MainActor [weak self] in
-            let имена = await SiteSession.названияРазделов(список)
-            guard let self, !имена.isEmpty else { return }
-            /* Имя, совпадающее с ключом, сайт не показывает (r !== n в _mxKind). */
-            var годные: [String: String] = [:]
-            for (раздел, имя) in имена where имя != раздел { годные[раздел] = имя }
-            self.подразделы.merge(годные) { _, новое in новое }
-        }
-    }
+    /// Этап 49 спрашивал подписи подразделов у страницы сайта; теперь не нужно — карточки ряда ListingCard.
+    /// Подпись снова понадобится — брать из ИменаРазделовСайта.запасные, не из WebView.
+    func спроситьПодразделы() {}
 
     // MARK: - По разделам (этап 26)
 
@@ -396,7 +374,12 @@ struct ПлиткиГлавной: View {
     let выбрать: (РазделГлавной) -> Void
     let открыть: (URL) -> Void
 
-    private static let верх: CGFloat = 104
+    /// Верхние строки: clamp(86px, calc((42svh − 44px) / 3), 118px) — от высоты экрана (SE 86, 844 — 103,5,
+    /// Pro Max 115,8). GeometryReader здесь нельзя: сетка внутри вертикальной прокрутки.
+    @MainActor private var верх: CGFloat {
+        let экран = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.bounds.height ?? 844
+        return min(118, max(86, (экран * 0.42 - 44) / 3))
+    }
     private static let низ: CGFloat = 88
     private static let зазор: CGFloat = 10
 
@@ -416,10 +399,10 @@ struct ПлиткиГлавной: View {
             HStack(spacing: Self.зазор) {
                 БаннерГлавной(слайды: слайды, открыть: открыть)
                     .frame(maxWidth: .infinity)
-                    .frame(height: Self.верх * 2 + Self.зазор)
+                    .frame(height: верх * 2 + Self.зазор)
                 VStack(spacing: Self.зазор) {
-                    плитка(0, сплошная: true, высота: Self.верх)
-                    плитка(1, сплошная: true, высота: Self.верх)
+                    плитка(0, сплошная: true, высота: верх)
+                    плитка(1, сплошная: true, высота: верх)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -493,8 +476,8 @@ struct ПлиткаРаздела: View {
                 }
                 .frame(width: размерКартинки, height: размерКартинки)
                 .shadow(color: Color(red: 10 / 255, green: 28 / 255, blue: 20 / 255).opacity(0.26), radius: 6, x: 0, y: 6)
-                .padding(.trailing, 6)
-                .padding(.bottom, 4)
+                .padding(.trailing, сплошная ? 8 : 6)
+                .padding(.bottom, сплошная ? 6 : 3)
                 .accessibilityHidden(true)
                 подписи
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -517,7 +500,6 @@ struct ПлиткаРаздела: View {
         .buttonStyle(НажатиеСайта())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(голос)
-        .accessibilityHint(раздел.вакансии ? DesignText.т("on_site") : "")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -525,6 +507,7 @@ struct ПлиткаРаздела: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(название)
                 .font(сплошная ? Font.system(.callout, weight: .heavy) : Font.system(.subheadline, weight: .heavy))
+                .tracking(сплошная ? -0.16 : -0.225)
                 .foregroundStyle(сплошная ? Color.white : Theme.текст)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
@@ -532,9 +515,9 @@ struct ПлиткаРаздела: View {
         }
         /* .mh-hub>.mh-tile:not(.is-prio){padding:var(--m-4) var(--m-5)} — у светлых плиток отступ как у сплошных:
            владелец 26.09.2026 — «Товары, Услуги … слишком приподняты и зажаты к верху плашек». */
-        .padding(.leading, сплошная ? 16 : 18)
+        .padding(.leading, сплошная ? 14 : 18)
         .padding(.trailing, сплошная ? 14 : 58)          // has-pic: у светлой плитки название не заходит на картинку
-        .padding(.vertical, сплошная ? 14 : 16)
+        .padding(.vertical, сплошная ? 12 : 16)
     }
 
     /// .mh-tile-n: число — «N предложений» (у «Работы» — «N вакансий»); ноль — у сплошной подпись раздела (is-sub), у
@@ -550,7 +533,7 @@ struct ПлиткаРаздела: View {
             .padding(.top, 1)
         } else if let счёт, счёт > 0 {
             Text(раздел.вакансии ? DesignText.вакансий(счёт) : DesignText.предложений(счёт))
-                .font(.system(size: сплошная ? 12 : 11, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(цветСчёта)
                 .lineLimit(1)
         } else if сплошная {
@@ -564,8 +547,8 @@ struct ПлиткаРаздела: View {
 
     private var тёмная: Bool { схема == .dark }
     private var краска: UIColor { Theme.hex(раздел.краска) }
-    /// Картинка: у верхних — 64 % высоты плитки, у нижних — 84 % (is-photo, height:88% за вычетом отступа).
-    private var размерКартинки: CGFloat { высота * (сплошная ? 0.64 : 0.84) }
+    /// Картинка: у верхних — 64 % высоты плитки, у нижних — 88 % (is-photo).
+    private var размерКартинки: CGFloat { высота * (сплошная ? 0.64 : 0.88) }
 
     /// linear-gradient(150deg, …) плитки: светлая — от 22 % краски к 7 % на поверхности (в тёмной 26 % → 14 %),
     /// сплошная — от краски, подмешанной к белому, к краске, притушенной почти чёрным.
@@ -700,7 +683,8 @@ struct БаннерГлавной: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(заголовок)
-                        .font(.system(size: 19, weight: .heavy))
+                        .font(.system(size: 21, weight: .heavy))
+                        .tracking(-0.42)
                         .foregroundStyle(Color.white)
                         .lineLimit(3)
                         .minimumScaleFactor(0.75)
@@ -711,22 +695,23 @@ struct БаннерГлавной: View {
                         .minimumScaleFactor(0.85)
                     HStack(spacing: 4) {
                         Text(DesignText.т("bn_\(слайд.id)_b"))
+                            .tracking(-0.12)
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                         Image(systemName: "chevron.right")
                             .flipsForRightToLeftLayoutDirection(true)
-                            .font(.system(size: 10, weight: .heavy))
+                            .font(.system(size: 12, weight: .heavy))
                     }
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Color(uiColor: краска))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .background(Color.white, in: Capsule())
-                    .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 4)
-                    .padding(.top, 6)
+                    // .mh-bn-b: box-shadow 0 6px 16px -8px rgba(6,20,12,.55); отступ 8 + зазор 4 = 12
+                    .shadow(color: Color(red: 6 / 255, green: 20 / 255, blue: 12 / 255).opacity(0.3), radius: 5, x: 0, y: 5)
+                    .padding(.top, 8)
                 }
                 .padding(16)
-                .padding(.bottom, 6)
             }
         }
         .buttonStyle(НажатиеСайта())
@@ -1070,8 +1055,8 @@ struct РядГлавной<Карточка: View>: View {
                 .padding(.horizontal, 16)
                 /* Владелец 25.09.2026, проверка на телефоне, сборка 33: прокрутка обрезает всё, что за её краем, и тень
                    карточек (до ~9 pt вниз) срезалась в 4 pt под ними ровной полосой. Снизу место под тень — внутри
-                   прокрутки, а внешний отступ меньше на столько же: ряд той же высоты. */
-                .padding(.top, 4)
+                   прокрутки, а внешний отступ меньше на столько же: ряд той же высоты. Сверху 8 (.mh-rh) + 2 (.mh-rs). */
+                .padding(.top, 10)
                 .padding(.bottom, 14)
             }
         }
@@ -1087,7 +1072,8 @@ struct РядГлавной<Карточка: View>: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(название)
-                .font(.system(.title3, weight: .heavy))
+                .font(.system(size: 19, weight: .heavy))
+                .tracking(-0.19)
                 .foregroundStyle(Theme.текст)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
@@ -1103,17 +1089,17 @@ struct РядГлавной<Карточка: View>: View {
                     Text(DesignText.т("row_all"))
                     Image(systemName: "chevron.right")
                         .flipsForRightToLeftLayoutDirection(true)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                 }
-                .font(.system(.subheadline, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(цветСсылки)
                 .frame(height: 32)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(DesignText.т("row_all") + ": " + название)
-            .accessibilityHint(раздел.вакансии ? DesignText.т("on_site") : "")
         }
+        .frame(minHeight: 40)          // .mh-rh: min-height var(--vx-h)
     }
 
     /// «26 предложений», у «Работы» — «3 вакансии» (_mhCount(n, jobs)).

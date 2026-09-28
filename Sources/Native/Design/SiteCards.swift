@@ -442,7 +442,7 @@ extension View {
     }
 
     /**
-     «Поделиться» на карточке ленты — .mk-cshare сайта (этап 49): кружок 32 pt из поверхности 90 % под сердцем (46 pt от
+     «Поделиться» на карточке ленты — .mk-cshare сайта (этап 49): кружок 32 pt из поверхности 82 % под сердцем (46 pt от
      верха, 8 от края), стрелка из квадрата серым. Нажатие — системный лист: ссылка на объявление и ««Название» — цена»,
      как текст mkShare. Слой над карточкой, а не внутри ссылки — как сердечкоИзбранного. Не вид сайта — ничего.
      */
@@ -451,15 +451,15 @@ extension View {
             if Config.дизайнКакНаСайте, товар.адрес != nil {
                 Button { ЛистПоделитьсяСайта.показать(товар) } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.текстВторой)
                         .frame(width: 32, height: 32)
-                        .background(Theme.поверхность.opacity(0.9), in: Circle())
+                        .background(Theme.поверхность.opacity(0.82), in: Circle())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.85))
                 .padding(.top, 40)
                 .accessibilityLabel(FeedText.т("share"))
             }
@@ -1411,23 +1411,23 @@ struct ПустаяВыдачаСайта: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 40, weight: .regular))
+                .font(.system(size: 44, weight: .regular))
                 .foregroundStyle(Theme.текстВторой.opacity(0.5))
                 .padding(.bottom, 12)
                 .accessibilityHidden(true)
             Text(FeedText.т("empty"))
-                .font(.system(.title3, weight: .bold))
+                .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(Theme.текст)
                 .padding(.bottom, 6)
             if !запрос.isEmpty {
                 Text("«" + запрос + "»")
-                    .font(.system(.body, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .padding(.top, 4)
                     .padding(.bottom, 8)
             }
             Text(DesignText.т("empty_sub"))
-                .font(.subheadline)
+                .font(.system(size: 14))
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 20)
@@ -1459,7 +1459,7 @@ struct ПустаяВыдачаСайта: View {
         if let сохранить {
             Button(action: сохранить) {
                 Label(SavedSearchText.т(сохранён ? "saved" : "save"), systemImage: сохранён ? "bell.fill" : "bell")
-                    .font(.system(.subheadline, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
@@ -1471,10 +1471,10 @@ struct ПустаяВыдачаСайта: View {
             /* .mk-empty-post: без заливки, текст --mk-green2, рамка 1,5 px цвета линии. */
             Button(action: спросить) {
                 Label(ListingLocationText.т("empty_post"), systemImage: "plus")
-                    .font(.system(.subheadline, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.зелёный2)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 24)
                     .padding(.vertical, 12)
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)

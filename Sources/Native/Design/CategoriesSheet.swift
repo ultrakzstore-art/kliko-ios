@@ -473,15 +473,11 @@ private struct КореньКатегорийСайта: View {
         min(140, max(92, (экран * 0.5 - 44) / 3))
     }
 
-    // MARK: Шапка: «‹» и «Найти категорию» (.mh-csearch)
+    // MARK: Шапка: «Найти категорию» (.mh-csearch) во всю ширину — назад ведёт стрелка первой кнопки панели
 
     private var шапка: some View {
-        HStack(spacing: 4) {
-            КнопкаШапкиКатегорий(значок: "chevron.backward", подпись: КатегорииText.т("back"), действие: закрыть)
-            поле
-        }
-        .padding(.leading, 8)
-        .padding(.trailing, 16)
+        поле
+            .padding(.horizontal, 16)
     }
 
     private var поле: some View {
@@ -751,13 +747,14 @@ private struct ПлиткаКатегорийСайта: View {
     @ViewBuilder
     private var картинкаПлитки: some View {
         if let картинка {
-            let размер = min(высота * 0.72, 88)
+            // .mh-tile-art: 64 × 64, right 6, bottom 3
+            let размер: CGFloat = 64
             КартинкаЛенты(картинка, пунктов: размер, заполнить: false) {
                 Color.clear
             }
             .frame(width: размер, height: размер)
             .padding(.trailing, 6)
-            .padding(.bottom, 4)
+            .padding(.bottom, 3)
         } else {
             Image(systemName: значок)
                 .font(.system(size: 36, weight: .regular))
@@ -773,14 +770,14 @@ private struct ПлиткаКатегорийСайта: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(название)
                 .font(.system(size: 16, weight: .heavy))
-                .tracking(-0.16)
+                .tracking(-0.24)
                 .foregroundStyle(Theme.текст)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
                 .multilineTextAlignment(.leading)
             if числом {
                 Text(подпись)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(цветСчёта)
                     .lineLimit(1)

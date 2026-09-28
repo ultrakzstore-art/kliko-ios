@@ -112,9 +112,11 @@ struct ОблакоСайта: View {
     let моё: Bool
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        VStack(alignment: .trailing, spacing: 3) {
+            // .kc-msg: 14px, line-height 1.4
             Text(текст)
-                .font(.system(size: 16))
+                .font(.system(size: 14))
+                .lineSpacing(2.9)
                 .foregroundStyle(моё ? Color.white : Theme.текст)
                 .multilineTextAlignment(.leading)
                 .frame(minWidth: 0, alignment: .leading)
@@ -122,7 +124,7 @@ struct ОблакоСайта: View {
                 Text(время)
                     .font(.system(size: 11))
                     .monospacedDigit()
-                    .foregroundStyle(моё ? Color.white.opacity(0.72) : Theme.текстВторой)
+                    .foregroundStyle(моё ? Color.white.opacity(0.6) : Theme.текстВторой)
             }
         }
         .padding(.horizontal, 12)
@@ -194,30 +196,33 @@ struct ПолеПерепискиСайта: View {
     var подсказка: String? = nil
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        /* .kc-field: min-height 40, скругление 22, отступы 3 3 3 14; «Отправить» 32 × 32 — внутри поля. */
+        HStack(alignment: .bottom, spacing: 2) {
             TextField(подсказка ?? ChatText.т("placeholder"), text: $текст, axis: .vertical)
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.текст)
                 .lineLimit(1...5)
                 .focused(фокус)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(minHeight: 42)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .strokeBorder(фокус.wrappedValue ? Theme.зелёныйЯркий : Theme.линия, lineWidth: 1)
-                }
+                .padding(.vertical, 5)
             Button(action: отправить) {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.white)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 32, height: 32)
                     .background(Theme.пузырьМой, in: Circle())
                     .opacity(можно ? 1 : 0.5)
             }
             .disabled(!можно)
             .accessibilityLabel(ChatText.т("send"))
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 3)
+        .padding(.vertical, 3)
+        .frame(minHeight: 40)
+        .background(Theme.полеПереписки, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(фокус.wrappedValue ? Theme.зелёныйЯркий : Theme.кромкаПоляПереписки, lineWidth: 1)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

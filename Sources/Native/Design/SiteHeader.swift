@@ -60,7 +60,7 @@ struct ШапкаСайта<Справа: View, УПоиска: View, Снизу
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     логотип
                         .fixedSize()
@@ -76,8 +76,9 @@ struct ШапкаСайта<Справа: View, УПоиска: View, Снизу
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, сПолосой ? 8 : 14)
+            // .mk-topbar-in: 10 сверху и снизу, ряды через 8; полоса под шапкой добавляет свои 4/14
+            .padding(.top, 10)
+            .padding(.bottom, 10)
             снизу
         }
         .frame(maxWidth: .infinity)
@@ -134,9 +135,10 @@ struct ШапкаСайта<Справа: View, УПоиска: View, Снизу
     /// крестик, пока что-то набрано, и камера (.mk-cam-badge: 33 × 33 без подложки, серая #6b7f76).
     private var полеПоиска: some View {
         HStack(spacing: 8) {
+            // svg.mk-si 19 × 19, #90a499 в обеих темах
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Theme.текстВторой)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Color(uiColor: Theme.hex(0x90A499)))
                 .accessibilityHidden(true)
             TextField(подсказка, text: $текст,
                       prompt: Text(подсказка).foregroundColor(Theme.текстВторой))
@@ -174,7 +176,16 @@ struct ШапкаСайта<Справа: View, УПоиска: View, Снизу
         .frame(height: 38)
         .frame(maxWidth: .infinity)
         .background(Theme.полеПоиска, in: Capsule())
-        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 6)
+        // box-shadow 0 8px 20px -14px: отрицательный разброс — тень только снизу посередине, под белым полем
+        .background {
+            Capsule()
+                .fill(Color.black.opacity(0.65))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .offset(y: 8)
+                .blur(radius: 10)
+                .accessibilityHidden(true)
+        }
         .contentShape(Capsule())
     }
 }
@@ -314,6 +325,8 @@ struct ПолосаРазделовШапки: View {
 
     private func чип(ключ: String, подпись: String, значок: String, краска: UInt32) -> some View {
         let выбранный: Bool
+        // .mk-vchip--more: пунктирная кромка и белый 80 %
+        let ещё = ключ == Self.ключКатегорий
         switch ключ {
         case Self.ключАренды: выбранный = аренда
         case Self.ключКатегорий: выбранный = false
@@ -334,19 +347,23 @@ struct ПолосаРазделовШапки: View {
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(выбранный ? Color(uiColor: Theme.hex(краска)) : Color.white)
+            .foregroundStyle(выбранный ? Color(uiColor: Theme.hex(краска))
+                             : (ещё ? Color.white.opacity(0.8) : Color.white))
             .padding(.horizontal, 13)
             .frame(height: 38)
             .background(выбранный ? Color.white : (схема == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.12)),
                         in: Capsule())
             .overlay {
-                Capsule().strokeBorder(выбранный ? Color.white : Theme.шапкаКнопкаРамка, lineWidth: 1)
+                if ещё {
+                    Capsule().strokeBorder(Theme.шапкаКнопкаРамка, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                } else {
+                    Capsule().strokeBorder(выбранный ? Color.white : Theme.шапкаКнопкаРамка, lineWidth: 1)
+                }
             }
             .contentShape(Capsule())
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
         .accessibilityAddTraits(выбранный ? .isSelected : [])
-        .accessibilityHint(ключ == "jobs" ? DesignText.т("on_site") : "")
     }
 }
 
@@ -355,9 +372,10 @@ struct КругШапкиСайта: View {
     let значок: String
 
     var body: some View {
+        // У «Карты» в тёмной теме значок мятный #5cd39a и крупнее (svg 20 × 20)
         Image(systemName: значок)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(Color.white)
+            .font(.system(size: значок == "map" ? 18 : 16, weight: .semibold))
+            .foregroundStyle(значок == "map" ? Theme.цвет(0xFFFFFF, 0x5CD39A) : Color.white)
             .frame(width: 38, height: 38)
             .background(Theme.шапкаКнопка, in: Circle())
             .overlay {
