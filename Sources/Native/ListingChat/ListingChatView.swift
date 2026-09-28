@@ -280,7 +280,7 @@ struct ЭкранЧатаОбъявления: View {
     private var полосаСделки: some View {
         if модель.сделкаИдёт && !модель.сделка.isEmpty {
             ПолосаСделкиЧата(заголовок: ListingChatText.т("deal_live"), кнопка: ListingChatText.т("deal_open"),
-                             нажать: открытьСделку)
+                             нажать: открытьСделку, сделка: модель.сделка)
         } else if модель.согласовано > 0 && !(модель.безГаранта || модель.товар.безГаранта) {
             ПолосаСделкиЧата(заголовок: String(format: ListingChatText.т("agreed"), суммаСогласия),
                              кнопка: String(format: ListingChatText.т("deal_go"), суммаСогласия),
@@ -588,13 +588,21 @@ struct ПолосаСделкиЧата: View {
     let заголовок: String
     let кнопка: String
     let нажать: () -> Void
+    /// Номер идущей сделки: справа от заголовка — статус доставки из кэша отслеживания (без сети).
+    var сделка: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(заголовок)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(Theme.акцент)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(заголовок)
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(Theme.акцент)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !сделка.isEmpty {
+                    ПилюляТрекаСделки(сделка: сделка)
+                }
+            }
             Button(action: нажать) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.shield")

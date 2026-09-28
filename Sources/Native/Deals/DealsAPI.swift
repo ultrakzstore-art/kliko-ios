@@ -914,7 +914,39 @@ enum ЖиваяСделка {
             данные["counterpart"] = с.продавец ? с.имяПокупателя : с.имяПродавца
             данные["amountText"] = с.сумма > 0 ? СделкиФормат.тенге(с.сумма) : ""
             данные["etaText"] = ""
+            /* Отслеживание (Sources/Native/Tracking): статус курьера Яндекса или перевозчика — на плашке. */
+            if let трек = КэшТрека.прочитать(с.id), трек.содержательно, !трек.статус.конечный {
+                let фаза = трек.фазаКурьера
+                let части: [String] = фаза == nil ? [трек.название, трек.подпись] : [трек.подпись]
+                данные["statusText"] = части.filter { !$0.isEmpty }.joined(separator: " · ")
+                if let фаза { данные["phase"] = фаза }
+                if let срок = трек.срокДляПлашки { данные["etaAt"] = срок }
+                if let машина = трек.машинаДляПлашки { данные["courier"] = машина }
+            }
         }
         DealActivityManager.shared.handle(["action": "update", "deal": данные])
+    }
+}
+
+// MARK: - Отслеживание доставки (Sources/Native/Tracking)
+
+extension Сделка {
+    /// Карточка «Отслеживание»: есть кого отслеживать (перевозчик, курьер Яндекса, ссылка, трек межгорода), сделка в пути
+    /// или только что закрыта.
+    var естьОтслеживание: Bool {
+        let этапы: Set<String> = ["held", "shipped", "delivered", "disputed", "confirmed"]
+        guard этапы.contains(статус) else { return false }
+        if черезПеревозчика && (!перевозчик.трек.isEmpty || !перевозчик.заказ.isEmpty || !перевозчик.этап.isEmpty) {
+            return true
+        }
+        if let к = курьер, к.яндекс || !к.статусЯндекса.isEmpty { return true }
+        if !ссылкаСлежения.isEmpty { return true }
+        if let м = межгородДанные, !м.трек.isEmpty { return true }
+        return false
+    }
+
+    /// «Изменить трек или ссылку» — как dealTrackLink сайта: не «сам», held/shipped.
+    var можноМенятьТрек: Bool {
+        способПередачи != "self" && (статус == "held" || статус == "shipped")
     }
 }

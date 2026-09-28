@@ -478,6 +478,11 @@ enum КазпочтаТрека {
 
 // MARK: - Кэш
 
+extension Notification.Name {
+    /// КэшТрека записал новый статус доставки; userInfo["deal"] — номер сделки.
+    static let klikoТрекИзменился = Notification.Name("kliko.tracking.changed")
+}
+
 /// Последний результат по сделке: в памяти и в UserDefaults (до 20 сделок). Выход из аккаунта — забыть().
 @MainActor
 enum КэшТрека {
@@ -502,6 +507,8 @@ enum КэшТрека {
             for пара in старые { память[пара.key] = nil }
         }
         сохранить()
+        /* Экран сделки обновит плашку на экране блокировки (ЖиваяСделка). */
+        NotificationCenter.default.post(name: .klikoТрекИзменился, object: nil, userInfo: ["deal": сделка])
     }
 
     static func забыть() {

@@ -409,7 +409,7 @@ struct КарточкаОтслеживания: View {
                     .accessibilityAddTraits(.updatesFrequently)
             }
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {

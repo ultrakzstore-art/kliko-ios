@@ -134,17 +134,26 @@ enum ВидСтатусаТрека: Sendable {
     case плохо
     case тихо
 
+    /// Краски кабинета сделок (КраскаСделокКабинета, css_cabinet.css) — как плашки .dmn рядом.
     var цвет: Color {
         switch self {
-        case .хорошо: return Theme.акцент
-        case .путь:   return Theme.цвет(0x1D4ED8, 0x8AB4F8)
-        case .ждём:   return Theme.цвет(0xB45309, 0xFBBF24)
-        case .плохо:  return Theme.скидкаТекст
+        case .хорошо: return КраскаСделокКабинета.хорошоТекст
+        case .путь:   return КраскаСделокКабинета.инфоТекст
+        case .ждём:   return КраскаСделокКабинета.предупреждениеТекст
+        case .плохо:  return КраскаСделокКабинета.плохоТекст
         case .тихо:   return Theme.текстВторой
         }
     }
 
-    var фон: Color { цвет.opacity(0.13) }
+    var фон: Color {
+        switch self {
+        case .хорошо: return КраскаСделокКабинета.хорошоФон
+        case .путь:   return КраскаСделокКабинета.инфоФон
+        case .ждём:   return КраскаСделокКабинета.предупреждениеФон
+        case .плохо:  return КраскаСделокКабинета.плохоФон
+        case .тихо:   return Theme.поверхность2
+        }
+    }
 }
 
 enum СтатусТрека: String, Codable, CaseIterable, Sendable {
