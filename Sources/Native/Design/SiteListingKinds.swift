@@ -83,6 +83,10 @@ struct ПоляСтраницыВида: Hashable, Decodable {
     var поколение: String?
     /// no_escrow — продавец не принимает безопасную сделку (лист «Что это даёт»: без гарантийного талона в сделке).
     var безГаранта = false
+    /// b2b — продавец выставляет счёт юрлицу (mkB2bBtn: «Счёт для юрлица»).
+    var b2b = false
+    /// for_exchange — продавец готов к обмену (кнопка .mk-exch-btn).
+    var обмен = false
 
     init() {}
 
@@ -110,6 +114,8 @@ struct ПоляСтраницыВида: Hashable, Decodable {
         наличие = ПоляСтраницыВида.число(c, "stock").flatMap { $0 >= 1 ? Int($0) : nil }
         поколение = ПоляСтраницыВида.строка(c, "gen")
         безГаранта = ПоляСтраницыВида.даНет(c, "no_escrow") ?? false
+        b2b = ПоляСтраницыВида.даНет(c, "b2b") ?? false
+        обмен = ПоляСтраницыВида.даНет(c, "for_exchange") ?? false
     }
 
     static func строка(_ c: KeyedDecodingContainer<КлючПоля>, _ k: String) -> String? {
