@@ -35,6 +35,9 @@ enum СправкаText {
         "support_s": "Не нашли ответ? Мы ответим в приложении.",
         "no_digital": "Эта возможность недоступна в приложении.",
         "a11y_faq": "Вопрос. Дважды нажмите, чтобы раскрыть ответ",
+        "search": "Поиск по справке",
+        "nothing_t": "Ничего не найдено",
+        "nothing_s": "Попробуйте другое слово или напишите в поддержку.",
     ]
 
     private static let kk: [String: String] = [
@@ -57,6 +60,9 @@ enum СправкаText {
         "support_s": "Жауап таппадыңыз ба? Қосымшада жауап береміз.",
         "no_digital": "Бұл мүмкіндік қосымшада қолжетімсіз.",
         "a11y_faq": "Сұрақ. Жауапты ашу үшін екі рет басыңыз",
+        "search": "Анықтамадан іздеу",
+        "nothing_t": "Ештеңе табылмады",
+        "nothing_s": "Басқа сөзбен іздеп көріңіз немесе қолдау қызметіне жазыңыз.",
     ]
 
     private static let en: [String: String] = [
@@ -79,6 +85,9 @@ enum СправкаText {
         "support_s": "Didn't find an answer? We'll reply in the app.",
         "no_digital": "This feature isn't available in the app.",
         "a11y_faq": "Question. Double-tap to show the answer",
+        "search": "Search help",
+        "nothing_t": "Nothing found",
+        "nothing_s": "Try another word or contact support.",
     ]
 
     private static let ar: [String: String] = [
@@ -101,5 +110,8 @@ enum СправкаText {
         "support_s": "لم تجد إجابة؟ سنرد عليك في التطبيق.",
         "no_digital": "هذه الميزة غير متاحة في التطبيق.",
         "a11y_faq": "سؤال. انقر مرتين لعرض الإجابة",
+        "search": "البحث في المساعدة",
+        "nothing_t": "لم يتم العثور على شيء",
+        "nothing_s": "جرّب كلمة أخرى أو اكتب إلى الدعم.",
     ]
 }
