@@ -377,10 +377,12 @@ function tellUser(userId, text) {
 }
 
 // ---------- автообновление ----------
-// Новые версии выкладываются в GitHub Releases (репозиторий открытый). Раз в час проверяем,
+// Новые версии собирает и раздаёт ваш сервер (deploy/updates: http://<IP>:8787/) — GitHub
+// Releases больше не открываются. Без сервера — по-старому, из GitHub. Раз в час проверяем,
 // скачиваем в фоне и спрашиваем: перезапустить сейчас или позже. «Позже» — поставится само
 // при следующем выходе из приложения.
 
+const UPDATE_PORT = 8787;
 const update = { status: '', version: '' };
 let askInstall = null;   // показать вопрос «обновить сейчас?» снова (по кнопке)
 function setupAutoUpdate() {
@@ -390,6 +392,12 @@ function setupAutoUpdate() {
   }
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch { return; }
+  const host = settings.updateHost || settings.server?.host;
+  if (host) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: `http://${host}:${UPDATE_PORT}/` });
+    // Сервер отдаёт файлы целиком, без докачки кусками.
+    autoUpdater.disableDifferentialDownload = true;
+  }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-available', (i) => { update.status = 'downloading'; update.version = i.version; log(`Есть обновление ${i.version} — скачиваю…`); pushState(); });
@@ -593,6 +601,7 @@ async function deployToServer(opts) {
     if (r.code !== 0 || !active) throw new Error('Бот на сервере не запустился — смотрите строки выше.');
 
     settings.server = { host: String(host).trim(), port: Number(port) || 22, username: String(username || 'root').trim(), at: Date.now() };
+    rememberUpdateHost(host);
     settings.autoStart = false;   // на ПК больше не запускаем сам — бот живёт на сервере
     bot.wanted = false;
     saveSettings();
@@ -690,6 +699,12 @@ function serverPassword(opts) {
   return '';
 }
 
+// Сервер, с которым получилось соединиться, — он же источник обновлений (со следующего запуска).
+function rememberUpdateHost(host) {
+  const h = String(host || '').trim();
+  if (h && settings.updateHost !== h) { settings.updateHost = h; saveSettings(); }
+}
+
 // Одна команда на сервере: вывод целиком.
 async function sshRun(opts, cmd) {
   const password = serverPassword(opts);
@@ -701,6 +716,7 @@ async function sshRun(opts, cmd) {
       conn.once('ready', resolve).once('error', reject)
         .connect({ host: String(opts.host).trim(), port: Number(opts.port) || 22, username: String(opts.username || 'root').trim(), password, readyTimeout: 20000 });
     });
+    rememberUpdateHost(opts.host);
     return await new Promise((resolve, reject) => {
       conn.exec(cmd, (err, stream) => {
         if (err) return reject(err);
