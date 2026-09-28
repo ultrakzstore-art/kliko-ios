@@ -93,7 +93,7 @@ enum УведомленияКабинета {
     }
 }
 
-/// Кнопка колокольчика в шапке «Кабинета» с точкой непрочитанных.
+/// Кнопка колокольчика в шапке «Кабинета»: непрочитанные — красная пилюля с числом (.tb-badge #e53935, 11 жирным).
 struct КнопкаКолокольчика: View {
     let новых: Int
     let нажать: () -> Void
@@ -104,10 +104,16 @@ struct КнопкаКолокольчика: View {
                 .font(.system(size: 17, weight: .semibold))
                 .overlay(alignment: .topTrailing) {
                     if новых > 0 {
-                        Circle()
-                            .fill(Theme.непрочитано)
-                            .frame(width: 9, height: 9)
-                            .offset(x: 3, y: -2)
+                        Text(новых > 99 ? "99+" : String(новых))
+                            .font(.system(size: 11, weight: .heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 6)
+                            .frame(minWidth: 19, minHeight: 19)
+                            .background(ЛистУведомлений.красный, in: Capsule())
+                            .fixedSize()
+                            .offset(x: 8, y: -6)
+                            .accessibilityHidden(true)
                     }
                 }
         }
@@ -116,8 +122,10 @@ struct КнопкаКолокольчика: View {
     }
 }
 
-/// #notif-panel: «Уведомления» и записи — подложка по типу (nt-ok — зелёная, nt-warn и nt-lead — янтарная, nt-bc —
-/// голубая, nt-exch — фиолетовая), непрочитанные — жирным с точкой.
+/// #notif-panel на телефоне — лист снизу: «Уведомления» 16 и красное число новых, «×» 30 на --surf2; записи списком
+/// (.notif-item 14/20, линия снизу): плитка значка 38 со скруглением 12 на оттенке типа (nt-ok — --tint-ok, nt-warn и
+/// nt-lead — --tint-warn, nt-bc — --tint-info, nt-exch — --tint-ai; у непрочитанной плитка — карточка, а подложкой всей
+/// строки — оттенок типа), текст 14, время 12, «×N» пилюлей, у непрочитанной — зелёная точка 8.
 struct ЛистУведомлений: View {
     let уведомления: [УведомлениеКабинета]
     /// Запись с чатом объявления: лист закрывается, кабинет кладёт чат в свой стек.
@@ -125,40 +133,77 @@ struct ЛистУведомлений: View {
 
     @Environment(\.dismiss) private var закрыть
 
+    /// .notif-count / .tb-badge.
+    static var красный: Color { Color(uiColor: Theme.hex(0xE53935)) }
+
     init(уведомления: [УведомлениеКабинета], чатТовара: @escaping (String) -> Void) {
         self.уведомления = уведомления
         self.чатТовара = чатТовара
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            шапка
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 0) {
                     ForEach(уведомления) { у in
                         if у.сделка != nil || у.товар != nil {
                             Button {
                                 перейти(у)
                             } label: {
-                                строка(у, переход: true)
+                                строка(у)
                             }
-                            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
                         } else {
-                            строка(у, переход: false)
+                            строка(у)
                         }
                     }
                 }
-                .padding(12)
-            }
-            .background(Theme.фонСтраницы)
-            .navigationTitle(ИнбоксText.т("notif_title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(ИнбоксText.т("close")) { закрыть() }
-                }
             }
         }
+        .background(ИнбоксКраска.карточка.ignoresSafeArea())
+        .presentationBackground(ИнбоксКраска.карточка)
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(20)
+    }
+
+    /// .notif-head: заголовок 16 жирно, красное число новых, «×» 30 × 30.
+    private var шапка: some View {
+        let новых = уведомления.filter { $0.новое }.count
+        return HStack(spacing: 8) {
+            Text(ИнбоксText.т("notif_title"))
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(ИнбоксКраска.текст)
+                .accessibilityAddTraits(.isHeader)
+            if новых > 0 {
+                Text(String(новых))
+                    .font(.system(size: 11, weight: .heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 19, minHeight: 19)
+                    .background(Self.красный, in: Capsule())
+            }
+            Spacer(minLength: 0)
+            Button { закрыть() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 30, height: 30)
+                    .background(ИнбоксКраска.подложка, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
+            .padding(.trailing, -7)
+            .accessibilityLabel(ИнбоксText.т("close"))
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
+        .overlay(alignment: .bottom) { ИнбоксКраска.линия.frame(height: 1) }
     }
 
     private func перейти(_ у: УведомлениеКабинета) {
@@ -170,68 +215,62 @@ struct ЛистУведомлений: View {
         }
     }
 
-    private func фон(_ вид: String) -> Color {
+    /// Оттенок типа — плитка значка и подложка непрочитанной строки.
+    private func тон(_ вид: String) -> Color {
         switch вид {
-        case "warn", "lead": return КраскаОбъявлений.предупреждениеФон
-        case "bc": return КраскаОбъявлений.инфоФон
-        case "exch": return ИнбоксКраска.иФон
-        default: return КраскаОбъявлений.хорошоФон
+        case "warn", "lead": return ИнбоксКраска.вниманиеФон
+        case "bc": return ИнбоксКраска.инфоФон
+        case "exch": return ИнбоксКраска.аиФон
+        default: return ИнбоксКраска.окФон
         }
     }
 
-    private func цвет(_ вид: String) -> Color {
-        switch вид {
-        case "warn", "lead": return КраскаОбъявлений.предупреждениеТекст
-        case "bc": return КраскаОбъявлений.инфоТекст
-        case "exch": return ИнбоксКраска.иТекст
-        default: return КраскаОбъявлений.хорошоТекст
-        }
-    }
-
-    private func строка(_ у: УведомлениеКабинета, переход: Bool) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+    private func строка(_ у: УведомлениеКабинета) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: у.товар != nil ? "bubble.left" : (у.сделка != nil ? "checkmark.shield" : "bell"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(цвет(у.вид))
-                .frame(width: 22)
+                .font(.system(size: 17))
+                .foregroundStyle(ИнбоксКраска.текст)
+                .frame(width: 38, height: 38)
+                .background(у.новое ? ИнбоксКраска.карточка : тон(у.вид),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(у.текст)
-                    .font(.system(size: 14, weight: у.новое ? Font.Weight.bold : Font.Weight.regular))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 14))
+                    .lineSpacing(3)
+                    .foregroundStyle(ИнбоксКраска.текст)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     Text(у.когда)
-                    if !у.повторов.isEmpty { Text(у.повторов).fontWeight(.bold) }
+                        .font(.system(size: 12))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.текстВторой)
+                    if !у.повторов.isEmpty {
+                        Text(у.повторов)
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(Theme.текстВторой)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 1)
+                            .background(ИнбоксКраска.подложка, in: Capsule())
+                    }
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
             }
             Spacer(minLength: 4)
             if у.новое {
                 Circle()
-                    .fill(Theme.непрочитано)
+                    .fill(Theme.зелёный)
                     .frame(width: 8, height: 8)
-                    .padding(.top, 5)
-                    .accessibilityHidden(true)
-            } else if переход {
-                Image(systemName: "chevron.right")
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .padding(.top, 3)
+                    .padding(.top, 6)
                     .accessibilityHidden(true)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(у.новое ? фон(у.вид) : Theme.поверхность,
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
+        .background(у.новое ? тон(у.вид) : ИнбоксКраска.карточка)
+        .overlay(alignment: .bottom) { ИнбоксКраска.линия.frame(height: 1) }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }
@@ -307,8 +346,7 @@ struct ЭкранОбращения: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let обращение {
                 переписка(обращение)
-                ПолеПерепискиСайта(текст: $ответ, можно: можноОтправить, отправить: { отправить() },
-                                   фокус: $полеВФокусе, подсказка: т("sup_ph"))
+                полеОтвета
             } else {
                 Text(ошибка ?? т("err_generic"))
                     .font(.system(size: 15))
@@ -318,19 +356,19 @@ struct ЭкранОбращения: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Theme.фонСтраницы)
+        .background(ИнбоксКраска.подложка)
         .navigationTitle(заголовок)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     Text(заголовок)
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(ИнбоксКраска.текст)
                         .lineLimit(1)
                     if let обращение {
                         Text("#" + String(обращение.id.prefix(8)) + " · " + обращение.статусТекст)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 12))
                             .foregroundStyle(Theme.текстВторой)
                     }
                 }
@@ -338,7 +376,7 @@ struct ЭкранОбращения: View {
                 .accessibilityAddTraits(.isHeader)
             }
         }
-        .toolbarBackground(Theme.поверхность, for: .navigationBar)
+        .toolbarBackground(ИнбоксКраска.карточка, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .tint(Theme.акцент)
         .task { await загрузить() }
@@ -357,10 +395,46 @@ struct ЭкранОбращения: View {
         !отправляем && !ответ.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// .sup-in и .sup-send: поле 16 (на телефоне не меньше 16) с кромкой 1,5 — в фокусе карточка и --acc-on; «Отправить»
+    /// 42 × 42 со скруглением 12 градиентом кабинета.
+    private var полеОтвета: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField(т("sup_ph"), text: $ответ, axis: .vertical)
+                .font(.system(size: 16))
+                .foregroundStyle(ИнбоксКраска.текст)
+                .lineLimit(1...5)
+                .focused($полеВФокусе)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 42)
+                .background(полеВФокусе ? ИнбоксКраска.карточка : ИнбоксКраска.подложка,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(полеВФокусе ? ИнбоксКраска.акцент : ИнбоксКраска.линия, lineWidth: 1.5)
+                }
+            Button { отправить() } label: {
+                Image(systemName: "paperplane")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 42, height: 42)
+                    .background(ИнбоксКраска.градиент, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .opacity(можноОтправить ? 1 : 0.5)
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
+            .disabled(!можноОтправить)
+            .accessibilityLabel(ChatText.т("send"))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(ИнбоксКраска.карточка)
+        .overlay(alignment: .top) { ИнбоксКраска.линия.frame(height: 1) }
+    }
+
     private func переписка(_ о: ОбращениеВПоддержку) -> some View {
         ScrollViewReader { прокрутка in
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 10) {
                     if о.сообщения.isEmpty {
                         Text(т("sup_empty"))
                             .font(.system(size: 14))
@@ -372,7 +446,8 @@ struct ЭкранОбращения: View {
                     }
                     Color.clear.frame(height: 1).id("низ")
                 }
-                .padding(12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear { прокрутка.scrollTo("низ", anchor: .bottom) }
@@ -385,26 +460,38 @@ struct ЭкранОбращения: View {
     private func сообщение(_ м: ОбращениеВПоддержку.Сообщение) -> some View {
         let моё = !м.отПоддержки
         let когда = String(м.когда.prefix(16)).replacingOccurrences(of: "T", with: " ")
+        /* .sup-msg: 14 с высотой строки 1.5, 10/14, скругление 14 и 6 у своего угла; моё — градиент кабинета,
+           поддержки — карточка с кромкой. Подпись .sup-meta — 11, прозрачность 0,75. */
+        let форма = UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: моё ? 14 : 6,
+                                           bottomTrailingRadius: моё ? 6 : 14, topTrailingRadius: 14, style: .continuous)
         return HStack(spacing: 0) {
-            if моё { Spacer(minLength: 48) }
-            VStack(alignment: .leading, spacing: 4) {
+            if моё { Spacer(minLength: 50) }
+            VStack(alignment: .leading, spacing: 6) {
                 Text(м.текст)
-                    .font(.system(size: 15))
-                    .foregroundStyle(моё ? Color.white : Theme.текст)
+                    .font(.system(size: 14))
+                    .lineSpacing(7)
+                    .foregroundStyle(моё ? Color.white : ИнбоксКраска.текст)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(т(моё ? "sup_you" : "sup_staff") + " · " + когда)
                     .font(.system(size: 11))
-                    .foregroundStyle(моё ? Color.white.opacity(0.75) : Theme.текстВторой)
+                    .foregroundStyle(моё ? Color.white : ИнбоксКраска.текст)
+                    .opacity(0.75)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(моё ? Theme.пузырьМой : Theme.поверхность,
-                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                if !моё {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous).strokeBorder(Theme.линия, lineWidth: 1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background {
+                if моё {
+                    форма.fill(ИнбоксКраска.градиент)
+                } else {
+                    форма.fill(ИнбоксКраска.карточка)
                 }
             }
-            if !моё { Spacer(minLength: 48) }
+            .overlay {
+                if !моё {
+                    форма.stroke(ИнбоксКраска.линия, lineWidth: 1)
+                }
+            }
+            if !моё { Spacer(minLength: 50) }
         }
         .accessibilityElement(children: .combine)
     }
@@ -475,55 +562,92 @@ struct ОкноЗапросаДанных: View {
 
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
 
+    /// .club-card: тёмно-зелёная шапка .club-hero (градиент 140°, заголовок 21 чёрным, пояснение 13 #bff5d4), ниже поле
+    /// 14, «Отправить обращение» градиентом #16a34a → #0f7a44 и «Закрыть» рамкой.
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+        ScrollView {
+            VStack(spacing: 0) {
+                VStack(spacing: 6) {
+                    Text(т("dreq_title"))
+                        .font(.system(size: 21, weight: .black))
+                        .accessibilityAddTraits(.isHeader)
                     Text(т("dreq_subtitle"))
-                        .font(.system(size: 14))
-                        .foregroundStyle(Theme.текстВторой)
+                        .font(.system(size: 13))
+                        .lineSpacing(6.5)
+                        .foregroundStyle(Color(uiColor: Theme.hex(0xBFF5D4)))
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+                .background(LinearGradient(colors: [Color(uiColor: Theme.hex(0x0E5A34)), Color(uiColor: Theme.hex(0x0B3D24)),
+                                                    Color(uiColor: Theme.hex(0x07130D))],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing))
+                VStack(alignment: .leading, spacing: 12) {
                     TextField("", text: $текст, axis: .vertical)
                         .lineLimit(4...8)
-                        .font(.system(size: 15))
+                        .font(.system(size: 14))
+                        .foregroundStyle(ИнбоксКраска.текст)
                         .padding(12)
-                        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                        .background(ИнбоксКраска.карточка, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                                .strokeBorder(Theme.линия, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(ИнбоксКраска.линия, lineWidth: 1)
                         }
                         .accessibilityLabel(т("dreq_title"))
                         .disabled(отправлено)
                     if let сообщение {
                         Text(сообщение)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(хорошо ? КраскаОбъявлений.хорошоТекст : КраскаОбъявлений.плохоТекст)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(хорошо ? ИнбоксКраска.окТекст : ИнбоксКраска.плохоТекст)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if !отправлено {
                         Button {
                             отправить()
                         } label: {
                             Text(т(отправляем ? "dreq_sending" : "dreq_submit"))
-                                .font(.system(size: 15, weight: .bold))
+                                .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color.white)
-                                .frame(maxWidth: .infinity, minHeight: 46)
-                                .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                                .frame(maxWidth: .infinity)
+                                .padding(12)
+                                .background(LinearGradient(colors: [Color(uiColor: Theme.hex(0x16A34A)),
+                                                                    Color(uiColor: Theme.hex(0x0F7A44))],
+                                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .shadow(color: Color(uiColor: Theme.hex(0x16A34A)).opacity(0.4), radius: 8, x: 0, y: 6)
                         }
                         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                         .disabled(отправляем)
                     }
+                    Button {
+                        закрыть()
+                    } label: {
+                        Text(т("close"))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.текстВторой)
+                            .frame(maxWidth: .infinity)
+                            .padding(12)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(ИнбоксКраска.линия, lineWidth: 1)
+                            }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 }
-                .padding(16)
-            }
-            .background(Theme.фонСтраницы)
-            .navigationTitle(т("dreq_title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(т("close")) { закрыть() }
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 20)
             }
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(ИнбоксКраска.карточка.ignoresSafeArea())
+        .presentationBackground(ИнбоксКраска.карточка)
+        .presentationCornerRadius(24)
     }
 
     private func отправить() {

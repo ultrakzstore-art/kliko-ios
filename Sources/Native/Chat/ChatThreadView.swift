@@ -25,6 +25,9 @@ final class ChatThreadModel: ObservableObject {
     /// Почему не ушло — коротко, под ошибкой: на проверке отправки (владелец 25.09.2026) это сразу скажет, что именно
     /// ответил сайт, а не только «не отправлено».
     @Published private(set) var причина = ""
+    /// Человеческий текст отказа сайта («Общение недоступно…»), если он есть: его и показываем под лентой; код в
+    /// причина — только для отладки.
+    @Published private(set) var объяснение: String? = nil
     @Published var черновик = "" {
         /* Этап 17: недописанное — в черновик диалога (ЧерновикиЧата). Пока сообщение уходит, поле уже пустое, но
            сохранённый черновик не трогаем: сотрёт его отправить(), когда сайт примет сообщение. */
@@ -48,6 +51,10 @@ final class ChatThreadModel: ObservableObject {
     @Published private(set) var прочиталДо = ""
     /// lead{role, agreed, pid, no_escrow} ответа open/poll (_dmLead кабинета): торг в этой переписке.
     @Published private(set) var торг: ТоргПереписки? = nil
+    /// item ответа open/poll — карточка объявления под шапкой (#dm-context).
+    @Published private(set) var товар: ТоварПереписки? = nil
+    /// me_verified: false — полоса верификации над полем (#dm-verify-bar); nil — сайт не прислал, полосы нет.
+    @Published private(set) var проверен: Bool? = nil
 
     /// Переписка на сайте — туда ведут пуши о новых сообщениях (AppDelegate).
     static var адресПереписки: URL? { Config.url("/cabinet.php?s=messages") }
@@ -151,6 +158,11 @@ final class ChatThreadModel: ObservableObject {
             черновик = было
             неОтправлено = true
             причина = Self.код(error)
+            if let e = error as? ChatAPI.Ошибка, case .отказ = e {
+                объяснение = ChatAPI.текст(e)
+            } else {
+                объяснение = nil
+            }
         }
     }
 
@@ -176,6 +188,8 @@ final class ChatThreadModel: ObservableObject {
         if переписка.сообщения != сообщения { сообщения = переписка.сообщения }
         if переписка.прочиталДо != прочиталДо { прочиталДо = переписка.прочиталДо }
         if let новый = переписка.торг, новый != торг { торг = новый }
+        if let новый = переписка.товар, новый != товар { товар = новый }
+        if let новый = переписка.проверен, новый != проверен { проверен = новый }
         /* Ждущее своё предложение — и на страницу объявления (полоса «Ваше предложение» с той же кнопкой). Только если
            в этой переписке есть свои предложения: переписка без торга не стирает то, что знает чат объявления. */
         let объявлениеТорга = объявлениеПредложения
@@ -337,32 +351,25 @@ struct ChatThreadView: View {
             if !модель.загружено {
                 SiteSpinner().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if модель.ошибка == .нуженВход {
-                ContentUnavailableView {
-                    Label(ChatText.т("login"), systemImage: "person.crop.circle.badge.questionmark")
-                } description: {
-                    Text(ChatText.т("login_sub"))
-                } actions: {
-                    Button(ChatText.т("login_btn")) { ВходПоверх.показать { Task { await модель.начать() } } }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.green)
-                }
+                ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),
+                           подпись: ChatText.т("login_sub"), кнопка: ChatText.т("login_btn"),
+                           действие: { ВходПоверх.показать { Task { await модель.начать() } } })
             } else if модель.ошибка != nil && модель.сообщения.isEmpty {
-                ContentUnavailableView {
-                    Label(ChatText.т("failed"), systemImage: "exclamationmark.bubble")
-                } description: {
-                    /* TestFlight 1.10: что ответил сайт («Собеседник не найден…», «Ошибка источника запроса»), а не
-                       только общий заголовок. Нет текста — пустое место. */
-                    Text(ChatAPI.текст(модель.ошибка) ?? "")
-                } actions: {
-                    Button(ChatText.т("retry")) { Task { await модель.начать() } }
-                    Button(ChatText.т("open_site")) { if let u = ChatThreadModel.адресПереписки { открыть(u) } }
-                }
+                /* TestFlight 1.10: что ответил сайт («Собеседник не найден…», «Ошибка источника запроса»), а не только
+                   общий заголовок. У сайта (openDM) — только текст в переписке, без ссылки на сайт. */
+                ПустоСайта(значок: "exclamationmark.bubble",
+                           заголовок: ChatAPI.текст(модель.ошибка) ?? ChatText.т("failed"),
+                           кнопка: ChatText.т("retry"),
+                           действие: { Task { await модель.начать() } })
             } else {
+                if Config.нативныеСообщенияКабинета, let товар = модель.товар {
+                    КарточкаТовараПереписки(товар: товар, открыть: открыть)
+                }
                 лента
             }
             if модель.загружено && модель.ошибка != .нуженВход { низ }
         }
-        .background(Config.дизайнКакНаСайте ? Theme.поверхность : Color(.systemBackground))
+        .background(Config.дизайнКакНаСайте ? ИнбоксКраска.карточка : Color(.systemBackground))
         .navigationTitle(заголовок.isEmpty ? ChatText.т("peer") : заголовок)
         .navigationBarTitleDisplayMode(.inline)
         /* Этап 30 ставил .kc-head сайта в системную панель (кружок с буквой и имя в середине, поверхность вместо стекла).
@@ -399,9 +406,9 @@ struct ChatThreadView: View {
     }
 
     /**
-     Шапка переписки как .kc-head сайта: поверхность, линия снизу, отступы 11/12; слева «Назад» — квадрат 36 со
-     скруглением и кромкой цвета линии, без тени (.mk-vfocus-back сайта), место для пальца — 44; дальше кружок с буквой и
-     имя (ШапкаПерепискиСайта). Владелец 25.09.2026, проверка на телефоне, сборка 33: вместо системной стеклянной
+     Шапка переписки как .cm-head #dm-modal: карточка, линия снизу; слева «Назад» — квадрат 36 со скруглением и кромкой
+     цвета линии, без тени, место для пальца — 44; дальше кружок 36 --acc-on с буквой, имя 15 жирным и «Прямой чат» 12
+     серым (ИмяПерепискиКабинета). Владелец 25.09.2026, проверка на телефоне, сборка 33: вместо системной стеклянной
      кнопки с пятном тени.
      */
     private var шапкаСайта: some View {
@@ -409,12 +416,12 @@ struct ChatThreadView: View {
             Button { закрыть() } label: {
                 Image(systemName: "chevron.backward")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
+                    .foregroundStyle(ИнбоксКраска.текст)
                     .frame(width: 36, height: 36)
-                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .background(ИнбоксКраска.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                            .strokeBorder(Theme.линия, lineWidth: 1)
+                            .strokeBorder(ИнбоксКраска.линия, lineWidth: 1)
                     }
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -426,22 +433,22 @@ struct ChatThreadView: View {
                 Button {
                     ОкноПродавца.открыть(id: номер, имя: заголовок)
                 } label: {
-                    ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+                    ИмяПерепискиКабинета(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
             } else {
-                ШапкаПерепискиСайта(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
+                ИмяПерепискиКабинета(имя: заголовок.isEmpty ? ChatText.т("peer") : заголовок)
             }
             Spacer(minLength: 0)
         }
         .padding(.leading, 8)
         .padding(.trailing, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(Theme.поверхность)
+        .background(ИнбоксКраска.карточка)
         .overlay(alignment: .bottom) {
-            Theme.линия
+            ИнбоксКраска.линия
                 .frame(height: 1)
                 .accessibilityHidden(true)
         }
@@ -450,13 +457,18 @@ struct ChatThreadView: View {
     private var лента: some View {
         ScrollViewReader { прокрутка in
             ScrollView {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: 8) {
                     if модель.сообщения.isEmpty {
                         if Config.дизайнКакНаСайте {
-                            /* Этап 30: системная строка .kc-sys — по центру, серым на --kc-soft. С исправлений с
-                               телефона (сборка 33) — та же строка, что у уведомлений сервера. */
-                            УведомлениеЧатаСайта(текст: ChatText.т("first"))
-                                .padding(.top, 40)
+                            /* _dmRender: пустая переписка — просто серый текст по центру (dm_no_msgs), без пилюли. */
+                            Text(ИнбоксText.т("dm_no_msgs"))
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.текстВторой)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 34)
+                                .padding(.horizontal, 20)
                         } else {
                             Text(ChatText.т("first"))
                                 .font(.footnote)
@@ -469,8 +481,7 @@ struct ChatThreadView: View {
                         .onAppear { низВиден = true }
                         .onDisappear { низВиден = false }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(12)
             }
             .scrollDismissesKeyboard(.interactively)
             .modifier(ОбновлениеПереписки(модель: модель))          // этап 17: «потяни — обновится»
@@ -546,28 +557,13 @@ struct ChatThreadView: View {
         withAnimation(ДвижениеСайта.появление) { кнопкаВниз = true }
     }
 
-    /// Итог отзыва предложения — плашка над строкой ввода (.kc-toast кабинета).
+    /// Итог отзыва предложения — плашка над строкой ввода (.toast кабинета, как у инбокса).
     private var плашкаТорга: some View {
         ZStack(alignment: .bottom) {
-            if let текст = модель.плашка {
-                Text(текст)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 11)
-                    .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                            .strokeBorder(Theme.линия, lineWidth: 1)
-                    }
-                    .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 76)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+            ПлашкаИнбокса(текст: модель.плашка)
+                .padding(.bottom, 52)
         }
-        .animation(ДвижениеСайта.смена, value: модель.плашка)
+        .animation(ДвижениеСайта.появление, value: модель.плашка)
     }
 
     /// «Отозвать предложение» под своей карточкой: неподкреплённое — окно подтверждения; подкреплённое деньгами при
@@ -638,7 +634,23 @@ struct ChatThreadView: View {
         .accessibilityLabel(с.голос(собеседник: заголовок))
     }
 
+    /// Слова человека: гео — карточка точки встречи, аренда и обмен — карточка .dm-card, фото — своими пропорциями
+    /// (.kc-msg.media), остальное — облаком.
+    @ViewBuilder
     private func сообщениеЧеловека(_ с: ЧатСообщение) -> some View {
+        if Config.нативныеСообщенияКабинета, с.тип == "geo", let ш = с.широта, let д = с.долгота {
+            КарточкаГеоЧата(моё: с.моё, широта: ш, долгота: д, изTelegram: false)
+        } else if Config.нативныеСообщенияКабинета, let сделка = с.сделкаЧата {
+            КарточкаСделкиПереписки(сделка: сделка, моё: с.моё)
+        } else if Config.дизайнКакНаСайте, let фото = с.фото {
+            ФотоПерепискиКабинета(адрес: фото, моё: с.моё, время: ЧатВремя.время(с.когда))
+                .accessibilityLabel(с.голос(собеседник: заголовок))
+        } else {
+            облакоЧеловека(с)
+        }
+    }
+
+    private func облакоЧеловека(_ с: ЧатСообщение) -> some View {
         HStack {
             if с.моё { Spacer(minLength: 48) }
             VStack(alignment: с.моё ? .trailing : .leading, spacing: 3) {
@@ -688,9 +700,19 @@ struct ChatThreadView: View {
     @ViewBuilder
     private func облако(_ с: ЧатСообщение) -> some View {
         if Config.дизайнКакНаСайте {
-            ОблакоСайта(текст: с.подпись, время: ЧатВремя.время(с.когда), моё: с.моё)
+            /* .kc-msg кабинета: --kc-acc #1d7d4a, чужое --kc-peer без кромки; голос и видео — значком, не эмодзи. */
+            ОблакоКабинета(текст: с.подпись, время: ЧатВремя.время(с.когда), моё: с.моё, значок: значокОблака(с))
         } else {
             облакоПрежнее(с)
+        }
+    }
+
+    private func значокОблака(_ с: ЧатСообщение) -> String? {
+        switch с.тип {
+        case "voice": return "mic"
+        case "video": return "video"
+        case "image": return "photo"
+        default: return nil
         }
     }
 
@@ -706,14 +728,16 @@ struct ChatThreadView: View {
     @ViewBuilder
     private var низ: some View {
         if модель.заблокирован && Config.дизайнКакНаСайте {
-            /* Этап 30: .kc-blocked — серый текст на --kc-soft с линией сверху. */
-            Text(ChatText.т("blocked"))
+            /* _dmRender: dm_blocked_msg — цветом --on-bad по центру, отступ 20. */
+            Text(ИнбоксText.т("dm_blocked_msg"))
                 .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
+                .foregroundStyle(ИнбоксКраска.плохоТекст)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
-                .padding(12)
-                .background(Theme.поверхность2)
-                .overlay(alignment: .top) { Theme.линия.frame(height: 1) }
+                .padding(20)
+                .background(ИнбоксКраска.карточка)
+                .overlay(alignment: .top) { ИнбоксКраска.линия.frame(height: 1) }
         } else if модель.заблокирован {
             Text(ChatText.т("blocked"))
                 .font(.footnote)
@@ -722,17 +746,20 @@ struct ChatThreadView: View {
                 .padding(12)
                 .background(.regularMaterial)
         } else if Config.нативныйЧатОтправка && Config.дизайнКакНаСайте {
-            /* Этап 30: строка ввода .kc-bar сайта. */
+            /* Этап 30: строка ввода .kc-bar сайта; над ней — #dm-verify-bar, когда me_verified = false. */
             VStack(spacing: 0) {
                 if модель.неОтправлено {
-                    Text(ChatText.т("not_sent") + (модель.причина.isEmpty ? "" : " (\(модель.причина))"))
+                    Text(неОтправленоТекст)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.малиновый)
+                        .foregroundStyle(ИнбоксКраска.плохоТекст)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Theme.поверхность)
+                        .background(ИнбоксКраска.карточка)
+                }
+                if Config.нативныеСообщенияКабинета && модель.проверен == false {
+                    ПолосаВерификацииКабинета { пройтиВерификацию() }
                 }
                 ПолеПерепискиСайта(текст: $модель.черновик, можно: можноОтправить,
                                    отправить: { Task { await модель.отправить() } }, фокус: $полеВФокусе)
@@ -740,7 +767,7 @@ struct ChatThreadView: View {
         } else if Config.нативныйЧатОтправка {
             VStack(spacing: 4) {
                 if модель.неОтправлено {
-                    Text(ChatText.т("not_sent") + (модель.причина.isEmpty ? "" : " (\(модель.причина))"))
+                    Text(неОтправленоТекст)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
@@ -763,25 +790,222 @@ struct ChatThreadView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.regularMaterial)
-        } else {
-            Button {
-                if let u = ChatThreadModel.адресПереписки { открыть(u) }
-            } label: {
-                Label(ChatText.т("reply_site"), systemImage: "arrowshape.turn.up.left.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .foregroundStyle(.white)
-                    .background(Theme.green, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.regularMaterial)
         }
+    }
+
+    /// «Сообщение не отправлено» или человеческий отказ сайта; внутренний код (network, HTTP 500…) — только в отладке.
+    private var неОтправленоТекст: String {
+        if let объяснение = модель.объяснение, !объяснение.isEmpty { return объяснение }
+        #if DEBUG
+        if !модель.причина.isEmpty { return ChatText.т("not_sent") + " (" + модель.причина + ")" }
+        #endif
+        return ChatText.т("not_sent")
+    }
+
+    /// «Пройти верификацию» — окно «Стать продавцом», как у лид-чата.
+    private func пройтиВерификацию() {
+        let адрес = Config.страницаСайта("cabinet?go=verify")
+        if !ОкнаПриложения.shared.показать(.верификация, запасной: адрес), let адрес { открыть(адрес) }
     }
 
     private var можноОтправить: Bool {
         !модель.отправляем && !модель.черновик.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+// MARK: - Части переписки кабинета
+
+/// Середина шапки #dm-modal .cm-head: кружок 36 --acc-on с буквой 14 жирным, имя 15 жирным и «Прямой чат» 12 серым.
+struct ИмяПерепискиКабинета: View {
+    let имя: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(String(имя.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(ИнбоксКраска.наАкценте)
+                .frame(width: 36, height: 36)
+                .background(ИнбоксКраска.акцент, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(имя)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(ИнбоксКраска.текст)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Text(ИнбоксText.т("dm_direct"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+/// #dm-context (_dmRenderCtx): фото 44, название 13 и цена 12 («Торг» / «Договорная»); под ними «Объявление» и, если
+/// есть, «Обмен» и «Аренда». Подложка --surf2, линия снизу 1.5.
+struct КарточкаТовараПереписки: View {
+    let товар: ТоварПереписки
+    let открыть: (URL) -> Void
+
+    private var цена: String {
+        if товар.торг && товар.цена <= 0 { return ИнбоксText.т("negotiable") }
+        guard товар.цена > 0 else { return "" }
+        let сумма = СделкиФормат.тенге(товар.цена)
+        return товар.торг ? сумма + " · " + ИнбоксText.т("torg") : сумма
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                КартинкаЛенты(Config.url(товар.фото), пунктов: 44) {
+                    ИнбоксКраска.карточка
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(товар.название.isEmpty ? ИнбоксText.т("listing") : товар.название)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ИнбоксКраска.текст)
+                        .lineLimit(1)
+                    if !цена.isEmpty {
+                        Text(цена)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                кнопка(ИнбоксText.т("listing"), значок: "eye", текст: Color.white, фон: Theme.зелёный, кромка: nil)
+                if товар.обмен {
+                    кнопка(ИнбоксText.т("dm_tag_exch"), значок: "arrow.2.squarepath", текст: ИнбоксКраска.окТекст,
+                           фон: ИнбоксКраска.окФон, кромка: ИнбоксКраска.окКромка)
+                }
+                if товар.аренда {
+                    кнопка(ИнбоксText.т("dm_tag_rent"), значок: "calendar", текст: ИнбоксКраска.инфоТекст,
+                           фон: ИнбоксКраска.инфоФон, кромка: ИнбоксКраска.инфоКромка)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ИнбоксКраска.подложка)
+        .overlay(alignment: .bottom) { ИнбоксКраска.линия.frame(height: 1.5) }
+    }
+
+    /// Все три ведут на объявление (&ret=chat у сайта): нативная карточка, иначе страница.
+    private func кнопка(_ подпись: String, значок: String, текст: Color, фон: Color, кромка: Color?) -> some View {
+        Button {
+            if Config.нативнаяКарточка {
+                NativeRouter.shared.цель = .объявление(id: товар.id)
+            } else if let адрес = Config.url("/marketplace.php?item=" + ИнбоксAPI.вАдрес(товар.id) + "&ret=chat") {
+                открыть(адрес)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 14))
+                    .accessibilityHidden(true)
+                Text(подпись)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(текст)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .overlay {
+                if let кромка {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                        .strokeBorder(кромка, lineWidth: 1.5)
+                }
+            }
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+    }
+}
+
+/// .dm-card аренды и обмена (_dmCardRental / _dmCardExchange): заголовок со значком 16, строки «Даты / Стоимость / Залог»
+/// или «Вам предлагают / За ваш», статус. Аренда — --tint-ai, обмен — --tint-info; не шире 90 %.
+struct КарточкаСделкиПереписки: View {
+    let сделка: СделкаВЧате
+    let моё: Bool
+
+    private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
+
+    private var статус: String {
+        let ключи: [String: String] = [
+            "requested": "dm_r_requested", "pending": "dm_r_requested", "confirmed": "dm_r_confirmed",
+            "active": "dm_r_active", "returned": "dm_r_returned", "cancelled": "dm_r_cancelled",
+            "disputed": "dm_r_disputed", "accepted": "dm_ex_accepted", "declined": "dm_ex_declined"
+        ]
+        if let ключ = ключи[сделка.статус] { return т(ключ) }
+        return сделка.статус
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if моё { Spacer(minLength: 36) }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: сделка.аренда ? "calendar" : "arrow.2.squarepath")
+                        .font(.system(size: 15))
+                        .accessibilityHidden(true)
+                    Text(т(сделка.аренда ? "rental_req" : "exchange_offer"))
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundStyle(сделка.аренда ? Theme.цвет(0x1D4ED8, 0x8AB4F8) : ИнбоксКраска.инфоТекст)
+                .padding(.bottom, 6)
+                if сделка.аренда {
+                    строка(т("dm_dates"), сделка.начало + " – " + сделка.конец)
+                    let единица = т(сделка.помесячно ? "unit_month" : "unit_day")
+                    let стоимость = [СделкиФормат.тенге(сделка.заСутки) + "/" + единица,
+                                     СделкиФормат.тенге(сделка.всего)].joined(separator: " · ")
+                    строка(т("dm_cost"), стоимость)
+                    if сделка.залог > 0 { строка(т("dm_deposit"), СделкиФормат.тенге(сделка.залог)) }
+                } else {
+                    строка(т("dm_they_offer"), товар(сделка.предлагают, сделка.предлагаютЦена))
+                    if сделка.доплата > 0 { строка(т("dm_sur"), "+ " + СделкиФормат.тенге(сделка.доплата)) }
+                    строка(т("dm_for_yours"), товар(сделка.заВаш, сделка.заВашЦена))
+                }
+                Text(статус)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(ИнбоксКраска.текст)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(сделка.аренда ? ИнбоксКраска.аиФон : ИнбоксКраска.инфоФон,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(сделка.аренда ? Theme.цвет(светлый: Theme.hex(0xE5D9F5), тёмный: Theme.hex(0xA78BFA, 0.32))
+                                                : ИнбоксКраска.инфоКромка, lineWidth: 1)
+            }
+            if !моё { Spacer(minLength: 36) }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func товар(_ название: String, _ цена: Int) -> String {
+        цена > 0 ? название + " · " + СделкиФормат.тенге(цена) : название
+    }
+
+    /// .dm-row: подпись серым слева, значение 600 справа.
+    private func строка(_ подпись: String, _ значение: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(подпись)
+                .foregroundStyle(Theme.текстВторой)
+            Spacer(minLength: 4)
+            Text(значение)
+                .fontWeight(.semibold)
+                .foregroundStyle(ИнбоксКраска.текст)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 13))
     }
 }

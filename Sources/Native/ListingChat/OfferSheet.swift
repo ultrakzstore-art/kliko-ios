@@ -108,13 +108,13 @@ struct ЛистПредложенияЦены: View {
                         .padding(.top, 10)
                 }
                 Text(ListingChatText.т("offer_sub"))
-                    .font(.system(size: 14))
-                    .lineSpacing(3)
+                    .font(.system(size: 13))
+                    .lineSpacing(6.5)
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 12)
                 круг
-                    .padding(.top, 14)
+                    .padding(.top, 16)
                 свояСтрока
                     .padding(.top, 12)
                 if вне {
@@ -130,7 +130,7 @@ struct ЛистПредложенияЦены: View {
                     .padding(.top, 16)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 22)
+            .padding(.top, 26)
             .padding(.bottom, 20)
             .мерилоЛиста()
         }
@@ -152,7 +152,8 @@ struct ЛистПредложенияЦены: View {
     private var шапка: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(ListingPageText.т("offer"))
-                .font(.system(size: 21, weight: .heavy))
+                .font(.system(size: 19, weight: .heavy))
+                .tracking(-0.19)
                 .foregroundStyle(Theme.текст)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
@@ -176,10 +177,10 @@ struct ЛистПредложенияЦены: View {
     private var ценаПродавца: some View {
         HStack(spacing: 6) {
             Text(ListingChatText.т("offer_seller_price"))
-                .font(.system(size: 13))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
             Text(ListingCard.тенге(Double(база)))
-                .font(.system(size: 15, weight: .heavy))
+                .font(.system(size: 14, weight: .heavy))
                 .monospacedDigit()
                 .foregroundStyle(Theme.текст)
         }
@@ -194,17 +195,20 @@ struct ЛистПредложенияЦены: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(ListingChatText.т("offer_dial"))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
                 Spacer(minLength: 8)
-                /* Строкой, а не ключом перевода: «%» в ключе SwiftUI понял бы как формат. */
+                /* .mk-od-pct: белым на пилюле цвета скидки. Строкой, а не ключом перевода: «%» в ключе SwiftUI понял
+                   бы как формат. */
                 Text(verbatim: "−" + String(скидка) + "%")
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.system(size: 14, weight: .heavy))
                     .monospacedDigit()
-                    .foregroundStyle(цветСкидки)
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 2)
+                    .background(цветСкидки, in: Capsule())
             }
-            Slider(value: привязкаПолзунка, in: 0...Double(Self.предел), step: 1)
-                .tint(цветСкидки)
+            ПолосаСкидкиПредложения(значение: привязкаПолзунка, предел: Double(Self.предел), цвет: цветСкидки)
                 .disabled(база <= 0)
                 .accessibilityLabel(ListingChatText.т("offer_dial"))
                 .accessibilityValue("−" + String(скидка) + "%, " + (цена > 0 ? ListingCard.тенге(Double(цена)) : "—"))
@@ -213,7 +217,8 @@ struct ЛистПредложенияЦены: View {
                 Spacer(minLength: 8)
                 Text(verbatim: "−" + String(Self.предел) + "%")
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 11))
+            .environment(\.layoutDirection, .leftToRight)
             .foregroundStyle(Theme.текстВторой)
             .accessibilityHidden(true)
             if !изменено {
@@ -223,16 +228,16 @@ struct ЛистПредложенияЦены: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(цена > 0 ? ListingCard.тенге(Double(цена)) : "—")
-                    .font(.system(size: 26, weight: .black))
+                    .font(.system(size: 19, weight: .heavy))
                     .monospacedDigit()
-                    .foregroundStyle(цветСкидки)
+                    .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Spacer(minLength: 4)
                 if цена > 0 && база > цена {
                     Text(String(format: ListingChatText.т("offer_save"), ListingCard.тенге(Double(база - цена))))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.зелёный2)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -251,20 +256,20 @@ struct ЛистПредложенияЦены: View {
     private var свояСтрока: some View {
         HStack(spacing: 12) {
             Text(ListingChatText.т("offer_own"))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
             Spacer(minLength: 8)
             HStack(spacing: 6) {
                 TextField(база > 0 ? String(база) : "", text: $своя)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(Theme.текст)
-                    .frame(width: 130)
+                    .frame(width: 120)
                     .focused($вПоле)
                     .accessibilityLabel(ListingChatText.т("offer_own"))
                 Text(verbatim: "₸")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
@@ -326,16 +331,19 @@ struct ЛистПредложенияЦены: View {
                     .font(.system(size: 18, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(ListingChatText.т("offer_send"))
-                    .font(.system(size: 17, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity)
+            .padding(16)
             .background(
                 LinearGradient(colors: [цветСкидки, тёмныйЦветСкидки], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
+            /* box-shadow 0 8px 20px -10px цветом скидки. */
+            .shadow(color: цветСкидки.opacity(можно ? 0.5 : 0), radius: 10, x: 0, y: 8)
             .opacity(можно ? 1 : 0.45)
             .contentShape(Rectangle())
         }
@@ -400,6 +408,62 @@ private struct СтрокаЖдущегоПредложения: View {
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
                 .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+    }
+}
+
+/// Ползунок скидки .mk-od-range: дорожка 6 градиентом зелёный → золото → красный, белый бегунок 22 с кромкой 2,5 цвета
+/// скидки и тенью. Двигается пальцем (шаг 1 %), VoiceOver — «больше / меньше». Бегунок у 0 — слева.
+struct ПолосаСкидкиПредложения: View {
+    @Binding var значение: Double
+    let предел: Double
+    let цвет: Color
+    @Environment(\.isEnabled) private var доступна
+
+    private static let бегунок: CGFloat = 22
+
+    var body: some View {
+        GeometryReader { мерка in
+            let ширина = max(1, мерка.size.width - Self.бегунок)
+            let доля = CGFloat(max(0, min(предел, значение)) / max(предел, 1))
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(LinearGradient(colors: [Color(uiColor: Theme.hex(0x1D7D4A)), Color(uiColor: Theme.hex(0xBF922A)),
+                                                  Color(uiColor: Theme.hex(0xC0392B))],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 6)
+                    .padding(.horizontal, Self.бегунок / 2)
+                Circle()
+                    .fill(Color.white)
+                    .overlay { Circle().strokeBorder(цвет, lineWidth: 2.5) }
+                    .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 2)
+                    .frame(width: Self.бегунок, height: Self.бегунок)
+                    .offset(x: ширина * доля)
+            }
+            .frame(height: 30)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { жест in
+                        guard доступна else { return }
+                        let x = жест.location.x - Self.бегунок / 2
+                        let новое = (Double(max(0, min(ширина, x)) / ширина) * предел).rounded()
+                        if новое != значение { значение = новое }
+                    }
+            )
+        }
+        .frame(height: 30)
+        /* Шкала «0% … −35%» и градиент — слева направо и в арабском, как у поля range сайта с его подписями. */
+        .environment(\.layoutDirection, .leftToRight)
+        .opacity(доступна ? 1 : 0.5)
+        .accessibilityElement()
+        .accessibilityAdjustableAction { куда in
+            guard доступна else { return }
+            switch куда {
+            case .increment: значение = min(предел, значение + 1)
+            case .decrement: значение = max(0, значение - 1)
+            @unknown default: break
+            }
         }
     }
 }

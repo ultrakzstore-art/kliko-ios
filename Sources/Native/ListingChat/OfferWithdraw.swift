@@ -242,17 +242,19 @@ struct КнопкаОтозватьПредложение: View {
                     SiteSpinner.мелкий
                 } else {
                     Text(ТекстыОтзываПредложения.т("withdraw"))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .underline()
                         .foregroundStyle(Theme.текстВторой)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 36)
+            /* .mk-ofc-x: 12, отступ 6 сверху и снизу, margin-top 8. */
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         .disabled(занято)
-        .padding(.top, 6)
+        .padding(.top, 8)
         .accessibilityLabel(ТекстыОтзываПредложения.т("withdraw"))
     }
 }

@@ -23,8 +23,10 @@ import Foundation
  via — "telegram".
 
  Предложение цены — ровно mkOfferSend: text с суммой и offer {price, method: "cash", term: 0, pickup, ship_by_buyer},
- force_escalate: true. Подкрепить деньгами и принять встречную (offer_fund / offer_unfund / offer_counter_*) здесь НЕТ:
- они держат и возвращают деньги — это остаётся на сайте. Отзыв предложения (offer_withdraw) — OfferWithdraw.swift.
+ force_escalate: true. Подкрепить деньгами (offer_fund / offer_unfund) здесь НЕТ: они держат и возвращают деньги — это
+ остаётся на сайте. Ответ на встречную цену продавца (offer_counter_accept / offer_counter_decline, _mkCounterGo) денег не
+ двигает — только соглашается о цене или отказывается (оплата потом, оформлением сделки): он здесь, ответНаВстречную.
+ Отзыв предложения (offer_withdraw) — OfferWithdraw.swift.
 
  Разбор терпимый, как у ленты (Listing): числа строкой или числом, массив — иногда объектом {"0":…}, чего нет — пусто.
  Здесь только запросы: когда слать, решает МодельЧатаОбъявления. Повторов нет: одно нажатие — один запрос.
@@ -205,6 +207,25 @@ enum ЧатОбъявленияAPI {
             if !ошибка.isEmpty { return .отказ(ошибка) }
             if код == 401 || код == 403 { return .нуженВход(словаСайта) }
             return .отказ((200..<300).contains(код) ? (словаСайта ?? "refused") : "HTTP \(код)")
+        }
+    }
+
+    /**
+     «Принять · N ₸» / «Отказаться» у встречной цены продавца — POST chat.php?action=offer_counter_accept |
+     offer_counter_decline {csrf, pid} (_mkCounterGo витрины). Токен — страницы кабинета, как у offer_withdraw
+     (ИнбоксAPI.отправить: на «csrf» — свежая страница и один повтор). Ответ ok — {price} согласованной цены.
+     */
+    @MainActor
+    static func ответНаВстречную(объявление: String, принять: Bool) async -> (ok: Bool, цена: Int, ошибка: String?) {
+        guard !объявление.isEmpty else { return (false, 0, ListingChatText.т("failed")) }
+        let действие = принять ? "offer_counter_accept" : "offer_counter_decline"
+        do {
+            let j = try await ИнбоксAPI.отправить("chat.php?action=" + действие, тело: ["pid": объявление])
+            if да(j["ok"]) { return (true, max(0, целое(j["price"]) ?? 0), nil) }
+            return (false, 0, ИнбоксAPI.текстОшибки(j, запасной: ListingChatText.т("failed")))
+        } catch {
+            if let сбой = error as? КабинетСайта.Сбой, сбой == .сеть { return (false, 0, ListingChatText.т("no_conn")) }
+            return (false, 0, ListingChatText.т("failed"))
         }
     }
 

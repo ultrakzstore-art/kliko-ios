@@ -449,6 +449,29 @@ final class МодельЧатаОбъявления: ObservableObject {
         }
     }
 
+    /// Ответ на встречную цену идёт — кнопки карточки выключены (у сайта button.disabled).
+    @Published private(set) var отвечаемНаВстречную = false
+
+    /// «Принять · N ₸» / «Отказаться» у встречной цены продавца (mkCounterAccept / mkCounterDecline): плашка «Цена
+    /// согласована: N ₸» или «Вы отказались», затем mkChatReload. Денег не двигает — оформление сделки потом.
+    func ответитьНаВстречную(принять: Bool, цена: Int) async {
+        guard !отвечаемНаВстречную else { return }
+        отвечаемНаВстречную = true
+        defer { отвечаемНаВстречную = false }
+        let итог = await ЧатОбъявленияAPI.ответНаВстречную(объявление: товар.id, принять: принять)
+        guard итог.ok else {
+            показать(итог.ошибка ?? ListingChatText.т("failed"))
+            return
+        }
+        if принять {
+            let сумма = итог.цена > 0 ? итог.цена : цена
+            показать(ListingChatText.т("of_ctr_took") + ": " + Self.число(сумма) + " ₸")
+        } else {
+            показать(ListingChatText.т("of_ctr_refused"))
+        }
+        await перезагрузить()
+    }
+
     /// Номер чата и статус из ответа (mkChatPoll): новый номер — опрос с начала (since -1).
     private func установитьЧат(_ номер: String?, статус новый: String) {
         if !новый.isEmpty { статус = новый }

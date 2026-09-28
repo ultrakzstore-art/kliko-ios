@@ -21,6 +21,8 @@ struct ИнбоксЭкран: View {
     @State private var входОткрыт = false
     @State private var запросДанных = false
     @State private var удалить: СтрокаИнбокса? = nil
+    /// .msg-search input:focus — кромка --acc-on.
+    @FocusState private var поискВФокусе: Bool
 
     init(список: ChatListModel, открыть: @escaping (URL) -> Void) {
         self.список = список
@@ -32,8 +34,19 @@ struct ИнбоксЭкран: View {
     var body: some View {
         содержимое
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.фонСтраницы)
-            .шапкаЭкранаСайта(т("title"))
+            .background(ИнбоксКраска.фон)
+            /* Заголовок «Чат» у сайта один — крупный h2 в содержимом; в панели только «Назад» (название остаётся
+               навигационным для VoiceOver и «Назад» следующего экрана). */
+            .navigationTitle(т("title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                }
+            }
+            .toolbarBackground(ИнбоксКраска.фон, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(Theme.акцент)
             .refreshable { await список.загрузить() }
             /* Возвращаемся из переписки — непрочитанные должны погаснуть: перечитываем при каждом показе. */
             .task { await загрузитьНаЭкране() }
@@ -78,10 +91,7 @@ struct ИнбоксЭкран: View {
 
     @ViewBuilder
     private var содержимое: some View {
-        if !модель.загружено {
-            SiteSpinner.цвета(Theme.акцент)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if модель.нуженВход {
+        if модель.нуженВход {
             ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: ChatText.т("login"),
                        подпись: ChatText.т("login_sub"), кнопка: ChatText.т("login_btn"),
                        действие: { войти() })
@@ -93,54 +103,73 @@ struct ИнбоксЭкран: View {
         }
     }
 
+    /// #messages-screen: .wrap 14 по краям и сверху; шапка, инструменты и вкладки — с отступом снизу, строки — через 10.
+    /// Пока список не пришёл, шапка, поиск и вкладки уже на месте, вместо строк — «Загрузка…» (как у сайта).
     private var лента: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 заголовок
+                    .padding(.bottom, 14)
                 инструменты
+                    .padding(.bottom, 12)
                 ВкладкиИнбокса(модель: модель)
-                if модель.фильтр == .trash { полосаКорзины }
-                строки
+                    .padding(.bottom, 12)
+                if модель.фильтр == .trash {
+                    полосаКорзины
+                        .padding(.bottom, 12)
+                }
+                if модель.загружено {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        строки
+                    }
+                } else {
+                    Text(т("loading"))
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.текстВторой)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
         }
         .scrollDismissesKeyboard(.interactively)
     }
 
     /// Верх #messages-screen: значок чата и «Чат» крупно, под ними chat_sub «Переписка, аренда и обмен — в одном месте».
     private var заголовок: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 Image(systemName: "bubble.left")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Theme.зелёный)
+                    .font(.system(size: 19, weight: .regular))
+                    .frame(width: 21, height: 21)
+                    .foregroundStyle(ИнбоксКраска.акцент)
                     .accessibilityHidden(true)
                 Text(т("title"))
-                    .font(.system(size: 26, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 21, weight: .bold))
+                    .foregroundStyle(ИнбоксКраска.текст)
                     .accessibilityAddTraits(.isHeader)
             }
             Text(т("sub"))
-                .font(.system(size: 15))
+                .font(.system(size: 13))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, 4)
-        .padding(.bottom, 4)
     }
 
     /// .msg-tools: поле поиска и «Корзина».
     private var инструменты: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 16, weight: .regular))
+                    .frame(width: 17)
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
                 TextField(т("search_ph"), text: $модель.поиск)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 16))
+                    .foregroundStyle(ИнбоксКраска.текст)
+                    .focused($поискВФокусе)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -158,10 +187,10 @@ struct ИнбоксЭкран: View {
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .background(ИнбоксКраска.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1)
+                    .strokeBorder(поискВФокусе ? ИнбоксКраска.акцент : ИнбоксКраска.линия, lineWidth: 1)
             }
             кнопкаКорзины
         }
@@ -177,13 +206,13 @@ struct ИнбоксЭкран: View {
             Image(systemName: "trash")
                 .font(.system(size: 18, weight: .semibold))
                 .accessibilityHidden(true)
-                .foregroundStyle(включена ? КраскаОбъявлений.плохоТекст : Theme.текстВторой)
+                .foregroundStyle(включена ? ИнбоксКраска.плохоТекст : Theme.текстВторой)
                 .frame(width: 44, height: 44)
-                .background(включена ? КраскаОбъявлений.плохоФон : Theme.поверхность,
+                .background(включена ? ИнбоксКраска.плохоФон : ИнбоксКраска.карточка,
                             in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                        .strokeBorder(включена ? КраскаОбъявлений.плохоКромка : Theme.линия, lineWidth: 1)
+                        .strokeBorder(включена ? ИнбоксКраска.плохоКромка : ИнбоксКраска.линия, lineWidth: 1)
                 }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
@@ -192,42 +221,48 @@ struct ИнбоксЭкран: View {
     }
 
     /// .msg-trashbar: срок хранения и «Запросить данные у поддержки →» (dataReqOpen('')).
+    /// Ссылка — в том же абзаце, что и срок (у сайта <a> внутри текста), жирная акцентом, без переноса.
     private var полосаКорзины: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(т("retention"))
-                .font(.system(size: 13))
+        let срок = Text(т("retention") + " ")
+        let ссылка = Text(т("request_data") + "\u{00A0}→")
+            .fontWeight(.bold)
+            .foregroundColor(ИнбоксКраска.акцент)
+        return Button {
+            запросДанных = true
+        } label: {
+            (срок + ссылка)
+                .font(.system(size: 12))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Button {
-                запросДанных = true
-            } label: {
-                Text(т("request_data") + " →")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.акцент)
-            }
-            .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(ИнбоксКраска.подложка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private var строки: some View {
         let видимые = модель.видимые
         if видимые.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 34, weight: .semibold))
+            VStack(spacing: 10) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 36, weight: .regular))
+                    .frame(width: 40, height: 40)
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
                 Text(т(модель.фильтр == .trash ? "trash_empty" : "empty"))
-                    .font(.system(size: 15))
+                    .font(.system(size: 13))
+                    .lineSpacing(4)
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 40)
+            .padding(.vertical, 44)
+            .padding(.horizontal, 20)
         } else {
             ForEach(видимые) { строка in
                 СтрокаИнбоксаВид(строка: строка,
@@ -276,13 +311,13 @@ struct ВкладкиИнбокса: View {
     @ObservedObject var модель: ИнбоксМодель
 
     var body: some View {
-        HStack(spacing: 4) {
+        РядВкладокИнбокса(промежуток: 4) {
             ForEach(ИнбоксМодель.Фильтр.вкладки, id: \.self) { ф in
                 кнопка(ф)
             }
         }
         .padding(4)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .background(ИнбоксКраска.подложка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
     }
 
     private func кнопка(_ ф: ИнбоксМодель.Фильтр) -> some View {
@@ -291,26 +326,27 @@ struct ВкладкиИнбокса: View {
         return Button {
             модель.выбрать(ф)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Text(ф.название)
                     .font(.system(size: 13, weight: .bold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
                 if число > 0 {
                     Text(число > 99 ? "99+" : String(число))
                         .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 5)
+                        .monospacedDigit()
+                        .foregroundStyle(ИнбоксКраска.наАкценте)
+                        .padding(.horizontal, 6)
                         .frame(minWidth: 18, minHeight: 18)
-                        .background(Theme.акцент, in: Capsule())
+                        .background(ИнбоксКраска.акцент, in: Capsule())
                 }
             }
-            .foregroundStyle(выбрана ? Theme.текст : Theme.текстВторой)
+            .foregroundStyle(выбрана ? ИнбоксКраска.текст : Theme.текстВторой)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 36)
             .background {
                 if выбрана {
                     RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                        .fill(Theme.поверхность)
+                        .fill(ИнбоксКраска.карточка)
                         .shadow(color: Color.black.opacity(0.10), radius: 1.5, x: 0, y: 1)
                 }
             }
@@ -318,6 +354,69 @@ struct ВкладкиИнбокса: View {
         .buttonStyle(.plain)
         .accessibilityLabel(число > 0 ? ф.название + ", " + String(format: AccessText.т("unread"), число) : ф.название)
         .accessibilityAddTraits(выбрана ? .isSelected : [])
+    }
+}
+
+/// Ряд вкладок как flex: 1 1 auto у .msg-tab: каждая — своей ширины плюс равная доля остатка; не влезли — сжимаются
+/// пропорционально своей ширине (текст обрежется, а не уменьшится).
+struct РядВкладокИнбокса: Layout {
+    var промежуток: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let размеры = subviews.map { $0.sizeThatFits(.unspecified) }
+        let зазоры = промежуток * CGFloat(max(0, размеры.count - 1))
+        let сумма = размеры.reduce(0) { $0 + $1.width } + зазоры
+        let высота = размеры.map { $0.height }.max() ?? 0
+        return CGSize(width: proposal.width ?? сумма, height: высота)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let ширины = subviews.map { $0.sizeThatFits(.unspecified).width }
+        guard !ширины.isEmpty else { return }
+        let зазоры = промежуток * CGFloat(ширины.count - 1)
+        let сумма = ширины.reduce(0, +)
+        let остаток = bounds.width - зазоры - сумма
+        let доля = остаток / CGFloat(ширины.count)
+        let сжатие = (bounds.width - зазоры) / max(сумма, 1)
+        var x = bounds.minX
+        for (место, вид) in subviews.enumerated() {
+            let ширина = остаток >= 0 ? ширины[место] + доля : ширины[место] * сжатие
+            вид.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: ширина, height: bounds.height))
+            x += ширина + промежуток
+        }
+    }
+}
+
+/// Ряд колонок по долям — grid-template-columns: minmax(0,2fr) minmax(0,1fr) у кнопок торга (.kc-ofr-main, .mk-ofc-row):
+/// ширина ряда делится по долям за вычетом промежутков, высота — у самой высокой.
+struct РядДолейКабинета: Layout {
+    var доли: [CGFloat] = [2, 1]
+    var промежуток: CGFloat = 8
+
+    private func ширины(_ всего: CGFloat, _ число: Int) -> [CGFloat] {
+        let свои = (0..<число).map { $0 < доли.count ? доли[$0] : 1 }
+        let сумма = max(свои.reduce(0, +), 0.001)
+        let место = max(0, всего - промежуток * CGFloat(max(0, число - 1)))
+        return свои.map { место * $0 / сумма }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let всего = proposal.width ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
+        let ш = ширины(всего, subviews.count)
+        var высота: CGFloat = 0
+        for (место, вид) in subviews.enumerated() {
+            высота = max(высота, вид.sizeThatFits(ProposedViewSize(width: ш[место], height: nil)).height)
+        }
+        return CGSize(width: всего, height: высота)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let ш = ширины(bounds.width, subviews.count)
+        var x = bounds.minX
+        for (место, вид) in subviews.enumerated() {
+            вид.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: ш[место], height: bounds.height))
+            x += ш[место] + промежуток
+        }
     }
 }
 
@@ -356,33 +455,33 @@ struct СтрокаИнбоксаВид: View {
         }
         .padding(12)
         .frame(minHeight: 72, alignment: .top)
-        .background(непрочитана ? КраскаОбъявлений.хорошоФон : Theme.поверхность,
+        .background(непрочитана ? ИнбоксКраска.окФон : ИнбоксКраска.карточка,
                     in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(непрочитана ? КраскаОбъявлений.хорошоКромка : Theme.линия, lineWidth: 1)
+                .strokeBorder(непрочитана ? ИнбоксКраска.окКромка : ИнбоксКраска.линия, lineWidth: 1)
         }
         .opacity(занята ? 0.6 : 1)
     }
 
     private var тело: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if закреплена {
                     Image(systemName: "pin.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.акцент)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(ИнбоксКраска.акцент)
                         .accessibilityHidden(true)
                 }
                 Text(строка.имя)
-                    .font(.system(size: 16, weight: непрочитана ? Font.Weight.heavy : Font.Weight.bold))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 14, weight: непрочитана ? Font.Weight.heavy : Font.Weight.bold))
+                    .foregroundStyle(ИнбоксКраска.текст)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(ИнбоксВремя.коротко(строка.когда))
-                    .font(.system(size: 13, weight: непрочитана ? Font.Weight.bold : Font.Weight.regular))
+                    .font(.system(size: 11, weight: непрочитана ? Font.Weight.bold : Font.Weight.regular))
                     .monospacedDigit()
-                    .foregroundStyle(непрочитана ? Theme.акцент : Theme.текстВторой)
+                    .foregroundStyle(непрочитана ? ИнбоксКраска.акцент : Theme.текстВторой)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -392,11 +491,12 @@ struct СтрокаИнбоксаВид: View {
                 Spacer(minLength: 4)
                 if непрочитана {
                     Text(строка.непрочитано > 99 ? "99+" : String(строка.непрочитано))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .font(.system(size: 11, weight: .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(ИнбоксКраска.наАкценте)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 20, minHeight: 20)
-                        .background(Theme.непрочитано, in: Capsule())
+                        .background(ИнбоксКраска.акцент, in: Capsule())
                 }
             }
         }
@@ -407,8 +507,8 @@ struct СтрокаИнбоксаВид: View {
     private var превью: some View {
         if let отрывок {
             Text(отрывок)
-                .font(.system(size: 15))
-                .foregroundStyle(Theme.текст)
+                .font(.system(size: 13))
+                .foregroundStyle(ИнбоксКраска.текст)
                 .lineLimit(1)
         } else {
             HStack(spacing: 4) {
@@ -420,8 +520,8 @@ struct СтрокаИнбоксаВид: View {
                 Text((строка.превьюМоё ? т("you") : "") + строка.превью)
                     .lineLimit(1)
             }
-            .font(.system(size: 15))
-            .foregroundStyle(непрочитана ? Theme.текст : Theme.текстВторой)
+            .font(.system(size: 13))
+            .foregroundStyle(непрочитана ? ИнбоксКраска.текст : Theme.текстВторой)
         }
     }
 
@@ -455,13 +555,13 @@ struct СтрокаИнбоксаВид: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(Theme.текстВторой)
-                .frame(width: 36, height: 36)
+                .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
         }
         .disabled(занята)
-        .padding(.top, -6)
-        .padding(.trailing, -6)
-        .padding(.leading, 4)
+        .padding(.top, -4)
+        .padding(.trailing, -4)
+        .padding(.leading, 12)
         .accessibilityLabel(т("more"))
     }
 
@@ -528,7 +628,7 @@ struct ПодстрокаИнбокса: View {
                             вид(пара.element)
                         }
                     }
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(1)
                     .fixedSize()
@@ -544,7 +644,7 @@ struct ПодстрокаИнбокса: View {
             тег
         case .раздел(let название, let цвет):
             Text(название)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(цвет ?? Theme.текстВторой)
                 .lineLimit(1)
         case .текст(let текст):
@@ -571,10 +671,10 @@ struct ТегИнбокса: View, Identifiable {
     let цвет: Color
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             if let значок {
                 Image(systemName: значок)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .accessibilityHidden(true)
             }
             Text(текст)
@@ -582,9 +682,9 @@ struct ТегИнбокса: View, Identifiable {
                 .lineLimit(1)
         }
         .foregroundStyle(цвет)
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 8)
         .padding(.vertical, 2)
-        .background(фон, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(фон, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     /// Теги строки: метка диалога (CHAT_LABELS), у диалога — «Аренда» / «Обмен», у лида — «🔥 Лид» (горячий) или
@@ -606,11 +706,11 @@ struct ТегИнбокса: View, Identifiable {
             }
         case .lead:
             if с.статусЛида == "hot_lead" {
-                теги.append(ТегИнбокса(id: "hot", текст: ИнбоксText.т("tag_lead"), значок: "flame.fill",
-                                       фон: КраскаОбъявлений.плохоФон, цвет: КраскаОбъявлений.плохоТекст))
+                теги.append(ТегИнбокса(id: "hot", текст: ИнбоксText.т("tag_lead"), значок: "flame",
+                                       фон: ИнбоксКраска.плохоФон, цвет: ИнбоксКраска.плохоТекст))
             } else {
                 теги.append(ТегИнбокса(id: "lead", текст: ИнбоксText.т("tag_buyer"), значок: nil,
-                                       фон: КраскаОбъявлений.предупреждениеФон, цвет: КраскаОбъявлений.предупреждениеТекст))
+                                       фон: ИнбоксКраска.вниманиеФон, цвет: ИнбоксКраска.вниманиеТекст))
             }
         case .buyer:
             теги.append(ТегИнбокса(id: "buy", текст: ИнбоксText.т("tag_buy"), значок: nil,
@@ -687,8 +787,8 @@ struct АватарИнбокса: View {
                 значок.вид(размер: 11)
                     .foregroundStyle(цвет)
                     .frame(width: 18, height: 18)
-                    .background(Theme.поверхность, in: Circle())
-                    .overlay { Circle().strokeBorder(Theme.линия, lineWidth: 1) }
+                    .background(ИнбоксКраска.карточка, in: Circle())
+                    .background(Circle().fill(ИнбоксКраска.линия).padding(-1))
                     .offset(x: 3, y: 3)
             }
         }
@@ -718,7 +818,7 @@ struct АватарИнбокса: View {
             ZStack {
                 фон
                 Text(String(строка.имя.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(буква)
             }
         }
@@ -819,35 +919,79 @@ enum МеткаДиалога: String, CaseIterable, Identifiable {
 
     var фон: Color {
         switch self {
-        case .maybe: return КраскаОбъявлений.предупреждениеФон
-        case .thinking: return КраскаОбъявлений.инфоФон
-        case .bought: return КраскаОбъявлений.хорошоФон
-        case .regular: return ИнбоксКраска.иФон
-        case .declined: return КраскаОбъявлений.плохоФон
+        case .maybe: return ИнбоксКраска.вниманиеФон
+        case .thinking: return ИнбоксКраска.инфоФон
+        case .bought: return ИнбоксКраска.окФон
+        case .regular: return ИнбоксКраска.аиФон
+        case .declined: return ИнбоксКраска.плохоФон
         }
     }
 
     var цвет: Color {
         switch self {
-        case .maybe: return КраскаОбъявлений.предупреждениеТекст
-        case .thinking: return КраскаОбъявлений.инфоТекст
-        case .bought: return КраскаОбъявлений.хорошоТекст
-        case .regular: return ИнбоксКраска.иТекст
-        case .declined: return КраскаОбъявлений.плохоТекст
+        case .maybe: return ИнбоксКраска.вниманиеТекст
+        case .thinking: return ИнбоксКраска.инфоТекст
+        case .bought: return ИнбоксКраска.окТекст
+        case .regular: return ИнбоксКраска.аиТекст
+        case .declined: return ИнбоксКраска.плохоТекст
         }
     }
 }
 
-/// Краски, которых нет у «Моих объявлений»: --tint-ai / --on-ai (фиолетовые) и цвет раздела из meta.catColor.
+/// Краски кабинета сайта (css_cabinet.css :root и [data-theme=dark], --acc-on из css_ui-prefs) — у инбокса, лид-чата,
+/// переписки dm.php, заявок и уведомлений. Не краски «Моих объявлений» и не витрины (--mk-*): у кабинета свои.
 enum ИнбоксКраска {
-    static let иФон = Theme.цвет(0xEDE9FE, 0x261E3D)
-    static let иТекст = Theme.цвет(0x6D28D9, 0xC4B5FD)
-    /// .msg-tag.rent: --tint-ai #f4eefb / --on-ai #6c3fc5 (тёмная — rgba(167,139,250,.15) на карточке / #b79bf5).
+    /// --acc-on: --g #0f5132 / тёмная --g3 #5cd39a; --acc-ink — текст на нём #fff / #10131a.
+    static let акцент = Theme.цвет(0x0F5132, 0x5CD39A)
+    static let наАкценте = Theme.цвет(0xFFFFFF, 0x10131A)
+    /// --bg страницы, --card карточки, --surf2 подложки, --line, --ink.
+    static let фон = Theme.цвет(0xEEF3F0, 0x101017)
+    static let карточка = Theme.цвет(0xFFFFFF, 0x1C1C26)
+    static let подложка = Theme.цвет(0xF6FAF8, 0x23232F)
+    static let линия = Theme.цвет(светлый: Theme.hex(0xE6EFE9), тёмный: Theme.hex(0xFFFFFF, 0.10))
+    static let текст = Theme.цвет(0x0F1712, 0xEAF3EE)
+    /// --tint-ok / --on-ok / --edge-ok.
+    static let окФон = Theme.цвет(светлый: Theme.hex(0xE7F6EE), тёмный: Theme.hex(0x34C997, 0.14))
+    static let окТекст = Theme.цвет(0x0F7A44, 0x5CD39A)
+    static let окКромка = Theme.цвет(светлый: Theme.hex(0xCDEBD7), тёмный: Theme.hex(0x34C997, 0.32))
+    /// --tint-warn / --on-warn / --edge-warn.
+    static let вниманиеФон = Theme.цвет(светлый: Theme.hex(0xFFF4E5), тёмный: Theme.hex(0xE0BD5E, 0.15))
+    static let вниманиеТекст = Theme.цвет(0x92400E, 0xE0BD5E)
+    static let вниманиеКромка = Theme.цвет(светлый: Theme.hex(0xFDE68A), тёмный: Theme.hex(0xE0BD5E, 0.34))
+    /// --tint-bad / --on-bad / --edge-bad.
+    static let плохоФон = Theme.цвет(светлый: Theme.hex(0xFEE2E2), тёмный: Theme.hex(0xFF6168, 0.15))
+    static let плохоТекст = Theme.цвет(0x991B1B, 0xFF8A8F)
+    static let плохоКромка = Theme.цвет(светлый: Theme.hex(0xFECACA), тёмный: Theme.hex(0xFF6168, 0.34))
+    /// --tint-ai #f4eefb / --on-ai #6c3fc5 (тёмная — rgba(167,139,250,.15) на карточке / #b79bf5).
     static let аиФон = Theme.цвет(0xF4EEFB, 0x2A2440)
     static let аиТекст = Theme.цвет(0x6C3FC5, 0xB79BF5)
-    /// .msg-tag.info и .exch («Покупка», «Обмен»): --tint-info #eef4ff / --on-info #1e40af (тёмная — #7cb8f5).
+    /// --tint-info #eef4ff / --on-info #1e40af (тёмная — #7cb8f5).
     static let инфоФон = Theme.цвет(0xEEF4FF, 0x1C2A3E)
     static let инфоТекст = Theme.цвет(0x1E40AF, 0x7CB8F5)
+    /// --edge-info.
+    static let инфоКромка = Theme.цвет(светлый: Theme.hex(0xC7D6F5), тёмный: Theme.hex(0x60A5FA, 0.34))
+
+    // Переписка (.kc css_chat в кабинете)
+    /// .kc-msg.me: --kc-acc — #1d7d4a; тёмная #5cd39a под чёрным 44 % = #337656.
+    static let облакоМоё = Theme.цвет(0x1D7D4A, 0x337656)
+    /// .kc-msg.peer и заглушки фото: --kc-peer.
+    static let облакоЧужое = Theme.цвет(0xEEF2F0, 0x1F2A24)
+    static let облакоЧужоеТекст = Theme.цвет(0x0F1B14, 0xEAF3EE)
+    /// --kc-mut: время чужого облака.
+    static let облакоВремя = Theme.цвет(0x5F7168, 0x90A499)
+    /// --kc-soft / --kc-line / --kc-deep карточек торга (.kc-ofr).
+    static let мягкий = Theme.цвет(0xF2F7F4, 0x1A221D)
+    static let мягкаяЛиния = Theme.цвет(0xE2ECE6, 0x243029)
+    static let глубокий = Theme.цвет(0x0F5132, 0x34C997)
+    /// Градиент кнопок кабинета linear-gradient(135deg, --g, --g2).
+    static var градиент: LinearGradient {
+        LinearGradient(colors: [Theme.цвет(0x0F5132, 0x22A05B), Theme.цвет(0x1D7D4A, 0x34C997)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    /// --acc-tint: rgba(29,125,74,.1) / rgba(52,201,151,.14).
+    static let оттенок = Theme.цвет(светлый: Theme.hex(0x1D7D4A, 0.10), тёмный: Theme.hex(0x34C997, 0.14))
+    /// .toast кабинета: #0f1712 в обеих темах.
+    static let плашка = Color(uiColor: Theme.hex(0x0F1712))
 
     /// «#1d9e5e» → цвет; не цвет — nil.
     static func цвет(_ hex: String) -> Color? {
@@ -869,20 +1013,171 @@ struct ПилюляСлужебнаяКабинета: View {
 
     var body: some View {
         Text(текст)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+            .font(.system(size: 12))
+            .foregroundStyle(ИнбоксКраска.окТекст)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(КраскаОбъявлений.хорошоФон, in: Capsule())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(ИнбоксКраска.окФон, in: Capsule())
             .overlay {
                 if рамка {
-                    Capsule().strokeBorder(КраскаОбъявлений.хорошоТекст, lineWidth: 1)
+                    Capsule().strokeBorder(ИнбоксКраска.окТекст, lineWidth: 1)
                 }
             }
+            .padding(.vertical, 2)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
+    }
+}
+
+/// Облако переписки кабинета (.kc-msg в #dm-messages и #lcm-messages): 14 с высотой строки 1.4, отступы 8/12,
+/// скругление 14 и «хвост» 5 на своей стороне. Своё — --kc-acc кабинета (#1d7d4a, тёмная — под 44 % чёрного), чужое —
+/// --kc-peer без кромки. Время — 11 справа, у своего белым 60 %, у чужого --kc-mut. «Kliko AI-ассистент» (.kc-who) и «из
+/// Telegram» — внутри облака над текстом.
+struct ОблакоКабинета: View {
+    let текст: String
+    let время: String
+    let моё: Bool
+    var кто: String? = nil
+    var изTelegram: Bool = false
+    /// Голосовое и видео без плеера — значок перед подписью (у сайта SVG, не эмодзи).
+    var значок: String? = nil
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let кто {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cpu")
+                            .font(.system(size: 11))
+                            .accessibilityHidden(true)
+                        Text(кто)
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(моё ? Color.white.opacity(0.85) : ИнбоксКраска.глубокий.opacity(0.85))
+                    .padding(.bottom, 3)
+                }
+                if изTelegram {
+                    HStack(spacing: 4) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 10))
+                            .accessibilityHidden(true)
+                        Text(ИнбоксText.т("via_tg"))
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(Color(uiColor: Theme.hex(0x229ED9)))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(ИнбоксКраска.инфоФон, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .padding(.bottom, 6)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    if let значок {
+                        Image(systemName: значок)
+                            .font(.system(size: 13))
+                            .accessibilityHidden(true)
+                    }
+                    Text(текст)
+                        .font(.system(size: 14))
+                        .lineSpacing(3)
+                        .multilineTextAlignment(.leading)
+                }
+                .foregroundStyle(моё ? Color.white : ИнбоксКраска.облакоЧужоеТекст)
+            }
+            if !время.isEmpty {
+                Text(время)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(моё ? Color.white.opacity(0.6) : ИнбоксКраска.облакоВремя)
+                    .padding(.top, 3)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(моё ? ИнбоксКраска.облакоМоё : ИнбоксКраска.облакоЧужое, in: форма)
+    }
+
+    private var форма: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: моё ? 14 : 5,
+                               bottomTrailingRadius: моё ? 5 : 14, topTrailingRadius: 14, style: .continuous)
+    }
+}
+
+/// Фото в переписке кабинета (.kc-msg.media): своими пропорциями, не выше 280 и не шире 260, скругление 14, время под
+/// ним серым. Нажатие — снимок во весь экран внутри приложения (у сайта window.open(src)).
+struct ФотоПерепискиКабинета: View {
+    let адрес: URL
+    let моё: Bool
+    let время: String
+    @State private var крупно = false
+
+    /// Явный init: скрытое состояние делает встроенный init видимым только внутри этого файла, а фото берут переписка
+    /// dm.php и лид-чат.
+    init(адрес: URL, моё: Bool, время: String) {
+        self.адрес = адрес
+        self.моё = моё
+        self.время = время
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if моё { Spacer(minLength: 48) }
+            VStack(alignment: .trailing, spacing: 3) {
+                Button {
+                    крупно = true
+                } label: {
+                    КартинкаЛенты(адрес, пунктов: 280, заполнить: false) {
+                        ИнбоксКраска.облакоЧужое
+                            .frame(width: 200, height: 200)
+                    }
+                    .frame(maxWidth: 260, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(ChatText.т("photo"))
+                if !время.isEmpty {
+                    Text(время)
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.текстВторой)
+                }
+            }
+            if !моё { Spacer(minLength: 48) }
+        }
+        .fullScreenCover(isPresented: $крупно) {
+            ФотоПерепискиКрупно(адрес: адрес)
+        }
+    }
+}
+
+/// Снимок из переписки во весь экран на чёрном, «Закрыть» сверху.
+struct ФотоПерепискиКрупно: View {
+    let адрес: URL
+    @Environment(\.dismiss) private var закрыть
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            КартинкаЛенты(адрес, пунктов: 1000, заполнить: false) {
+                SiteSpinner.цвета(Color.white)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Button {
+                закрыть()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.16), in: Circle())
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 12)
+            .padding(.top, 8)
+            .accessibilityLabel(ИнбоксText.т("close"))
+        }
     }
 }
 
@@ -895,25 +1190,29 @@ struct ОтметкаПрочтения: View {
             Spacer(minLength: 0)
             Text(ИнбоксText.т(прочитано ? "read" : "sent"))
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(прочитано ? Theme.зелёныйЯркий : Theme.текстВторой)
-                .padding(.trailing, 4)
+                .foregroundStyle(прочитано ? Color(uiColor: Theme.hex(0x1D9E5E)) : Theme.текстВторой)
+                .padding(.trailing, 2)
+                .padding(.top, 1)
         }
     }
 }
 
-/// Короткая плашка внизу — toast сайта. Голосом её уже произнесла модель (announcement).
+/// Короткая плашка внизу — .toast кабинета: #0f1712 в обеих темах, белый 14, отступы 12/20, скругление 12, не шире
+/// 420. Голосом её уже произнесла модель (announcement).
 struct ПлашкаИнбокса: View {
     let текст: String?
 
     var body: some View {
         if let текст {
             Text(текст)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14))
+                .lineSpacing(3)
                 .foregroundStyle(Color.white)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Theme.зелёный, in: Capsule())
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(ИнбоксКраска.плашка, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .frame(maxWidth: 420)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
                 .transition(.opacity)

@@ -147,6 +147,11 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     let вид: String
     /// offer{} предложения цены (kind offer) — карточка _dmOfferCard кабинета: «Ваше предложение» и «Отозвать».
     let предложение: ПредложениеВЧате?
+    /// Гео (type geo): meta.lat / meta.lon — карточка точки встречи (_dmRender); нет — nil.
+    let широта: Double?
+    let долгота: Double?
+    /// Аренда и обмен (type rental / exchange): meta — карточка .dm-card (_dmCardRental / _dmCardExchange).
+    let сделкаЧата: СделкаВЧате?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ЧатКлюч.self)
@@ -185,9 +190,17 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
                 фото = nil
             }
             заявка = тип == "system" && meta.да("request") ? ЗаявкаВЧате(meta) : nil
+            let ш = meta.дробное("lat")
+            let д = meta.дробное("lon")
+            широта = тип == "geo" && ш != 0 ? ш : nil
+            долгота = тип == "geo" && д != 0 ? д : nil
+            сделкаЧата = тип == "rental" || тип == "exchange" ? СделкаВЧате(meta, аренда: тип == "rental") : nil
         } else {
             фото = nil
             заявка = nil
+            широта = nil
+            долгота = nil
+            сделкаЧата = nil
         }
         /* У сообщения своего номера в июльском контракте не было. Берём его, если сервер начал присылать; иначе —
            отправитель, время и текст: двух одинаковых сообщений в одну секунду от одного человека не бывает. */
@@ -197,8 +210,10 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     /// Что показать в пузыре и в списке диалогов для не-текстовых сообщений.
     static func подпись(тип: String, текст: String) -> String {
         switch тип {
-        case "image": return "📷 " + ChatText.т("photo")
-        case "voice": return "🎤 " + ChatText.т("voice")
+        /* Значок у сайта — SVG рядом с подписью (облако кабинета рисует его само), не эмодзи в тексте. */
+        case "image": return ChatText.т("photo")
+        case "voice": return ChatText.т("voice")
+        case "video" where текст.isEmpty: return ИнбоксText.т("video")
         /* Этап 45: запрос аренды и предложение обмена — подписи строки инбокса сайта (dm_rental_req, dm_exchange_offer);
            их карточки с кнопками пока на сайте. */
         case "rental" where Config.нативныеСообщенияКабинета: return ИнбоксText.т("rental_req")
@@ -275,6 +290,11 @@ struct ЧатПереписка: Decodable {
     var собеседникУшёл: Bool
     /// lead{role, agreed, pid, no_escrow} из корня ответа open/poll (_dmLead кабинета) — торг в этой переписке.
     var торг: ТоргПереписки? = nil
+    /// item{id, img, title, price, price_negotiable, for_exchange, for_rent} ответа open/poll — карточка объявления под
+    /// шапкой (#dm-context, _dmRenderCtx).
+    var товар: ТоварПереписки? = nil
+    /// me_verified ответа: false — полоса «Пройдите верификацию» над полем (#dm-verify-bar); нет поля — nil.
+    var проверен: Bool? = nil
 
     private struct Любое: Decodable {
         let значение: ЧатСообщение?
@@ -345,6 +365,11 @@ struct ЧатОтвет: Decodable {
             if let торг = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("lead")) {
                 найдена?.торг = ТоргПереписки(торг)
             }
+            if let вещь = try? c.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("item")) {
+                let товар = ТоварПереписки(вещь)
+                if !товар.id.isEmpty { найдена?.товар = товар }
+            }
+            if c.contains(ЧатКлюч("me_verified")) { найдена?.проверен = c.да("me_verified") }
             if c.собеседникУшёл("peer") {
                 найдена?.собеседникУшёл = true
             } else if let номер = c.номерСобеседника("peer") ?? c.номерСобеседника("peer_id")
@@ -380,6 +405,67 @@ struct ТоргПереписки: Hashable {
     }
 
     var покупатель: Bool { роль == "buyer" }
+}
+
+/// Объявление переписки (item ответа dm.php, _dmRenderCtx): фото, название, цена, «Торг» / «Договорная», обмен, аренда.
+struct ТоварПереписки: Hashable {
+    let id: String
+    let фото: String
+    let название: String
+    let цена: Int
+    let торг: Bool
+    let обмен: Bool
+    let аренда: Bool
+
+    init(_ c: KeyedDecodingContainer<ЧатКлюч>) {
+        id = c.строка("id") ?? ""
+        фото = c.строка("img") ?? ""
+        название = c.строка("title") ?? ""
+        let целая = c.целое("price")
+        цена = max(0, целая != 0 ? целая : Int(c.дробное("price").rounded()))
+        торг = c.да("price_negotiable")
+        обмен = c.да("for_exchange")
+        аренда = c.да("for_rent")
+    }
+}
+
+/**
+ Аренда и обмен в переписке — meta сообщений type rental / exchange (_dmCardRental, _dmCardExchange кабинета): даты,
+ стоимость, залог и статус аренды; что предлагают, за что и доплата у обмена. Кнопки продавца («Подтвердить»,
+ «Принять») пока на сайте — карточка только показывает.
+ */
+struct СделкаВЧате: Hashable {
+    let аренда: Bool
+    let статус: String
+    let начало: String
+    let конец: String
+    let заСутки: Int
+    let всего: Int
+    let залог: Int
+    let помесячно: Bool
+    let предлагают: String
+    let предлагаютЦена: Int
+    let заВаш: String
+    let заВашЦена: Int
+    let доплата: Int
+
+    init(_ m: KeyedDecodingContainer<ЧатКлюч>, аренда: Bool) {
+        self.аренда = аренда
+        статус = (m.строка("status") ?? (аренда ? "requested" : "pending")).lowercased()
+        начало = m.строка("start") ?? ""
+        конец = m.строка("end") ?? ""
+        заСутки = max(0, m.целое("price_per_day"))
+        всего = max(0, m.целое("total"))
+        залог = max(0, m.целое("deposit"))
+        помесячно = (m.строка("period") ?? "") == "month"
+        let предложено = try? m.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("offered"))
+        предлагают = предложено?.строка("title") ?? ""
+        предлагаютЦена = max(0, предложено?.целое("price") ?? 0)
+        let цель = try? m.nestedContainer(keyedBy: ЧатКлюч.self, forKey: ЧатКлюч("target"))
+        заВаш = цель?.строка("title") ?? ""
+        заВашЦена = max(0, цель?.целое("price") ?? 0)
+        доплата = max(0, m.целое("surcharge"))
+    }
 }
 
 /**

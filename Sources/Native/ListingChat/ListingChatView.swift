@@ -34,7 +34,7 @@ struct ЭкранЧатаОбъявления: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаЧатаОбъявления(подпись: модель.подписьШапки, назад: { закрыть() })
+            ШапкаЧатаОбъявления(подпись: модель.подписьШапки, нетСвязи: модель.нетСвязи, назад: { закрыть() })
             КонтекстЧатаОбъявления(товар: модель.товар, изЧата: модель.товарЧата,
                                    кОбъявлению: { закрыть() }, кПродавцу: открытьПродавца)
             полосаСделки
@@ -95,6 +95,17 @@ struct ЭкранЧатаОбъявления: View {
         } else {
             открытьЧатНаСайте()
         }
+    }
+
+    /// «Принять» / «Отказаться» у встречной цены: здесь — согласие о цене денег не двигает. Своё предложение подкреплено
+    /// деньгами, а деньги сделок выключены, — как раньше, объявление на сайте с открытым чатом.
+    private func ответитьНаВстречную(принять: Bool, цена: Int) {
+        let подкреплено = модель.сообщения.last(where: { $0.вид == "offer" && $0.моё })?.предложение?.подкреплено ?? 0
+        if подкреплено > 0 && !Config.деньгиСделок {
+            открытьЧатНаСайте()
+            return
+        }
+        Task { await модель.ответитьНаВстречную(принять: принять, цена: цена) }
     }
 
     /// Из окна «Предложить цену»: лист закрывается, окно подтверждения — когда он уедет (два окна разом iOS не покажет).
@@ -163,7 +174,7 @@ struct ЭкранЧатаОбъявления: View {
             СостояниеЧатаОбъявления(статус: модель.статус, наСвязи: модель.продавецНаСвязи,
                                     присутствие: модель.присутствие)
             if let барьер = модель.барьер {
-                БарьерЧата(барьер: барьер, войти: войти)
+                БарьерЧата(барьер: барьер, войти: войти, верифицировать: верифицировать)
             }
         }
     }
@@ -178,9 +189,11 @@ struct ЭкранЧатаОбъявления: View {
             : модель.сообщения.last(where: { $0.вид == "offer" && $0.моё })?.id
         let отзываем = торг.идёт(объявление: модель.товар.id, чат: модель.чат ?? "")
         let отозватьЖдущее: () -> Void = { отозватьНажали() }
+        let ответНаВстречную: (Bool, Int) -> Void = { принять, цена in ответитьНаВстречную(принять: принять, цена: цена) }
         return ForEach(модель.сообщения) { с in
             СтрокаЧатаОбъявления(сообщение: с, заменено: заменённые.contains(с.id), согласовано: модель.согласовано,
-                                  безГаранта: безГаранта, ответитьНаСайте: открытьЧатНаСайте,
+                                  безГаранта: безГаранта, ответитьНаВстречную: ответНаВстречную,
+                                  отвечаем: модель.отвечаемНаВстречную,
                                   отозвать: с.id == ждущее ? отозватьЖдущее : nil,
                                   отзываем: отзываем)
             if с.id == последнее {
@@ -211,9 +224,9 @@ struct ЭкранЧатаОбъявления: View {
                         }
                     }
                     if модель.неОтправлено {
-                        Text(ChatText.т("not_sent") + (модель.причина.isEmpty ? "" : " (\(модель.причина))"))
+                        Text(неОтправленоТекст)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.малиновый)
+                            .foregroundStyle(Theme.цвет(0x991B1B, 0xFF8A8F))
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                             .padding(.horizontal, 12)
@@ -226,6 +239,16 @@ struct ЭкранЧатаОбъявления: View {
                 .background(Theme.поверхность)
             }
         }
+    }
+
+    /// «Сообщение не отправлено» или слова сайта (error — фраза, а не код); код (network, HTTP 500…) — только в отладке.
+    private var неОтправленоТекст: String {
+        let причина = модель.причина
+        if let слова = ChatAPI.текст(.отказ(причина)), !причина.hasPrefix("HTTP") { return слова }
+        #if DEBUG
+        if !причина.isEmpty { return ChatText.т("not_sent") + " (" + причина + ")" }
+        #endif
+        return ChatText.т("not_sent")
     }
 
     private var можноОтправить: Bool {
@@ -284,6 +307,12 @@ struct ЭкранЧатаОбъявления: View {
 
     // MARK: - Переходы на сайт
 
+    /// «Пройти верификацию» окна .mk-chat-gate — своё окно «Стать продавцом» (как у лид-чата), не вход.
+    private func верифицировать() {
+        let адрес = Config.страницаСайта("cabinet?go=verify")
+        if !ОкнаПриложения.shared.показать(.верификация, запасной: адрес), let адрес { открыть(адрес) }
+    }
+
     /// Свой экран входа листом поверх вкладок (ОкнаПриложения); слоя окон нет — страница входа сайта, как раньше.
     private func войти() {
         let адрес = МодельЧатаОбъявления.адресВхода
@@ -330,9 +359,11 @@ struct ЭкранЧатаОбъявления: View {
 
 // MARK: - Шапка (.mk-chat-head)
 
-/// «Назад» как у переписки этапа 30, кружок ассистента (.mk-chat-ava) и две строки: «Чат с продавцом» и подпись статуса.
+/// «Назад» как у переписки этапа 30, квадрат ассистента 40 со скруглением 14 (.mk-chat-ava) и две строки: «Чат с продавцом»
+/// 15 и подпись статуса 12 (без сети — #c0392b с точкой 7). Отступы 10 сверху и 12 снизу.
 struct ШапкаЧатаОбъявления: View {
     let подпись: String
+    var нетСвязи: Bool = false
     let назад: () -> Void
 
     var body: some View {
@@ -352,33 +383,44 @@ struct ШапкаЧатаОбъявления: View {
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
             .accessibilityLabel(ListingPageText.т("back"))
-            Image(systemName: "sparkles")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .frame(width: 34, height: 34)
-                .background(
-                    LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий], startPoint: .topLeading,
-                                   endPoint: .bottomTrailing),
-                    in: Circle()
-                )
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(ListingChatText.т("title"))
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Text(подпись)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(1)
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий], startPoint: .topLeading,
+                                       endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ListingChatText.т("title"))
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(Theme.текст)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    HStack(spacing: 5) {
+                        if нетСвязи {
+                            Circle()
+                                .fill(Self.красныйСвязи)
+                                .frame(width: 7, height: 7)
+                                .accessibilityHidden(true)
+                        }
+                        Text(подпись)
+                            .font(.system(size: 12))
+                            .foregroundStyle(нетСвязи ? Self.красныйСвязи : Theme.текстВторой)
+                            .lineLimit(1)
+                    }
+                }
             }
-            .padding(.leading, 4)
             Spacer(minLength: 0)
         }
         .padding(.leading, 8)
         .padding(.trailing, 12)
-        .padding(.vertical, 7)
+        /* 10 сверху и 12 снизу вокруг квадрата 40; «Назад» с местом для пальца 44 выше на 4 — по 2 с каждой стороны. */
+        .padding(.top, 8)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
         .background(Theme.поверхность)
         .overlay(alignment: .bottom) {
@@ -387,6 +429,11 @@ struct ШапкаЧатаОбъявления: View {
                 .accessibilityHidden(true)
         }
     }
+}
+
+extension ШапкаЧатаОбъявления {
+    /// .mk-chat-sub.off — #c0392b.
+    static var красныйСвязи: Color { Color(uiColor: Theme.hex(0xC0392B)) }
 }
 
 // MARK: - Объявление под шапкой (.mk-chat-ctx)
@@ -424,17 +471,17 @@ struct КонтекстЧатаОбъявления: View {
             обложка
             VStack(alignment: .leading, spacing: 3) {
                 Text(название)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                 if снято {
                     Label(ListingChatText.т(ключСнятого), systemImage: "tag")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.system(size: 12, weight: .heavy))
                         .foregroundStyle(цветСнятого)
                         .labelStyle(МеткаСайта())
                 } else if let строкаЦены = цена {
                     Text(строкаЦены)
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
                 }
@@ -496,7 +543,7 @@ struct КонтекстЧатаОбъявления: View {
             Button(action: кПродавцу) {
                 HStack(spacing: 4) {
                     Text(ListingChatText.т(вид == "service" ? "seller_services" : "seller_goods"))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .lineLimit(1)
                     Image(systemName: "chevron.forward")
                         .font(.system(size: 11, weight: .bold))
@@ -504,7 +551,7 @@ struct КонтекстЧатаОбъявления: View {
                 }
                 .foregroundStyle(Theme.текст)
                 .padding(.horizontal, 12)
-                .frame(minHeight: 34)
+                .padding(.vertical, 8)
                 .overlay {
                     RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
                         .strokeBorder(Theme.линия, lineWidth: 1.5)
@@ -517,15 +564,15 @@ struct КонтекстЧатаОбъявления: View {
             Button(action: кОбъявлению) {
                 HStack(spacing: 6) {
                     Image(systemName: "eye")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14))
                         .accessibilityHidden(true)
                     Text(ListingChatText.т("listing"))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .lineLimit(1)
                 }
                 .foregroundStyle(Color.white)
                 .padding(.horizontal, 12)
-                .frame(minHeight: 34)
+                .padding(.vertical, 8)
                 .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                 .contentShape(Rectangle())
             }
@@ -587,7 +634,9 @@ struct СтрокаЧатаОбъявления: View {
     let заменено: Bool
     let согласовано: Int
     let безГаранта: Bool
-    let ответитьНаСайте: () -> Void
+    /// «Принять» (true) / «Отказаться» (false) у встречной цены продавца, с её суммой.
+    let ответитьНаВстречную: (Bool, Int) -> Void
+    var отвечаем: Bool = false
     /// «Отозвать предложение» у карточки ждущего предложения (только у неё; у остальных строк nil).
     var отозвать: (() -> Void)? = nil
     var отзываем: Bool = false
@@ -604,14 +653,15 @@ struct СтрокаЧатаОбъявления: View {
             КарточкаПредложенияЧата(предложение: предложение, заменено: заменено, согласовано: согласовано,
                                     безГаранта: безГаранта, отозвать: отозвать, отзываем: отзываем)
         } else if сообщение.вид == "counter", let встречная = сообщение.встречная {
-            КарточкаВстречнойЦены(встречная: встречная, заменено: заменено, ответитьНаСайте: ответитьНаСайте)
+            КарточкаВстречнойЦены(встречная: встречная, заменено: заменено, занято: отвечаем,
+                                  ответить: { принять in ответитьНаВстречную(принять, встречная.цена) })
         } else {
             ОблакоЧатаОбъявления(сообщение: сообщение)
         }
     }
 }
 
-/// Облако .kc-msg: своё — справа на --kc-acc с «хвостом» справа, продавца и ассистента — слева на --kc-peer с кромкой и
+/// Облако .kc-msg: своё — справа на --kc-acc с «хвостом» справа, продавца и ассистента — слева на --kc-peer без кромки, с
 /// подписью «Продавец» / «Kliko AI-ассистент» (.kc-who); из Telegram — плашка «из Telegram» (.mk-cvia). Времени в облаке
 /// у виджета сайта нет — нет и здесь.
 struct ОблакоЧатаОбъявления: View {
@@ -685,8 +735,10 @@ struct ОблакоЧатаОбъявления: View {
                 .frame(width: 200, height: 200)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             } else {
+                /* .kc-msg: 14 с высотой строки 1.4. */
                 Text(текст)
-                    .font(.system(size: 16))
+                    .font(.system(size: 14))
+                    .lineSpacing(2.6)
                     .foregroundStyle(моё ? Color.white : Theme.текст)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -694,13 +746,11 @@ struct ОблакоЧатаОбъявления: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(моё ? Theme.пузырьМой : Theme.пузырьЧужой, in: форма)
-        .overlay {
-            if !моё {
-                форма.stroke(Theme.линия, lineWidth: 1)
-            }
-        }
+        .background(моё ? Theme.пузырьМой : ОблакоЧатаОбъявления.чужоеОблако, in: форма)
     }
+
+    /// --kc-peer виджета: #eef2f0 / тёмная .kc — #1f2a24, без кромки.
+    static var чужоеОблако: Color { Theme.цвет(0xEEF2F0, 0x1F2A24) }
 
     /// «Вы: …», «Продавец: …», «Kliko AI-ассистент: …».
     private var голос: String {
@@ -729,8 +779,8 @@ struct ПлашкаТелеграмаЧата: View {
     }
 }
 
-/// Строка .kc-sys: по центру, мелко, серым на --kc-soft; «хорошая» (offer_ok, offer_funded, «Продавец на связи») — цветом
-/// --on-ok на мятном, со значком галочки у строк статуса (mkIco("check")).
+/// Строка .kc-sys: по центру, мелко, серым на --kc-soft, со значком галочки у строк статуса (mkIco("check")). Класс .ok у
+/// сайта (offer_ok, offer_funded, «Продавец на связи») стилей не имеет — «хорошая» выглядит так же.
 struct СтрокаСлужебнаяЧата: View {
     let текст: String
     let хорошая: Bool
@@ -740,7 +790,7 @@ struct СтрокаСлужебнаяЧата: View {
         HStack(spacing: 5) {
             if значок {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .accessibilityHidden(true)
             }
             Text(текст)
@@ -748,11 +798,10 @@ struct СтрокаСлужебнаяЧата: View {
                 .lineSpacing(2)
                 .multilineTextAlignment(.center)
         }
-        .foregroundStyle(хорошая ? Theme.акцент : Theme.текстВторой)
+        .foregroundStyle(Theme.текстВторой)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(хорошая ? Theme.мята : Theme.поверхность2,
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .background(Theme.цвет(0xF2F7F4, 0x1A221D), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -789,11 +838,12 @@ struct ОтметкаПрочтенияЧата: View {
 
     var body: some View {
         Text(ListingChatText.т(прочитано ? "read" : "sent"))
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(прочитано ? Theme.зелёный2 : Theme.текстВторой)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.trailing, 4)
             .padding(.top, -4)
+            .padding(.bottom, 4)
     }
 }
 
@@ -813,7 +863,7 @@ struct ТочкиПечатиЧата: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Theme.пузырьЧужой,
+            .background(ОблакоЧатаОбъявления.чужоеОблако,
                         in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 5, bottomTrailingRadius: 14,
                                                    topTrailingRadius: 14, style: .continuous))
             .opacity(0.8)
@@ -878,7 +928,7 @@ private struct ВерхКарточкиЧата: View {
             .foregroundStyle(Theme.текстВторой)
             .padding(.bottom, 6)
         Text(ListingCard.тенге(Double(сумма)))
-            .font(.system(size: 22, weight: .black))
+            .font(.system(size: 19, weight: .black))
             .strikethrough(зачёркнута)
             .foregroundStyle(Theme.текст)
     }
@@ -891,16 +941,17 @@ private struct ОтметкаКарточкиЧата: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.shield")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
         }
         .foregroundStyle(Theme.зелёный2)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .background(Theme.цвет(светлый: Theme.hex(0x1D7D4A, 0.12), тёмный: Theme.hex(0x34C997, 0.14)),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         .padding(.top, 8)
     }
 }
@@ -910,7 +961,7 @@ private struct СтрокаКарточкиЧата: View {
 
     var body: some View {
         Text(текст)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(Theme.текстВторой)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 4)
@@ -1013,12 +1064,14 @@ struct КарточкаПредложенияЧата: View {
 }
 
 /// Встречная цена продавца (mkCounterCard) — слева: сумма и «+5% к вашим …». Заменена, отклонена или неактуальна — бледная
-/// с пояснением; принята — «Цена согласована». Ждёт ответа — «Ответить на сайте»: «Принять» и «Отказаться» меняют сделку и
-/// остаются на сайте (объявление с открытым чатом).
+/// с пояснением; принята — «Цена согласована». Ждёт ответа — ряд .mk-ofc-row 2:1: зелёная «Принять · N ₸» и красноватая
+/// «Отказаться» (offer_counter_accept / offer_counter_decline).
 struct КарточкаВстречнойЦены: View {
     let встречная: ВстречнаяВЧате
     let заменено: Bool
-    let ответитьНаСайте: () -> Void
+    var занято: Bool = false
+    /// true — принять, false — отказаться.
+    let ответить: (Bool) -> Void
 
     private var пояснение: String? {
         guard встречная.база > 0 else { return nil }
@@ -1048,20 +1101,47 @@ struct КарточкаВстречнойЦены: View {
             } else if встречная.принята {
                 ОтметкаКарточкиЧата(текст: ListingChatText.т("of_ctr_took"))
             } else {
-                Button(action: ответитьНаСайте) {
-                    Text(ChatText.т("reply_site"))
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                                .strokeBorder(Theme.линия, lineWidth: 1)
-                        }
-                        .contentShape(Rectangle())
+                РядДолейКабинета(доли: [2, 1], промежуток: 8) {
+                    Button {
+                        ответить(true)
+                    } label: {
+                        Text(ListingChatText.т("of_ctr_take")
+                            .replacingOccurrences(of: "{sum}", with: ListingCard.тенге(Double(встречная.цена))))
+                            .font(.system(size: 12, weight: .heavy))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(Theme.цвет(0x1D7D4A, 0x34C997),
+                                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+                    Button {
+                        ответить(false)
+                    } label: {
+                        Text(ListingChatText.т("of_ctr_no"))
+                            .font(.system(size: 12, weight: .heavy))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(ИнбоксКраска.плохоТекст)
+                            .padding(.horizontal, 10)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(ИнбоксКраска.плохоФон, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Theme.цвет(светлый: Theme.hex(0xFECACA), тёмный: Theme.hex(0xFF6168, 0.32)),
+                                                  lineWidth: 1)
+                            }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-                .accessibilityHint(ListingPageText.т("on_site"))
+                .disabled(занято)
+                .opacity(занято ? 0.55 : 1)
                 .padding(.top, 10)
             }
         }
@@ -1150,11 +1230,12 @@ struct КарточкаГеоЧата: View {
 
 // MARK: - Окно входа (.mk-chat-gate)
 
-/// Мятная карточка по центру: слова сайта зелёным и кнопка «Войти / Регистрация» или «Пройти верификацию» (страница
-/// кабинета сайта). Лимит ассистента — только текст.
+/// Мятная карточка по центру: слова сайта зелёным 13 и кнопка 14 «Войти / Регистрация» (лист входа) или «Пройти
+/// верификацию» (окно «Стать продавцом»). Лимит ассистента — только текст.
 struct БарьерЧата: View {
     let барьер: МодельЧатаОбъявления.Барьер
     let войти: () -> Void
+    let верифицировать: () -> Void
 
     private var текст: String {
         switch барьер {
@@ -1173,23 +1254,24 @@ struct БарьерЧата: View {
     var body: some View {
         VStack(spacing: 12) {
             Text(текст)
-                .font(.system(size: 15))
-                .lineSpacing(3)
-                .foregroundStyle(Theme.акцент)
+                .font(.system(size: 13))
+                .lineSpacing(6.5)
+                .foregroundStyle(Theme.цвет(0x0F5132, 0x5CD39A))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if let надпись = кнопка {
-                Button(action: войти) {
+                Button {
+                    if case .верификация = барьер { верифицировать() } else { войти() }
+                } label: {
                     Text(надпись)
-                        .font(.system(size: 16, weight: .heavy))
+                        .font(.system(size: 14, weight: .heavy))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 24)
-                        .frame(minHeight: 46)
+                        .padding(.vertical, 12)
                         .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-                .accessibilityHint(ListingPageText.т("on_site"))
             }
         }
         .padding(16)
@@ -1199,7 +1281,7 @@ struct БарьерЧата: View {
             RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
                 .strokeBorder(Theme.зелёный2.opacity(0.3), lineWidth: 1)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 14)
         .padding(.top, 4)
     }
 }
@@ -1217,10 +1299,11 @@ struct КнопкаПозватьПродавца: View {
                     .font(.system(size: 16, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(ListingChatText.т("call_seller"))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
             }
             .foregroundStyle(Theme.текст)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
             .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
@@ -1230,7 +1313,6 @@ struct КнопкаПозватьПродавца: View {
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         .padding(.horizontal, 14)
-        .padding(.top, 6)
         .padding(.bottom, 4)
     }
 }
@@ -1247,8 +1329,8 @@ struct ПолосаБлокировкиЧата: View {
     var body: some View {
         VStack(spacing: 10) {
             Text(ListingChatText.т(заблокировалЯ ? "you_blocked" : "seller_blocked"))
-                .font(.system(size: 14))
-                .lineSpacing(3)
+                .font(.system(size: 13))
+                .lineSpacing(6)
                 .foregroundStyle(Theme.скидкаТекст)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1257,14 +1339,15 @@ struct ПолосаБлокировкиЧата: View {
                 Button(action: действие) {
                     ZStack {
                         Text(надпись)
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .opacity(ждём ? 0 : 1)
                         if ждём {
                             SiteSpinner.цвета(Theme.текст)
                         }
                     }
                     .foregroundStyle(Theme.текст)
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
                     .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)

@@ -30,7 +30,7 @@ struct ЭкранЗаявок: View {
     var body: some View {
         содержимое
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.фонСтраницы)
+            .background(ИнбоксКраска.фон)
             .modifier(ШапкаСделок(заголовок: т("req_title")))
             .task { await модель.загрузить() }
             .task { await модель.тик() }
@@ -73,7 +73,7 @@ struct ЭкранЗаявок: View {
     private var содержимое: some View {
         if !модель.загружено {
             Text(т("loading"))
-                .font(.system(size: 15))
+                .font(.system(size: 14))
                 .foregroundStyle(Theme.текстВторой)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if модель.нуженВход {
@@ -88,10 +88,14 @@ struct ЭкранЗаявок: View {
     private var список: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
+                /* #requests-screen: подзаголовок 13 с отступом 14, чипы — ещё 14 до списка (12 промежутка + 2). */
                 Text(т("req_sub"))
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 2)
                 фильтры
+                    .padding(.bottom, 2)
                 if let ошибка = модель.ошибка, модель.заявки.isEmpty {
                     Text(ошибка)
                         .font(.system(size: 15))
@@ -108,8 +112,8 @@ struct ЭкранЗаявок: View {
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
         }
     }
 
@@ -121,14 +125,23 @@ struct ЭкранЗаявок: View {
                 Button {
                     модель.фильтр = ф
                 } label: {
+                    /* .msg-chip: 13 полужирным, 6/14, кромка 1,5; выбранный — градиент --g → --g2 с тенью. */
                     Text(ф.название)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(выбран ? Color.white : Theme.текстВторой)
                         .padding(.horizontal, 14)
-                        .frame(minHeight: 34)
-                        .background(выбран ? Theme.зелёный : Theme.поверхность, in: Capsule())
+                        .padding(.vertical, 6)
+                        .background {
+                            if выбран {
+                                Capsule()
+                                    .fill(ИнбоксКраска.градиент)
+                                    .shadow(color: Theme.цвет(0x34C997, 0x34C997).opacity(0.5), radius: 5, x: 0, y: 4)
+                            } else {
+                                Capsule().fill(ИнбоксКраска.карточка)
+                            }
+                        }
                         .overlay {
-                            Capsule().strokeBorder(выбран ? Color.clear : Theme.линия, lineWidth: 1)
+                            Capsule().strokeBorder(выбран ? Color.clear : ИнбоксКраска.линия, lineWidth: 1.5)
                         }
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
@@ -227,41 +240,62 @@ struct КарточкаЗаявки: View {
         VStack(alignment: .leading, spacing: 10) {
             верх
             if !заявка.текст.isEmpty {
+                /* .req-text: 14 с высотой строки 1.5 в серой рамке. */
                 Text(заявка.текст)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 14))
+                    .lineSpacing(7)
+                    .foregroundStyle(ИнбоксКраска.текст)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(ИнбоксКраска.подложка, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(ИнбоксКраска.линия, lineWidth: 1)
+                    }
             }
             if !заявка.объявление.isEmpty { объявление }
             if !заявка.город.isEmpty || !заявка.специальность.isEmpty { мета }
             подсказка
             кнопки
         }
-        .padding(14)
-        .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background {
+            let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+            if ждёт || моя {
+                форма.fill(LinearGradient(colors: [ИнбоксКраска.подложка, ИнбоксКраска.карточка],
+                                          startPoint: .top, endPoint: .bottom))
+            } else {
+                форма.fill(ИнбоксКраска.карточка)
+            }
+        }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(кромка, lineWidth: 1)
+                .strokeBorder(ждёт ? ИнбоксКраска.акцент : ИнбоксКраска.линия, lineWidth: 1)
         }
-        .opacity(закрыта ? 0.65 : (занята ? 0.8 : 1))
+        .opacity(закрыта ? 0.5 : (занята ? 0.8 : 1))
     }
 
-    private var фон: Color { моя ? КраскаОбъявлений.хорошоФон : Theme.поверхность }
-    private var кромка: Color { моя ? КраскаОбъявлений.хорошоКромка : Theme.линия }
+    /// .is-waiting: откликнулся и жду выбора клиента — кромка --acc-on и подложка сверху вниз.
+    private var ждёт: Bool { состояние == "open" && заявка.откликнулся }
 
     private var верх: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             Text(String(имя.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                .font(.system(size: 17, weight: .heavy))
+                .font(.system(size: 16, weight: .heavy))
                 .foregroundStyle(Color.white)
                 .frame(width: 40, height: 40)
-                .background(Theme.зелёный2, in: Circle())
+                .background(LinearGradient(colors: [Theme.цвет(0x1D7D4A, 0x34C997), Theme.цвет(0x0F5132, 0x22A05B)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Circle())
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                ПереносСтрок(промежуток: 8, междуСтрок: 4) {
                     Text(имя)
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(ИнбоксКраска.текст)
                         .lineLimit(1)
                     значок
                 }
@@ -277,70 +311,103 @@ struct КарточкаЗаявки: View {
         }
     }
 
+    /// .req-badge: 10 жирным заглавными --acc-on на --acc-tint; «Вас выбрали» — --on-warn на --tint-warn.
     @ViewBuilder
     private var значок: some View {
         if состояние == "open" && заявка.откликнулся {
-            ТегИнбокса(id: "b", текст: т("req_you_responded"), значок: nil, фон: КраскаОбъявлений.хорошоФон,
-                       цвет: КраскаОбъявлений.хорошоТекст)
+            метка(т("req_you_responded"), текст: ИнбоксКраска.акцент, фон: ИнбоксКраска.оттенок)
         } else if моя {
             if состояние == "confirmed" {
-                ТегИнбокса(id: "b", текст: т("req_order_yours"), значок: nil, фон: КраскаОбъявлений.хорошоФон,
-                           цвет: КраскаОбъявлений.хорошоТекст)
+                метка(т("req_order_yours"), текст: ИнбоксКраска.акцент, фон: ИнбоксКраска.оттенок)
             } else {
-                ТегИнбокса(id: "b", текст: т("req_you_chosen"), значок: nil, фон: КраскаОбъявлений.предупреждениеФон,
-                           цвет: КраскаОбъявлений.предупреждениеТекст)
+                метка(т("req_you_chosen"), текст: ИнбоксКраска.вниманиеТекст, фон: ИнбоксКраска.вниманиеФон)
             }
         }
     }
 
+    private func метка(_ подпись: String, текст: Color, фон: Color) -> some View {
+        Text(подпись)
+            .font(.system(size: 10, weight: .bold))
+            .tracking(0.3)
+            .textCase(.uppercase)
+            .foregroundStyle(текст)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(фон, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    /// .req-timer (12 жирным на --acc-tint; меньше минуты — --tint-warn) или .req-state (11 серым на --surf2; ok — --tint-ok).
     @ViewBuilder
     private var справа: some View {
         if состояние == "open" {
             let осталось = заявка.осталось(сейчас)
-            Label(Заявка.отсчёт(осталось), systemImage: "clock")
-                .font(.system(size: 13, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(осталось <= 60 ? КраскаОбъявлений.плохоТекст : Theme.текст)
-                .accessibilityLabel(String(format: т("req_left_a11y"), Заявка.отсчёт(осталось)))
+            let срочно = осталось <= 60
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 11, weight: .bold))
+                    .accessibilityHidden(true)
+                Text(Заявка.отсчёт(осталось))
+                    .font(.system(size: 12, weight: .heavy))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(срочно ? ИнбоксКраска.вниманиеТекст : ИнбоксКраска.акцент)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(срочно ? ИнбоксКраска.вниманиеФон : ИнбоксКраска.оттенок,
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(format: т("req_left_a11y"), Заявка.отсчёт(осталось)))
         } else if моя {
-            Label(т(состояние == "confirmed" ? "req_confirmed" : "req_assigned"), systemImage: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .accessibilityHidden(true)
+                Text(т(состояние == "confirmed" ? "req_confirmed" : "req_assigned"))
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(ИнбоксКраска.окТекст)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(ИнбоксКраска.окФон, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
             Text(т(состояние == "assigned" ? "req_taken" : "req_expired"))
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Theme.текстВторой)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(ИнбоксКраска.подложка, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
-    /// .req-listing: «По вашему объявлению» + название.
+    /// .req-listing: фото 42 на --tint-ok, «По вашему объявлению» 11 и название 13 жирным; карточка с кромкой 1,5.
     private var объявление: some View {
         Button {
             действие(.объявление)
         } label: {
             HStack(spacing: 10) {
-                if let адрес = Config.url(заявка.фото) {
-                    AsyncImage(url: адрес) { картинка in
-                        картинка.resizable().scaledToFill()
-                    } placeholder: {
-                        Theme.поверхность2
+                ZStack {
+                    ИнбоксКраска.окФон
+                    if let адрес = Config.url(заявка.фото) {
+                        КартинкаЛенты(адрес, пунктов: 42) {
+                            ИнбоксКраска.окФон
+                        }
+                    } else {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 17))
+                            .foregroundStyle(ИнбоксКраска.окТекст)
                     }
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-                    .accessibilityHidden(true)
-                } else {
-                    Image(systemName: "shippingbox")
-                        .foregroundStyle(Theme.текстВторой)
-                        .frame(width: 36, height: 36)
-                        .accessibilityHidden(true)
                 }
-                VStack(alignment: .leading, spacing: 1) {
+                .frame(width: 42, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(т("req_by_your_ad"))
-                        .font(.system(size: 11))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Theme.текстВторой)
                     Text(заявка.объявление)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.текст)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(ИнбоксКраска.текст)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -350,22 +417,33 @@ struct КарточкаЗаявки: View {
                     .foregroundStyle(Theme.текстВторой)
                     .accessibilityHidden(true)
             }
-            .padding(8)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(ИнбоксКраска.карточка, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(ИнбоксКраска.линия, lineWidth: 1.5)
+            }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 
+    /// .req-meta: город 12 серым и специальность .req-tag (11 жирным --acc-on на --acc-tint).
     private var мета: some View {
         HStack(spacing: 8) {
             if !заявка.город.isEmpty {
                 Label(заявка.город, systemImage: "mappin")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
             }
             if !заявка.специальность.isEmpty {
-                ТегИнбокса(id: "sp", текст: заявка.специальность, значок: nil, фон: КраскаОбъявлений.инфоФон,
-                           цвет: КраскаОбъявлений.инфоТекст)
+                Text(заявка.специальность)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(ИнбоксКраска.акцент)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(ИнбоксКраска.оттенок, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
         }
     }
@@ -377,41 +455,73 @@ struct КарточкаЗаявки: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
         } else if моя && !заявка.адрес.isEmpty {
-            Label(заявка.адрес, systemImage: "mappin.and.ellipse")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текст)
+            /* .req-addr: 13 полужирным на карточке с пунктирной кромкой. */
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "mappin")
+                    .font(.system(size: 13))
+                    .accessibilityHidden(true)
+                Text(заявка.адрес)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineSpacing(2.6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(ИнбоксКраска.текст)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(ИнбоксКраска.карточка, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(ИнбоксКраска.линия, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+            }
         }
     }
 
+    /// .req-acts: главная (--go) во всю ширину, остальные — сеткой от 94 с промежутком 8.
     @ViewBuilder
     private var кнопки: some View {
+        let сетка = [GridItem(.adaptive(minimum: 94), spacing: 8)]
         if состояние == "open" {
             if заявка.откликнулся {
-                кнопка(т("req_open_chat"), значок: "bubble.left", главная: true) { действие(.чат) }
+                кнопка(т("req_open_chat"), значок: "bubble.left", вид: .главная) { действие(.чат) }
             } else {
-                HStack(spacing: 8) {
-                    кнопка(т("req_respond"), значок: "arrowshape.turn.up.left", главная: true) { действие(.откликнуться) }
-                    кнопка(т("req_hide"), значок: "flag", главная: false) { действие(.скрыть) }
-                        .accessibilityHint(т("req_report_hide"))
+                VStack(spacing: 8) {
+                    кнопка(т("req_respond"), значок: "arrowshape.turn.up.left", вид: .главная) { действие(.откликнуться) }
+                    LazyVGrid(columns: сетка, spacing: 8) {
+                        кнопка(т("req_hide"), значок: "flag", вид: .серая) { действие(.скрыть) }
+                            .accessibilityHint(т("req_report_hide"))
+                    }
                 }
             }
         } else if моя {
-            ПереносСтрок(промежуток: 8, междуСтрок: 8) {
+            VStack(spacing: 8) {
                 if заявка.нуженОтвет {
-                    кнопка(т("req_accept_order"), значок: "checkmark", главная: true) { действие(.принять) }
+                    кнопка(т("req_accept_order"), значок: "checkmark", вид: .главная) { действие(.принять) }
+                } else {
+                    кнопка(т("nav_chat"), значок: "bubble.left", вид: .главная) { действие(.чат) }
                 }
-                кнопка(т("nav_chat"), значок: "bubble.left", главная: !заявка.нуженОтвет) { действие(.чат) }
-                ForEach(ссылки, id: \.подпись) { с in
-                    кнопка(с.подпись, значок: с.значок, главная: false) { открытьСсылку(с.адрес) }
+                LazyVGrid(columns: сетка, spacing: 8) {
+                    if заявка.нуженОтвет {
+                        кнопка(т("nav_chat"), значок: "bubble.left", вид: .рамка) { действие(.чат) }
+                    }
+                    ForEach(ссылки, id: \.подпись) { с in
+                        кнопка(с.подпись, значок: с.значок, вид: с.вид) { открытьСсылку(с.адрес) }
+                    }
                 }
             }
         }
+    }
+
+    /// Виды .req-btn: --go (градиент), --out (карточка с кромкой), --x (серый текст), --wa, --taxi, --map.
+    private enum ВидКнопки {
+        case главная, рамка, серая, ватсап, такси, карта
     }
 
     private struct Ссылка {
         let подпись: String
         let значок: String
         let адрес: URL
+        let вид: ВидКнопки
     }
 
     /// Телефон, WhatsApp, такси и маршрут (reqTaxiButtons): точка есть — Яндекс Go и 2ГИС до неё, нет — поиск адреса.
@@ -419,49 +529,93 @@ struct КарточкаЗаявки: View {
         var список: [Ссылка] = []
         let тел = заявка.телефон.filter { $0.isNumber || $0 == "+" }
         if !тел.isEmpty, let u = URL(string: "tel:" + тел) {
-            список.append(Ссылка(подпись: т("req_call"), значок: "phone", адрес: u))
+            список.append(Ссылка(подпись: т("req_call"), значок: "phone", адрес: u, вид: .рамка))
         }
         let цифры = заявка.телефон.filter { $0.isNumber }
         if !цифры.isEmpty, let u = URL(string: "https://wa.me/" + цифры) {
-            список.append(Ссылка(подпись: "WhatsApp", значок: "message", адрес: u))
+            список.append(Ссылка(подпись: "WhatsApp", значок: "message", адрес: u, вид: .ватсап))
         }
         if заявка.широта != 0 && заявка.долгота != 0 {
             let ш = String(заявка.широта)
             let д = String(заявка.долгота)
             if let u = URL(string: "https://3.redirect.appmetrica.yandex.com/route?end-lat=" + ш + "&end-lon=" + д
                            + "&appmetrica_tracking_id=25395763362139037&lang=ru&ref=klikokz") {
-                список.append(Ссылка(подпись: т("req_taxi"), значок: "car", адрес: u))
+                список.append(Ссылка(подпись: т("req_taxi"), значок: "car", адрес: u, вид: .такси))
             }
             if let u = URL(string: "https://2gis.kz/directions/points/%7C" + д + "%2C" + ш) {
                 список.append(Ссылка(подпись: т("req_route") + " · 2ГИС", значок: "arrow.triangle.turn.up.right.diamond",
-                                     адрес: u))
+                                     адрес: u, вид: .карта))
             }
         } else if !заявка.адрес.isEmpty,
                   let u = URL(string: "https://2gis.kz/search/" + ИнбоксAPI.вАдрес(заявка.адрес)) {
-            список.append(Ссылка(подпись: т("req_find_addr") + " · 2ГИС", значок: "mappin", адрес: u))
+            список.append(Ссылка(подпись: т("req_find_addr") + " · 2ГИС", значок: "mappin", адрес: u, вид: .карта))
         }
         return список
     }
 
-    private func кнопка(_ подпись: String, значок: String, главная: Bool,
+    /// .req-btn: высота 42, 13 жирным, скругление 12, кромка 1,5.
+    private func кнопка(_ подпись: String, значок: String, вид: ВидКнопки,
                         _ нажать: @escaping () -> Void) -> some View {
-        Button(action: нажать) {
-            Label(подпись, systemImage: значок)
-                .font(.system(size: 13, weight: .bold))
-                .lineLimit(1)
-                .foregroundStyle(главная ? Color.white : Theme.текст)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 38)
-                .background(главная ? Theme.зелёный : Theme.поверхность2,
-                            in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                .overlay {
-                    if !главная {
-                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                            .strokeBorder(Theme.линия, lineWidth: 1)
-                    }
-                }
+        let текст: Color
+        let фон: Color
+        let кромка: Color?
+        switch вид {
+        case .главная:
+            текст = Color.white
+            фон = Color.clear
+            кромка = nil
+        case .рамка:
+            текст = ИнбоксКраска.текст
+            фон = ИнбоксКраска.карточка
+            кромка = ИнбоксКраска.линия
+        case .серая:
+            текст = Theme.текстВторой
+            фон = ИнбоксКраска.карточка
+            кромка = ИнбоксКраска.линия
+        case .ватсап:
+            текст = Color.white
+            фон = Color(uiColor: Theme.hex(0x25D366))
+            кромка = nil
+        case .такси:
+            текст = Color(uiColor: Theme.hex(0x1A1A1A))
+            фон = Color(uiColor: Theme.hex(0xFFCE00))
+            кромка = nil
+        case .карта:
+            текст = ИнбоксКраска.акцент
+            фон = ИнбоксКраска.карточка
+            кромка = ИнбоксКраска.линия
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+        return Button(action: нажать) {
+            HStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(подпись)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(текст)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .background {
+                let форма = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                if вид == .главная {
+                    форма.fill(LinearGradient(colors: [Theme.цвет(0x1D7D4A, 0x34C997), Theme.цвет(0x0F5132, 0x22A05B)],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing))
+                } else {
+                    форма.fill(фон)
+                }
+            }
+            .overlay {
+                if let кромка {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(кромка, lineWidth: 1.5)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         .disabled(занята)
     }
 }
@@ -498,43 +652,51 @@ struct КарточкаЗаявкиВЧате: View {
 
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
 
+    /// .dm-reqcard: значок слева (галочка или ответ), --tint-ok с кромкой --edge-ok 1,5 (подтверждена — --on-ok).
     var body: some View {
-        содержимое
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(КраскаОбъявлений.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(КраскаОбъявлений.хорошоКромка, lineWidth: 1)
-            }
-            .task { я = await ИнбоксAPI.номерБыстро() }
-            .confirmationDialog(т("req_accept_title"), isPresented: $спроситьПринять, titleVisibility: .visible) {
-                Button(т("req_accept_ok")) {
-                    Task {
-                        let итог = await заявки.принять(заявка.номер)
-                        применить(итог)
-                    }
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: заявка.назначена || заявка.подтверждена ? "checkmark.circle" : "arrowshape.turn.up.left")
+                .font(.system(size: 17))
+                .foregroundStyle(ИнбоксКраска.окТекст)
+                .accessibilityHidden(true)
+            содержимое
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ИнбоксКраска.окФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(заявка.подтверждена ? ИнбоксКраска.окТекст : ИнбоксКраска.окКромка, lineWidth: 1.5)
+        }
+        .padding(.vertical, 4)
+        .task { я = await ИнбоксAPI.номерБыстро() }
+        .confirmationDialog(т("req_accept_title"), isPresented: $спроситьПринять, titleVisibility: .visible) {
+            Button(т("req_accept_ok")) {
+                Task {
+                    let итог = await заявки.принять(заявка.номер)
+                    применить(итог)
                 }
-                Button(т("cancel"), role: .cancel) {}
-            } message: {
-                Text(т("req_accept_text"))
             }
-            .confirmationDialog(т("req_pin_title"), isPresented: $спроситьЗакрепить, titleVisibility: .visible) {
-                Button(т("req_pin_btn")) {
-                    Task {
-                        let итог = await заявки.закрепить(заявка.номер, мастер: заявка.мастер)
-                        применить(итог)
-                    }
+            Button(т("cancel"), role: .cancel) {}
+        } message: {
+            Text(т("req_accept_text"))
+        }
+        .confirmationDialog(т("req_pin_title"), isPresented: $спроситьЗакрепить, titleVisibility: .visible) {
+            Button(т("req_pin_btn")) {
+                Task {
+                    let итог = await заявки.закрепить(заявка.номер, мастер: заявка.мастер)
+                    применить(итог)
                 }
-                Button(т("cancel"), role: .cancel) {}
-            } message: {
-                Text(т("req_pin_text"))
             }
-            .alert(т("req_closed_title"), isPresented: $неактивна) {
-                Button(т("ok_btn"), role: .cancel) {}
-            } message: {
-                Text(т("req_closed_text"))
-            }
+            Button(т("cancel"), role: .cancel) {}
+        } message: {
+            Text(т("req_pin_text"))
+        }
+        .alert(т("req_closed_title"), isPresented: $неактивна) {
+            Button(т("ok_btn"), role: .cancel) {}
+        } message: {
+            Text(т("req_closed_text"))
+        }
     }
 
     private func применить(_ итог: ЗаявкиМодель.ИтогЗаявки) {
@@ -552,8 +714,9 @@ struct КарточкаЗаявкиВЧате: View {
         } else if заявка.назначена {
             VStack(alignment: .leading, spacing: 8) {
                 Text(т("dm_client_chose"))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineSpacing(5)
+                    .foregroundStyle(ИнбоксКраска.окТекст)
                 if !я.isEmpty && я == заявка.мастер {
                     if сделано {
                         подпись(т("req_deal_confirmed"))
@@ -562,7 +725,8 @@ struct КарточкаЗаявкиВЧате: View {
                     }
                 } else {
                     Text(т("dm_wait_master"))
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
+                        .italic()
                         .foregroundStyle(Theme.текстВторой)
                 }
             }
@@ -571,8 +735,9 @@ struct КарточкаЗаявкиВЧате: View {
                 if заявка.естьПрофиль { профиль }
                 if !текст.isEmpty {
                     Text(текст)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.текст)
+                        .font(.system(size: 13, weight: .bold))
+                        .lineSpacing(5)
+                        .foregroundStyle(ИнбоксКраска.окТекст)
                 }
                 if !заявка.объявление.isEmpty {
                     Button {
@@ -643,19 +808,23 @@ struct КарточкаЗаявкиВЧате: View {
     }
 
     private func подпись(_ текст: String) -> some View {
-        Label(текст, systemImage: "checkmark.circle.fill")
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(КраскаОбъявлений.хорошоТекст)
+        Text(текст)
+            .font(.system(size: 13, weight: .bold))
+            .lineSpacing(5)
+            .foregroundStyle(ИнбоксКраска.окТекст)
     }
 
+    /// .dm-pin-btn: 13 жирным белым на градиенте #1d9e5e → #0f7a44, 10/16, скругление 10.
     private func кнопка(_ подпись: String, _ нажать: @escaping () -> Void) -> some View {
         Button(action: нажать) {
             Label(подпись, systemImage: "checkmark")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 40)
-                .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(LinearGradient(colors: [Color(uiColor: Theme.hex(0x1D9E5E)), Color(uiColor: Theme.hex(0x0F7A44))],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
         .disabled(заявки.занято.contains(заявка.номер))
