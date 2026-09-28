@@ -88,6 +88,10 @@ enum ВидФильтра: Hashable, Sendable {
     case состояние
     case ценаОт
     case ценаДо
+    /// Поиск, раздел и «Рядом со мной» — чипы mkRenderActive тоже, но живут не в фильтрах: их «×» — в FeedModel.
+    case запрос
+    case раздел
+    case рядом
 }
 
 /// Чип выбранного фильтра над выдачей (.mk-achip).
@@ -215,6 +219,8 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         case .состояние:   состояние = nil
         case .ценаОт:      ценаОт = nil
         case .ценаДо:      ценаДо = nil
+        case .запрос, .раздел, .рядом:
+            break               // не фильтры — их убирает FeedModel.убратьФильтр
         }
     }
 

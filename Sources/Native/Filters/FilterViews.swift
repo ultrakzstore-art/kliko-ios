@@ -43,16 +43,50 @@ struct ПолосаФильтров: View {
     let выбрать: (СортировкаЛенты) -> Void
     /// Этап 39: значок карты последним в строке — вход в карту объявлений с фильтрами этой ленты. nil — значка нет.
     var карта: (() -> Void)? = nil
+    /// Дизайн сайта: на «Фильтры» — сводка mkFbtnSync (`подпись`), без неё — один значок (#mk-fbtn:not(.has)).
+    var сайт = false
+    var подпись: String? = nil
+    /// #mk-subbtn: колокольчик «Подписаться на этот поиск» первым в строке; nil — его нет (нет ни поиска, ни раздела).
+    var подписка: (() -> Void)? = nil
+    var подписан = false
 
     var body: some View {
         HStack(spacing: 8) {
-            КнопкаФильтров(число: число, действие: открыть)
+            if let подписаться = подписка {
+                КнопкаПодпискиВыдачи(подписан: подписан, действие: подписаться)
+            }
+            КнопкаФильтров(число: число, сайт: сайт, подпись: подпись, действие: открыть)
             МенюСортировки(сортировка: сортировка, выбрать: выбрать)
             if let открытьКарту = карта {
                 КнопкаКартыЛенты(действие: открытьКарту)
             }
         }
         .padding(.horizontal, 16)
+    }
+}
+
+/// .mk-ctrl.mk-subbtn: на телефоне подпись спрятана (#mk-subbtn-lbl) — квадрат 42×40 с колокольчиком; подписан (.on) —
+/// заливка и рамка --mk-green, значок белый.
+private struct КнопкаПодпискиВыдачи: View {
+    let подписан: Bool
+    let действие: () -> Void
+
+    var body: some View {
+        Button(action: действие) {
+            Image(systemName: подписан ? "bell.fill" : "bell")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(подписан ? Color.white : Theme.текстВторой)
+                .frame(width: 42, height: 40)
+                .background(подписан ? Theme.зелёный : Theme.поверхность,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(подписан ? Theme.зелёный : Theme.линия, lineWidth: 1.5)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(SavedSearchText.т(подписан ? "unsave" : "save"))
     }
 }
 
@@ -78,22 +112,28 @@ private struct КнопкаКартыЛенты: View {
     }
 }
 
-/// .mk-ctrl#mk-fbtn: значок трёх убывающих линий, «Фильтры» и число выбранного.
+/// .mk-ctrl#mk-fbtn: значок трёх убывающих линий, «Фильтры» и число выбранного. В дизайне сайта на телефоне без
+/// выбранного — один значок 42×40, с выбранным — сводка (не шире 9,5 em, с многоточием).
 private struct КнопкаФильтров: View {
     let число: Int
+    var сайт = false
+    var подпись: String? = nil
     let действие: () -> Void
 
     var body: some View {
         Button(action: действие) {
             HStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: сайт ? 16 : 15, weight: .semibold))
                     .foregroundStyle(выбрано ? Theme.акцент : Theme.текстВторой)
                     .accessibilityHidden(true)
-                Text(FilterText.т("filters"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(выбрано ? Theme.акцент : Theme.текст)
-                    .lineLimit(1)
+                if let надпись {
+                    if сайт {
+                        НеШире(максимум: 9.5 * 14) { строка(надпись) }
+                    } else {
+                        строка(надпись)
+                    }
+                }
                 if выбрано {
                     Text(String(число))
                         .font(.system(size: 11, weight: .bold))
@@ -105,9 +145,9 @@ private struct КнопкаФильтров: View {
                         .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, одинЗначок ? 0 : 12)
             .padding(.vertical, 4)
-            .frame(minHeight: 40)
+            .frame(minWidth: одинЗначок ? 42 : nil, minHeight: 40)
             .background(выбрано ? Theme.мята : Theme.поверхность,
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
@@ -119,10 +159,41 @@ private struct КнопкаФильтров: View {
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel(FilterText.т("filters"))
-        .accessibilityValue(выбрано ? String(число) : "")
+        .accessibilityValue(подпись ?? (выбрано ? String(число) : ""))
     }
 
     private var выбрано: Bool { число > 0 }
+
+    private func строка(_ надпись: String) -> some View {
+        Text(надпись)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(выбрано ? Theme.акцент : Theme.текст)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    /// Надпись на кнопке: прежний вид — всегда «Фильтры», дизайн сайта — сводка или ничего.
+    private var надпись: String? { сайт ? подпись : FilterText.т("filters") }
+
+    /// Только значок — квадрат 42×40, как #mk-fbtn:not(.has) сайта.
+    private var одинЗначок: Bool { надпись == nil && !выбрано }
+}
+
+/// max-width сайта: своя ширина, пока влезает в `максимум`, длиннее — ужимается до него (текст — с многоточием).
+/// .frame(maxWidth:) тут не годится: он растянул бы и короткую надпись до предела.
+private struct НеШире: Layout {
+    let максимум: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let вид = subviews.first else { return .zero }
+        let ширина = min(proposal.width ?? максимум, максимум)
+        return вид.sizeThatFits(ProposedViewSize(width: ширина, height: proposal.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
 }
 
 /// «Сначала показывать» — .mk-sort-sel: выбранный порядок и стрелка вниз; нажатие — список вариантов с галочкой.
@@ -140,13 +211,14 @@ private struct МенюСортировки: View {
         } label: {
             HStack(spacing: 6) {
                 Text(сортировка.подпись)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))      // select на телефоне — не меньше 16 px
                     .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
+                    .padding(.trailing, -2)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 12)
@@ -186,7 +258,7 @@ struct ЧипыФильтров: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(КраскиФильтров.сброс)
                     .padding(.horizontal, 4)
-                    .frame(minHeight: 30)
+                    .frame(minHeight: 34)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -209,18 +281,18 @@ private struct ЧипАктивногоФильтра: View {
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .heavy))
+                    .font(.system(size: 10, weight: .bold))
                     .frame(width: 20, height: 20)
-                    .background(Theme.акцент.opacity(0.18), in: Circle())
+                    .background(Theme.зелёный2.opacity(0.18), in: Circle())
                     .accessibilityHidden(true)
             }
             .foregroundStyle(КраскиФильтров.выбрано)
             .padding(.leading, 12)
             .padding(.trailing, 6)
-            .padding(.vertical, 5)
+            .padding(.vertical, 7)          // 6 + рамка 1: пилюля 34, как .mk-achip
             .background(Theme.мята, in: Capsule())
             .overlay {
-                Capsule().strokeBorder(Theme.акцент.opacity(0.25), lineWidth: 1)
+                Capsule().strokeBorder(Theme.зелёный2.opacity(0.25), lineWidth: 1)
             }
             .contentShape(Capsule())
         }
@@ -479,7 +551,7 @@ struct ЛистФильтров: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.текст)
                     .padding(.horizontal, 20)
-                    .frame(minHeight: 48)
+                    .frame(minHeight: 45)
                     .background(Theme.поверхность2,
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -488,8 +560,9 @@ struct ЛистФильтров: View {
             Button { готово() } label: {
                 подписьПоказать
                     .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(LinearGradient(colors: [Theme.панельСвязиНачало, Theme.панельСвязиКонец],
+                    .frame(maxWidth: .infinity, minHeight: 45)
+                    /* .mk-dapply: 135deg --mk-green2 → --mk-green, в тёмной — #34c997 → #22a05b */
+                    .background(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный],
                                                startPoint: .topLeading, endPoint: .bottomTrailing),
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -499,7 +572,8 @@ struct ЛистФильтров: View {
         .padding(.horizontal, 20)
         .padding(.top, 14)
         .padding(.bottom, 16)
-        .background(Theme.поверхность)
+        /* .mk-dfoot: линия сверху и тень вверх 0 −8 20 −14 rgba(0,0,0,.45) — мягче, без разлёта в стороны */
+        .background(Theme.поверхность.shadow(.drop(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -4)))
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.линия).frame(height: 1)
         }
@@ -631,7 +705,7 @@ private struct ВариантФильтра: View {
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                    .strokeBorder(выбран ? Theme.акцент : Theme.линия, lineWidth: выбран ? 2 : 1.5)
+                    .strokeBorder(выбран ? Theme.зелёный2 : Theme.линия, lineWidth: выбран ? 2 : 1.5)
             }
             .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         }
@@ -675,13 +749,13 @@ private struct ПолеЧисла: View {
 
     var body: some View {
         TextField(подсказка, text: $текст, prompt: Text(подсказка).foregroundColor(Theme.текстВторой))
-            .font(.system(size: 15))
+            .font(.system(size: 16))               // .mk-pinp: 16 px, высота 44
             .foregroundStyle(Theme.текст)
             .tint(Theme.акцент)
             .keyboardType(.numberPad)
             .focused(фокус, equals: своё)
             .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 42)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)

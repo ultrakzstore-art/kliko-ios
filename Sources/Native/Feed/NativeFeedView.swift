@@ -521,9 +521,9 @@ struct NativeFeedView: View {
         }
     }
 
-    /// Рядом с полем — где у сайта «Карта»: колокольчик сохранённого поиска (этап 12), а без нижних вкладок — избранное,
-    /// сообщения и кабинет, которые раньше жили в системной панели. Этап 39: первой — сама «Карта» (#mk-map-btn сайта —
-    /// круглая кнопка справа от поля на телефоне), своя карта объявлений.
+    /// Рядом с полем — где у сайта «Карта»: без нижних вкладок — избранное, сообщения и кабинет, которые раньше жили в
+    /// системной панели (колокольчик сохранённого поиска — в строке фильтров, как #mk-subbtn сайта). Этап 39: первой —
+    /// сама «Карта» (#mk-map-btn сайта — круглая кнопка справа от поля на телефоне), своя карта объявлений.
     @ViewBuilder
     private var кнопкиУПоискаСайта: some View {
         if Config.картаОбъявлений {
@@ -533,7 +533,6 @@ struct NativeFeedView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(MapText.т("map"))
         }
-        if показатьСохранитьПоиск { колокольчикСайта }
         if Config.избранное && !Config.нижниеВкладки {
             ссылкаВШапкеСайта(ИзбранноеЦель.список, значок: "heart", подпись: FavoritesText.т("title"))
         }
@@ -549,16 +548,6 @@ struct NativeFeedView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(FeedText.т("cabinet"))
         }
-    }
-
-    private var колокольчикСайта: some View {
-        let искомое = модель.действующее
-        let сохранён = сохранённые.есть(искомое)
-        return Button { переключитьСохранённый(искомое) } label: {
-            КругШапкиСайта(значок: сохранён ? "bell.fill" : "bell")
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(SavedSearchText.т(сохранён ? "unsave" : "save"))
     }
 
     /// Как ссылкаШапки, только кружком шапки сайта: в стеке — ссылка, в две колонки — в стек правой колонки.
@@ -800,7 +789,8 @@ struct NativeFeedView: View {
     /// .mh-h2 — 21px, насыщенность 800.
     private func заголовокСайта(_ текст: String, крупный: Bool) -> some View {
         Text(текст)
-            .font(крупный ? Font.system(.title2, weight: .heavy) : Font.system(.headline, weight: .heavy))
+            .font(крупный ? Font.system(size: 21, weight: .heavy) : Font.system(.headline, weight: .heavy))
+            .tracking(крупный ? -0.315 : 0)          // .mh-h2: 21 px/800, −0,015 em
             .foregroundStyle(Theme.текст)
             .accessibilityAddTraits(.isHeader)
     }
@@ -876,14 +866,14 @@ struct NativeFeedView: View {
     private var неудачаПодборок: some View {
         HStack(spacing: 10) {
             Text(DesignText.т("fail"))
-                .font(.subheadline)
+                .font(.system(size: 14))
                 .foregroundStyle(Theme.текстВторой)
             Spacer(minLength: 8)
             Button {
                 Task { await подборки.загрузить() }
             } label: {
                 Text(DesignText.т("retry"))
-                    .font(.subheadline.weight(.bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 16)
                     .frame(height: 36)
@@ -903,10 +893,48 @@ struct NativeFeedView: View {
     /**
      Лента — все объявления, поиск или раздел (страница сайта без html.mk-home): «Вы смотрели» (только во всей ленте),
      заголовок с числом (.mk-rbar), «Фильтры» и порядок, чипы выбранного, карточки витрины; лента кончилась — зелёный
-     баннер «Продавай на Kliko.kz» и подвал, как внизу страницы сайта под #mk-results.
+     баннер «Продавай на Kliko.kz» и подвал, как внизу страницы сайта под #mk-results. Ритм по сайту (390 px): точки
+     подсказок → заголовок 14, число → «Фильтры» 8, «Фильтры» → чипы 22, чипы или «Фильтры» → карточки 18 — поэтому
+     стек без общего зазора, у каждого блока свой отступ сверху.
      */
-    @ViewBuilder
     private var выдачаСайта: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            верхВыдачиСайта
+            шапкаВыдачи
+            /* Этап 33: «Фильтры», «Сначала показывать» и чипы выбранного — под заголовком, как в .mk-rbar и #mk-active. */
+            if Config.фильтрыНаСервере {
+                полосаФильтровСайта
+                    .padding(.top, 8)
+            }
+            /* .mk-active: поиск, раздел, «Рядом со мной» и фильтры — одной строкой пилюль (mkRenderActive). */
+            let чипы = чипыВыдачи
+            if !чипы.isEmpty {
+                ЧипыФильтров(чипы: чипы, убрать: { фильтр in модель.убратьФильтр(фильтр) },
+                             сбросить: { модель.сброситьВсё() })
+                    .padding(.top, 22)
+            }
+            /* Без строки фильтров колокольчика #mk-subbtn нет — «Сохранить поиск» остаётся полосой над выдачей. */
+            if показатьСохранитьПоиск && !Config.фильтрыНаСервере {
+                полосаСохранитьПоиск
+                    .padding(.top, 12)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                содержимое
+            }
+            .padding(.top, 18)
+            if лентаДочитана {
+                БаннерПродажСайта(разместить: { разместить() })
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                ПодвалСайта(открыть: открыть)
+                    .padding(.top, 12)
+            }
+        }
+    }
+
+    /// Над заголовком выдачи: «Вы смотрели», карусель подсказок или «Новости и акции» раздела.
+    @ViewBuilder
+    private var верхВыдачиСайта: some View {
         let смотрели = недавниеВЛенте
         /* Есть ли полоса, решает полосаНедавних — только у верха ленты или при новой выдаче; содержимое — живое:
            высота полосы от числа карточек не зависит, и сетка под пальцем не сдвигается. */
@@ -929,26 +957,6 @@ struct NativeFeedView: View {
                 целиИсторий = ЦельИсторий(раздел: набор.раздел, номер: номер, сПлитки: false)
             }
             .padding(.top, 10)
-        }
-        шапкаВыдачи
-        /* Этап 33: «Фильтры», «Сначала показывать» и чипы выбранного — под заголовком, как в .mk-rbar и #mk-active. */
-        if Config.фильтрыНаСервере { блокФильтров }
-        /* «Рядом со мной» — чип выбранного с «×» (mkRenderActive: near). */
-        if модель.рядом {
-            HStack {
-                ЧипРядомСоМной { модель.задатьРядом(false) }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-        }
-        if показатьСохранитьПоиск { полосаСохранитьПоиск }
-        содержимое
-        if лентаДочитана {
-            БаннерПродажСайта(разместить: { разместить() })
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-            ПодвалСайта(открыть: открыть)
-                .padding(.top, 12)
         }
     }
 
@@ -997,23 +1005,26 @@ struct NativeFeedView: View {
         }
     }
 
-    /// .mk-rbar: «Предложения от проверенных продавцов», «По запросу «…»» или название раздела (mkFeedHead) и «· N
-    /// предложений» (total ответа, пока его нет — загруженные).
+    /// .mk-rbar: «Предложения от проверенных продавцов», «По запросу «…»» или название раздела (mkFeedHead) — 14 px, 800,
+    /// разрядка −0,01 em; под ним своей строкой число (.mk-rcount 12 px: число 600, слово 400) — total ответа, пока его
+    /// нет — загруженные.
     private var шапкаВыдачи: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(заголовокВыдачи)
-                .font(.system(.title3, weight: .heavy))
-                .tracking(-0.3)
-                .foregroundStyle(Theme.текст)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .accessibilityAddTraits(.isHeader)
-            if let число = числоВыдачи {
-                Text("· " + DesignText.предложений(число))
-                    .font(.system(.subheadline, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(1)
-                    .fixedSize()
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(заголовокВыдачи)
+                    .font(.system(size: 14, weight: .heavy))
+                    .tracking(-0.14)
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .accessibilityAddTraits(.isHeader)
+                if let число = числоВыдачи {
+                    let слово = "\u{00A0}" + DesignText.т("offers" + DesignText.форма(число))
+                    (Text(DesignText.число(число)).fontWeight(.semibold) + Text(слово))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
             /* Этап 18: «Уточнить» — у заголовка ленты, когда фильтров на сервере нет. */
@@ -1030,12 +1041,16 @@ struct NativeFeedView: View {
     private var заголовокВыдачи: String {
         let искомое = модель.действующее
         if !искомое.текст.isEmpty { return String(format: DesignText.т("feed_query"), искомое.текст) }
-        let раздел = искомое.раздел
-        if !раздел.isEmpty {
-            if let свой = РазделГлавной.с(ключом: раздел) { return названиеРаздела(свой) }
-            if !ЯзыкПриложения.shared.сменён, let строка = разделы.first(where: { $0.k == раздел }) { return строка.название }
-        }
+        if let название = названиеРазделаВыдачи(искомое.раздел) { return название }
         return DesignText.т("feed")
+    }
+
+    /// Название раздела выдачи (mkCatName): свой раздел главной или, пока язык не меняли, строка снимка; нет — nil.
+    private func названиеРазделаВыдачи(_ раздел: String) -> String? {
+        guard !раздел.isEmpty else { return nil }
+        if let свой = РазделГлавной.с(ключом: раздел) { return названиеРаздела(свой) }
+        if !ЯзыкПриложения.shared.сменён, let строка = разделы.first(where: { $0.k == раздел }) { return строка.название }
+        return nil
     }
 
     /// Число в заголовке: total ответа, иначе сколько загружено; пока ответа нет — без числа.
@@ -1170,11 +1185,11 @@ struct NativeFeedView: View {
         }
     }
 
-    /// Toast сайта: строка внизу на 2,5 с.
+    /// Toast сайта: строка внизу на 2,2 с (mkToast).
     private func показатьТост(_ текст: String) {
         withAnimation(.easeOut(duration: 0.2)) { тост = текст }
         Task {
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
             if тост == текст {
                 withAnimation(.easeIn(duration: 0.2)) { тост = nil }
             }
@@ -1361,6 +1376,53 @@ struct NativeFeedView: View {
             ЧипыФильтров(чипы: чипы, убрать: { фильтр in модель.убратьФильтр(фильтр) },
                          сбросить: { модель.сброситьФильтры() })
         }
+    }
+
+    /// Строка фильтров в дизайне сайта (.mk-rright): колокольчик #mk-subbtn (есть поиск или раздел), «Фильтры» со
+    /// сводкой mkFbtnSync и «Сначала показывать». Значка карты нет — у сайта карта только кружком в шапке (#mk-map-btn).
+    private var полосаФильтровСайта: some View {
+        let искомое = модель.действующее
+        let подписка: (() -> Void)? = показатьСохранитьПоиск ? { переключитьСохранённый(искомое) } : nil
+        return ПолосаФильтров(число: модель.фильтры.число, сортировка: модель.фильтры.сортировка,
+                              открыть: { открытьФильтры() },
+                              выбрать: { сортировка in модель.выбратьСортировку(сортировка) },
+                              карта: nil, сайт: true, подпись: сводкаФильтров,
+                              подписка: подписка, подписан: сохранённые.есть(искомое))
+    }
+
+    /// Надпись #mk-fbtn — mkFbtnSync сайта: «Аренда», раздел, состояние и «Цена» — первые два через « · », остальное и
+    /// поиск, комнаты, год — «+N»; ничего не выбрано — nil (на телефоне один значок).
+    private var сводкаФильтров: String? {
+        let ф = модель.фильтры
+        let искомое = модель.действующее
+        var части: [String] = []
+        if модель.аренда { части.append(FilterText.т("rent")) }
+        if let раздел = названиеРазделаВыдачи(искомое.раздел) { части.append(раздел) }
+        if let с = ф.состояние { части.append(с.подпись(раздел: модель.раздел)) }
+        if ф.ценаОт != nil || ф.ценаДо != nil { части.append(FilterText.т("price_short")) }
+        var ещё = max(0, части.count - 2)
+        if !искомое.текст.isEmpty { ещё += 1 }
+        if !ф.комнаты.isEmpty { ещё += 1 }
+        if ф.годОт != nil || ф.годДо != nil { ещё += 1 }
+        guard !части.isEmpty || ещё > 0 else { return nil }
+        let начало = части.isEmpty ? FilterText.т("filters") : части.prefix(2).joined(separator: " · ")
+        return ещё > 0 ? начало + " +" + String(ещё) : начало
+    }
+
+    /// Чипы .mk-active в порядке mkRenderActive: «Поиск: …», раздел, «Рядом со мной», затем фильтры.
+    private var чипыВыдачи: [АктивныйФильтр] {
+        let искомое = модель.действующее
+        var итог: [АктивныйФильтр] = []
+        if !искомое.текст.isEmpty {
+            итог.append(АктивныйФильтр(вид: .запрос, текст: String(format: FilterText.т("search_chip"), искомое.текст)))
+        }
+        if let раздел = названиеРазделаВыдачи(искомое.раздел) {
+            итог.append(АктивныйФильтр(вид: .раздел, текст: раздел))
+        }
+        if модель.рядом {
+            итог.append(АктивныйФильтр(вид: .рядом, текст: ВитринаТекст.т("near_me")))
+        }
+        return итог + модель.фильтры.чипы(раздела: модель.раздел)
     }
 
     private func открытьФильтры() {
@@ -1701,8 +1763,16 @@ struct ListingCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(золотая ? Theme.топРамка : Theme.линия, lineWidth: золотая ? 1.5 : 1)
+                .strokeBorder(золотая ? Theme.цвет(0xE4C579, 0xE4C579) : Theme.линия, lineWidth: 1)
                 .allowsHitTesting(false)
+        }
+        .overlay {
+            if золотая {        // .top-card: снаружи ещё кольцо 1,5 #d9b24c (box-shadow 0 0 0 1.5px), в обеих темах
+                RoundedRectangle(cornerRadius: Theme.Радиус.lg + 0.75, style: .continuous)
+                    .stroke(Theme.цвет(0xD9B24C, 0xD9B24C), lineWidth: 1.5)
+                    .padding(-0.75)
+                    .allowsHitTesting(false)
+            }
         }
         .background { теньСайта }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
@@ -1840,9 +1910,10 @@ struct ListingCard: View {
             Text(товар.title)
                 .font(.system(size: кегль(13), weight: .medium))
                 .foregroundStyle(Theme.текст)
-                .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: !крупныйТекст)
+                .lineLimit(крупныйТекст ? 3 : 1)                // .mk-title: nowrap + многоточие, как у сайта
+                .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: кегль(17), alignment: .leading)     // 13 × 1,32
             Text(характеристики.isEmpty ? " " : характеристики)
                 .font(.system(size: кегль(12)))
                 .foregroundStyle(Theme.текстВторой)
@@ -1890,7 +1961,7 @@ struct ListingCard: View {
                         .lineLimit(1)
                 }
                 .font(.system(size: кегль(11), weight: .bold))
-                .foregroundStyle(Theme.акцент)
+                .foregroundStyle(Theme.зелёный2)
             }
             Spacer(minLength: 0)
             HStack(spacing: 4) {

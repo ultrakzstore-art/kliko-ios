@@ -43,17 +43,20 @@ struct ЭкранСравнения: View {
                         }
                     }
                     ForEach(строки) { строка in
-                        Divider()
+                        Rectangle()
+                            .fill(Theme.линия)
+                            .frame(height: 1)
+                            .gridCellUnsizedAxes(.horizontal)       // ширину берёт у таблицы, как Divider
                         GridRow {
                             Text(строка.подпись)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.текстВторой)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(width: Self.ширинаПодписи, alignment: .leading)
                             ForEach(Array(строка.значения.enumerated()), id: \.offset) { пара in
                                 Text(пара.element)
                                     .font(строка.главная ? Font.subheadline.weight(.heavy) : Font.subheadline)
-                                    .foregroundStyle(пара.element == Self.нет ? Color.secondary : Color.primary)
+                                    .foregroundStyle(пара.element == Self.нет ? Theme.текстВторой : Theme.текст)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(width: Self.ширинаКолонки, alignment: .leading)
                             }
@@ -62,13 +65,13 @@ struct ЭкранСравнения: View {
                 }
                 Text(CompareText.т("note"))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(width: ширинаТаблицы, alignment: .leading)
             }
             .padding(16)
         }
-        .background(Color(.systemBackground))
+        .background(Theme.фонСтраницы)
         .navigationTitle(CompareText.т("title"))
         .navigationBarTitleDisplayMode(.inline)
         .task { await прочитатьКопии() }
@@ -147,7 +150,7 @@ struct ЭкранСравнения: View {
 
     private func содержимоеШапки(_ товар: Listing) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Color(.tertiarySystemGroupedBackground)
+            Theme.поверхность2
                 .frame(width: Self.ширинаКолонки, height: Self.ширинаКолонки * 3 / 4)
                 .overlay {
                     AsyncImage(url: товар.обложка) { фаза in
@@ -156,7 +159,7 @@ struct ЭкранСравнения: View {
                         } else {
                             Image(systemName: "photo")
                                 .font(.system(size: 22))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Theme.текстВторой)
                         }
                     }
                 }
@@ -164,7 +167,7 @@ struct ЭкранСравнения: View {
                 .accessibilityHidden(true)
             Text(товар.title)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Theme.текст)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -204,7 +207,7 @@ struct ЗначокВыбора: View {
     var body: some View {
         Image(systemName: выбрана ? "checkmark.circle.fill" : "circle")
             .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(выбрана ? Theme.green2 : Color.secondary)
+            .foregroundStyle(выбрана ? Theme.зелёный2 : Theme.текстВторой)
             .frame(width: 32, height: 32)
             .background(.ultraThinMaterial, in: Circle())
             .padding(6)

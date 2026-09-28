@@ -28,7 +28,8 @@ enum FilterText {
                "seller": "Продавец", "verified": "Проверенные", "verified_chip": "Проверенные продавцы",
                "photo": "Фото", "photo_only": "Только с фото", "photo_chip": "С фото",
                "reset": "Сбросить", "reset_all": "Сбросить всё", "show": "Показать", "close": "Закрыть",
-               "remove_a11y": "Сбросить: %@", "facet": "%@: %@"],
+               "remove_a11y": "Сбросить: %@", "facet": "%@: %@",
+               "search_chip": "Поиск: %@", "price_short": "Цена", "rent": "Аренда"],
         "kk": ["filters": "Сүзгілер", "sort_title": "Алдымен көрсету",
                "sort_reco": "Ұсынылатындар", "sort_new": "Жаңалары", "sort_old": "Ескілері", "sort_rating": "Рейтинг бойынша", "sort_cheap": "Арзанырақ", "sort_expensive": "Қымбатырақ",
                "price": "Бағасы, ₸", "from": "бастап", "to": "дейін", "from_x": "%@ бастап", "to_x": "%@ дейін",
@@ -38,7 +39,8 @@ enum FilterText {
                "seller": "Сатушы", "verified": "Тексерілгендер", "verified_chip": "Тексерілген сатушылар",
                "photo": "Фото", "photo_only": "Тек фотосы барлар", "photo_chip": "Фотосы бар",
                "reset": "Тазалау", "reset_all": "Барлығын тазалау", "show": "Көрсету", "close": "Жабу",
-               "remove_a11y": "Тазалау: %@", "facet": "%@: %@"],
+               "remove_a11y": "Тазалау: %@", "facet": "%@: %@",
+               "search_chip": "Іздеу: %@", "price_short": "Баға", "rent": "Жалға алу"],
         "en": ["filters": "Filters", "sort_title": "Show first",
                "sort_reco": "Recommended", "sort_new": "Newest", "sort_old": "Oldest", "sort_rating": "By rating", "sort_cheap": "Cheapest", "sort_expensive": "Most expensive",
                "price": "Price, ₸", "from": "from", "to": "to", "from_x": "from %@", "to_x": "up to %@",
@@ -48,7 +50,8 @@ enum FilterText {
                "seller": "Seller", "verified": "Verified", "verified_chip": "Verified sellers",
                "photo": "Photo", "photo_only": "With photos only", "photo_chip": "With photos",
                "reset": "Reset", "reset_all": "Reset all", "show": "Show", "close": "Close",
-               "remove_a11y": "Remove: %@", "facet": "%@: %@"],
+               "remove_a11y": "Remove: %@", "facet": "%@: %@",
+               "search_chip": "Search: %@", "price_short": "Price", "rent": "Rent"],
         "ar": ["filters": "عوامل التصفية", "sort_title": "اعرض أولًا",
                "sort_reco": "المقترحة", "sort_new": "الأحدث", "sort_old": "الأقدم", "sort_rating": "حسب التقييم", "sort_cheap": "الأرخص", "sort_expensive": "الأغلى",
                "price": "السعر، ₸", "from": "من", "to": "إلى", "from_x": "من %@", "to_x": "حتى %@",
@@ -58,6 +61,7 @@ enum FilterText {
                "seller": "البائع", "verified": "الموثّقون", "verified_chip": "بائعون موثّقون",
                "photo": "الصور", "photo_only": "مع صور فقط", "photo_chip": "مع صور",
                "reset": "إعادة الضبط", "reset_all": "إعادة ضبط الكل", "show": "عرض", "close": "إغلاق",
-               "remove_a11y": "إزالة: %@", "facet": "%@: %@"]
+               "remove_a11y": "إزالة: %@", "facet": "%@: %@",
+               "search_chip": "بحث: %@", "price_short": "السعر", "rent": "إيجار"]
     ]
 }

@@ -144,7 +144,8 @@ struct РядИсторий: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 2)
+            .padding(.top, 2)
+            .padding(.bottom, 4)                // .vst: padding 2 2 4
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(ВитринаТекст.т("st_news"))
@@ -174,7 +175,7 @@ struct РядИсторий: View {
                 }
                 .frame(width: 62, height: 62)
                 Text(история.заголовок.isEmpty ? набор.название : история.заголовок)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))     // .vst-t: --fs-2xs 10 px, 600
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)

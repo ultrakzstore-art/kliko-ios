@@ -187,9 +187,6 @@ struct ListingDetailView: View {
                 Button(FeedText.т("retry")) { Task { await догрузить() } }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.green)
-                if let адрес = товар.адрес {
-                    Button(FeedText.т("open_site")) { открыть(адрес) }
-                }
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 80)

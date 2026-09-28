@@ -39,7 +39,7 @@ struct БлокВИП<Карточка: View>: View {
     private var заголовок: some View {
         HStack(spacing: 12) {
             Image(systemName: "star.fill")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 20, weight: .bold))         // .mh-vipic svg 20 px
                 .foregroundStyle(Color.white)
                 .frame(width: 40, height: 40)
                 /* Тень — заливкой подложки (ShapeStyle.shadow), как у метки «★ ТОП» (сборка 33, «лента подвисает»). */
@@ -51,7 +51,8 @@ struct БлокВИП<Карточка: View>: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(HomeText.т("vip_h"))
-                    .font(.system(.title2, weight: .heavy))
+                    .font(.system(size: 21, weight: .heavy))    // .mh-h2: --fs-h1 21 px/800, −0,015 em
+                    .tracking(-0.315)
                     .foregroundStyle(Theme.текст)
                     .lineLimit(2)
                     .accessibilityAddTraits(.isHeader)

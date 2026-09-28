@@ -109,20 +109,20 @@ struct ПоискКакНаСайте: ViewModifier {
     }
 }
 
-/// Плашка внизу — toast сайта.
+/// Плашка внизу — toast сайта (.mk-toast: --mk-ink с текстом --mk-surf, 13 px/600, поля 12 20, скругление 12).
 private struct ПлашкаПоиска: View {
     let текст: String
 
     var body: some View {
         Text(текст)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.white)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.поверхность)
             .lineLimit(2)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(Color(uiColor: Theme.hex(0x13211B, 0.92)), in: Capsule())
-            .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 6)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Theme.текст, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 8)
     }
 }
 
@@ -303,6 +303,7 @@ private struct СписокПодсказок: View {
                 набрано
             }
         }
+        .padding(.horizontal, 8)            // список сайта отступает на 8: значки строк — на 20, разделов — на 16
     }
 
     @ViewBuilder
@@ -501,7 +502,6 @@ private struct СтрокаРаздела: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 4)
         .accessibilityElement(children: .combine)
     }
 

@@ -65,18 +65,18 @@ struct КарусельПодсказок: View {
 
     var body: some View {
         if !(скрытые.contains("near") && скрытые.contains("trust")) {
-            VStack(spacing: 2) {
+            VStack(spacing: 6) {             // .mk-vdots: margin 6 0 14
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 12) {
                         ForEach(слайды, id: \.self) { ключ in
                             слайд(ключ)
-                                .containerRelativeFrame(.horizontal) { длина, _ in длина * 0.82 }
+                                .containerRelativeFrame(.horizontal)        // .mk-vpicks > *: flex 0 0 100%
                                 .id(ключ)
                         }
                     }
                     .scrollTargetLayout()
                 }
-                .contentMargins(.horizontal, 14, for: .scrollContent)
+                .contentMargins(.horizontal, 16, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $текущий)
                 .fixedSize(horizontal: false, vertical: true)
@@ -99,7 +99,7 @@ struct КарусельПодсказок: View {
                     withAnimation(.easeInOut(duration: 0.3)) { текущий = ключ }
                 } label: {
                     Capsule()
-                        .fill(вкл ? Theme.акцент : Theme.линия)
+                        .fill(вкл ? Theme.зелёный2 : Theme.линия)
                         .frame(width: вкл ? 18 : 6, height: 6)
                         .frame(height: 22)
                         .contentShape(Rectangle())
@@ -108,6 +108,7 @@ struct КарусельПодсказок: View {
                 .accessibilityHidden(true)
             }
         }
+        .padding(.vertical, -8)             // в раскладке — точка 6 pt, как у сайта; палец попадает по полосе 22 pt
         .animation(.easeInOut(duration: 0.25), value: текущий)
         .frame(maxWidth: .infinity)
     }
@@ -151,16 +152,16 @@ struct КарусельПодсказок: View {
                             ProgressView().controlSize(.mini)
                         } else {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                         }
                         Text(ВитринаТекст.т("near_h"))
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .lineLimit(1)
                     }
                     .foregroundStyle(Theme.акцент)
                     Spacer(minLength: 0)
                     Text(подписьРядом)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.текст)
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
@@ -201,9 +202,9 @@ struct КарусельПодсказок: View {
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ВитринаТекст.т("trust_h"))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                     Text(ВитринаТекст.т("trust_s"))
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(Color.white.opacity(0.78))
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -212,7 +213,7 @@ struct КарусельПодсказок: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .padding(.horizontal, 12)
                     .frame(height: 32)
                     .background(Color.white.opacity(0.18), in: Capsule())
@@ -561,15 +562,15 @@ struct ЛистГарантСделки: View {
         .buttonStyle(НажатиеСайта())
     }
 
-    /// Какая кнопка у этого человека — mkEscrowCTA: вход и _MK_ME_VERIFIED спрашиваем у загруженной страницы.
+    /// Какая кнопка у этого человека — mkEscrowCTA: вход и верификация (_MK_ME_VERIFIED сайта) — из своего профиля
+    /// кабинета, без скрытой страницы сайта.
     @MainActor
     static func кнопкаСейчас() async -> Кнопка {
         let состояние = await SiteSession.состояние()
         guard состояние.вошёл == true else { return .регистрация }
-        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else { return .верификация }
-        let js = "(function(){try{return window._MK_ME_VERIFIED===true?'1':'0';}catch(e){return '0';}})()"
-        let ответ = (try? await web.evaluateJavaScript(js)) as? String
-        return ответ == "1" ? .понятно : .верификация
+        let настройки = НастройкиМодель.shared
+        if настройки.профиль == nil { await настройки.загрузить() }
+        return (настройки.профиль?.верифицирован ?? false) ? .понятно : .верификация
     }
 }
 
@@ -586,6 +587,16 @@ struct ЛистДоступаГео: View {
     }
 
     var body: some View {
+        /* Высота — по содержимому (казахский текст и путь в Настройках на SE в 320 pt не влезали); не влезло — листается. */
+        ScrollView {
+            содержимое
+                .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .листПоВысоте()
+    }
+
+    private var содержимое: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(ВитринаТекст.т(выключеноНаУстройстве ? "perm_off_t" : "perm_t"))
                 .font(.system(size: 18, weight: .bold))
@@ -632,55 +643,26 @@ struct ЛистДоступаГео: View {
         .padding(.horizontal, 20)
         .padding(.top, 22)
         .padding(.bottom, 12)
-        .presentationDetents([.height(320)])
-        .presentationDragIndicator(.visible)
     }
 }
 
 // MARK: - Мелкое
 
 /// Всплывающая строка внизу (toast сайта): «Показываю ближайшие к вам», «Не удалось определить местоположение».
+/// .mk-toast: фон --mk-ink, текст --mk-surf (в тёмной — светлая плашка с тёмным текстом), 13 px/600, поля 12 20,
+/// скругление --r-ms 12, тень 0 8 24 rgba(0,0,0,.22).
 struct ТостЛенты: View {
     let текст: String
 
     var body: some View {
         Text(текст)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.white)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.поверхность)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(Color(red: 19 / 255, green: 33 / 255, blue: 27 / 255).opacity(0.94), in: Capsule())
-            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Theme.текст, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 8)
             .accessibilityAddTraits(.isStaticText)
-    }
-}
-
-/// Чип «Рядом со мной» с «×» над выдачей (mkRenderActive: ["near", near_me]).
-struct ЧипРядомСоМной: View {
-    let убрать: () -> Void
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "location.fill")
-                .font(.system(size: 11, weight: .bold))
-            Text(ВитринаТекст.т("near_me"))
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-            Button(action: убрать) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(ВитринаТекст.т("close"))
-        }
-        .foregroundStyle(Theme.акцент)
-        .padding(.leading, 12)
-        .padding(.trailing, 4)
-        .frame(height: 32)
-        .background(Theme.мята, in: Capsule())
-        .overlay { Capsule().strokeBorder(Theme.рамкаПункта, lineWidth: 1) }
     }
 }
