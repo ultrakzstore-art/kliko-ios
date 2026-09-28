@@ -30,7 +30,7 @@ struct ЗаглушкаКарточки: View {
             Text(IPadText.т("pick_sub"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.фонСтраницы)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

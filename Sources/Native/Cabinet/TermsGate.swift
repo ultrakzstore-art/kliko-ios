@@ -1,11 +1,12 @@
 import SwiftUI
+import UIKit
 
 /**
  НОВАЯ РЕДАКЦИЯ СОГЛАШЕНИЯ — ЭТАП 40 (владелец 26.09.2026: «всё одно и то же, просто код разный»).
 
  Как termsRenewGate кабинета сайта (карта §1.6): сервер печатает window.__TERMS_RENEW = true — при входе в кабинет
  встаёт окно, которое не закрыть ни свайпом, ни «×» (у сайта его не закрыть и Esc): «Условия обновились», редакция
- (__TERMS_VER), что изменилось (__TERMS_WHAT), «Читать соглашение» (/soglashenie.php) и две кнопки — «Выйти» (тот же
+ (__TERMS_VER), что изменилось (__TERMS_WHAT), «Читать соглашение» (/soglashenie.php — своим окном поверх) и две кнопки — «Выйти» (тот же
  выход, что в кабинете) и «Принимаю» → POST cabinet.php?action=terms_accept {csrf, accept: 1}, только по нажатию.
  Принято — окно закрывается, внизу кабинета «Спасибо — новая редакция принята»; сессии нет — экран входа; иначе —
  «Ошибка» с кодом сервера, окно остаётся.
@@ -57,11 +58,14 @@ struct ОкноСоглашения: View {
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                 список
-                if let адрес = Config.url("/soglashenie.php") {
-                    Link(т("terms_renew_link"), destination: адрес)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.зелёный2)
+                /* Соглашение — своим окном поверх (НативныеОкна → страница сайта своими блоками); не вышло — система. */
+                Button(т("terms_renew_link")) {
+                    if let адрес = Config.url("/soglashenie.php"), !НативныеОкна.перехватить(адрес) {
+                        UIApplication.shared.open(адрес, options: [:], completionHandler: nil)
+                    }
                 }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.зелёный2)
                 if let ошибка {
                     Text(ошибка)
                         .font(.system(size: 14, weight: .semibold))

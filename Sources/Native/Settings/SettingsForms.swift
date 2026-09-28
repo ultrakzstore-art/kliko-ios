@@ -17,7 +17,8 @@ func тН(_ ключ: String) -> String { НастройкиText.т(ключ) }
 
 // MARK: - Общие части
 
-/// Лист настройки: заголовок, «Закрыть», содержимое на фоне страницы сайта.
+/// Лист настройки (.cabset-sheet): полоска сверху, заголовок .cabset-hd b (19/800, разрядка -0,3), крестик .cabset-x
+/// плиткой (surf2, радиус 10), содержимое на фоне страницы сайта.
 struct ЛистНастройки<Содержимое: View>: View {
     let заголовок: String
     let содержимое: Содержимое
@@ -37,11 +38,32 @@ struct ЛистНастройки<Содержимое: View>: View {
                 .navigationTitle(заголовок)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text(заголовок)
+                            .font(.system(size: 19, weight: .heavy))
+                            .tracking(-0.3)
+                            .foregroundStyle(Theme.текст)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(тН("close")) { закрыть() }
+                        Button {
+                            закрыть()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.текстВторой)
+                                .frame(width: 36, height: 36)
+                                .background(Theme.поверхность2,
+                                            in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(тН("close"))
                     }
                 }
         }
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -56,7 +78,20 @@ struct КнопкаНастройки: View {
             КнопкаСайта(подпись: подпись, идёт: идёт, действие: действие)
         }
         .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        /* Снизу 10 — тень зелёной кнопки не обрезается строкой списка. */
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 10, trailing: 0))
+    }
+}
+
+extension View {
+    /// Поле окна настроек сайта: 16, 14 внутри, карточка, рамка 1,5 --line, радиус 12 (openChangePassword).
+    func полеНастройкиСайта() -> some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return self
+            .font(.system(size: 16))
+            .padding(14)
+            .background(Theme.поверхность, in: форма)
+            .overlay { форма.strokeBorder(Theme.линия, lineWidth: 1.5) }
     }
 }
 
@@ -119,30 +154,42 @@ struct ФормаПароля: View {
         self.готово = готово
     }
 
+    /// Как окно сайта: подсказка, три поля столбиком через 10, кнопка, ошибка по центру под ней. «Отмена» — крестик листа.
     var body: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(тН(свой ? "pw_hint_change" : "pw_hint_set"))
+                    .font(.system(size: 13))
+                    .lineSpacing(3)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
                 if свой {
                     SecureField(тН("pw_old_ph"), text: $старый)
                         .textContentType(.password)
+                        .полеНастройкиСайта()
                 }
                 SecureField(тН("pw_new_ph"), text: $новый)
                     .textContentType(.newPassword)
+                    .полеНастройкиСайта()
                 SecureField(тН("pw_new2_ph"), text: $повтор)
                     .textContentType(.newPassword)
                     .submitLabel(.done)
                     .onSubmit { сохранить() }
-            } header: {
-                Text(тН(свой ? "pw_hint_change" : "pw_hint_set"))
-                    .textCase(nil)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.текстВторой)
+                    .полеНастройкиСайта()
+                КнопкаСайта(подпись: тН("save"), идёт: идёт) { сохранить() }
+                if let ошибка {
+                    Text(ошибка)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.скидкаТекст)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            if let ошибка {
-                Section { ОшибкаНастройки(текст: ошибка) }
-            }
-            КнопкаНастройки(подпись: тН("save"), идёт: идёт) { сохранить() }
+            .padding(20)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     /// Проверки сайта: длина не меньше 6, совпадение; потом {old, new, new2} как есть (сайт пароли не обрезает).
@@ -210,9 +257,12 @@ struct ФормаНомера: View {
                 TextField("+7 (700) 000-00-00", text: номерВвод)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
+                    .полеНастройкиСайта()
                     .disabled(профиль.верифицирован)
                     .opacity(профиль.верифицирован ? 0.65 : 1)
                     .accessibilityLabel(тН("ph_title"))
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 if профиль.верифицирован {
                     Button {
                         перейтиКВерификации()

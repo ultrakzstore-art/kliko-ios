@@ -414,7 +414,7 @@ struct CabinetView: View {
         return CabinetText.т(ждёмСайт ? "checking_sub" : "unknown_sub")
     }
 
-    // MARK: - Кабинет на сайте
+    // MARK: - Разделы кабинета
 
     private var разделСайта: some View {
         Section {
@@ -439,9 +439,7 @@ struct CabinetView: View {
                 строкаСообщений
             }
         } header: {
-            Text(CabinetText.т("site"))
-        } footer: {
-            Text(CabinetText.т("site_footer"))
+            ЗаголовокГруппыКабинета(CabinetText.т("site"))
         }
     }
 
@@ -451,29 +449,20 @@ struct CabinetView: View {
             WebBridge.shared.открытьЭкран(.сообщения, запасной: Config.url("/cabinet.php?s=messages"))
         } label: {
             HStack {
-                Label {
-                    Text(TabsText.т("messages")).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(TabsText.т("messages"), значок: "bubble.left.and.bubble.right")
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                СтрелкаСтрокиКабинета()
             }
         }
+        .полямиСтрокиКабинета()
     }
 
     /// Этап 41: строка «Мои объявления» — экран приложения, поэтому со стрелкой списка, а не «наружу».
     private var строкаМоихОбъявлений: some View {
         NavigationLink(value: КабинетЦель.моиОбъявления) {
-            Label {
-                Text(МоиОбъявленияText.т("title")).foregroundStyle(.primary)
-            } icon: {
-                Image(systemName: "square.stack.3d.up").foregroundStyle(Theme.green2)
-            }
+            ПодписьСтрокиКабинета(МоиОбъявленияText.т("title"), значок: "square.stack.3d.up")
         }
+        .полямиСтрокиКабинета()
     }
 
     /// Этап 43: строка «Мои сделки» — со значком, сколько сделок ждут человека (спор или «получено — подтвердите»), как
@@ -481,11 +470,7 @@ struct CabinetView: View {
     private var строкаМоихСделок: some View {
         NavigationLink(value: КабинетЦель.сделки) {
             HStack {
-                Label {
-                    Text(СделкиText.т("deals_title")).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "checkmark.shield").foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(СделкиText.т("deals_title"), значок: "checkmark.shield")
                 Spacer(minLength: 8)
                 if сделки.ждут > 0 {
                     Text(сделки.ждут > 99 ? "99+" : String(сделки.ждут))
@@ -498,17 +483,14 @@ struct CabinetView: View {
                 }
             }
         }
+        .полямиСтрокиКабинета()
     }
 
     /// Этап 45: строка «Заявки рядом» — со значком новых заявок (reqSetNav сайта).
     private var строкаЗаявок: some View {
         NavigationLink(value: КабинетЦель.заявки) {
             HStack {
-                Label {
-                    Text(ИнбоксText.т("req_title")).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "hand.raised").foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(ИнбоксText.т("req_title"), значок: "hand.raised")
                 Spacer(minLength: 8)
                 if заявки.новых > 0 {
                     Text(заявки.новых > 99 ? "99+" : String(заявки.новых))
@@ -521,6 +503,7 @@ struct CabinetView: View {
                 }
             }
         }
+        .полямиСтрокиКабинета()
     }
 
     /// Этап 48: группа «Для бизнеса» меню кабинета сайта (и «Акции» из «Разделов») — экраны приложения, со стрелкой
@@ -537,18 +520,15 @@ struct CabinetView: View {
                 МенюБизнесаКабинета()
             }
         } header: {
-            Text(БизнесText.т("biz_group"))
+            ЗаголовокГруппыКабинета(БизнесText.т("biz_group"))
         }
     }
 
     private func строкаЦели(_ название: String, значок: String, цель: КабинетЦель) -> some View {
         NavigationLink(value: цель) {
-            Label {
-                Text(название).foregroundStyle(.primary)
-            } icon: {
-                Image(systemName: значок).foregroundStyle(Theme.green2)
-            }
+            ПодписьСтрокиКабинета(название, значок: значок)
         }
+        .полямиСтрокиКабинета()
     }
 
     /// Этап 40: «Войти» — свой экран входа, без стрелки «наружу»: это экран приложения, а не страница сайта.
@@ -557,38 +537,26 @@ struct CabinetView: View {
             входОткрыт = true
         } label: {
             HStack {
-                Label {
-                    Text(CabinetText.т("login")).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "person.crop.circle.badge.plus").foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(CabinetText.т("login"), значок: "person.crop.circle.badge.plus")
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                СтрелкаСтрокиКабинета()
             }
         }
+        .полямиСтрокиКабинета()
     }
 
-    /// Строка, которая открывает страницу сайта, — со стрелкой «наружу»: видно, что дальше сайт, а не экран приложения.
+    /// Строка по адресу сайта, который открывается своим экраном (справка — НативныеОкна): стрелка списка (.cabset-arw).
     private func строкаСайта(_ название: String, значок: String, путь: String) -> some View {
         Button {
             if let u = Config.url(путь) { открыть(u) }
         } label: {
             HStack {
-                Label {
-                    Text(название).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: значок).foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(название, значок: значок)
                 Spacer(minLength: 8)
-                Image(systemName: "arrow.up.right.square")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                СтрелкаСтрокиКабинета()
             }
         }
+        .полямиСтрокиКабинета()
     }
 
     // MARK: - Безопасность: вход по Face ID (AppLock)
@@ -596,18 +564,15 @@ struct CabinetView: View {
     private var разделБезопасности: some View {
         Section {
             Toggle(isOn: $защита) {
-                Label {
-                    Text(String(format: CabinetText.т("lock_toggle"), AppLock.имяСпособа(способВхода)))
-                } icon: {
-                    Image(systemName: значокЗамка).foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(String(format: CabinetText.т("lock_toggle"), AppLock.имяСпособа(способВхода)),
+                                      значок: значокЗамка)
             }
             .tint(Theme.green2)
             .disabled(проверяемЗамок || способВхода == "none")
             /* Этап 46: «Устройства и входы» (sec_devices) — рядом с Face ID, как в группе «Безопасность» сайта. */
             if профильНастроек != nil { СтрокаУстройств() }
         } header: {
-            Text(CabinetText.т("security"))
+            ЗаголовокГруппыКабинета(CabinetText.т("security"))
         } footer: {
             Text(подписьЗамка)
         }
@@ -661,7 +626,7 @@ struct CabinetView: View {
                 if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
             }
         } header: {
-            Text(CabinetText.т("notifications"))
+            ЗаголовокГруппыКабинета(CabinetText.т("notifications"))
         } footer: {
             if уведомления == .denied { Text(CabinetText.т("notif_off_footer")) }
         }
@@ -714,7 +679,7 @@ struct CabinetView: View {
                 }
             }
         } header: {
-            Text(CabinetText.т("data"))
+            ЗаголовокГруппыКабинета(CabinetText.т("data"))
         } footer: {
             if Config.избранное || Config.недавние {
                 Text(CabinetText.т(избранноеВАккаунте ? "data_footer_synced" : "data_footer"))
@@ -743,15 +708,11 @@ struct CabinetView: View {
                 Button {
                     показатьНовое = true
                 } label: {
-                    Label {
-                        Text(WhatsNewText.т("row")).foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: "sparkles").foregroundStyle(Theme.green2)
-                    }
+                    ПодписьСтрокиКабинета(WhatsNewText.т("row"), значок: "sparkles")
                 }
             }
         } header: {
-            Text(CabinetText.т("about"))
+            ЗаголовокГруппыКабинета(CabinetText.т("about"))
         }
     }
 
@@ -955,13 +916,7 @@ extension CabinetView {
     @ViewBuilder
     var плашкаВнизу: some View {
         if let текст = плашка {
-            Text(текст)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Theme.зелёный, in: Capsule())
+            ТостКабинета(текст: текст)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 96)
                 .transition(.opacity)

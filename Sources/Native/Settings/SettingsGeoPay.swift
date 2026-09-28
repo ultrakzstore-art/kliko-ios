@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 /**
  «РЕГИОН И АДРЕС» И «РАССРОЧКА И КРЕДИТ» — ЭТАП 46 (владелец 26.09.2026: «всё одно и то же, просто код разный»).
@@ -6,8 +7,8 @@ import SwiftUI
  Регион и адрес (cabPrefGeo, §6.2.7): регион и район — ключи из GEO_KZ (js/cab-refs.js, тот же файл, что у мастера
  подачи), город — текстом, улица, «Это и адрес получения» и блок «Куда отправляю» (delWhereHTML). «Сохранить» шлёт два
  запроса разом, как сайт: save_pref_geo и save_pref_ship; успех решает первый, ошибку второго сайт не показывает.
- Точку на карте сайт ставит своим окном (mapPickOpen) — здесь её состояние видно, а lat/lon уходят прежние: нативного
- окна карты у кабинета пока нет (у мастера подачи этапа 42 — тоже), и молча стереть точку было бы хуже.
+ Точку на карте сайт ставит своим окном (mapPickOpen) — здесь своим листом карты (ТочкаНаКартеНастроек): нажали на
+ карту — точка, «Сохранить» кладёт её в форму, «Убрать точку» — стирает; lat/lon уходят с «Сохранить» формы.
 
  Рассрочка и кредит (cabPrefPay, §6.2.11): переключатели, «С банком / Без банка · нотариус», наценка и ставка в пределах
  PAY_CFG, банки из PAY_CFG.banks в их порядке, ссылка на оплату на каждый отмеченный банк с проверкой _cabPayLinkOk
@@ -29,6 +30,9 @@ struct ФормаРегиона: View {
     @State private var получение: Bool
     @State private var отправка: String
     @State private var куда: Set<String>
+    @State private var широта: Double?
+    @State private var долгота: Double?
+    @State private var карта = false
     @State private var ошибка: String? = nil
     @State private var идёт = false
 
@@ -43,6 +47,8 @@ struct ФормаРегиона: View {
         _получение = State(initialValue: профиль.адресПолучения)
         _отправка = State(initialValue: профиль.отправка)
         _куда = State(initialValue: Set(профиль.регионыОтправки))
+        _широта = State(initialValue: профиль.широта)
+        _долгота = State(initialValue: профиль.долгота)
     }
 
     private var районы: [РайонКЗ] {
@@ -50,9 +56,11 @@ struct ФормаРегиона: View {
     }
 
     /// Точка на карте отмечена: оба числа есть и не (0; 0) — _pgSt сайта.
-    private var точкаЕсть: Bool {
-        guard let ш = профиль.широта, let д = профиль.долгота else { return false }
-        return ш != 0 || д != 0
+    private var точкаЕсть: Bool { точка != nil }
+
+    private var точка: CLLocationCoordinate2D? {
+        guard let ш = широта, let д = долгота, ш != 0 || д != 0 else { return nil }
+        return CLLocationCoordinate2D(latitude: ш, longitude: д)
     }
 
     var body: some View {
@@ -91,7 +99,21 @@ struct ФормаРегиона: View {
                     TextField(тН("pg_addr_ph"), text: $адрес)
                         .textContentType(.streetAddressLine1)
                 }
-                LabeledContent(тН("pg_map_l"), value: тН(точкаЕсть ? "pg_map_on" : "pg_map_off"))
+                Button {
+                    карта = true
+                } label: {
+                    HStack {
+                        Text(тН("pg_map_l")).foregroundStyle(Theme.текст)
+                        Spacer(minLength: 8)
+                        Text(тН(точкаЕсть ? "pg_map_on" : "pg_map_off"))
+                            .foregroundStyle(точкаЕсть ? Theme.акцент : Theme.текстВторой)
+                        Image(systemName: "chevron.right")
+                            .flipsForRightToLeftLayoutDirection(true)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.текстВторой.opacity(0.5))
+                            .accessibilityHidden(true)
+                    }
+                }
             } header: {
                 Text(тН("cabset_geo_hint")).textCase(nil)
             } footer: {
@@ -113,6 +135,12 @@ struct ФормаРегиона: View {
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
         .task { await загрузить() }
+        .sheet(isPresented: $карта) {
+            ТочкаНаКартеНастроек(начало: точка) { новая in
+                широта = новая?.latitude
+                долгота = новая?.longitude
+            }
+        }
     }
 
     /// geoFillDistricts: сменился регион — район сбрасывается.
@@ -229,8 +257,14 @@ struct ФормаРегиона: View {
         let чистыйАдрес = адрес.trimmingCharacters(in: .whitespacesAndNewlines)
         var поляГео: [String: Any] = ["region": регион, "district": район, "city": чистыйГород, "address": чистыйАдрес,
                                       "recv": получение]
-        if let ш = профиль.широта { поляГео["lat"] = NSNumber(value: ш) } else { поляГео["lat"] = NSNull() }
-        if let д = профиль.долгота { поляГео["lon"] = NSNumber(value: д) } else { поляГео["lon"] = NSNull() }
+        let сохранённаяТочка = точка
+        if let т = сохранённаяТочка {
+            поляГео["lat"] = NSNumber(value: т.latitude)
+            поляГео["lon"] = NSNumber(value: т.longitude)
+        } else {
+            поляГео["lat"] = NSNull()
+            поляГео["lon"] = NSNull()
+        }
         let гео = поляГео
         let области: [String] = отправка == "regions"
             ? регионы.map { $0.id }.filter { куда.contains($0) && $0 != регион }
@@ -255,6 +289,8 @@ struct ФормаРегиона: View {
                         п.город = чистыйГород
                         п.адрес = чистыйАдрес
                         п.адресПолучения = сохранённоеПолучение
+                        п.широта = сохранённаяТочка?.latitude
+                        п.долгота = сохранённаяТочка?.longitude
                         if доставкаПринята {
                             п.отправка = сохранённаяОтправка
                             п.регионыОтправки = области
@@ -270,6 +306,78 @@ struct ФормаРегиона: View {
                 ошибка = НастройкиAPI.сбой(error)
             }
         }
+    }
+}
+
+/// Лист «Точка на карте» (mapPickOpen сайта): нажатие на карту ставит точку, «Сохранить» отдаёт её форме,
+/// «Убрать точку» — стирает. Сама запись — кнопкой формы «Регион и адрес».
+struct ТочкаНаКартеНастроек: View {
+    let начало: CLLocationCoordinate2D?
+    let готово: (CLLocationCoordinate2D?) -> Void
+    @Environment(\.dismiss) private var закрыть
+    @State private var точка: CLLocationCoordinate2D?
+    @State private var камера: MapCameraPosition
+
+    init(начало: CLLocationCoordinate2D?, готово: @escaping (CLLocationCoordinate2D?) -> Void) {
+        self.начало = начало
+        self.готово = готово
+        _точка = State(initialValue: начало)
+        /* Нет точки — весь Казахстан. */
+        let центр = начало ?? CLLocationCoordinate2D(latitude: 48.0, longitude: 67.0)
+        let размах = начало == nil ? 18.0 : 0.02
+        _камера = State(initialValue: .region(MKCoordinateRegion(center: центр,
+                                                                 span: MKCoordinateSpan(latitudeDelta: размах,
+                                                                                        longitudeDelta: размах))))
+    }
+
+    var body: some View {
+        ЛистНастройки(заголовок: тН("pg_map_l")) {
+            VStack(spacing: 12) {
+                Text(тН("pg_map_note"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                карта
+                КнопкаСайта(подпись: тН("save"), идёт: false) {
+                    готово(точка)
+                    закрыть()
+                }
+                .disabled(точка == nil)
+                .opacity(точка == nil ? 0.5 : 1)
+                if начало != nil || точка != nil {
+                    Button(тН("pg_map_clear")) {
+                        готово(nil)
+                        закрыть()
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(КраскаОбъявлений.плохоТекст)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var карта: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return MapReader { прокси in
+            Map(position: $камера, interactionModes: .all) {
+                if let точка {
+                    Marker("", coordinate: точка)
+                        .tint(Theme.зелёный)
+                }
+            }
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
+            .onTapGesture { место in
+                guard let к = прокси.convert(место, from: .local) else { return }
+                точка = к
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .frame(minHeight: 260)
+        .clipShape(форма)
+        .overlay { форма.strokeBorder(Theme.линия, lineWidth: 1) }
+        .accessibilityLabel(тН("pg_map_l"))
     }
 }
 

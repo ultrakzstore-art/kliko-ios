@@ -20,12 +20,9 @@ private struct СтрокаРазделаКабинета: View {
 
     var body: some View {
         NavigationLink(value: цель) {
-            Label {
-                Text(название).foregroundStyle(.primary)
-            } icon: {
-                Image(systemName: значок).foregroundStyle(Theme.green2)
-            }
+            ПодписьСтрокиКабинета(название, значок: значок)
         }
+        .полямиСтрокиКабинета()
     }
 }
 
@@ -41,30 +38,21 @@ struct МенюРазделовКабинета: View {
             NavigationLink {
                 ЭкранРаботыКабинета(открыть: открыть)
             } label: {
-                Label {
-                    Text(тК("jobs_title")).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "briefcase").foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(тК("jobs_title"), значок: "briefcase")
             }
+            .полямиСтрокиКабинета()
             if Config.избранное {
                 Button {
                     /* «Подписки» сайта (?s=subs): избранное, поиски и продавцы — вкладка «Избранное» приложения. */
                     WebBridge.shared.открытьЭкран(.избранное, запасной: nil)
                 } label: {
                     HStack {
-                        Label {
-                            Text(тК("subs_title")).foregroundStyle(.primary)
-                        } icon: {
-                            Image(systemName: "heart.text.square").foregroundStyle(Theme.green2)
-                        }
+                        ПодписьСтрокиКабинета(тК("subs_title"), значок: "heart.text.square")
                         Spacer(minLength: 8)
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
+                        СтрелкаСтрокиКабинета()
                     }
                 }
+                .полямиСтрокиКабинета()
             }
         }
     }

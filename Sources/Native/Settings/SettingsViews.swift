@@ -34,8 +34,16 @@ struct ШапкаПрофиля: View {
         self.профиль = профиль
     }
 
+    /// .hero: 135° #0f5132 → #0f5132 (52 %) → #1d7d4a; в тёмной — #22a05b → #34c997 под затемнением rgba(6,10,14,.42→.52).
+    private static let градиент = Gradient(stops: [
+        .init(color: Theme.цвет(0x0F5132, 0x16613B), location: 0),
+        .init(color: Theme.цвет(0x0F5132, 0x155937), location: 0.52),
+        .init(color: Theme.цвет(0x1D7D4A, 0x1C6650), location: 1),
+    ])
+
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+        HStack(alignment: .top, spacing: 12) {
             PhotosPicker(selection: $выбор, matching: .images) {
                 аватар
             }
@@ -46,19 +54,23 @@ struct ШапкаПрофиля: View {
             сведения
             Spacer(minLength: 0)
         }
-        .padding(16)
-        .background(
-            LinearGradient(colors: [Theme.шапкаВерх, Theme.шапкаСередина, Theme.шапкаНиз],
-                           startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-        )
-        .overlay(alignment: .topLeading) {
-            RadialGradient(colors: [Theme.шапкаБлик, Color.clear], center: .topLeading, startRadius: 0, endRadius: 220)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+        .padding(20)
+        .background {
+            ZStack {
+                /* Тень 0 12px 32px -16px rgba(15,40,25,.28): короткая, под низом карточки. */
+                форма
+                    .fill(LinearGradient(gradient: Self.градиент, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .shadow(color: Color(red: 15 / 255, green: 40 / 255, blue: 25 / 255).opacity(0.22), radius: 10, y: 10)
+                /* .hero::before — блик справа сверху (белый 16 %), ::after — слева снизу (белый 8 %); под содержимым. */
+                RadialGradient(colors: [Color.white.opacity(0.16), Color.clear], center: UnitPoint(x: 0.9, y: 0),
+                               startRadius: 0, endRadius: 120)
+                    .clipShape(форма)
+                RadialGradient(colors: [Color.white.opacity(0.08), Color.clear], center: UnitPoint(x: 0.05, y: 1.1),
+                               startRadius: 0, endRadius: 100)
+                    .clipShape(форма)
+            }
+            .accessibilityHidden(true)
         }
-        .теньКарточкиСайта(радиус: Theme.Радиус.lg)
         .onChange(of: выбор) { _, новый in
             guard let новый else { return }
             загрузить(новый)
@@ -69,7 +81,7 @@ struct ШапкаПрофиля: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(профиль.имя.isEmpty ? CabinetText.т("signed_in") : профиль.имя)
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                 if профиль.верифицирован {
@@ -81,8 +93,9 @@ struct ШапкаПрофиля: View {
             }
             if !профиль.телефонПоказ.isEmpty {
                 Text(кошелёк.скрыто && Config.нативныйКошелёк ? "•• ••• •• ••" : профиль.телефонПоказ)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.95))
+                    .font(.system(size: 14, weight: .semibold))
+                    .tracking(0.42)
+                    .foregroundStyle(Color.white.opacity(0.9))
                     .monospacedDigit()
             }
             if профиль.скрытНомер {
@@ -91,23 +104,27 @@ struct ШапкаПрофиля: View {
                     .foregroundStyle(Color.white.opacity(0.62))
             }
             if !профиль.подписчики.isEmpty {
-                Label(профиль.подписчики, systemImage: "person.2")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.white.opacity(0.86))
+                HStack(spacing: 6) {
+                    Image(systemName: "person.2")
+                        .accessibilityHidden(true)
+                    Text(профиль.подписчики)
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.86))
+                .padding(.top, 2)
             }
         }
         .accessibilityElement(children: .combine)
     }
 
-    /// #hero-av: фото или первая буква имени на зелёном, значок камеры в углу.
+    /// #hero-av: 42×42, радиус 14, белый 18 % с рамкой 1,5 белый 35 %; фото или первая буква, значок камеры в углу.
     private var аватар: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
         return ZStack(alignment: .bottomTrailing) {
             ZStack {
-                LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий], startPoint: .topLeading,
-                               endPoint: .bottomTrailing)
+                Color.white.opacity(0.18)
                 Text(String(профиль.имя.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                    .font(.system(size: 22, weight: .heavy))
+                    .font(.system(size: 19, weight: .heavy))
                     .foregroundStyle(Color.white)
                 if let адрес = Config.url(профиль.аватар), !профиль.аватар.isEmpty {
                     AsyncImage(url: адрес) { картинка in
@@ -115,7 +132,7 @@ struct ШапкаПрофиля: View {
                     } placeholder: {
                         Color.clear
                     }
-                    .frame(width: 52, height: 52)
+                    .frame(width: 42, height: 42)
                     .clipped()
                 }
                 if грузится {
@@ -123,9 +140,9 @@ struct ШапкаПрофиля: View {
                     SiteSpinner.белый
                 }
             }
-            .frame(width: 52, height: 52)
+            .frame(width: 42, height: 42)
             .clipShape(форма)
-            .overlay { форма.strokeBorder(Color.white.opacity(0.5), lineWidth: 1.5) }
+            .overlay { форма.strokeBorder(Color.white.opacity(0.35), lineWidth: 1.5) }
             Image(systemName: "camera.fill")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(Theme.акцент)
@@ -212,7 +229,7 @@ struct РазделыНастроек: View {
             СтрокаНастройки(название: тН("cabset_chat"), значок: "text.bubble", окно: .чаты)
             СтрокаВерификации(профиль: профиль, открыть: открыть)
         } header: {
-            Text(тН("cabset_account"))
+            ЗаголовокГруппыКабинета(тН("cabset_account"))
         }
     }
 
@@ -223,7 +240,7 @@ struct РазделыНастроек: View {
             СтрокаНастройки(название: тН("cabset_hours"), значок: "clock", окно: .часы)
             СтрокаНастройки(название: тН("cabset_redact"), значок: "eye.slash", окно: .фото)
         } header: {
-            Text(тН("cabset_listings"))
+            ЗаголовокГруппыКабинета(тН("cabset_listings"))
         }
     }
 
@@ -234,7 +251,7 @@ struct РазделыНастроек: View {
             СтрокаНастройки(название: тН("cabset_pay"), значок: "creditcard", окно: .оплата)
             СтрокаНастройки(название: тН("cabset_reserve"), значок: "hourglass", окно: .бронь)
         } header: {
-            Text(тН("cabset_sales"))
+            ЗаголовокГруппыКабинета(тН("cabset_sales"))
         }
     }
 }
@@ -250,23 +267,16 @@ struct СтрокаНастройки: View {
             НастройкиМодель.shared.открыть(окно)
         } label: {
             HStack {
-                Label {
-                    Text(название).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: значок).foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(название, значок: значок)
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                СтрелкаСтрокиКабинета()
             }
         }
+        .полямиСтрокиКабинета()
     }
 }
 
-/// Строка, которая открывает страницу сайта, — со стрелкой «наружу», как у остальных таких строк кабинета.
+/// Строка по адресу сайта, который открывается своим экраном (витрина — ОкноПродавца): стрелка списка (.cabset-arw).
 struct СтрокаНаСайт: View {
     let название: String
     let значок: String
@@ -275,18 +285,12 @@ struct СтрокаНаСайт: View {
     var body: some View {
         Button(action: действие) {
             HStack {
-                Label {
-                    Text(название).foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: значок).foregroundStyle(Theme.green2)
-                }
+                ПодписьСтрокиКабинета(название, значок: значок)
                 Spacer(minLength: 8)
-                Image(systemName: "arrow.up.right.square")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                СтрелкаСтрокиКабинета()
             }
         }
+        .полямиСтрокиКабинета()
     }
 }
 
@@ -298,25 +302,22 @@ struct СтрокаВерификации: View {
 
     var body: some View {
         if профиль.верифицирован {
-            Label {
-                Text(тН("ver_ok")).foregroundStyle(.primary)
-            } icon: {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.проверен)
-            }
+            ПодписьСтрокиКабинета(тН("ver_ok"), значок: "checkmark.seal.fill", цвет: Theme.проверен)
+                .полямиСтрокиКабинета()
         } else {
             Button {
                 НастройкиВерификация.открыть(профиль: профиль, открыть: открыть)
             } label: {
-                HStack {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(тН("ver_row")).foregroundStyle(.primary)
-                            Text(тН("ver_row_s"))
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.текстВторой)
-                        }
-                    } icon: {
-                        Image(systemName: "checkmark.shield").foregroundStyle(Theme.green2)
+                HStack(spacing: 12) {
+                    ЗначокСтрокиСайта(значок: "checkmark.shield")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(тН("ver_row"))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.текст)
+                        Text(тН("ver_row_s"))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.текстВторой)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                     if профиль.проверкаОтклонена {
@@ -327,13 +328,10 @@ struct СтрокаВерификации: View {
                             .padding(.vertical, 3)
                             .background(КраскаОбъявлений.плохоФон, in: Capsule())
                     }
-                    Image(systemName: "chevron.right")
-                        .flipsForRightToLeftLayoutDirection(true)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
+                    СтрелкаСтрокиКабинета()
                 }
             }
+            .полямиСтрокиКабинета()
         }
     }
 }
@@ -371,24 +369,17 @@ struct РазделПриложения: View {
                 НастройкиМодель.shared.открытьМастер()
             } label: {
                 HStack {
-                    Label {
-                        Text(тН("cabwiz_t")).foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: "flag").foregroundStyle(Theme.green2)
-                    }
+                    ПодписьСтрокиКабинета(тН("cabwiz_t"), значок: "flag")
                     Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .flipsForRightToLeftLayoutDirection(true)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
+                    СтрелкаСтрокиКабинета()
                 }
             }
+            .полямиСтрокиКабинета()
             if !профиль.языки.isEmpty {
                 СтрокаНастройки(название: названиеЯзыка, значок: "globe", окно: .язык)
             }
         } header: {
-            Text(тН("cabset_app"))
+            ЗаголовокГруппыКабинета(тН("cabset_app"))
         }
     }
 
@@ -413,11 +404,7 @@ struct РазделУдаленияАккаунта: View {
                 HStack {
                     Label(тН("cabset_del"), systemImage: "trash")
                     Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .flipsForRightToLeftLayoutDirection(true)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
+                    СтрелкаСтрокиКабинета()
                 }
             }
         }
@@ -442,7 +429,8 @@ struct НастройкиКабинета: ViewModifier {
             }
             .sheet(item: $модель.применить) { поле in
                 ОкноПрименения(поле: поле)
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .sheet(item: $модель.мастер) { мастер in
                 ЛистНачалаРаботы(авто: мастер.авто, открыть: открыть)
@@ -462,13 +450,7 @@ struct НастройкиКабинета: ViewModifier {
     @ViewBuilder
     private var плашка: some View {
         if let текст = модель.плашка {
-            Text(текст)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Theme.зелёный, in: Capsule())
+            ТостКабинета(текст: текст)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 96)
                 .transition(.opacity)
@@ -568,6 +550,17 @@ struct ОкноПрименения: View {
     }
 
     var body: some View {
+        /* Длинные kk/ar тексты на iPhone SE не влезают в половину экрана — прокрутка, лист тянется до полного. */
+        ScrollView {
+            содержимое
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.фонСтраницы)
+        .interactiveDismissDisabled(этап == .идёт)
+    }
+
+    private var содержимое: some View {
         VStack(spacing: 14) {
             Image(systemName: значок)
                 .font(.system(size: 26, weight: .semibold))
@@ -593,9 +586,7 @@ struct ОкноПрименения: View {
             кнопки
         }
         .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.фонСтраницы)
-        .interactiveDismissDisabled(этап == .идёт)
+        .frame(maxWidth: .infinity)
     }
 
     private var значок: String {
@@ -629,25 +620,37 @@ struct ОкноПрименения: View {
     private var кнопки: some View {
         switch этап {
         case .вопрос:
-            HStack(spacing: 10) {
-                Button {
-                    закрыть()
-                } label: {
-                    Text(тН("capp_skip"))
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms,
-                                                                             style: .continuous))
+            /* Длинные подписи (kk) — кнопки друг под другом, а не перенос внутри кнопки. */
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    кнопкаПропустить
+                    КнопкаСайта(подпись: тН("capp_run"), идёт: false) { применить() }
                 }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-                КнопкаСайта(подпись: тН("capp_run"), идёт: false) { применить() }
+                VStack(spacing: 10) {
+                    КнопкаСайта(подпись: тН("capp_run"), идёт: false) { применить() }
+                    кнопкаПропустить
+                }
             }
         case .идёт:
             EmptyView()
         case .итог:
             КнопкаСайта(подпись: тН("capp_ok"), идёт: false) { закрыть() }
         }
+    }
+
+    private var кнопкаПропустить: some View {
+        Button {
+            закрыть()
+        } label: {
+            Text(тН("capp_skip"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
     }
 
     /// apply_pref_field {field} — только по «Применить». Ошибка — msg || error || «Не удалось применить».

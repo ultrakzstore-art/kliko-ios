@@ -97,29 +97,48 @@ final class ПлашкаРаздела: ObservableObject {
     }
 }
 
-/// Переключатель вкладок сайта (.dlv-tab, rent-tab): две-три кнопки-капсулы.
+/// Переключатель вкладок сайта (.dlv-tab, rent-tab): 8 между, 10 внутри, радиус 12, 14/800; выключенная — карточка с
+/// рамкой 1,5 и серым текстом, включённая — градиент --g → --g2 с тенью 0 6px 14px -7px.
 struct ВкладкиРаздела: View {
     let варианты: [(ключ: String, подпись: String)]
     @Binding var выбрано: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(варианты, id: \.ключ) { вариант in
-                Button {
-                    withAnimation(.easeOut(duration: 0.15)) { выбрано = вариант.ключ }
-                } label: {
-                    Text(вариант.подпись)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(выбрано == вариант.ключ ? Color.white : Theme.текст)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(выбрано == вариант.ключ ? Theme.акцент : Theme.поверхность2,
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(выбрано == вариант.ключ ? .isSelected : [])
+                вкладка(вариант.ключ, вариант.подпись)
             }
         }
+    }
+
+    private func вкладка(_ ключ: String, _ подпись: String) -> some View {
+        let вкл = выбрано == ключ
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return Button {
+            withAnimation(.easeOut(duration: 0.15)) { выбрано = ключ }
+        } label: {
+            Text(подпись)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(вкл ? Color.white : Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(10)
+                .background {
+                    if вкл {
+                        форма.fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2],
+                                                  startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .shadow(color: КраскаСтрокКабинета.тень.opacity(0.55), radius: 7, y: 6)
+                    } else {
+                        ZStack {
+                            форма.fill(Theme.поверхность)
+                            форма.strokeBorder(Theme.линия, lineWidth: 1.5)
+                        }
+                    }
+                }
+                .contentShape(форма)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(вкл ? .isSelected : [])
     }
 }
 
@@ -187,9 +206,14 @@ struct КарточкаРаздела<Содержимое: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             содержимое
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background {
+            /* box-shadow 0 1px 3px rgba(16,24,40,.05) — едва заметная тень под карточкой. */
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .fill(Theme.поверхность)
+                .shadow(color: Color(red: 16 / 255, green: 24 / 255, blue: 40 / 255).opacity(0.05), radius: 1.5, y: 1)
+        }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
                 .strokeBorder(Theme.линия, lineWidth: 1.5)
@@ -197,17 +221,19 @@ struct КарточкаРаздела<Содержимое: View>: View {
     }
 }
 
-/// Метка статуса (.dlv-pill, цвет статуса аренды).
+/// Метка статуса (.dlv-pill, цвет статуса аренды): 11/800; крупная — поля .dlv-pill 6/12 (доставки).
 struct МеткаСтатуса: View {
     let текст: String
     var тон: ЗаметкаБизнеса.Тон = .серый
+    var крупная = false
 
     var body: some View {
         Text(текст)
-            .font(.system(size: 11.5, weight: .heavy))
+            .font(.system(size: 11, weight: .heavy))
             .foregroundStyle(краска)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .lineLimit(1)
+            .padding(.horizontal, крупная ? 12 : 9)
+            .padding(.vertical, крупная ? 6 : 4)
             .background(фон, in: Capsule())
     }
 
@@ -382,5 +408,113 @@ struct СтрокаКопирования: View {
         }
         .padding(10)
         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+    }
+}
+
+// MARK: - Строки и группы кабинета (.cabset-*)
+
+/// Краски строк кабинета сайта (css_cabinet-parts: .cabset-ic, .cabset-gt).
+enum КраскаСтрокКабинета {
+    /// --acc-on: #0f5132 и #5cd39a — значок строки.
+    static let значок = Theme.цвет(0x0F5132, 0x5CD39A)
+    /// --tint-ok: #e7f6ee и rgba(52,201,151,.14) — начало градиента плитки.
+    static let тинт = Theme.цвет(светлый: Theme.hex(0xE7F6EE), тёмный: Theme.hex(0x34C997, 0.14))
+    /// Тень зелёных кнопок: rgba(15,81,50,…).
+    static let тень = Color(red: 15 / 255, green: 81 / 255, blue: 50 / 255)
+    /// .toast сайта: #0f1712.
+    static let тост = Color(uiColor: Theme.hex(0x0F1712))
+}
+
+/// .cabset-ic: плитка 32×32, радиус 10, градиент --tint-ok → прозрачный, кольцо 1px --line, значок 17 --acc-on.
+struct ЗначокСтрокиСайта: View {
+    let значок: String
+    var цвет: Color = КраскаСтрокКабинета.значок
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+        Image(systemName: значок)
+            .font(.system(size: 17))
+            .foregroundStyle(цвет)
+            .frame(width: 32, height: 32)
+            .background(LinearGradient(colors: [КраскаСтрокКабинета.тинт, Color.clear],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: форма)
+            .overlay { форма.strokeBorder(Theme.линия, lineWidth: 1) }
+            .accessibilityHidden(true)
+    }
+}
+
+/// Значок и название строки (.cabset-row): между ними 12, название .cabset-lb 14/600 (lh 1.3).
+struct ПодписьСтрокиКабинета: View {
+    let название: String
+    let значок: String
+    var цвет: Color = КраскаСтрокКабинета.значок
+
+    init(_ название: String, значок: String, цвет: Color = КраскаСтрокКабинета.значок) {
+        self.название = название
+        self.значок = значок
+        self.цвет = цвет
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ЗначокСтрокиСайта(значок: значок, цвет: цвет)
+            Text(название)
+                .font(.system(size: 14, weight: .semibold))
+                .lineSpacing(2)
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.leading)
+        }
+    }
+}
+
+/// .cabset-arw: стрелка строки — серая с прозрачностью .5, зеркалится в арабском.
+struct СтрелкаСтрокиКабинета: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .flipsForRightToLeftLayoutDirection(true)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Theme.текстВторой.opacity(0.5))
+            .accessibilityHidden(true)
+    }
+}
+
+/// Заголовок группы .cabset-gt: 11/800 прописными, разрядка .09em, серый.
+struct ЗаголовокГруппыКабинета: View {
+    let текст: String
+
+    init(_ текст: String) {
+        self.текст = текст
+    }
+
+    var body: some View {
+        Text(текст.uppercased())
+            .font(.system(size: 11, weight: .heavy))
+            .tracking(0.99)
+            .foregroundStyle(Theme.текстВторой)
+    }
+}
+
+/// .toast кабинета сайта: #0f1712, белый 14 (lh 1.4), 12/20 внутри, радиус 12, не шире 420.
+struct ТостКабинета: View {
+    let текст: String
+
+    var body: some View {
+        Text(текст)
+            .font(.system(size: 14))
+            .lineSpacing(2)
+            .foregroundStyle(Color.white)
+            .multilineTextAlignment(.center)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .background(КраскаСтрокКабинета.тост, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .frame(maxWidth: 420)
+    }
+}
+
+extension View {
+    /// Поля строки .cabset-row: 12 сверху и снизу, 14 по бокам.
+    func полямиСтрокиКабинета() -> some View {
+        listRowInsets(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
     }
 }
