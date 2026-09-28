@@ -153,8 +153,18 @@ extension Listing {
 
     // MARK: - «Добавлено …» (mkDate)
 
-    /// «сегодня», «вчера», «3 дня назад», «24 сен» (и год, если не этот). created_at — «2026-09-24».
+    /// Есть created_ts — точное время, как mkExactTime сайта: «22 сен 2026, 12:53». Нет — mkDate по created_at
+    /// («2026-09-24»): «сегодня», «вчера», «3 дня назад», «24 сен» (и год, если не этот).
     var когдаДобавлено: String? {
+        if созданоСекунд > 0 {
+            let когда = Date(timeIntervalSince1970: TimeInterval(созданоСекунд))
+            let к = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day, .hour, .minute], from: когда)
+            let месяцы = ListingPageText.т("months").split(separator: ",").map(String.init)
+            let номер = (к.month ?? 1) - 1
+            let месяц = месяцы.indices.contains(номер) ? месяцы[номер] : String(номер + 1)
+            let время = String(format: "%02d:%02d", к.hour ?? 0, к.minute ?? 0)
+            return [String(к.day ?? 0), месяц, String(к.year ?? 0) + ",", время].joined(separator: " ")
+        }
         guard let строка = создано else { return nil }
         return Listing.датаСайта(строка)
     }

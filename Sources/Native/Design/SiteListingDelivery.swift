@@ -604,7 +604,17 @@ struct ЛистЗапросаИсполнителям: View {
             case .ошибка(let текстОшибки):
                 статус = .итог(текстОшибки, false)
             case .нетСессии:
-                статус = .итог(тДост("need_session"), false)
+                /* Не вошли — своё окно входа, а не страница сайта (как у панели связи); вошли — просто ещё раз. */
+                if await SiteSession.состояние().вошёл == true {
+                    статус = .итог(тДост("need_session"), false)
+                } else {
+                    статус = .нет
+                    закрыть()
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 450_000_000)
+                        if !ОкнаПриложения.shared.показать(.вход) { ВходПоверх.показать() }
+                    }
+                }
             case .сеть:
                 статус = .итог(тДост("net_error"), false)
             }
@@ -637,11 +647,11 @@ struct ДоставкаИзГородаСайта: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "truck.box")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.зелёный2)
                         .accessibilityHidden(true)
                     Text(ДоставкаОбъявления.подписьДоставки(товар))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -653,10 +663,10 @@ struct ДоставкаИзГородаСайта: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(minHeight: 46)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                        .strokeBorder(Theme.линия, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1)
                 }
                 .contentShape(Rectangle())
             }
@@ -953,4 +963,451 @@ struct КотировкаДоставкиСайта: View {
         }
         return к.имя
     }
+}
+
+// MARK: - «Нужна помощь?» (mkServiceBlock) — услуги рядом по разделу
+
+/**
+ Под «Расположением» у не-услуг — .mk-svc сайта: «НУЖНА ПОМОЩЬ?» с пульсирующей точкой и пилюли услуг по разделу
+ объявления (MK_SVC_MAP.M, с подъёмом к родителю и к корню; ничего — «Найти специалиста»). Нажатие — тот же запрос
+ исполнителям рядом (mkBroadcast), что у грузоперевозок: ЛистЗапросаИсполнителям с текстом услуги, городом и точкой.
+ */
+struct БлокУслугСайта: View {
+    let товар: Listing
+    @State private var запрос: ЗапросИсполнителям?
+    @State private var пульс = false
+
+    init(товар: Listing) {
+        self.товар = товар
+    }
+
+    /// Ключи пилюль: раздел, его родители, корень; нет — «spec».
+    static func ключи(_ товар: Listing) -> [String] {
+        var раздел = товар.категория
+        var шагов = 0
+        while let р = раздел, шагов < 25 {
+            if let набор = ТекстыУслугРядом.разделы[р] { return набор }
+            раздел = РазделыСайта.родитель(р)
+            шагов += 1
+        }
+        return ТекстыУслугРядом.разделы[товар.корень] ?? ["spec"]
+    }
+
+    var body: some View {
+        let ключи = Self.ключи(товар).filter { ТекстыУслугРядом.значки[$0] != nil }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(RadialGradient(colors: [Color(uiColor: Theme.hex(0x4FD9A4)), Theme.зелёный2],
+                                         center: UnitPoint(x: 0.32, y: 0.3), startRadius: 0, endRadius: 6))
+                    .frame(width: 9, height: 9)
+                    .background {
+                        Circle()
+                            .fill(Theme.зелёный2.opacity(пульс ? 0.05 : 0.22))
+                            .frame(width: пульс ? 21 : 15, height: пульс ? 21 : 15)
+                    }
+                    .accessibilityHidden(true)
+                Text(ТекстыУслугРядом.т("need_help").uppercased())
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(0.5)
+                    .foregroundStyle(Theme.текст)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            ПереносСтрок(промежуток: 6, междуСтрок: 6) {
+                ForEach(ключи, id: \.self) { ключ in
+                    Button { запрос = запросПо(ключ) } label: {
+                        ПилюляУслугиСайта(значок: ТекстыУслугРядом.значки[ключ] ?? "wrench.and.screwdriver",
+                                          текст: ТекстыУслугРядом.т("svc_" + ключ))
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                Theme.цвет(светлый: Theme.hex(0xF4F8F6), тёмный: Theme.hex(0x163024, 0.45))
+                RadialGradient(colors: [Theme.оттенокАкцента, Color.clear], center: .topLeading, startRadius: 0,
+                               endRadius: 260)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+            .shadow(color: Color(red: 16 / 255, green: 32 / 255, blue: 24 / 255).opacity(0.08), radius: 8, x: 0, y: 6)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.оттенокАкцента, lineWidth: 1)
+        }
+        .onAppear {
+            guard !ДвижениеСайта.тихо else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { пульс = true }
+        }
+        .sheet(item: $запрос) { какой in
+            ЛистЗапросаИсполнителям(запрос: какой)
+        }
+    }
+
+    private func запросПо(_ ключ: String) -> ЗапросИсполнителям {
+        let широта = товар.поляВида.широта.map { String($0) } ?? ""
+        let долгота = товар.поляВида.долгота.map { String($0) } ?? ""
+        return ЗапросИсполнителям(текст: ТекстыУслугРядом.вопрос(ключ), город: товар.city, широта: широта,
+                                  долгота: долгота, раздел: "services")
+    }
+}
+
+/// .mk-svc-chip в .mk-mwrap: пилюля 32 pt, значок 14 зелёным (0,82), текст 12 полужирным.
+private struct ПилюляУслугиСайта: View {
+    let значок: String
+    let текст: String
+
+    private static let фон = Theme.цвет(светлый: Theme.hex(0xFFFFFF), тёмный: Theme.hex(0xFFFFFF, 0.05))
+    private static let рамка = Theme.цвет(светлый: Theme.hex(0x1D7D4A, 0.10), тёмный: Theme.hex(0xFFFFFF, 0.12))
+    private static let краска = Theme.цвет(0x1D7D4A, 0xD8EFE2)
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: значок)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.зелёный2)
+                .opacity(0.82)
+                .accessibilityHidden(true)
+            Text(текст)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Self.краска)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(minHeight: 32)
+        .background(Self.фон, in: Capsule())
+        .overlay { Capsule().strokeBorder(Self.рамка, lineWidth: 1) }
+        .contentShape(Capsule())
+    }
+}
+
+/// Словарь MK_SVC_MAP сайта (T — значок, подпись, вопрос; M — пилюли раздела) и тексты блока на языке телефона.
+enum ТекстыУслугРядом {
+    static func т(_ ключ: String) -> String {
+        let словарь = тексты[ListingPageText.язык] ?? тексты["ru"]!
+        return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
+    }
+
+    /// Текст запроса исполнителям (T[ключ][3] / svcq_<ключ>); у «spec» — пусто, человек пишет сам.
+    static func вопрос(_ ключ: String) -> String {
+        let текст = т("q_" + ключ)
+        return текст.hasPrefix("q_") ? "" : текст
+    }
+
+    static let значки: [String: String] = [
+        "evak": "car",
+        "sto": "wrench.and.screwdriver",
+        "tire": "circle.circle",
+        "carwash": "drop",
+        "autoexp": "magnifyingglass",
+        "autopaint": "paintbrush",
+        "autoglass": "eye",
+        "autoelec": "bolt",
+        "diag": "cpu",
+        "microfix": "wrench.and.screwdriver",
+        "boatfix": "wrench.and.screwdriver",
+        "realtor": "house",
+        "jurcheck": "checkmark.shield",
+        "renovate": "wrench.and.screwdriver",
+        "mover": "truck.box",
+        "plumb": "drop",
+        "electro": "bolt",
+        "wininstall": "door.left.hand.closed",
+        "winrepair": "wrench.and.screwdriver",
+        "mosquito": "square.grid.3x3",
+        "phonefix": "iphone",
+        "screen": "iphone",
+        "battery": "bolt",
+        "lapfix": "laptopcomputer",
+        "pcfix": "cpu",
+        "upgrade": "cpu",
+        "virus": "checkmark.shield",
+        "os": "wrench.and.screwdriver",
+        "tvfix": "tv",
+        "fridgefix": "wrench.and.screwdriver",
+        "washfix": "wrench.and.screwdriver",
+        "acfix": "wind",
+        "acinstall": "wind",
+        "delivery": "truck.box",
+        "assembly": "wrench.and.screwdriver",
+        "bigdeliv": "truck.box",
+        "vet": "pawprint",
+        "grooming": "scissors",
+        "pet-walk": "pawprint",
+        "tailor": "tshirt",
+        "shoefix": "shoeprints.fill",
+        "babycour": "truck.box",
+        "sportcour": "truck.box",
+        "trainer": "dumbbell",
+        "photosvc": "camera",
+        "dronsvc": "airplane",
+        "spec": "dot.radiowaves.left.and.right",
+    ]
+
+    static let разделы: [String: [String]] = [
+        "transport": ["evak", "sto", "tire", "carwash", "autoexp"],
+        "cars": ["evak", "sto", "tire", "carwash", "autoexp", "autopaint", "autoglass", "autoelec", "diag"],
+        "cars-sedan": ["evak", "sto", "tire", "carwash", "autoexp", "autopaint", "autoglass", "autoelec", "diag"],
+        "cars-suv": ["evak", "sto", "tire", "carwash", "autoexp", "autopaint", "autoglass", "autoelec", "diag"],
+        "cars-electric": ["evak", "sto", "autoelec", "diag", "carwash"],
+        "motorcycles": ["sto", "tire", "carwash", "spec"],
+        "scooters": ["sto", "tire", "carwash", "spec"],
+        "e-scooters": ["microfix", "delivery", "spec"],
+        "trucks-special": ["evak", "sto", "tire", "spec"],
+        "auto-parts": ["sto", "autoelec", "diag", "spec"],
+        "tires-wheels": ["tire", "sto", "spec"],
+        "water-transport": ["boatfix", "bigdeliv", "spec"],
+        "boats": ["boatfix", "bigdeliv", "spec"],
+        "jet-skis": ["boatfix", "bigdeliv", "spec"],
+        "realty": ["realtor", "jurcheck", "renovate", "mover", "plumb", "electro"],
+        "apartments": ["realtor", "jurcheck", "renovate", "mover", "plumb", "electro"],
+        "rooms": ["realtor", "renovate", "mover", "plumb", "electro"],
+        "houses": ["realtor", "jurcheck", "renovate", "mover", "plumb", "electro"],
+        "cottages": ["realtor", "jurcheck", "renovate", "mover", "plumb", "electro"],
+        "commercial-realty": ["realtor", "jurcheck", "renovate", "electro"],
+        "land": ["realtor", "jurcheck", "spec"],
+        "windows-doors": ["wininstall", "winrepair", "mosquito", "electro"],
+        "repair": ["plumb", "electro", "mover", "renovate", "wininstall"],
+        "home-garden": ["renovate", "mover", "assembly", "plumb", "electro", "wininstall"],
+        "phones-tablets": ["phonefix", "screen", "battery"],
+        "smartphones": ["phonefix", "screen", "battery"],
+        "tablets": ["phonefix", "screen", "battery"],
+        "phone-parts": ["phonefix", "screen", "battery", "spec"],
+        "computers": ["lapfix", "pcfix", "upgrade", "virus", "os"],
+        "laptops": ["lapfix", "upgrade", "virus", "os"],
+        "desktops": ["pcfix", "upgrade", "virus", "os"],
+        "pc-components": ["pcfix", "upgrade", "spec"],
+        "monitors": ["spec"],
+        "tv-audio": ["tvfix"],
+        "tv": ["tvfix"],
+        "appliances": ["fridgefix", "washfix", "acfix"],
+        "fridges": ["fridgefix"],
+        "washing-machines": ["washfix"],
+        "air-conditioners": ["acfix", "acinstall"],
+        "furniture": ["assembly", "mover"],
+        "sofas": ["assembly", "mover"],
+        "beds": ["assembly", "mover"],
+        "wardrobes": ["assembly", "mover"],
+        "animals": ["vet", "grooming", "pet-walk"],
+        "dogs": ["vet", "grooming", "pet-walk"],
+        "cats": ["vet", "grooming"],
+        "clothing": ["tailor", "shoefix"],
+        "shoes": ["shoefix", "tailor"],
+        "kids": ["babycour", "spec"],
+        "strollers-carseats": ["babycour", "assembly"],
+        "sport": ["trainer", "spec"],
+        "bicycles": ["microfix", "delivery", "spec"],
+        "fitness": ["trainer", "assembly"],
+        "photo-video": ["photosvc", "dronsvc"],
+        "drones": ["dronsvc", "photosvc"],
+        "cameras": ["photosvc", "spec"],
+        "electronics": ["spec"],
+    ]
+
+    private static let тексты: [String: [String: String]] = [
+        "ru": [
+            "need_help": "Нужна помощь?",
+            "svc_evak": "Эвакуатор", "q_evak": "Нужен эвакуатор",
+            "svc_sto": "СТО рядом", "q_sto": "Ищу СТО / автосервис",
+            "svc_tire": "Шиномонтаж", "q_tire": "Нужен шиномонтаж",
+            "svc_carwash": "Автомойка", "q_carwash": "Ищу автомойку рядом",
+            "svc_autoexp": "Подборщик авто", "q_autoexp": "Ищу подборщика / автоэксперта",
+            "svc_autopaint": "Кузовной ремонт", "q_autopaint": "Нужен кузовной ремонт или покраска",
+            "svc_autoglass": "Замена стёкол авто", "q_autoglass": "Нужна замена или ремонт стекла авто",
+            "svc_autoelec": "Авто-электрик", "q_autoelec": "Ищу авто-электрика",
+            "svc_diag": "Диагностика авто", "q_diag": "Нужна компьютерная диагностика авто",
+            "svc_microfix": "Ремонт самоката/велосипеда", "q_microfix": "Нужен ремонт электросамоката или велосипеда",
+            "svc_boatfix": "Ремонт лодки/мотора", "q_boatfix": "Нужен ремонт лодки или лодочного мотора",
+            "svc_realtor": "Риелтор", "q_realtor": "Ищу риелтора",
+            "svc_jurcheck": "Юр. проверка", "q_jurcheck": "Нужна юридическая проверка объекта недвижимости",
+            "svc_renovate": "Ремонт под ключ", "q_renovate": "Ищу бригаду для ремонта квартиры",
+            "svc_mover": "Переезд / грузчики", "q_mover": "Нужны грузчики или перевозка мебели",
+            "svc_plumb": "Сантехник", "q_plumb": "Нужен сантехник",
+            "svc_electro": "Электрик", "q_electro": "Нужен электрик",
+            "svc_wininstall": "Установка окон", "q_wininstall": "Нужна установка пластиковых окон",
+            "svc_winrepair": "Ремонт окон", "q_winrepair": "Нужен ремонт окна / замена ручки / уплотнителя",
+            "svc_mosquito": "Москитные сетки", "q_mosquito": "Нужны москитные сетки на окна",
+            "svc_phonefix": "Ремонт телефона", "q_phonefix": "Нужен ремонт телефона",
+            "svc_screen": "Замена экрана", "q_screen": "Нужна замена экрана телефона",
+            "svc_battery": "Замена аккумулятора", "q_battery": "Нужна замена аккумулятора телефона",
+            "svc_lapfix": "Ремонт ноутбука", "q_lapfix": "Нужен ремонт ноутбука",
+            "svc_pcfix": "Ремонт компьютера", "q_pcfix": "Нужен ремонт компьютера",
+            "svc_upgrade": "Апгрейд ПК", "q_upgrade": "Хочу апгрейд компьютера / заменить комплектующие",
+            "svc_virus": "Удалить вирусы", "q_virus": "Нужно удаление вирусов и настройка Windows",
+            "svc_os": "Установка Windows", "q_os": "Нужна установка / переустановка Windows",
+            "svc_tvfix": "Ремонт телевизора", "q_tvfix": "Нужен ремонт телевизора",
+            "svc_fridgefix": "Ремонт холодильника", "q_fridgefix": "Нужен ремонт холодильника",
+            "svc_washfix": "Ремонт стиралки", "q_washfix": "Нужен ремонт стиральной машины",
+            "svc_acfix": "Ремонт кондиционера", "q_acfix": "Нужен ремонт или чистка кондиционера",
+            "svc_acinstall": "Установка кондиц.", "q_acinstall": "Нужна установка кондиционера",
+            "svc_delivery": "Доставка / перевозка", "q_delivery": "Нужна доставка или перевозка",
+            "svc_assembly": "Сборка мебели", "q_assembly": "Нужна сборка мебели",
+            "svc_bigdeliv": "Газель / грузовик", "q_bigdeliv": "Нужна газель или грузовик для перевозки",
+            "svc_vet": "Ветеринар рядом", "q_vet": "Нужен ветеринар / выезд на дом",
+            "svc_grooming": "Грумер / стрижка", "q_grooming": "Нужен грумер для животного",
+            "svc_pet-walk": "Выгул собаки", "q_pet-walk": "Нужен выгул собаки",
+            "svc_tailor": "Пошив / ремонт", "q_tailor": "Нужен ателье / ремонт одежды",
+            "svc_shoefix": "Ремонт обуви", "q_shoefix": "Нужен ремонт обуви",
+            "svc_babycour": "Доставка", "q_babycour": "Нужна доставка детских товаров",
+            "svc_sportcour": "Доставка", "q_sportcour": "Нужна доставка спортинвентаря",
+            "svc_trainer": "Тренер", "q_trainer": "Ищу персонального тренера",
+            "svc_photosvc": "Фотограф", "q_photosvc": "Ищу фотографа",
+            "svc_dronsvc": "Съёмка с дрона", "q_dronsvc": "Нужна аэро-фотосъёмка / видео с дрона",
+            "svc_spec": "Найти специалиста",
+        ],
+        "kk": [
+            "need_help": "Көмек керек пе?",
+            "svc_evak": "Эвакуатор", "q_evak": "Эвакуатор керек",
+            "svc_sto": "Жақын СТО", "q_sto": "СТО / автосервис іздеймін",
+            "svc_tire": "Шиномонтаж", "q_tire": "Шиномонтаж керек",
+            "svc_carwash": "Автожуу", "q_carwash": "Жақын жерден автожуу іздеймін",
+            "svc_autoexp": "Көлік таңдаушы", "q_autoexp": "Көлік таңдаушы / автосарапшы іздеймін",
+            "svc_autopaint": "Шанақ жөндеу", "q_autopaint": "Шанақ жөндеу немесе бояу керек",
+            "svc_autoglass": "Көлік әйнегін ауыстыру", "q_autoglass": "Көлік әйнегін ауыстыру не жөндеу керек",
+            "svc_autoelec": "Автоэлектрик", "q_autoelec": "Автоэлектрик іздеймін",
+            "svc_diag": "Көлік диагностикасы", "q_diag": "Көлікке компьютерлік диагностика керек",
+            "svc_microfix": "Самокат/велосипед жөндеу", "q_microfix": "Электросамокат не велосипед жөндеу керек",
+            "svc_boatfix": "Қайық/мотор жөндеу", "q_boatfix": "Қайық не қайық моторын жөндеу керек",
+            "svc_realtor": "Риелтор", "q_realtor": "Риелтор іздеймін",
+            "svc_jurcheck": "Заң тексеруі", "q_jurcheck": "Жылжымайтын мүлікті заңдық тексеру керек",
+            "svc_renovate": "Кілтке дейін жөндеу", "q_renovate": "Пәтер жөндеуге бригада іздеймін",
+            "svc_mover": "Көшу / жүкшілер", "q_mover": "Жүкшілер не жиһаз тасымалы керек",
+            "svc_plumb": "Сантехник", "q_plumb": "Сантехник керек",
+            "svc_electro": "Электрик", "q_electro": "Электрик керек",
+            "svc_wininstall": "Терезе орнату", "q_wininstall": "Пластик терезе орнату керек",
+            "svc_winrepair": "Терезе жөндеу", "q_winrepair": "Терезе жөндеу / тұтқа не тығыздағыш ауыстыру керек",
+            "svc_mosquito": "Москит торлары", "q_mosquito": "Терезеге москит торы керек",
+            "svc_phonefix": "Телефон жөндеу", "q_phonefix": "Телефон жөндеу керек",
+            "svc_screen": "Экран ауыстыру", "q_screen": "Телефон экранын ауыстыру керек",
+            "svc_battery": "Аккумулятор ауыстыру", "q_battery": "Телефон аккумуляторын ауыстыру керек",
+            "svc_lapfix": "Ноутбук жөндеу", "q_lapfix": "Ноутбук жөндеу керек",
+            "svc_pcfix": "Компьютер жөндеу", "q_pcfix": "Компьютер жөндеу керек",
+            "svc_upgrade": "ДК жаңарту", "q_upgrade": "Компьютерді жаңартқым / бөлшектерін ауыстырғым келеді",
+            "svc_virus": "Вирустарды жою", "q_virus": "Вирустарды жою және Windows баптау керек",
+            "svc_os": "Windows орнату", "q_os": "Windows орнату / қайта орнату керек",
+            "svc_tvfix": "Теледидар жөндеу", "q_tvfix": "Теледидар жөндеу керек",
+            "svc_fridgefix": "Тоңазытқыш жөндеу", "q_fridgefix": "Тоңазытқыш жөндеу керек",
+            "svc_washfix": "Кір жуғыш жөндеу", "q_washfix": "Кір жуғыш машина жөндеу керек",
+            "svc_acfix": "Кондиционер жөндеу", "q_acfix": "Кондиционер жөндеу не тазалау керек",
+            "svc_acinstall": "Кондиционер орнату", "q_acinstall": "Кондиционер орнату керек",
+            "svc_delivery": "Жеткізу / тасымал", "q_delivery": "Жеткізу не тасымал керек",
+            "svc_assembly": "Жиһаз құрастыру", "q_assembly": "Жиһаз құрастыру керек",
+            "svc_bigdeliv": "Газель / жүк көлігі", "q_bigdeliv": "Тасымалға газель не жүк көлігі керек",
+            "svc_vet": "Жақын ветеринар", "q_vet": "Ветеринар / үйге шақыру керек",
+            "svc_grooming": "Грумер / қырқу", "q_grooming": "Жануарға грумер керек",
+            "svc_pet-walk": "Итті серуендету", "q_pet-walk": "Итті серуендету керек",
+            "svc_tailor": "Тігу / жөндеу", "q_tailor": "Ателье / киім жөндеу керек",
+            "svc_shoefix": "Аяқ киім жөндеу", "q_shoefix": "Аяқ киім жөндеу керек",
+            "svc_babycour": "Жеткізу", "q_babycour": "Балалар тауарларын жеткізу керек",
+            "svc_sportcour": "Жеткізу", "q_sportcour": "Спорт құралдарын жеткізу керек",
+            "svc_trainer": "Жаттықтырушы", "q_trainer": "Жеке жаттықтырушы іздеймін",
+            "svc_photosvc": "Фотограф", "q_photosvc": "Фотограф іздеймін",
+            "svc_dronsvc": "Дроннан түсіру", "q_dronsvc": "Дроннан фото / бейне түсіру керек",
+            "svc_spec": "Маман табу",
+        ],
+        "en": [
+            "need_help": "Need help?",
+            "svc_evak": "Tow truck", "q_evak": "Need a tow truck",
+            "svc_sto": "Car service nearby", "q_sto": "Looking for a car service",
+            "svc_tire": "Tyre service", "q_tire": "Need a tyre service",
+            "svc_carwash": "Car wash", "q_carwash": "Looking for a car wash nearby",
+            "svc_autoexp": "Car inspector", "q_autoexp": "Looking for a car inspector",
+            "svc_autopaint": "Body repair", "q_autopaint": "Need body repair or painting",
+            "svc_autoglass": "Auto glass", "q_autoglass": "Need car glass replaced or repaired",
+            "svc_autoelec": "Auto electrician", "q_autoelec": "Looking for an auto electrician",
+            "svc_diag": "Car diagnostics", "q_diag": "Need computer diagnostics for my car",
+            "svc_microfix": "Scooter/bike repair", "q_microfix": "Need an e-scooter or bike repaired",
+            "svc_boatfix": "Boat/motor repair", "q_boatfix": "Need a boat or outboard motor repaired",
+            "svc_realtor": "Realtor", "q_realtor": "Looking for a realtor",
+            "svc_jurcheck": "Legal check", "q_jurcheck": "Need a legal check of the property",
+            "svc_renovate": "Full renovation", "q_renovate": "Looking for a crew to renovate an apartment",
+            "svc_mover": "Movers", "q_mover": "Need movers or furniture transport",
+            "svc_plumb": "Plumber", "q_plumb": "Need a plumber",
+            "svc_electro": "Electrician", "q_electro": "Need an electrician",
+            "svc_wininstall": "Window installation", "q_wininstall": "Need PVC windows installed",
+            "svc_winrepair": "Window repair", "q_winrepair": "Need a window repaired / handle or seal replaced",
+            "svc_mosquito": "Insect screens", "q_mosquito": "Need insect screens for windows",
+            "svc_phonefix": "Phone repair", "q_phonefix": "Need a phone repaired",
+            "svc_screen": "Screen replacement", "q_screen": "Need a phone screen replaced",
+            "svc_battery": "Battery replacement", "q_battery": "Need a phone battery replaced",
+            "svc_lapfix": "Laptop repair", "q_lapfix": "Need a laptop repaired",
+            "svc_pcfix": "PC repair", "q_pcfix": "Need a computer repaired",
+            "svc_upgrade": "PC upgrade", "q_upgrade": "Want to upgrade my PC / replace components",
+            "svc_virus": "Virus removal", "q_virus": "Need viruses removed and Windows set up",
+            "svc_os": "Windows install", "q_os": "Need Windows installed / reinstalled",
+            "svc_tvfix": "TV repair", "q_tvfix": "Need a TV repaired",
+            "svc_fridgefix": "Fridge repair", "q_fridgefix": "Need a fridge repaired",
+            "svc_washfix": "Washer repair", "q_washfix": "Need a washing machine repaired",
+            "svc_acfix": "AC repair", "q_acfix": "Need an AC repaired or cleaned",
+            "svc_acinstall": "AC installation", "q_acinstall": "Need an AC installed",
+            "svc_delivery": "Delivery", "q_delivery": "Need delivery or transport",
+            "svc_assembly": "Furniture assembly", "q_assembly": "Need furniture assembled",
+            "svc_bigdeliv": "Van / truck", "q_bigdeliv": "Need a van or truck for transport",
+            "svc_vet": "Vet nearby", "q_vet": "Need a vet / home visit",
+            "svc_grooming": "Groomer", "q_grooming": "Need a groomer for my pet",
+            "svc_pet-walk": "Dog walking", "q_pet-walk": "Need a dog walker",
+            "svc_tailor": "Tailoring", "q_tailor": "Need a tailor / clothing repair",
+            "svc_shoefix": "Shoe repair", "q_shoefix": "Need shoes repaired",
+            "svc_babycour": "Delivery", "q_babycour": "Need kids' goods delivered",
+            "svc_sportcour": "Delivery", "q_sportcour": "Need sports gear delivered",
+            "svc_trainer": "Trainer", "q_trainer": "Looking for a personal trainer",
+            "svc_photosvc": "Photographer", "q_photosvc": "Looking for a photographer",
+            "svc_dronsvc": "Drone shooting", "q_dronsvc": "Need aerial photo / drone video",
+            "svc_spec": "Find a specialist",
+        ],
+        "ar": [
+            "need_help": "تحتاج مساعدة؟",
+            "svc_evak": "سحب السيارات", "q_evak": "أحتاج سيارة سحب",
+            "svc_sto": "ورشة قريبة", "q_sto": "أبحث عن ورشة سيارات",
+            "svc_tire": "إطارات", "q_tire": "أحتاج خدمة إطارات",
+            "svc_carwash": "غسيل سيارات", "q_carwash": "أبحث عن مغسلة سيارات قريبة",
+            "svc_autoexp": "خبير سيارات", "q_autoexp": "أبحث عن خبير لفحص السيارة",
+            "svc_autopaint": "إصلاح الهيكل", "q_autopaint": "أحتاج إصلاح الهيكل أو الطلاء",
+            "svc_autoglass": "زجاج السيارات", "q_autoglass": "أحتاج استبدال أو إصلاح زجاج السيارة",
+            "svc_autoelec": "كهربائي سيارات", "q_autoelec": "أبحث عن كهربائي سيارات",
+            "svc_diag": "تشخيص السيارة", "q_diag": "أحتاج تشخيصًا حاسوبيًا للسيارة",
+            "svc_microfix": "إصلاح سكوتر/دراجة", "q_microfix": "أحتاج إصلاح سكوتر كهربائي أو دراجة",
+            "svc_boatfix": "إصلاح قارب/محرك", "q_boatfix": "أحتاج إصلاح قارب أو محرك قارب",
+            "svc_realtor": "وسيط عقاري", "q_realtor": "أبحث عن وسيط عقاري",
+            "svc_jurcheck": "فحص قانوني", "q_jurcheck": "أحتاج فحصًا قانونيًا للعقار",
+            "svc_renovate": "تجديد شامل", "q_renovate": "أبحث عن فريق لتجديد شقة",
+            "svc_mover": "نقل / عمال", "q_mover": "أحتاج عمال نقل أو نقل أثاث",
+            "svc_plumb": "سباك", "q_plumb": "أحتاج سباكًا",
+            "svc_electro": "كهربائي", "q_electro": "أحتاج كهربائيًا",
+            "svc_wininstall": "تركيب نوافذ", "q_wininstall": "أحتاج تركيب نوافذ بلاستيكية",
+            "svc_winrepair": "إصلاح نوافذ", "q_winrepair": "أحتاج إصلاح نافذة / استبدال مقبض أو عازل",
+            "svc_mosquito": "شبكات البعوض", "q_mosquito": "أحتاج شبكات بعوض للنوافذ",
+            "svc_phonefix": "إصلاح الهاتف", "q_phonefix": "أحتاج إصلاح هاتف",
+            "svc_screen": "استبدال الشاشة", "q_screen": "أحتاج استبدال شاشة الهاتف",
+            "svc_battery": "استبدال البطارية", "q_battery": "أحتاج استبدال بطارية الهاتف",
+            "svc_lapfix": "إصلاح اللابتوب", "q_lapfix": "أحتاج إصلاح لابتوب",
+            "svc_pcfix": "إصلاح الكمبيوتر", "q_pcfix": "أحتاج إصلاح كمبيوتر",
+            "svc_upgrade": "ترقية الكمبيوتر", "q_upgrade": "أريد ترقية الكمبيوتر / استبدال القطع",
+            "svc_virus": "إزالة الفيروسات", "q_virus": "أحتاج إزالة الفيروسات وضبط ويندوز",
+            "svc_os": "تثبيت ويندوز", "q_os": "أحتاج تثبيت / إعادة تثبيت ويندوز",
+            "svc_tvfix": "إصلاح التلفاز", "q_tvfix": "أحتاج إصلاح تلفاز",
+            "svc_fridgefix": "إصلاح الثلاجة", "q_fridgefix": "أحتاج إصلاح ثلاجة",
+            "svc_washfix": "إصلاح الغسالة", "q_washfix": "أحتاج إصلاح غسالة",
+            "svc_acfix": "إصلاح المكيف", "q_acfix": "أحتاج إصلاح أو تنظيف مكيف",
+            "svc_acinstall": "تركيب مكيف", "q_acinstall": "أحتاج تركيب مكيف",
+            "svc_delivery": "توصيل / نقل", "q_delivery": "أحتاج توصيلًا أو نقلًا",
+            "svc_assembly": "تركيب الأثاث", "q_assembly": "أحتاج تركيب أثاث",
+            "svc_bigdeliv": "شاحنة صغيرة / كبيرة", "q_bigdeliv": "أحتاج شاحنة للنقل",
+            "svc_vet": "بيطري قريب", "q_vet": "أحتاج طبيبًا بيطريًا / زيارة منزلية",
+            "svc_grooming": "تجميل الحيوانات", "q_grooming": "أحتاج مزيّنًا لحيواني الأليف",
+            "svc_pet-walk": "تمشية الكلاب", "q_pet-walk": "أحتاج من يمشّي كلبي",
+            "svc_tailor": "خياطة / إصلاح", "q_tailor": "أحتاج خياطًا / إصلاح ملابس",
+            "svc_shoefix": "إصلاح الأحذية", "q_shoefix": "أحتاج إصلاح حذاء",
+            "svc_babycour": "توصيل", "q_babycour": "أحتاج توصيل مستلزمات أطفال",
+            "svc_sportcour": "توصيل", "q_sportcour": "أحتاج توصيل معدات رياضية",
+            "svc_trainer": "مدرب", "q_trainer": "أبحث عن مدرب شخصي",
+            "svc_photosvc": "مصور", "q_photosvc": "أبحث عن مصور",
+            "svc_dronsvc": "تصوير بالدرون", "q_dronsvc": "أحتاج تصويرًا جويًا / فيديو بالدرون",
+            "svc_spec": "ابحث عن مختص",
+        ],
+    ]
 }

@@ -74,6 +74,15 @@ struct ПоляСтраницыВида: Hashable, Decodable {
     var регионыОтправки: [String] = []
     /// ship_carrier — транспортная компания, выбранная продавцом: в списке ТК она первая, с меткой «выбор продавца».
     var перевозчик: String?
+    /// Аренда (mkRentBlock): rent_deposit — залог, rent_min_days — мин. срок (дней или месяцев), rent_kit — «В комплекте».
+    var залогАренды: Double?
+    var минСрокАренды: Int?
+    var комплектАренды: String?
+    /// stock — сколько штук в наличии (mkStockLine); gen — поколение модели, метка после названия (.mk-gentag).
+    var наличие: Int?
+    var поколение: String?
+    /// no_escrow — продавец не принимает безопасную сделку (лист «Что это даёт»: без гарантийного талона в сделке).
+    var безГаранта = false
 
     init() {}
 
@@ -95,6 +104,12 @@ struct ПоляСтраницыВида: Hashable, Decodable {
         отправкаКуда = ПоляСтраницыВида.строка(c, "ship_scope")
         регионыОтправки = ПоляСтраницыВида.строки(c, "ship_regions")
         перевозчик = ПоляСтраницыВида.строка(c, "ship_carrier")
+        залогАренды = ПоляСтраницыВида.число(c, "rent_deposit").flatMap { $0 > 0 ? $0 : nil }
+        минСрокАренды = ПоляСтраницыВида.число(c, "rent_min_days").flatMap { $0 >= 1 ? Int($0) : nil }
+        комплектАренды = ПоляСтраницыВида.строка(c, "rent_kit")
+        наличие = ПоляСтраницыВида.число(c, "stock").flatMap { $0 >= 1 ? Int($0) : nil }
+        поколение = ПоляСтраницыВида.строка(c, "gen")
+        безГаранта = ПоляСтраницыВида.даНет(c, "no_escrow") ?? false
     }
 
     static func строка(_ c: KeyedDecodingContainer<КлючПоля>, _ k: String) -> String? {
@@ -288,6 +303,8 @@ struct ПунктХарактеристикиВида: Hashable {
     let текст: String
     /// SF Symbol — у specs[] сайт рисует значок (emoji-svg), у полей жилья значков нет.
     let значок: String?
+    /// Короткая бледная подпись перед значением — «Проц.», «Видео» у техники без specs (mkSpecs сайта).
+    var подпись: String? = nil
 }
 
 extension Listing {
@@ -324,6 +341,32 @@ extension Listing {
             if !поля.isEmpty { return поля }
         }
         return пунктыХарактеристикСтраницы
+    }
+
+    /// Характеристики «Описания» у любого раздела: specs и поля жилья по правилам сайта, а у техники без specs —
+    /// процессор, видео, ОЗУ и накопитель, как mkSpecs(t, true) для electronics.
+    var характеристикиСтраницы: [ПунктХарактеристикиВида] {
+        let пункты = характеристикиВида
+        guard пункты.isEmpty, корень == "electronics" else { return пункты }
+        func поле(_ з: String?) -> String? {
+            let т = (з ?? "").trimmingCharacters(in: .whitespaces)
+            return Self.пустоеЗначение(т) ? nil : т
+        }
+        var итог: [ПунктХарактеристикиВида] = []
+        if let cpu = поле(cpuСтрокой) {
+            итог.append(ПунктХарактеристикиВида(текст: cpu, значок: "cpu", подпись: ListingPageText.т("cpu_short")))
+        }
+        if let gpu = поле(gpuСтрокой) {
+            итог.append(ПунктХарактеристикиВида(текст: Self.значениеСайта(gpu), значок: "display",
+                                                подпись: ListingPageText.т("gpu_short")))
+        }
+        if let ram = поле(ramСтрокой) {
+            итог.append(ПунктХарактеристикиВида(текст: ram + " " + DesignText.т("gb_ram"), значок: "memorychip"))
+        }
+        if let диск = поле(storageСтрокой) {
+            итог.append(ПунктХарактеристикиВида(текст: диск, значок: "internaldrive"))
+        }
+        return итог
     }
 
     private var пунктыЖильяСтраницы: [ПунктХарактеристикиВида] {
@@ -435,15 +478,30 @@ extension Listing {
 
 // MARK: - Блоки страницы по порядку сайта
 
+/// Проверки по базам РК — window.MK_CHECKS сайта: пока false («ждут провайдера»), кнопки проверки нет.
+private let проверкиРКВключены = false
+
 /// Кнопка проверки и схема помещения — между советом и «Описанием» (.mk-mcol-c сайта).
 struct БлокиВидаДоОписания: View {
     let товар: Listing
     let вид: ВидСтраницыОбъявления
 
+    /// Есть ли что показать — иначе страница не ставит блок, и промежутки не двоятся.
+    static func есть(_ товар: Listing, вид: ВидСтраницыОбъявления) -> Bool {
+        проверкиРКВключены || схема(товар, вид: вид) != nil
+    }
+
+    private static func схема(_ товар: Listing, вид: ВидСтраницыОбъявления) -> URL? {
+        guard вид == .жильё, let план = товар.жильё["plan"] else { return nil }
+        return Config.url(план)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            КнопкаПроверкиСайта(товар: товар, вид: вид)
-            if вид == .жильё, let план = товар.жильё["plan"], let адрес = Config.url(план) {
+        VStack(alignment: .leading, spacing: 14) {
+            if проверкиРКВключены {
+                КнопкаПроверкиСайта(товар: товар, вид: вид)
+            }
+            if let адрес = Self.схема(товар, вид: вид) {
                 СхемаПомещенияСайта(адрес: адрес)
             }
         }
@@ -595,9 +653,9 @@ struct ЛистПроверкиСайта: View {
                 if !сессия.продавецПодтверждён {
                     ЗамокОтчёта(вид: вид) {
                         закрыть()
-                        /* Как mkChkVerify сайта — cabinet.php?go=verify; eGov открывается своим окном (ОкноEgov). */
-                        if let адрес = Config.страницаСайта("cabinet.php?go=verify"), !ОкноEgov.перехватить(адрес) {
-                            WebBridge.shared.pendingURL = адрес
+                        /* Как mkChkVerify сайта, но своим окном верификации (eGov — внутри него), без страницы сайта. */
+                        if !ОкнаПриложения.shared.показать(.верификация, задержка: 400_000_000) {
+                            ВерификацияПоверх.показать()
                         }
                     }
                 } else if let п = проверка, п.действителен {
@@ -1106,8 +1164,9 @@ struct БлокОписанияВида: View {
     let добавлено: String?
     let просмотры: Int?
 
+    /// Промежутки сайта: подзаголовок → 8 → характеристики → 14 → текст (margin-bottom 20 + gap 14) → «Добавлено».
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             ПодзаголовокСайта(значок: "info.circle", текст: ListingPageText.т("desc"))
             if !характеристики.isEmpty {
                 ПереносСтрок(промежуток: 8, междуСтрок: 8) {
@@ -1115,28 +1174,15 @@ struct БлокОписанияВида: View {
                         ФишкаХарактеристикиВида(пункт: пункт)
                     }
                 }
+                .padding(.top, 8)
             }
             if let текст = описание {
-                Text(текст)
-                    .font(.system(size: 15))
-                    .lineSpacing(6)
-                    .foregroundStyle(Theme.текст)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                ТекстОписанияСайта(текст: текст)
+                    .padding(.top, характеристики.isEmpty ? 8 : 14)
             }
             if добавлено != nil || (просмотры ?? 0) > 0 {
-                HStack(spacing: 16) {
-                    if let когда = добавлено {
-                        Label(String(format: ListingPageText.т("added"), когда), systemImage: "clock")
-                    }
-                    if let п = просмотры, п > 0 {
-                        Label(String(п), systemImage: "eye")
-                            .accessibilityLabel(String(format: ListingPageText.т("views"), п))
-                    }
-                }
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .labelStyle(МеткаСайта())
+                СтрокаДобавленоСайта(добавлено: добавлено, просмотры: просмотры)
+                    .padding(.top, описание != nil ? 34 : 14)
             }
         }
     }
@@ -1147,20 +1193,30 @@ private struct ФишкаХарактеристикиВида: View {
     let пункт: ПунктХарактеристикиВида
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             if let значок = пункт.значок {
                 Image(systemName: значок)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.зелёный2)
+                    .opacity(0.9)
                     .accessibilityHidden(true)
             }
-            Text(пункт.текст)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.текст)
-                .lineLimit(2)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if let подпись = пункт.подпись {
+                    /* <span style="opacity:.6;font-size:.85em"> сайта. */
+                    Text(подпись)
+                        .font(.system(size: 10.2, weight: .semibold))
+                        .opacity(0.6)
+                }
+                Text(пункт.текст)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+            }
+            .foregroundStyle(Theme.текст)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
+        .frame(minHeight: 32)
         .background(Theme.поверхность2, in: Capsule())
     }
 }
@@ -1222,7 +1278,7 @@ struct СпособыОплатыСайта: View {
             withAnimation(.easeOut(duration: 0.15)) { выбрано = ключ }
         } label: {
             Text(текст)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(выбрана ? цвет : Theme.текстВторой)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
@@ -1296,7 +1352,7 @@ private struct СтрокаОплаты: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(заголовок)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                     if !подпись.isEmpty {
                         Text(подпись)
@@ -1308,7 +1364,7 @@ private struct СтрокаОплаты: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(суммаСтрокой)
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.system(size: 14, weight: .heavy))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -1342,7 +1398,7 @@ private struct СтрокаОплаты: View {
             withAnimation(.easeOut(duration: 0.15)) { срок = месяцев }
         } label: {
             Text(String(месяцев))
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(выбран ? цвет : Theme.текстВторой)
                 .frame(maxWidth: .infinity)
@@ -1365,3 +1421,501 @@ private struct СтрокаОплаты: View {
 // MARK: - Расположение (mkLocationBlock)
 
 // Блок «Расположение» с картой, маршрутом и курьером — у всех разделов, в SiteListingLocation.swift.
+
+// MARK: - Аренда (mkRentBlock) — запрос аренды без денег
+
+/**
+ «Доступна аренда» у объявлений for_rent — как mkRentBlock сайта в колонке продавца: цена за сутки или месяц, залог,
+ мин. срок, «В комплекте». Проверенному — даты, расчёт, сообщение и «Запросить аренду» (rentals.php action=request —
+ это запрос продавцу, не оплата); гостю и непроверенному — строка со своим окном входа или верификации.
+ */
+struct БлокАрендыСайта: View {
+    let товар: Listing
+    @ObservedObject private var сессия = СессияПриложения.shared
+    @State private var начало: Date?
+    @State private var конец: Date?
+    @State private var сообщение = ""
+    @State private var отправляем = false
+    @State private var отправлено = false
+    @State private var ошибка: String?
+
+    /// «Арендовать безопасно» панели связи просит страницу доехать до блока (mkRentJump); object — номер объявления.
+    static let кАренде = Notification.Name("kliko.listing.rent_jump")
+    /// id блока в прокрутке страницы.
+    static let якорь = "mk-rent"
+
+    private static let голова = Theme.цвет(0x0F5132, 0x34C997)
+    private static let фонКолонки = Theme.цвет(0xFFFFFF, 0x1C1C26)
+    private static let рамкаКолонки = Theme.цвет(светлый: Theme.hex(0xE4F0E9), тёмный: Theme.hex(0xFFFFFF, 0.10))
+    private static let подписьПоля = Color(uiColor: Theme.hex(0x5F8F72))
+    private static let рамкаПоля = Theme.цвет(светлый: Theme.hex(0xD7E6DD), тёмный: Theme.hex(0xFFFFFF, 0.10))
+    private static let ошибкаЦвет = Color(uiColor: Theme.hex(0xC0392B))
+
+    init(товар: Listing) {
+        self.товар = товар
+    }
+
+    private var месяцы: Bool { товар.периодАренды == "month" }
+    private var цена: Double { товар.rentPriceDay ?? 0 }
+    private var залог: Double { товар.поляВида.залогАренды ?? 0 }
+    private var минимум: Int { товар.поляВида.минСрокАренды ?? 1 }
+    private var своё: Bool { !сессия.id.isEmpty && сессия.id == товар.продавецID }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            шапка
+                .padding(.bottom, 16)
+            колонки
+            if let комплект = товар.поляВида.комплектАренды {
+                строкаКомплекта(комплект)
+            }
+            низ
+                .padding(.top, 10)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .background(LinearGradient(colors: [Theme.оттенокАкцента, Color.clear], startPoint: .topLeading,
+                                   endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.оттенокАкцента, lineWidth: 1)
+        }
+    }
+
+    // MARK: Шапка и колонки
+
+    private var шапка: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 34, height: 34)
+                .background(LinearGradient(colors: [Theme.зелёныйЯркий, Theme.зелёный], startPoint: .topLeading,
+                                           endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .accessibilityHidden(true)
+            Text(тВида("rent_available"))
+                .font(.system(size: 16, weight: .heavy))
+                .tracking(-0.16)
+                .foregroundStyle(Self.голова)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private var колонки: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if цена > 0 {
+                колонка(тВида(месяцы ? "rent_per_month" : "rent_per_day"), значение: Self.сумма(цена), тенге: true)
+            }
+            if залог > 0 {
+                колонка(тВида("rent_deposit"), значение: Self.сумма(залог), тенге: true)
+            }
+            колонка(тВида("rent_min_term"), значение: минСрокТекст, тенге: false)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func колонка(_ подпись: String, значение: String, тенге: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(подпись.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(Theme.зелёный2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(значение)
+                    .font(.system(size: 16, weight: .heavy))
+                    .tracking(-0.32)
+                    .foregroundStyle(Self.голова)
+                if тенге {
+                    Text(verbatim: "₸")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Theme.зелёный2)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Self.фонКолонки, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Self.рамкаКолонки, lineWidth: 1)
+        }
+    }
+
+    private func строкаКомплекта(_ комплект: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Theme.линия
+                .frame(height: 1)
+                .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(тВида("rent_kit") + ":")
+                    .foregroundStyle(Theme.текстВторой)
+                Text(комплект)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Theme.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 12))
+        }
+        .padding(.top, 16)
+    }
+
+    // MARK: Низ: своё, форма, вход или верификация
+
+    @ViewBuilder
+    private var низ: some View {
+        if своё {
+            Text(тВида("rent_own"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .padding(.vertical, 8)
+        } else if сессия.вошёл == true && сессия.продавецПодтверждён {
+            if отправлено {
+                Label(тВида("rent_sent"), systemImage: "checkmark.circle")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.зелёный2)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(14)
+            } else {
+                форма
+            }
+        } else {
+            let вошёл = сессия.вошёл == true
+            Button {
+                if вошёл {
+                    if !ОкнаПриложения.shared.показать(.верификация) { ВерификацияПоверх.показать() }
+                } else if !ОкнаПриложения.shared.показать(.вход) {
+                    ВходПоверх.показать()
+                }
+            } label: {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.зелёный2)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(тВида(вошёл ? "rent_unver" : "rent_guest"))
+                            .foregroundStyle(Theme.текстВторой)
+                        Text(тВида(вошёл ? "rent_verify_go" : "rent_login_go"))
+                            .fontWeight(.bold)
+                            .foregroundStyle(Theme.зелёный2)
+                    }
+                    .font(.system(size: 12))
+                    .lineSpacing(4)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .background(Self.фонКолонки, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay(alignment: .leading) {
+                    Theme.зелёный2
+                        .frame(width: 3)
+                        .accessibilityHidden(true)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(Self.рамкаКолонки, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var форма: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ПолеДатыАренды(подпись: тВида("rent_start"), дата: $начало, с: Calendar.current.startOfDay(for: Date()))
+                ПолеДатыАренды(подпись: тВида("rent_end"), дата: $конец,
+                               с: начало ?? Calendar.current.startOfDay(for: Date()))
+            }
+            расчёт
+            TextField(тВида("rent_msg_ph"), text: $сообщение, axis: .vertical)
+                .font(.system(size: 13))
+                .lineLimit(2...4)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(Self.рамкаПоля, lineWidth: 1.5)
+                }
+                .onChange(of: сообщение) { _, стало in
+                    if стало.count > 300 { сообщение = String(стало.prefix(300)) }
+                }
+            if let ошибка {
+                Text(ошибка)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Self.ошибкаЦвет)
+            }
+            Button(action: отправить) {
+                HStack(spacing: 10) {
+                    if отправляем {
+                        SiteSpinner.белый
+                    } else {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 17, weight: .semibold))
+                            .accessibilityHidden(true)
+                    }
+                    Text(тВида(отправляем ? "rent_sending" : "rent_request"))
+                        .font(.system(size: 16, weight: .heavy))
+                        .tracking(0.16)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+                .padding(16)
+                .background(LinearGradient(colors: [Theme.зелёный2, Color(uiColor: Theme.hex(0x149A52)), Theme.зелёный],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            .disabled(отправляем)
+        }
+    }
+
+    // MARK: Расчёт (mkRentCalcHTML)
+
+    /// Сколько единиц между датами (mkRentUnits): дни — вверх, месяцы — дни / 30, не меньше одного.
+    private var выбрано: (единиц: Int, дней: Int)? {
+        guard let н = начало, let к = конец else { return nil }
+        let дней = Int((к.timeIntervalSince(н) / 86_400).rounded(.up))
+        return (месяцы ? max(1, Int((Double(дней) / 30).rounded())) : дней, дней)
+    }
+
+    @ViewBuilder
+    private var расчёт: some View {
+        let единица = тВида(месяцы ? "rent_u_month" : "rent_u_day")
+        let краска = Theme.цвет(0x0F5C32, 0x34C997)
+        VStack(alignment: .leading, spacing: 6) {
+            if let в = выбрано, в.дней < 1 {
+                Text(тВида("rent_err_dates"))
+                    .fontWeight(.bold)
+                    .foregroundStyle(Self.ошибкаЦвет)
+            } else if let в = выбрано, в.единиц < минимум {
+                Text(тВида("rent_min_pfx") + String(минимум) + " " + единица)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Self.ошибкаЦвет)
+            } else {
+                let единиц = выбрано?.единиц ?? минимум
+                if цена > 0 {
+                    строкаРасчёта([String(единиц), единица, "×", Self.сумма(цена), "₸"].joined(separator: " "),
+                                  Self.сумма(цена * Double(единиц)) + " ₸", краска: краска)
+                }
+                if залог > 0 {
+                    строкаРасчёта(тВида("rent_deposit_back"), Self.сумма(залог) + " ₸",
+                                  краска: Theme.цвет(0x6F9A80, 0x34C997))
+                }
+                VStack(spacing: 8) {
+                    ЛинияРасчётаАренды()
+                        .stroke(style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        .foregroundStyle(Theme.цвет(светлый: Theme.hex(0xBFE0CC), тёмный: Theme.hex(0x34C997, 0.3)))
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+                    HStack(spacing: 10) {
+                        Text(тВида("rent_to_pay"))
+                            .foregroundStyle(краска)
+                        Spacer(minLength: 8)
+                        Text(Self.сумма(цена * Double(единиц) + залог) + " ₸")
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(Self.голова)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.цвет(светлый: Theme.hex(0xEAFAF1), тёмный: Theme.hex(0x34C997, 0.12)),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                .strokeBorder(Theme.цвет(светлый: Theme.hex(0xCDEBD7), тёмный: Theme.hex(0x34C997, 0.25)), lineWidth: 1)
+        }
+    }
+
+    private func строкаРасчёта(_ слева: String, _ справа: String, краска: Color) -> some View {
+        HStack(spacing: 10) {
+            Text(слева)
+            Spacer(minLength: 8)
+            Text(справа)
+                .fontWeight(.bold)
+        }
+        .foregroundStyle(краска)
+    }
+
+    /// «3 суток», «1 месяц» — мин. срок как у сайта.
+    private var минСрокТекст: String {
+        let н = минимум
+        let ключ: String
+        if месяцы {
+            ключ = н % 10 == 1 && н % 100 != 11 ? "rent_min_m1"
+                : ((2...4).contains(н % 10) && !(12...14).contains(н % 100) ? "rent_min_m2" : "rent_min_m5")
+        } else {
+            ключ = н == 1 ? "rent_min_d1" : (н < 5 ? "rent_min_d2" : "rent_min_d5")
+        }
+        return String(format: тВида(ключ), н)
+    }
+
+    /// mkRcFmt: разряды через пробел.
+    static func сумма(_ число: Double) -> String {
+        let ф = NumberFormatter()
+        ф.numberStyle = .decimal
+        ф.groupingSeparator = " "
+        ф.maximumFractionDigits = 0
+        return ф.string(from: NSNumber(value: число.rounded())) ?? String(Int(число))
+    }
+
+    // MARK: Запрос (mkRentRequest)
+
+    private func отправить() {
+        guard !отправляем else { return }
+        guard let н = начало, let к = конец else {
+            ошибка = тВида("rent_pick_dates")
+            return
+        }
+        if let в = выбрано, в.дней < 1 || в.единиц < минимум {
+            ошибка = в.дней < 1 ? тВида("rent_err_dates")
+                : тВида("rent_min_pfx") + String(минимум) + " " + тВида(месяцы ? "rent_u_month" : "rent_u_day")
+            return
+        }
+        ошибка = nil
+        отправляем = true
+        let текст = сообщение.trimmingCharacters(in: .whitespacesAndNewlines)
+        let номер = товар.id
+        Task { @MainActor in
+            let итог = await АрендаОбъявленияAPI.запросить(объявление: номер, начало: н, конец: к, сообщение: текст)
+            отправляем = false
+            switch итог {
+            case .готово:
+                withAnimation(ДвижениеСайта.смена) { отправлено = true }
+            case .ошибка(let текстОшибки):
+                ошибка = текстОшибки ?? тВида("rent_error")
+            case .нетСессии:
+                if !ОкнаПриложения.shared.показать(.вход) { ВходПоверх.показать() }
+            case .сеть:
+                ошибка = тВида("rent_no_conn")
+            }
+        }
+    }
+}
+
+/// Пунктир над «К оплате» (.mk-rc-total border-top: dashed).
+private struct ЛинияРасчётаАренды: Shape {
+    func path(in rect: CGRect) -> Path {
+        var путь = Path()
+        путь.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        путь.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return путь
+    }
+}
+
+/// Поле даты .mk-rent-form-inp: подпись прописными, рамка 1,5 и значок календаря; под ним — системный выбор даты.
+private struct ПолеДатыАренды: View {
+    let подпись: String
+    @Binding var дата: Date?
+    let с: Date
+
+    private static let рамка = Theme.цвет(светлый: Theme.hex(0xD7E6DD), тёмный: Theme.hex(0xFFFFFF, 0.10))
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(подпись.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.44)
+                .foregroundStyle(Color(uiColor: Theme.hex(0x5F8F72)))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            ZStack {
+                HStack(spacing: 8) {
+                    Text(дата.map { $0.formatted(date: .numeric, time: .omitted) } ?? "—")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(дата == nil ? Theme.текстВторой : Theme.текст)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    Image(systemName: "calendar")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.зелёный2)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(Self.рамка, lineWidth: 1.5)
+                }
+                .allowsHitTesting(false)
+                /* Нажатие ловит системный выбор даты — прозрачный поверх своего поля. */
+                DatePicker(подпись, selection: Binding(get: { max(дата ?? с, с) }, set: { дата = $0 }),
+                           in: с..., displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .opacity(0.02)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// POST rentals.php {action:"request", csrf, me_id, item_id, start_date, end_date, message} — как mkRentRequest.
+enum АрендаОбъявленияAPI {
+    enum Итог {
+        case готово
+        case ошибка(String?)
+        case нетСессии
+        case сеть
+    }
+
+    private static let сессия: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 20
+        c.httpShouldSetCookies = false
+        c.httpCookieStorage = nil
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: c)
+    }()
+
+    @MainActor
+    static func запросить(объявление: String, начало: Date, конец: Date, сообщение: String) async -> Итог {
+        let состояние = await SiteSession.состояние()
+        guard let csrf = состояние.csrf else { return .нетСессии }
+        guard let адрес = URL(string: "rentals.php", relativeTo: Config.apiBase)?.absoluteURL else { return .сеть }
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "en_US_POSIX")
+        ф.calendar = Calendar(identifier: .gregorian)
+        ф.dateFormat = "yyyy-MM-dd"
+        var запрос = URLRequest(url: адрес)
+        запрос.httpMethod = "POST"
+        запрос.httpShouldHandleCookies = false
+        запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (имя, значение) in await SiteSession.куки() {
+            запрос.setValue(значение, forHTTPHeaderField: имя)
+        }
+        let тело: [String: Any] = [
+            "action": "request", "csrf": csrf, "me_id": состояние.пользователь ?? "", "item_id": объявление,
+            "start_date": ф.string(from: начало), "end_date": ф.string(from: конец), "message": сообщение
+        ]
+        запрос.httpBody = try? JSONSerialization.data(withJSONObject: тело)
+        guard let результат = try? await сессия.data(for: запрос),
+              let j = (try? JSONSerialization.jsonObject(with: результат.0)) as? [String: Any] else {
+            return .сеть
+        }
+        if ДоставкаТКAPI.да(j["ok"]) { return .готово }
+        return .ошибка(ДоставкаТКAPI.строка(j["error"]))
+    }
+}

@@ -38,6 +38,11 @@ struct ПанельСвязиСайта: View {
     let открыть: (URL) -> Void
     @State private var ждём: Канал? = nil
     @State private var окно: ОкноСвязи? = nil
+    /// Окно-карточка сайта (вне часов, номер скрыт, номер после сделки) с «Написать в чат» — mkHoursGateModal и
+    /// mkPhoneHiddenModal; простые сообщения остаются алертом.
+    @State private var карточка: ОкноСвязи? = nil
+    /// «Написать в чат» из карточки: она уехала — страница кладёт чат в стек.
+    @State private var чатПослеОкна = false
     /// Номер вошедшего (getMkMe) — своё объявление; проверен ли он (_MK_ME_VERIFIED) — подпись кнопки гаранта услуг.
     @State private var я: String? = nil
     @State private var проверен = false
@@ -68,10 +73,18 @@ struct ПанельСвязиСайта: View {
             пилюля
         }
         .animation(ДвижениеСайта.смена, value: торг.ждущие[товар.id] != nil || торг.итоги[товар.id] != nil)
-        .padding(.horizontal, 16)
+        /* .mk-mstickybar: пилюля в 18 pt от краёв, 12 pt сверху и снизу (плюс «домой»). */
+        .padding(.horizontal, 18)
         .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
         .background(alignment: .top) { ПодложкаПанелиСвязи() }
+        .fullScreenCover(item: $карточка) { о in
+            ОкноСвязиСайта(окно: о) { вЧат in закрытьКарточку(вЧат: вЧат) }
+                .presentationBackground(.clear)
+        }
+        .navigationDestination(isPresented: $чатПослеОкна) {
+            экранЧатаПослеОкна
+        }
         .alert(окно?.заголовок ?? "", isPresented: Binding(get: { окно != nil }, set: { if !$0 { окно = nil } }),
                presenting: окно) { о in
             if о.регистрация, let вход = Config.url("/cabinet.php") {
@@ -173,12 +186,12 @@ struct ПанельСвязиСайта: View {
                   предложить: false)
         case .аренда:
             Button {
-                if let адрес = товар.адрес { открыть(адрес) }
+                /* mkRentJump: не страница сайта — страница объявления доезжает до своего блока аренды. */
+                NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
             } label: {
                 ПодписьПанелиСвязи(значок: "checkmark.shield", заголовок: ListingPageText.т("rent_safe"), подпись: nil)
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            .accessibilityHint(ListingPageText.т("on_site"))
         case .купитьБезопасно:
             Button {
                 нажатьГарант()
@@ -394,6 +407,40 @@ struct ПанельСвязиСайта: View {
         }
     }
 
+    /// Карточка встаёт без выезда снизу — появляется сама, как окно сайта.
+    private func показатьКарточку(_ о: ОкноСвязи) {
+        var без = Transaction()
+        без.disablesAnimations = true
+        withTransaction(без) { карточка = о }
+    }
+
+    /// Карточка закрыта; «Написать в чат» — после её ухода тот же чат, что у «Связаться» (mkChatOpen).
+    private func закрытьКарточку(вЧат: Bool) {
+        var без = Transaction()
+        без.disablesAnimations = true
+        withTransaction(без) { карточка = nil }
+        guard вЧат else { return }
+        guard цельЧата(предложить: false) != nil else {
+            чатНедоступен()
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            чатПослеОкна = true
+        }
+    }
+
+    /// Экран чата для «Написать в чат» — тот же, что открывает цельЧата(предложить: false).
+    @ViewBuilder
+    private var экранЧатаПослеОкна: some View {
+        if Config.нативныйЧат && Config.чатОбъявления {
+            ЭкранЧатаОбъявления(товар: товар, предложить: false, открыть: открыть)
+        } else if let продавец = товар.продавецID {
+            ChatThreadView(модель: ChatThreadModel(собеседник: продавец, объявление: товар.id),
+                           заголовок: товар.продавец ?? "", открыть: открыть)
+        }
+    }
+
     /// Написать некуда (нет продавца или чат выключен) — окно «Связь недоступна» здесь же, а не страница сайта.
     private func чатНедоступен() {
         окно = ОкноСвязи(заголовок: ListingPageText.т("contact_unavail"), текст: "", регистрация: false)
@@ -405,9 +452,8 @@ struct ПанельСвязиСайта: View {
         guard ждём == nil else { return }
         /* mkContactGo: вне часов работы номер не открывается — окно с часами приёма звонков. */
         if !товар.открытоСейчас() {
-            let часы = товар.текстЧасов.map { "\n\n" + String(format: ListingPageText.т("hours_accepts"), $0) } ?? ""
-            окно = ОкноСвязи(заголовок: ListingPageText.т("hours_gate_t"), текст: ListingPageText.т("hours_gate_b") + часы,
-                             регистрация: false)
+            показатьКарточку(ОкноСвязи(заголовок: ListingPageText.т("hours_gate_t"), текст: ListingPageText.т("hours_gate_b"),
+                                       регистрация: false, значок: "clock", часы: товар.текстЧасов))
             return
         }
         ждём = канал
@@ -433,8 +479,9 @@ struct ПанельСвязиСайта: View {
                              текст: текст ?? ListingPageText.т("gate_account_b"), регистрация: true)
         case .скрыт(let причина):
             let сделка = причина == "need_deal"
-            окно = ОкноСвязи(заголовок: ListingPageText.т(сделка ? "gate_deal_t" : "gate_phone_t"),
-                             текст: ListingPageText.т(сделка ? "gate_deal_b" : "gate_phone_b"), регистрация: false)
+            показатьКарточку(ОкноСвязи(заголовок: ListingPageText.т(сделка ? "gate_deal_t" : "gate_phone_t"),
+                                       текст: ListingPageText.т(сделка ? "gate_deal_b" : "gate_phone_b"),
+                                       регистрация: false, значок: "phone.down"))
         case .недоступно:
             окно = ОкноСвязи(заголовок: ListingPageText.т(канал == .звонок ? "num_unavail" : "contact_unavail"),
                              текст: "", регистрация: false)
@@ -459,11 +506,153 @@ struct ПанельСвязиСайта: View {
 }
 
 /// Окно после нажатия на звонок или WhatsApp: нужен вход, номер скрыт, вне часов, недоступно.
-struct ОкноСвязи {
+struct ОкноСвязи: Identifiable {
     let заголовок: String
     let текст: String
     /// Нужен вход — кнопка «Зарегистрироваться» (кабинет сайта).
     let регистрация: Bool
+    /// Значок в зелёном квадрате карточки (ОкноСвязиСайта); у алерта не нужен.
+    var значок: String? = nil
+    /// Окно часов работы («09:00–18:00») — блок «Принимает звонки» карточки вне часов.
+    var часы: String? = nil
+
+    var id: String { заголовок + текст }
+}
+
+/**
+ Карточка сайта поверх затемнения rgba(10,20,15,.55) — mkHoursGateModal и mkPhoneHiddenModal: поверхность со
+ скруглением 20 и линией, квадрат 60 pt с зелёным градиентом и значком 29, заголовок 19 жирным, у часов — плашка
+ «Принимает звонки» с окном 24 pt, текст 14 pt, «Написать в чат» 48 pt зелёным градиентом и «Позже» 42 pt.
+ */
+private struct ОкноСвязиСайта: View {
+    let окно: ОкноСвязи
+    let закрыть: (Bool) -> Void
+    @State private var видно = false
+
+    var body: some View {
+        ZStack {
+            Color(red: 10 / 255, green: 20 / 255, blue: 15 / 255)
+                .opacity(видно ? 0.55 : 0)
+                .ignoresSafeArea()
+                .onTapGesture { уйти(вЧат: false) }
+                .accessibilityHidden(true)
+            ViewThatFits(in: .vertical) {
+                карточка
+                ScrollView { карточка }
+                    .scrollBounceBehavior(.basedOnSize)
+            }
+            .padding(20)
+            .opacity(видно ? 1 : 0)
+            .offset(y: видно ? 0 : 8)
+        }
+        .onAppear { withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.22))) { видно = true } }
+    }
+
+    private func уйти(вЧат: Bool) {
+        withAnimation(ДвижениеСайта.мягко(.easeIn(duration: 0.18))) { видно = false }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            закрыть(вЧат)
+        }
+    }
+
+    private var карточка: some View {
+        VStack(spacing: 0) {
+            Image(systemName: окно.значок ?? "phone")
+                .font(.system(size: 26, weight: .regular))
+                .foregroundStyle(Theme.зелёный2)
+                .frame(width: 60, height: 60)
+                .background(
+                    LinearGradient(colors: [Color(red: 22 / 255, green: 163 / 255, blue: 74 / 255).opacity(0.18),
+                                            Color(red: 22 / 255, green: 163 / 255, blue: 74 / 255).opacity(0.07)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+                .padding(.bottom, 16)
+                .accessibilityHidden(true)
+            Text(окно.заголовок)
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, окно.часы != nil ? 10 : 8)
+                .accessibilityAddTraits(.isHeader)
+            if let часы = окно.часы {
+                плашкаЧасов(часы)
+                    .padding(.bottom, 12)
+            }
+            Text(окно.текст)
+                .font(.system(size: 14))
+                .lineSpacing(5)
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 20)
+            Button { уйти(вЧат: true) } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(ListingPageText.т("write_chat"))
+                        .font(.system(size: 15, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            Button { уйти(вЧат: false) } label: {
+                Text(ListingPageText.т("later"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(maxWidth: .infinity, minHeight: 42)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 10)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
+        .frame(maxWidth: 380)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.35), radius: 24, x: 0, y: 22)
+    }
+
+    /// .mk-hrgate-info: «Принимает звонки» и окно часов крупно зелёным на зелёном 9 %.
+    private func плашкаЧасов(_ часы: String) -> some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный)
+                    .accessibilityHidden(true)
+                Text(ListingPageText.т("hours_accepts_lbl"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+            }
+            Text(часы)
+                .font(.system(size: 24, weight: .heavy))
+                .tracking(0.5)
+                .monospacedDigit()
+                .foregroundStyle(Theme.зелёный)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity)
+        .background(Theme.зелёный.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
 }
 
 /// Левая часть пилюли: значок в светлом квадрате 34 pt (.so-ic) и две строки (.so-tx) на своём градиенте.
@@ -475,7 +664,7 @@ private struct ПодписьПанелиСвязи: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: значок)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.white)
                 .frame(width: 34, height: 34)
                 .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
@@ -487,33 +676,28 @@ private struct ПодписьПанелиСвязи: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(заголовок)
-                    .font(.system(size: 16, weight: .heavy))
-                    .tracking(-0.16)
+                    .font(.system(size: 14, weight: .heavy))
+                    .tracking(-0.14)
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 if let строка = подпись {
                     Text(строка)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.78))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.72))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(
             LinearGradient(colors: [Theme.панельСвязиНачало, Theme.кнопкаСвязиКонец],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
-        .overlay(alignment: .top) {
-            Color.white.opacity(0.22)
-                .frame(height: 1)
-                .accessibilityHidden(true)
-        }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -528,7 +712,8 @@ private struct ПодложкаПанелиСвязи: View {
                 .frame(height: 24)
             Theme.поверхность
         }
-        .padding(.top, -12)
+        /* ::before на 24 pt над панелью: гаснет выше неё, сама панель — сплошная поверхность. */
+        .padding(.top, -24)
         .ignoresSafeArea(edges: .bottom)
         .allowsHitTesting(false)
         .accessibilityHidden(true)

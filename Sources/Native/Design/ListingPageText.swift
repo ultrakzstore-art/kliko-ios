@@ -13,8 +13,9 @@ import Foundation
  */
 enum ListingPageText {
     static func т(_ ключ: String) -> String {
-        let словарь = тексты[язык] ?? тексты["ru"]!
-        return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
+        let код = язык
+        if let своё = тексты[код]?[ключ] ?? текстыДоверия[код]?[ключ] { return своё }
+        return тексты["ru"]?[ключ] ?? текстыДоверия["ru"]?[ключ] ?? ключ
     }
 
     static var язык: String { String((Locale.preferredLanguages.first ?? "ru").prefix(2)) }
@@ -47,6 +48,8 @@ enum ListingPageText {
 
     private static let тексты: [String: [String: String]] = [
         "ru": [
+            "stock_in_avail": "В наличии", "stock_pcs": "%d шт", "stock_low": "осталось мало",
+            "cpu_short": "Проц.", "gpu_short": "Видео", "shop": "Магазин", "hours_accepts_lbl": "Принимает звонки",
             "cond_new": "Новое", "cond_used": "Б/У", "with_mileage": "С пробегом", "no_mileage": "Без пробега",
             "realty_new": "Новостройка", "realty_used": "Вторичный рынок", "rent": "Аренда",
             "price_from": "от", "negotiable": "Договорная", "torg": "Торг", "unit_day": "сут", "unit_month": "М",
@@ -119,6 +122,8 @@ enum ListingPageText {
             "wa_text": "Здравствуйте! Интересует «%@» за %@. Ещё актуально?"
         ],
         "kk": [
+            "stock_in_avail": "Қоймада бар", "stock_pcs": "%d дана", "stock_low": "аз қалды",
+            "cpu_short": "Проц.", "gpu_short": "Бейне", "shop": "Дүкен", "hours_accepts_lbl": "Қоңырау қабылдайды",
             "cond_new": "Жаңа", "cond_used": "Қолданылған", "with_mileage": "Жүрісі бар", "no_mileage": "Жүрісі жоқ",
             "realty_new": "Жаңа үй", "realty_used": "Қайталама нарық", "rent": "Жалға",
             "price_from": "бастап", "negotiable": "Келісімді", "torg": "Сауда", "unit_day": "тәул", "unit_month": "ай",
@@ -191,6 +196,8 @@ enum ListingPageText {
             "wa_text": "Сәлеметсіз бе! «%@» %@ бағасына қызықтырады. Әлі өзекті ме?"
         ],
         "en": [
+            "stock_in_avail": "In stock", "stock_pcs": "%d pcs", "stock_low": "few left",
+            "cpu_short": "CPU", "gpu_short": "GPU", "shop": "Shop", "hours_accepts_lbl": "Takes calls",
             "cond_new": "New", "cond_used": "Used", "with_mileage": "Used", "no_mileage": "Brand new",
             "realty_new": "New build", "realty_used": "Resale", "rent": "For rent",
             "price_from": "from", "negotiable": "Negotiable", "torg": "Negotiable", "unit_day": "day", "unit_month": "mo",
@@ -263,6 +270,8 @@ enum ListingPageText {
             "wa_text": "Hello! I'm interested in “%@” for %@. Is it still available?"
         ],
         "ar": [
+            "stock_in_avail": "متوفر", "stock_pcs": "%d قطعة", "stock_low": "الكمية قليلة",
+            "cpu_short": "المعالج", "gpu_short": "الرسوميات", "shop": "متجر", "hours_accepts_lbl": "يستقبل المكالمات",
             "cond_new": "جديد", "cond_used": "مستعمل", "with_mileage": "مستعملة", "no_mileage": "بدون عداد",
             "realty_new": "بناء جديد", "realty_used": "سوق ثانوي", "rent": "للإيجار",
             "price_from": "من", "negotiable": "قابل للتفاوض", "torg": "تفاوض", "unit_day": "يوم", "unit_month": "شهر",
@@ -333,6 +342,131 @@ enum ListingPageText {
             "write_chat": "اكتب في الدردشة", "later": "لاحقًا",
             "root_electronics": "إلكترونيات", "root_transport": "مركبات", "root_realty": "عقارات", "root_clothing": "ملابس وأحذية", "root_home-garden": "المنزل والحديقة", "root_kids": "مستلزمات الأطفال", "root_sport": "رياضة وترفيه", "root_animals": "حيوانات", "root_jobs": "وظائف", "root_services": "خدمات", "root_hobby": "هوايات وإبداع", "root_food-farm": "أغذية وزراعة", "root_beauty": "الجمال والصحة",
             "wa_text": "مرحبًا! أنا مهتم بـ «%@» بسعر %@. هل ما زال متاحًا؟"
+        ]
+    ]
+
+    /// Лист «Что это даёт» (openInfo сайта): шапка, разделы гарантии и доставки, пояснения знаков доверия (trustd_*
+    /// словаря сайта). Отдельным словарём — чтобы не раздувать основной.
+    private static let текстыДоверия: [String: [String: String]] = [
+        "ru": [
+            "info_title": "Безопасная покупка", "info_sub": "Знаки доверия, гарантия и доставка",
+            "cov_warr_title": "Гарантия продавца — %@", "cov_asis_title": "Продаётся как есть",
+            "cov_w1_l": "Гарантия %@", "cov_w1_d": "Откажет в этот срок — продавец обязан вернуть деньги или заменить. Срок идёт с даты получения.",
+            "cov_w2_l": "Оформляйте через безопасную сделку", "cov_w2_d": "Гарант удержит оплату, пока вы не подтвердите, что товар исправен — это ваша страховка.",
+            "cov_w3_l": "Сохраните переписку и чек", "cov_w3_d": "Условия и срок гарантии подтверждаются вашим диалогом в чате и чеком.",
+            "cov_w3_l2": "Гарантийный талон в сделке", "cov_w3_d2": "В безопасной сделке продавец может подписать гарантийный талон через eGov — талон хранится в сделке вместе с перепиской.",
+            "cov_a1_l": "Без гарантии после покупки", "cov_a1_d": "Обычно так у б/у: продавец не отвечает за поломки после сделки — поэтому важно проверить заранее.",
+            "cov_a2_l": "Проверяйте при получении", "cov_a2_d": "Осмотрите и протестируйте до оплаты. Безопасная сделка держит деньги, пока вы не подтвердите приёмку.",
+            "cov_a3_l": "Спросите продавца заранее", "cov_a3_d": "Уточните в чате комплект, дефекты и причину продажи — до встречи.",
+            "dlv_title": "Доставка", "dlv_free_d": "Продавец берёт доставку на себя.",
+            "dlv_days_d": "Ориентировочный срок доставки от продавца.", "dlv_carrier_l": "Транспортная компания",
+            "dlv_safe_l": "Курьер и безопасная сделка", "dlv_safe_d": "Курьера можно заказать из чата; деньги держит гарант, пока вы не подтвердите получение.",
+            "t_receipt_d": "Есть чек — подтверждены магазин и дата покупки, проще гарантия и возврат.", "t_working_d": "Проверено при вас или показано в работе — не «кот в мешке».",
+            "t_complete_d": "Полный комплект: коробка, зарядка, документы, аксессуары.", "t_vin_clean_d": "VIN и история чистые — не в розыске, без арестов и ограничений.",
+            "t_not_crashed_d": "Не был в серьёзных ДТП — кузов и геометрия целы.", "t_service_book_d": "Есть сервисная книжка — обслуживание по регламенту, видна история.",
+            "t_one_owner_d": "Один владелец — понятная история, меньше сюрпризов.", "t_docs_ok_d": "Документы в порядке — право собственности чистое, сделку можно оформить.",
+            "t_no_liens_d": "Без обременений — не в залоге, не под арестом, не в споре.", "t_lawyer_checked_d": "Юрист проверил документы — риски исключены заранее.",
+            "t_mortgage_ok_d": "Подходит под ипотеку — банк готов кредитовать этот объект.", "t_vet_passport_d": "Ветпаспорт и прививки — питомец здоров и привит по возрасту.",
+            "t_sterilized_d": "Стерилизован/кастрирован — меньше рисков для здоровья и хлопот.", "t_vet_checked_d": "Осмотрен ветеринаром — состояние подтверждено специалистом.",
+            "t_pedigree_d": "Клеймо/чип/родословная — происхождение подтверждено, питомца можно опознать.", "t_trained_d": "Приучен (к лотку/командам) — готов к дому, меньше хлопот.",
+            "t_original_d": "Оригинал, не подделка — подлинность подтверждена.", "t_tags_d": "С бирками и чеком — новое, не ношеное, проверяется на месте.",
+            "t_measured_d": "Точные замеры — подойдёт по размеру, без возвратов.", "t_no_defects_d": "Без дефектов — нет пятен, затяжек и дырок.",
+            "t_safety_cert_d": "Сертификат безопасности — соответствует нормам для детей.", "t_clean_d": "Чистое и продезинфицировано — готово к использованию.",
+            "t_not_recalled_d": "Модель не отзывалась производителем — без известных дефектов.", "t_guarantor_d": "Работа через Гаранта — деньги придут исполнителю только после приёмки.",
+            "t_licensed_d": "Опыт и лицензия — работу выполняет квалифицированный специалист.", "t_portfolio_d": "Есть портфолио — видно качество прошлых работ.",
+            "t_deposit_d": "Залог/депозит — фиксирует ответственность и возвращается при сдаче.", "t_contract_d": "Договор аренды — условия зафиксированы письменно, защищает обе стороны.",
+            "t_condition_act_d": "Акт состояния при передаче — фиксирует, в каком виде взяли и вернули.", "t_insured_d": "Страховка — покрывает риски повреждения на время аренды.",
+            "t_cleaned_d": "Чистка между арендами — вы получаете чистую вещь."
+        ],
+        "kk": [
+            "info_title": "Қауіпсіз сатып алу", "info_sub": "Сенім белгілері, кепілдік және жеткізу",
+            "cov_warr_title": "Сатушы кепілдігі — %@", "cov_asis_title": "Қалай бар, солай сатылады",
+            "cov_w1_l": "Кепілдік %@", "cov_w1_d": "Осы мерзімде істен шықса — сатушы ақшаны қайтаруға немесе ауыстыруға міндетті. Мерзім алған күннен басталады.",
+            "cov_w2_l": "Қауіпсіз мәміле арқылы рәсімдеңіз", "cov_w2_d": "Тауардың дұрыс екенін растағанша кепіл төлемді ұстап тұрады — бұл сіздің сақтандыруыңыз.",
+            "cov_w3_l": "Хат алмасу мен чекті сақтаңыз", "cov_w3_d": "Кепілдік шарттары мен мерзімі чаттағы диалогыңызбен және чекпен расталады.",
+            "cov_w3_l2": "Мәміледегі кепілдік талоны", "cov_w3_d2": "Қауіпсіз мәміледе сатушы кепілдік талонына eGov арқылы қол қоя алады — талон мәміледе хат алмасумен бірге сақталады.",
+            "cov_a1_l": "Сатып алғаннан кейін кепілдік жоқ", "cov_a1_d": "Қолданылған тауарда әдетте солай: мәміледен кейінгі ақауға сатушы жауап бермейді — сондықтан алдын ала тексеріңіз.",
+            "cov_a2_l": "Алған кезде тексеріңіз", "cov_a2_d": "Төлемге дейін қарап, сынап көріңіз. Қауіпсіз мәміле қабылдағаныңызды растағанша ақшаны ұстап тұрады.",
+            "cov_a3_l": "Сатушыдан алдын ала сұраңыз", "cov_a3_d": "Жиынтықты, ақауларды және сату себебін кездесуге дейін чатта нақтылаңыз.",
+            "dlv_title": "Жеткізу", "dlv_free_d": "Жеткізуді сатушы өз мойнына алады.",
+            "dlv_days_d": "Сатушының болжамды жеткізу мерзімі.", "dlv_carrier_l": "Көлік компаниясы",
+            "dlv_safe_l": "Курьер және қауіпсіз мәміле", "dlv_safe_d": "Курьерді чаттан шақыруға болады; алғаныңызды растағанша ақшаны кепіл ұстап тұрады.",
+            "t_receipt_d": "Чегі бар — дүкен мен сатып алу күні расталған, кепілдік пен қайтару оңай.", "t_working_d": "Көз алдыңызда тексерілген немесе жұмыста көрсетілген — «қаптағы мысық» емес.",
+            "t_complete_d": "Толық жиынтық: қорап, зарядтағыш, құжаттар, керек-жарақ.", "t_vin_clean_d": "VIN мен тарихы таза — іздеуде емес, тыйым мен шектеу жоқ.",
+            "t_not_crashed_d": "Ауыр жол апатында болмаған — шанағы мен геометриясы бүтін.", "t_service_book_d": "Сервистік кітапшасы бар — регламент бойынша қызмет көрсетілген, тарихы көрінеді.",
+            "t_one_owner_d": "Бір иесі — тарихы түсінікті, тосын жағдай аз.", "t_docs_ok_d": "Құжаттары ретті — меншік құқығы таза, мәмілені рәсімдеуге болады.",
+            "t_no_liens_d": "Ауыртпалықсыз — кепілде емес, тыйым салынбаған, дау жоқ.", "t_lawyer_checked_d": "Құжаттарды заңгер тексерген — тәуекелдер алдын ала жойылған.",
+            "t_mortgage_ok_d": "Ипотекаға жарамды — банк бұл нысанға несие беруге дайын.", "t_vet_passport_d": "Ветпаспорт пен екпелер — жануар сау, жасына қарай екпе алған.",
+            "t_sterilized_d": "Зарарсыздандырылған/піштірілген — денсаулыққа қатер мен әуре аз.", "t_vet_checked_d": "Ветеринар қараған — жағдайын маман растаған.",
+            "t_pedigree_d": "Таңба/чип/тектік куәлік — шығу тегі расталған, жануарды тануға болады.", "t_trained_d": "Үйретілген (науаға/командаларға) — үйге дайын, әуре аз.",
+            "t_original_d": "Түпнұсқа, жалған емес — шынайылығы расталған.", "t_tags_d": "Биркасы мен чегі бар — жаңа, киілмеген, орнында тексеріледі.",
+            "t_measured_d": "Нақты өлшемдер — өлшеміңізге келеді, қайтарусыз.", "t_no_defects_d": "Ақаусыз — дақ, тартылған жіп пен тесік жоқ.",
+            "t_safety_cert_d": "Қауіпсіздік сертификаты — балаларға арналған нормаларға сай.", "t_clean_d": "Таза және залалсыздандырылған — қолдануға дайын.",
+            "t_not_recalled_d": "Модельді өндіруші кері шақырмаған — белгілі ақаулары жоқ.", "t_guarantor_d": "Кепіл арқылы жұмыс — ақша орындаушыға тек қабылдаудан кейін түседі.",
+            "t_licensed_d": "Тәжірибе мен лицензия — жұмысты білікті маман орындайды.", "t_portfolio_d": "Портфолиосы бар — бұрынғы жұмыстардың сапасы көрінеді.",
+            "t_deposit_d": "Кепілақы/депозит — жауапкершілікті бекітеді және тапсырғанда қайтарылады.", "t_contract_d": "Жалға алу шарты — шарттар жазбаша бекітілген, екі тарапты да қорғайды.",
+            "t_condition_act_d": "Тапсыру кезіндегі жағдай актісі — қандай күйде алып, қайтарғаныңызды бекітеді.", "t_insured_d": "Сақтандыру — жалға алу кезінде бүліну тәуекелін жабады.",
+            "t_cleaned_d": "Жалға берулер арасында тазалау — сіз таза зат аласыз."
+        ],
+        "en": [
+            "info_title": "Safe purchase", "info_sub": "Trust signs, warranty and delivery",
+            "cov_warr_title": "Seller warranty — %@", "cov_asis_title": "Sold as is",
+            "cov_w1_l": "Warranty %@", "cov_w1_d": "If it fails within this period, the seller must refund or replace it. The period starts on the day you receive it.",
+            "cov_w2_l": "Use a safe deal", "cov_w2_d": "The guarantor holds the payment until you confirm the item works — that's your insurance.",
+            "cov_w3_l": "Keep the chat and the receipt", "cov_w3_d": "The warranty terms are confirmed by your chat and the receipt.",
+            "cov_w3_l2": "Warranty card in the deal", "cov_w3_d2": "In a safe deal the seller can sign a warranty card via eGov — it is stored in the deal together with the chat.",
+            "cov_a1_l": "No warranty after purchase", "cov_a1_d": "Usual for used items: the seller isn't responsible for breakdowns after the deal — so check it in advance.",
+            "cov_a2_l": "Check on receipt", "cov_a2_d": "Inspect and test before paying. A safe deal holds the money until you confirm receipt.",
+            "cov_a3_l": "Ask the seller in advance", "cov_a3_d": "Ask in the chat about the kit, defects and the reason for selling — before you meet.",
+            "dlv_title": "Delivery", "dlv_free_d": "The seller covers delivery.",
+            "dlv_days_d": "Approximate delivery time from the seller.", "dlv_carrier_l": "Transport company",
+            "dlv_safe_l": "Courier and safe deal", "dlv_safe_d": "You can order a courier from the chat; the guarantor holds the money until you confirm receipt.",
+            "t_receipt_d": "There's a receipt — the store and purchase date are confirmed, warranty and returns are easier.", "t_working_d": "Checked in front of you or shown working — no pig in a poke.",
+            "t_complete_d": "Full set: box, charger, documents, accessories.", "t_vin_clean_d": "Clean VIN and history — not wanted, no arrests or restrictions.",
+            "t_not_crashed_d": "No serious accidents — body and geometry are intact.", "t_service_book_d": "Service book — maintained on schedule, the history is visible.",
+            "t_one_owner_d": "One owner — a clear history, fewer surprises.", "t_docs_ok_d": "Documents in order — clean ownership, the deal can be completed.",
+            "t_no_liens_d": "No encumbrances — not pledged, not under arrest, not in dispute.", "t_lawyer_checked_d": "A lawyer checked the documents — risks ruled out in advance.",
+            "t_mortgage_ok_d": "Mortgage-eligible — a bank is ready to lend on this property.", "t_vet_passport_d": "Vet passport and vaccinations — the pet is healthy and vaccinated for its age.",
+            "t_sterilized_d": "Spayed/neutered — fewer health risks and less hassle.", "t_vet_checked_d": "Examined by a vet — the condition is confirmed by a specialist.",
+            "t_pedigree_d": "Brand/chip/pedigree — origin confirmed, the pet can be identified.", "t_trained_d": "Trained (litter/commands) — ready for home, less hassle.",
+            "t_original_d": "Original, not a fake — authenticity confirmed.", "t_tags_d": "With tags and receipt — new, unworn, checked on the spot.",
+            "t_measured_d": "Exact measurements — it will fit, no returns.", "t_no_defects_d": "No defects — no stains, snags or holes.",
+            "t_safety_cert_d": "Safety certificate — meets the standards for children.", "t_clean_d": "Clean and disinfected — ready to use.",
+            "t_not_recalled_d": "The model wasn't recalled by the manufacturer — no known defects.", "t_guarantor_d": "Work through the Guarantor — the money reaches the contractor only after acceptance.",
+            "t_licensed_d": "Experience and license — the work is done by a qualified specialist.", "t_portfolio_d": "Has a portfolio — the quality of past work is visible.",
+            "t_deposit_d": "Deposit — secures responsibility and is returned on hand-back.", "t_contract_d": "Rental agreement — the terms are in writing and protect both sides.",
+            "t_condition_act_d": "Condition report at hand-over — records the state it was taken and returned in.", "t_insured_d": "Insurance — covers damage risks during the rental.",
+            "t_cleaned_d": "Cleaning between rentals — you get a clean item."
+        ],
+        "ar": [
+            "info_title": "شراء آمن", "info_sub": "علامات الثقة والضمان والتوصيل",
+            "cov_warr_title": "ضمان البائع — %@", "cov_asis_title": "يُباع كما هو",
+            "cov_w1_l": "ضمان %@", "cov_w1_d": "إذا تعطّل خلال هذه المدة فعلى البائع إعادة المال أو الاستبدال. تبدأ المدة من يوم الاستلام.",
+            "cov_w2_l": "أتمّ الشراء عبر صفقة آمنة", "cov_w2_d": "يحتفظ الضامن بالدفعة حتى تؤكد أن المنتج سليم — هذا تأمينك.",
+            "cov_w3_l": "احتفظ بالمحادثة والإيصال", "cov_w3_d": "شروط الضمان ومدته تثبتها محادثتك في الدردشة والإيصال.",
+            "cov_w3_l2": "بطاقة الضمان في الصفقة", "cov_w3_d2": "في الصفقة الآمنة يمكن للبائع توقيع بطاقة الضمان عبر eGov — وتُحفظ في الصفقة مع المحادثة.",
+            "cov_a1_l": "بلا ضمان بعد الشراء", "cov_a1_d": "هذا معتاد في المستعمل: لا يتحمل البائع الأعطال بعد الصفقة — لذا افحصه مسبقًا.",
+            "cov_a2_l": "افحص عند الاستلام", "cov_a2_d": "عاين وجرّب قبل الدفع. تحتفظ الصفقة الآمنة بالمال حتى تؤكد الاستلام.",
+            "cov_a3_l": "اسأل البائع مسبقًا", "cov_a3_d": "استوضح في الدردشة عن الملحقات والعيوب وسبب البيع — قبل اللقاء.",
+            "dlv_title": "التوصيل", "dlv_free_d": "يتحمل البائع تكلفة التوصيل.",
+            "dlv_days_d": "مدة التوصيل التقريبية من البائع.", "dlv_carrier_l": "شركة النقل",
+            "dlv_safe_l": "المندوب والصفقة الآمنة", "dlv_safe_d": "يمكن طلب مندوب من الدردشة، ويحتفظ الضامن بالمال حتى تؤكد الاستلام.",
+            "t_receipt_d": "يوجد إيصال — المتجر وتاريخ الشراء مؤكدان، والضمان والإرجاع أسهل.", "t_working_d": "فُحص أمامك أو عُرض وهو يعمل — بلا مفاجآت.",
+            "t_complete_d": "طقم كامل: العلبة والشاحن والمستندات والملحقات.", "t_vin_clean_d": "رقم VIN والسجل نظيفان — غير مطلوب، بلا حجز أو قيود.",
+            "t_not_crashed_d": "لم يتعرض لحوادث خطيرة — الهيكل والأبعاد سليمة.", "t_service_book_d": "يوجد دفتر صيانة — صيانة حسب الجدول والسجل واضح.",
+            "t_one_owner_d": "مالك واحد — سجل واضح ومفاجآت أقل.", "t_docs_ok_d": "المستندات سليمة — الملكية نظيفة ويمكن إتمام الصفقة.",
+            "t_no_liens_d": "بلا أعباء — غير مرهون ولا محجوز ولا عليه نزاع.", "t_lawyer_checked_d": "راجع محامٍ المستندات — استُبعدت المخاطر مسبقًا.",
+            "t_mortgage_ok_d": "مناسب للرهن العقاري — البنك مستعد لتمويل هذا العقار.", "t_vet_passport_d": "جواز بيطري وتطعيمات — الحيوان سليم ومطعّم حسب عمره.",
+            "t_sterilized_d": "معقّم/مخصي — مخاطر صحية ومتاعب أقل.", "t_vet_checked_d": "فحصه طبيب بيطري — الحالة مؤكدة من مختص.",
+            "t_pedigree_d": "وسم/شريحة/نسب — الأصل مؤكد ويمكن التعرف على الحيوان.", "t_trained_d": "مدرّب (على الصندوق/الأوامر) — جاهز للمنزل ومتاعب أقل.",
+            "t_original_d": "أصلي وليس مقلدًا — الأصالة مؤكدة.", "t_tags_d": "بالبطاقات والإيصال — جديد غير مستعمل ويُفحص في المكان.",
+            "t_measured_d": "مقاسات دقيقة — سيناسبك دون إرجاع.", "t_no_defects_d": "بلا عيوب — لا بقع ولا خيوط مشدودة ولا ثقوب.",
+            "t_safety_cert_d": "شهادة سلامة — مطابق لمعايير الأطفال.", "t_clean_d": "نظيف ومعقّم — جاهز للاستخدام.",
+            "t_not_recalled_d": "لم يسحب المصنّع هذا الطراز — لا عيوب معروفة.", "t_guarantor_d": "العمل عبر الضامن — يصل المال إلى المنفذ بعد القبول فقط.",
+            "t_licensed_d": "خبرة وترخيص — ينفذ العمل مختص مؤهل.", "t_portfolio_d": "يوجد معرض أعمال — جودة الأعمال السابقة واضحة.",
+            "t_deposit_d": "تأمين/وديعة — يثبت المسؤولية ويُعاد عند التسليم.", "t_contract_d": "عقد إيجار — الشروط مكتوبة وتحمي الطرفين.",
+            "t_condition_act_d": "محضر الحالة عند التسليم — يوثّق حالة الشيء عند الاستلام والإرجاع.", "t_insured_d": "تأمين — يغطي مخاطر التلف خلال مدة الإيجار.",
+            "t_cleaned_d": "تنظيف بين الإيجارات — تحصل على شيء نظيف."
         ]
     ]
 }

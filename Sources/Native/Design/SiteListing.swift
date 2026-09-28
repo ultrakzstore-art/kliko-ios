@@ -66,28 +66,29 @@ struct СтраницаОбъявленияСайта: View {
         GeometryReader { рамка in
             let верх = рамка.safeAreaInsets.top
             ZStack(alignment: .top) {
-                ScrollView {
-                    содержимое(ширина: рамка.size.width, верх: верх)
+                ScrollViewReader { прокрутка in
+                    ScrollView {
+                        содержимое(ширина: рамка.size.width, верх: верх)
+                    }
+                    .coordinateSpace(NamedCoordinateSpace.named(ПрокруткаСтраницыОбъявления.имя))
+                    /* «Арендовать безопасно» панели связи — к блоку аренды, как mkRentJump сайта. */
+                    .onReceive(NotificationCenter.default.publisher(for: БлокАрендыСайта.кАренде)) { весть in
+                        guard (весть.object as? String) == товар.id else { return }
+                        withAnimation(ДвижениеСайта.смена) { прокрутка.scrollTo(БлокАрендыСайта.якорь, anchor: .center) }
+                    }
                 }
-                .coordinateSpace(NamedCoordinateSpace.named(ПрокруткаСтраницыОбъявления.имя))
-                if прокручено {
-                    Theme.поверхность
-                        .frame(height: верх)
-                        .transition(.opacity)
-                        .accessibilityHidden(true)
-                }
-                кнопки
-                    .padding(.top, верх + 20)
-                    .padding(.horizontal, 12)
+                /* Под часами — всегда поверхность, фото начинается ниже (.mk-mscrim сайта: padding-top по вырезу). */
+                Theme.поверхность
+                    .frame(height: верх)
+                    .accessibilityHidden(true)
             }
             .ignoresSafeArea(edges: .top)
-            .animation(ДвижениеСайта.выбор, value: прокручено)
         }
         .background(Theme.поверхность.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .background(СмахнутьНазад().frame(width: 0, height: 0))
         .sheet(isPresented: $листДоверия) {
-            ЛистДоверия(пункты: товар.пунктыДоверия, ключСовета: товар.ключСовета)
+            ЛистДоверия(товар: товар)
         }
         .task(id: товар.категория) { await загрузитьНазвания() }
         .task(id: товар.продавецID) { await узнатьМагазин() }
@@ -100,8 +101,15 @@ struct СтраницаОбъявленияСайта: View {
 
     private func содержимое(ширина: CGFloat, верх: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ГалереяСайта(адреса: товар.фотоАдреса, страница: $страница, верх: верх, ширина: ширина,
-                         метка: товар.меткаСостояния, аренда: товар.forRent, открыть: открытьФото)
+            ГалереяСайта(адреса: товар.фотоАдреса, страница: $страница, верх: 0, ширина: ширина,
+                         метка: товар.меткаСостояния, аренда: товар.forRent, пауза: прокручено,
+                         вИзбранное: вИзбранноеДвойным, открыть: открытьФото)
+                /* Кнопки — часть галереи и уезжают с ней, как .mk-mhead внутри прокрутки .mk-modal. */
+                .overlay(alignment: .top) {
+                    кнопки
+                        .padding(.top, 20)
+                        .padding(.horizontal, 12)
+                }
                 .background {
                     /* Нижний край галереи на экране: ушёл выше часов — фото больше не под ними. */
                     GeometryReader { г in
@@ -112,22 +120,33 @@ struct СтраницаОбъявленияСайта: View {
                             /* Где фото в прокрутке — по нему страницу смахивают вниз только от самого верха
                                (ЗакрытьСмахиваниемВниз в SiteListingPull.swift). */
                             .preference(key: ВерхСтраницыОбъявления.self,
-                                        value: г.frame(in: NamedCoordinateSpace.named(ПрокруткаСтраницыОбъявления.имя)).minY)
+                                        value: г.frame(in: NamedCoordinateSpace.named(ПрокруткаСтраницыОбъявления.имя)).minY
+                                            - верх)
                     }
                 }
-            ВерхСтраницы(товар: товар, магазин: магазин, названия: названия, листДоверия: $листДоверия)
+            ВерхСтраницы(товар: товар, магазин: магазин, названия: названия, ширина: ширина, листДоверия: $листДоверия)
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
-            НизСтраницы(товар: товар, догружаем: догружаем, неДогрузилась: неДогрузилась,
+                .padding(.top, 14)
+            НизСтраницы(товар: товар, магазин: магазин, догружаем: догружаем, неДогрузилась: неДогрузилась,
                         сохранённаяКопия: сохранённаяКопия, скрытыеСоветы: $скрытыеСоветы, повторить: повторить,
                         открыть: открыть)
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
+                .padding(.top, 14)
             if Config.похожие {
                 ПолосаПохожих(состояние: похожие,
                               заголовок: ListingPageText.т(товар.услуга ? "similar_svc" : "similar"))
                     .padding(.top, 8)
             }
+        }
+        .padding(.top, верх)
+    }
+
+    /// Двойное касание фото — в избранное, как у сайта: уже сохранённое не убирается.
+    private var вИзбранноеДвойным: (@MainActor () -> Void)? {
+        guard Config.избранное else { return nil }
+        let этот = товар
+        return { @MainActor in
+            if !FavoritesStore.shared.есть(этот.id) { FavoritesStore.shared.переключить(этот) }
         }
     }
 
@@ -135,7 +154,7 @@ struct СтраницаОбъявленияСайта: View {
 
     /// Сердце и «Поделиться» слева, «×» справа — .mk-mhead сайта.
     private var кнопки: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             if Config.избранное {
                 КнопкаИзбранного(товар: товар, место: .фото)
             }
@@ -150,17 +169,24 @@ struct СтраницаОбъявленияСайта: View {
     @ViewBuilder
     private var кнопкаПоделиться: some View {
         if let картинкой = поделитьсяКартинкой {
-            КнопкаНадФото(значок: "square.and.arrow.up", подпись: FeedText.т("share"), действие: картинкой)
+            Button(action: картинкой) { значокПоделиться }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+                .accessibilityLabel(FeedText.т("share"))
                 .accessibilityHint(ShareCardText.т("hint"))
         } else if товар.адрес != nil {
-            Button { ЛистПоделитьсяСайта.показать(товар) } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .фонКнопкиНадФото()
-            }
-            .accessibilityLabel(FeedText.т("share"))
+            Button { ЛистПоделитьсяСайта.показать(товар) } label: { значокПоделиться }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+                .accessibilityLabel(FeedText.т("share"))
         }
+    }
+
+    /// Три узла со связями — значок .mk-mbtn сайта, а не системный «квадрат со стрелкой».
+    private var значокПоделиться: some View {
+        ЗнакПоделитьсяСайта()
+            /* stroke-width 2 в поле 24, ужатом до 16 pt, — 4/3 pt. */
+            .stroke(Color.white, style: StrokeStyle(lineWidth: 4 / 3, lineCap: .round, lineJoin: .round))
+            .frame(width: 16, height: 16)
+            .фонКнопкиНадФото()
     }
 
     // MARK: - Сведения со страницы сайта
@@ -176,13 +202,14 @@ struct СтраницаОбъявленияСайта: View {
     }
 
     private func узнатьМагазин() async {
-        guard товар.услуга, let продавец = товар.продавецID else { return }
+        guard let продавец = товар.продавецID else { return }
         магазин = await SiteSession.магазины().contains(продавец)
     }
 
     /// Сказать панели и часам, что страница на экране и лежит ли фото под часами.
     private func отметиться() {
-        let запись = КарточкаНаЭкране(стек: стек, фотоПодЧасами: !прокручено)
+        /* Под часами всегда поверхность — часы по теме. */
+        let запись = КарточкаНаЭкране(стек: стек, фотоПодЧасами: false)
         if вид.карточки[метка] != запись { вид.карточки[метка] = запись }
     }
 }
@@ -193,15 +220,20 @@ private struct ВерхСтраницы: View {
     let товар: Listing
     let магазин: Bool
     let названия: [String: String]
+    /// Ширина экрана — размер цены (7vw сайта).
+    let ширина: CGFloat
     @Binding var листДоверия: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ЗаголовокСайта(текст: товар.title)
+            ЗаголовокСайта(текст: товар.title, метка: меткаПоколения)
             if товар.ценаВидна {
-                ЦенаСайта(товар: товар)
+                ЦенаСайта(товар: товар, ширина: ширина)
             }
-            if let часы = товар.текстЧасов {
+            /* mkStockLine: наличие у новых товаров; вместе с часами на телефоне сайт прячет часы (.mk-duo). */
+            if let штук = наличие {
+                БлокНаличияСайта(штук: штук)
+            } else if let часы = товар.текстЧасов {
                 БлокЧасов(часы: часы, подпись: товар.услуга ? ListingPageText.т("hours_work") : nil,
                           состояние: состояниеЧасов)
             }
@@ -218,6 +250,20 @@ private struct ВерхСтраницы: View {
         }
     }
 
+    /// gen, которого нет в названии.
+    private var меткаПоколения: String? {
+        guard let поколение = товар.поляВида.поколение,
+              !товар.title.lowercased().contains(поколение.lowercased()) else { return nil }
+        return поколение
+    }
+
+    /// Сколько штук в наличии — только у новых товаров, не у услуг, работы, жилья и аренды.
+    private var наличие: Int? {
+        guard let штук = товар.поляВида.наличие, товар.состояние == "new", !товар.forRent,
+              !["services", "jobs", "realty"].contains(товар.корень) else { return nil }
+        return штук
+    }
+
     /// mkHoursState: круглосуточно или открыто — зелёная; закрыто у магазина услуг — красная; иначе — оранжевая.
     private var состояниеЧасов: БлокЧасов.Состояние {
         if товар.часыРежим == "247" || товар.открытоСейчас() { return .открыто }
@@ -229,6 +275,7 @@ private struct ВерхСтраницы: View {
 
 private struct НизСтраницы: View {
     let товар: Listing
+    let магазин: Bool
     let догружаем: Bool
     let неДогрузилась: Bool
     let сохранённаяКопия: Date?
@@ -237,7 +284,8 @@ private struct НизСтраницы: View {
     let открыть: ((URL) -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        /* --rh сайта: колонки .mk-mwrap через 14 pt. */
+        VStack(alignment: .leading, spacing: 14) {
             /* Этап 13: без связи — сохранённая копия с телефона; сказать, от когда она. */
             if let когда = сохранённаяКопия {
                 ЗаметкаКопииСайта(когда: когда, догружаем: догружаем, повторить: повторить)
@@ -253,22 +301,25 @@ private struct НизСтраницы: View {
                     withAnimation(ДвижениеСайта.вставкаСписка) { _ = скрытыеСоветы.insert(ключ) }
                 }
             }
-            /* Авто и жильё (SiteListingKinds.swift): проверка, схема, свои характеристики, оплата и место — как у сайта. */
-            if let видСтраницы = товар.видСтраницы {
+            /* Авто и жильё (SiteListingKinds.swift): схема помещения (и проверка, когда сайт её включит) — до описания. */
+            if let видСтраницы = товар.видСтраницы, БлокиВидаДоОписания.есть(товар, вид: видСтраницы) {
                 БлокиВидаДоОписания(товар: товар, вид: видСтраницы)
-                let пункты = товар.характеристикиВида
-                if !пункты.isEmpty || товар.описание != nil {
-                    БлокОписанияВида(характеристики: пункты, описание: товар.описаниеДляЭкрана,
-                                     добавлено: товар.когдаДобавлено, просмотры: товар.просмотры)
-                }
-                if let оплата = товар.поляВида.оплата, (товар.price ?? 0) > 0, оплата.рассрочка || оплата.кредит {
-                    СпособыОплатыСайта(товар: товар, оплата: оплата)
-                }
-            } else if !товар.характеристики.isEmpty || товар.описание != nil {
-                БлокОписанияСайта(характеристики: товар.характеристики, описание: товар.описаниеДляЭкрана,
-                                  добавлено: товар.когдаДобавлено, просмотры: товар.просмотры)
+            }
+            /* Характеристики у всех разделов — по правилам mkSpecs(t, true): подписи, пустые прочь, значки. */
+            let пункты = товар.характеристикиСтраницы
+            if !пункты.isEmpty || товар.описание != nil {
+                БлокОписанияВида(характеристики: пункты, описание: товар.описаниеДляЭкрана,
+                                 добавлено: товар.когдаДобавлено, просмотры: товар.просмотры)
+            }
+            /* mkPayBlock — у любого раздела с ценой и рассрочкой или кредитом. */
+            if let оплата = товар.поляВида.оплата, (товар.price ?? 0) > 0, оплата.рассрочка || оплата.кредит {
+                СпособыОплатыСайта(товар: товар, оплата: оплата)
             }
             if товар.продавец != nil {
+                /* .mk-mdivide перед карточкой продавца. */
+                Theme.линия
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
                 /* Этап 37: карточка открывает отзывы о продавце, рядом с подпиской — «⋮» с «Заблокировать» и
                    «Пожаловаться», как .mk-msc и .mk-sfollow сайта (нет seller_id — ни того, ни другого). */
                 if Config.продавецОтзывы || Config.жалобы, let продавецID = товар.продавецID {
@@ -277,18 +328,31 @@ private struct НизСтраницы: View {
                     /* Этап 36: под карточкой — «Подписаться на продавца», как .mk-sfollow сайта. */
                     ПродавецСПодпиской(товар: товар, продавецID: продавецID)
                 } else {
-                    КарточкаПродавцаСайта(товар: товар)
+                    КарточкаПродавцаСайта(товар: товар, магазин: магазин)
                 }
+            }
+            /* mkRentBlock — в колонке продавца, после карточки (margin-top 20). */
+            if товар.forRent {
+                БлокАрендыСайта(товар: товар)
+                    .padding(.top, 6)
+                    .id(БлокАрендыСайта.якорь)
             }
             /* «Расположение» — у всех разделов, как rt = mkLocationBlock(r) в колонке .mk-mcol-e сайта; нет ни места,
                ни точки — нет и блока (SiteListingLocation.swift). */
-            if РасположениеСайта.есть(товар) {
-                РасположениеСайта(товар: товар, открыть: открыть)
-            }
-            if догружаем {
-                SiteSpinner()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+            /* Group прозрачен для VStack: промежутки те же, а блоков в построителе меньше. */
+            Group {
+                if РасположениеСайта.есть(товар) {
+                    РасположениеСайта(товар: товар, открыть: открыть)
+                }
+                /* «Нужна помощь?» — услуги рядом по разделу, у всего, кроме самих услуг (mkServiceBlock). */
+                if !товар.услуга {
+                    БлокУслугСайта(товар: товар)
+                }
+                if догружаем {
+                    SiteSpinner()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
             }
         }
     }
@@ -371,16 +435,42 @@ struct КарточкаНаЭкране: Equatable {
 }
 
 extension SiteSession {
-    /// Магазины (MK_SHOPS страницы сайта) — продавцы с витриной: у их услуг вне часов работы плашка «закрыто».
-    /// Страница не загружена или списка нет — пусто.
+    /// Список магазинов за время работы приложения: страница сайта его не меняет от объявления к объявлению.
+    @MainActor private static var кэшМагазинов: Set<String>?
+
+    /// Магазины (MK_SHOPS страницы сайта) — продавцы с витриной: у их услуг вне часов работы плашка «закрыто», в
+    /// карточке продавца — «Магазин». Список читается из разметки страницы витрины обычным запросом, без WebView;
+    /// нет сети или списка — пусто (в следующий раз попробуем снова).
     @MainActor
     static func магазины() async -> Set<String> {
-        guard let web = WebBridge.shared.webView, WebBridge.shared.isLoaded else { return [] }
-        let js = "(function(){try{return JSON.stringify((typeof MK_SHOPS!=='undefined'&&MK_SHOPS&&MK_SHOPS.forEach)"
-            + "?Array.from(MK_SHOPS):[]);}catch(e){return '[]';}})()"
-        guard let строка = try? await web.evaluateJavaScript(js) as? String,
-              let данные = строка.data(using: .utf8),
-              let список = try? JSONSerialization.jsonObject(with: данные) as? [String] else { return [] }
-        return Set(список)
+        if let готовый = кэшМагазинов { return готовый }
+        var запрос = URLRequest(url: Config.apiBase.appendingPathComponent("marketplace"))
+        запрос.timeoutInterval = 15
+        guard let ответ = try? await URLSession.shared.data(for: запрос),
+              let страница = String(data: ответ.0, encoding: .utf8),
+              let образец = try? NSRegularExpression(pattern: "MK_SHOPS\\s*=\\s*new Set\\((\\[[^\\]]*\\])\\)"),
+              let найдено = образец.firstMatch(in: страница, range: NSRange(страница.startIndex..., in: страница)),
+              let часть = Range(найдено.range(at: 1), in: страница),
+              let список = try? JSONDecoder().decode([String].self, from: Data(страница[часть].utf8)) else { return [] }
+        let итог = Set(список)
+        кэшМагазинов = итог
+        return итог
+    }
+}
+
+/// Значок «Поделиться» сайта (.mk-mbtn): три кружка r 3 в поле 24×24 и две связи между ними.
+struct ЗнакПоделитьсяСайта: Shape {
+    func path(in rect: CGRect) -> Path {
+        let м = min(rect.width, rect.height) / 24
+        func т(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * м, y: rect.minY + y * м) }
+        var путь = Path()
+        for (x, y) in [(CGFloat(18), CGFloat(5)), (6, 12), (18, 19)] {
+            путь.addEllipse(in: CGRect(x: rect.minX + (x - 3) * м, y: rect.minY + (y - 3) * м, width: 6 * м, height: 6 * м))
+        }
+        путь.move(to: т(8.6, 13.5))
+        путь.addLine(to: т(15.4, 17.5))
+        путь.move(to: т(15.4, 6.5))
+        путь.addLine(to: т(8.6, 10.5))
+        return путь
     }
 }

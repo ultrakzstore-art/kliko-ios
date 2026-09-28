@@ -91,7 +91,7 @@ enum ListingLocationText {
             "net_error": "Ошибка сети", "detecting_addr": "Определяем адрес…",
             "addr_detected": "Адрес определён", "no_geo_access": "Нет доступа к геолокации",
             "bc_confirm_t": "Отправить запрос?", "bc_confirm_s": "Его увидят исполнители рядом и ответят вам в чате.",
-            "cancel": "Отмена", "need_session": "Откройте ленту сайта и попробуйте ещё раз",
+            "cancel": "Отмена", "need_session": "Не удалось отправить, попробуйте ещё раз",
             "ship_quote": "Доставка ~ %@", "ship_quote_who": "платит покупатель, сверх суммы сделки",
             "ship_eta": "~%@ мин в пути", "eta_days": "%1$@–%2$@ дн.",
             "eta_days_one": "%@ дн.", "co_ship_free": "Доставка за счёт продавца"
@@ -142,7 +142,7 @@ enum ListingLocationText {
             "net_error": "Желі қатесі", "detecting_addr": "Мекенжайды анықтап жатырмыз…",
             "addr_detected": "Мекенжай анықталды", "no_geo_access": "Геолокацияға рұқсат жоқ",
             "bc_confirm_t": "Сұрау жіберілсін бе?", "bc_confirm_s": "Оны жақын маңдағы орындаушылар көріп, сізге чатта жауап береді.",
-            "cancel": "Бас тарту", "need_session": "Сайт лентасын ашып, қайта көріңіз",
+            "cancel": "Бас тарту", "need_session": "Жіберу мүмкін болмады, қайта көріңіз",
             "ship_quote": "Жеткізу ~ %@", "ship_quote_who": "сатып алушы төлейді, мәміле сомасынан бөлек",
             "ship_eta": "жолда ~%@ мин", "eta_days": "%1$@–%2$@ күн",
             "eta_days_one": "%@ күн", "co_ship_free": "Жеткізуді сатушы төлейді"
@@ -193,7 +193,7 @@ enum ListingLocationText {
             "net_error": "Network error", "detecting_addr": "Detecting your address…",
             "addr_detected": "Address found", "no_geo_access": "No access to location",
             "bc_confirm_t": "Send the request?", "bc_confirm_s": "Providers nearby will see it and reply to you in chat.",
-            "cancel": "Cancel", "need_session": "Open the site feed and try again",
+            "cancel": "Cancel", "need_session": "Couldn't send, please try again",
             "ship_quote": "Delivery ~ %@", "ship_quote_who": "paid by the buyer, on top of the deal amount",
             "ship_eta": "~%@ min on the way", "eta_days": "%1$@–%2$@ days",
             "eta_days_one": "%@ days", "co_ship_free": "Delivery paid by the seller"
@@ -244,7 +244,7 @@ enum ListingLocationText {
             "net_error": "خطأ في الشبكة", "detecting_addr": "جارٍ تحديد العنوان…",
             "addr_detected": "تم تحديد العنوان", "no_geo_access": "لا يوجد وصول إلى الموقع",
             "bc_confirm_t": "إرسال الطلب؟", "bc_confirm_s": "سيراه مقدمو الخدمة القريبون ويردون عليك في الدردشة.",
-            "cancel": "إلغاء", "need_session": "افتح موجز الموقع وحاول مرة أخرى",
+            "cancel": "إلغاء", "need_session": "تعذّر الإرسال، حاول مرة أخرى",
             "ship_quote": "التوصيل ~ %@", "ship_quote_who": "يدفعه المشتري، إضافة إلى مبلغ الصفقة",
             "ship_eta": "~%@ دقيقة في الطريق", "eta_days": "%1$@–%2$@ أيام",
             "eta_days_one": "%@ أيام", "co_ship_free": "التوصيل على نفقة البائع"
@@ -444,13 +444,13 @@ struct РасположениеСайта: View {
             ПодзаголовокСайта(значок: "mappin.and.ellipse", текст: ListingKindsText.т("sec_location"))
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(место.isEmpty ? ListingKindsText.т("sec_location") : место)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.текст)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let адрес = адрес2ГИС {
                     Link(destination: адрес) {
                         Text(ListingKindsText.т("open_2gis"))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Theme.зелёный2)
                             .lineLimit(1)
                     }
@@ -458,7 +458,7 @@ struct РасположениеСайта: View {
             }
             if let улица = поля.адрес {
                 Text(улица)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
@@ -491,7 +491,8 @@ struct РасположениеСайта: View {
                 ДоставкаИзГородаСайта(товар: товар, оформить: купитьБезопасно)
             }
         }
-        .padding(.top, 14)
+        /* .mk-mcol-e: линия сверху и 10 pt до «Расположения». */
+        .padding(.top, 10)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Theme.линия)
@@ -606,23 +607,23 @@ private struct КнопкаМаршрутаСайта: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "car.fill")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.зелёный2)
                 .frame(width: 34, height: 34)
                 .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(тМеста(доставить ? "route_both_t" : "route_go_t"))
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(Theme.текст)
                 Text(тМеста(доставить ? "route_both_s" : "route_go_s"))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: "chevron.forward")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
         }
@@ -649,12 +650,13 @@ struct ЧипМестаСайта: View {
                 .font(.system(size: 13, weight: .semibold))
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
         }
         .foregroundStyle(Theme.текст)
         .padding(.horizontal, 12)
-        .frame(minHeight: 34)
+        .padding(.vertical, 6)
+        .frame(minHeight: 32)
         .background(Theme.поверхность2, in: Capsule())
         .overlay { Capsule().strokeBorder(Theme.линия, lineWidth: 1.5) }
         .contentShape(Capsule())
@@ -674,7 +676,7 @@ private struct КартаМестаСайта: View {
             Marker(название, coordinate: точка)
                 .tint(Theme.зелёный2)
         }
-        .frame(height: 190)
+        .frame(height: 200)
         .allowsHitTesting(false)
         .overlay(alignment: .topTrailing) {
             Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -741,7 +743,7 @@ struct ЛистМаршрутаСайта: View {
                             .foregroundStyle(Theme.текст)
                         if !подпись.isEmpty {
                             Text(подпись)
-                                .font(.system(size: 13))
+                                .font(.system(size: 12))
                                 .foregroundStyle(Theme.текстВторой)
                         }
                     }
@@ -762,7 +764,8 @@ struct ЛистМаршрутаСайта: View {
                     открыть((приложение: nil, запасной: МаршрутОбъявления.inDrive))
                 }
                 СтрокаПриложенияМаршрута(значок: "location.north.circle.fill", название: "2ГИС", подпись: заметка,
-                                         фон: Color(red: 0.149, green: 0.502, blue: 0.208), цвет: .white) {
+                                         фон: Color(red: 0.149, green: 0.502, blue: 0.208), цвет: .white,
+                                         подложкаЗначка: 0.2) {
                     открыть(МаршрутОбъявления.дваГис(точка, туда: туда))
                 }
                 РазделительМаршрута(текст: тМеста("nav_apps"))
@@ -843,7 +846,7 @@ private struct ПереключательНаправления: View {
             withAnimation(ДвижениеСайта.выбор) { действие() }
         } label: {
             Text(текст)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(выбрана ? Theme.текст : Theme.текстВторой)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -869,27 +872,31 @@ private struct СтрокаПриложенияМаршрута: View {
     let подпись: String
     let фон: Color
     let цвет: Color
+    /// .ra-ic: белая подложка 35 %, у 2ГИС — 20 %.
+    var подложкаЗначка: Double = 0.35
     let действие: () -> Void
 
     var body: some View {
         Button(action: действие) {
             HStack(spacing: 12) {
                 Image(systemName: значок)
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 34, height: 34)
-                    .background(цвет.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(подложкаЗначка),
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(название)
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.system(size: 14, weight: .heavy))
                     Text(подпись)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .opacity(0.75)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
+                    .opacity(0.6)
                     .accessibilityHidden(true)
             }
             .foregroundStyle(цвет)
@@ -910,7 +917,7 @@ private struct РазделительМаршрута: View {
         HStack(spacing: 12) {
             Rectangle().fill(Theme.линия).frame(height: 1)
             Text(текст.lowercased())
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
                 .layoutPriority(1)
             Rectangle().fill(Theme.линия).frame(height: 1)

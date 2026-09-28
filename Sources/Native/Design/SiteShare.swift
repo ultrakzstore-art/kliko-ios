@@ -134,7 +134,7 @@ struct ЛистПоделитьсяСайта: View {
         ScrollView {
             VStack(spacing: 0) {
                 Text(т("title"))
-                    .font(.system(size: 19, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
@@ -150,9 +150,9 @@ struct ЛистПоделитьсяСайта: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Button(т("later")) { закрыть() }
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: 39)
                     .padding(.top, 8)
             }
             .padding(.horizontal, 20)
@@ -199,12 +199,12 @@ struct ЛистПоделитьсяСайта: View {
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(данные.название)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                 Text(данные.строкаЦены)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.акцент)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Theme.зелёный)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -219,28 +219,28 @@ struct ЛистПоделитьсяСайта: View {
         Button { скопировать() } label: {
             HStack(spacing: 10) {
                 Image(systemName: скопировано ? "checkmark" : "link")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.акцент)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный)
                     .frame(width: 20)
                     .accessibilityHidden(true)
                 Text(данные.адрес.absoluteString)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .environment(\.layoutDirection, .leftToRight)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(скопировано ? т("copied") : т("copy"))
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Theme.акцент)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Theme.зелёный)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .background(скопировано ? Theme.мята : Theme.поверхность2,
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                    .strokeBorder(скопировано ? Theme.акцент : Theme.линия, lineWidth: 1.5)
+                    .strokeBorder(скопировано ? Theme.акцент : Theme.линия, lineWidth: 1)
             }
             .contentShape(Rectangle())
         }
@@ -249,63 +249,70 @@ struct ЛистПоделитьсяСайта: View {
         .accessibilityValue(данные.адрес.absoluteString)
     }
 
-    /// .mksh-grid — круглые кнопки приложений, по четыре в ряд.
+    /// .mksh-grid — плитки 82 pt по три в ряд через 10: значок 26 pt цвета приложения и подпись 12 жирным.
     private var сетка: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 14) {
-            кнопка("WhatsApp", фон: Color(uiColor: Theme.hex(0x25D366)), действие: { whatsApp() }) {
-                ЗнакWhatsApp().scaleEffect(1.25)
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            кнопка("WhatsApp", действие: { whatsApp() }) {
+                ЗнакWhatsApp()
+                    .colorMultiply(Color(uiColor: Theme.hex(0x25D366)))
+                    .scaleEffect(1.2)
             }
-            кнопка("Telegram", фон: Color(uiColor: Theme.hex(0x229ED9)), действие: { telegram() }) {
-                символ("paperplane.fill")
+            кнопка("Telegram", действие: { telegram() }) {
+                символ("paperplane.fill", цвет: Color(uiColor: Theme.hex(0x229ED9)))
             }
-            кнопка("Instagram", фон: ПоделитьсяСайта.цветаInstagram, действие: { instagram() }) {
-                символ("camera")
+            кнопка("Instagram", действие: { instagram() }) {
+                Image(systemName: "camera")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(ПоделитьсяСайта.цветаInstagram)
             }
-            кнопка("SMS", фон: Color(uiColor: Theme.hex(0x34C759)), действие: { смс() }) {
-                символ("message.fill")
+            кнопка("SMS", действие: { смс() }) {
+                символ("message.fill", цвет: Color(uiColor: Theme.hex(0x34C759)))
             }
-            кнопка(т("email"), фон: Color(uiColor: Theme.hex(0x1D9BF0)), действие: { почта() }) {
-                символ("envelope.fill")
+            кнопка(т("email"), действие: { почта() }) {
+                символ("envelope.fill", цвет: Color(uiColor: Theme.hex(0x1D9BF0)))
             }
-            кнопка(т("photo"), фон: Theme.поверхность2, рамка: true, действие: { картинка(1350) }) {
-                символ("photo.on.rectangle", цвет: Theme.акцент)
+            кнопка(т("photo"), действие: { картинка(1350) }) {
+                символ("photo.on.rectangle", цвет: Theme.зелёный)
             }
-            кнопка(т("story"), фон: Theme.поверхность2, рамка: true, действие: { картинка(1920) }) {
-                символ("rectangle.portrait", цвет: Theme.акцент)
+            кнопка(т("story"), действие: { картинка(1920) }) {
+                символ("rectangle.portrait", цвет: Theme.зелёный)
             }
-            кнопка("QR", фон: показQR ? Theme.мята : Theme.поверхность2, рамка: true, действие: { переключитьQR() }) {
-                символ("qrcode", цвет: Theme.акцент)
+            кнопка("QR", активна: показQR, действие: { переключитьQR() }) {
+                символ("qrcode", цвет: Theme.зелёный)
             }
-            кнопка(скопировано ? т("copied") : т("link"), фон: скопировано ? Theme.мята : Theme.поверхность2, рамка: true,
-                   действие: { скопировать() }) {
-                символ(скопировано ? "checkmark" : "link", цвет: Theme.акцент)
+            кнопка(скопировано ? т("copied") : т("link"), активна: скопировано, действие: { скопировать() }) {
+                символ(скопировано ? "checkmark" : "link", цвет: Theme.зелёный)
             }
-            кнопка(т("more"), фон: Theme.поверхность2, рамка: true, действие: { ещё() }) {
+            кнопка(т("more"), действие: { ещё() }) {
                 символ("ellipsis", цвет: Theme.текст)
             }
         }
         .disabled(занято)
     }
 
-    private func кнопка<Знак: View, Фон: ShapeStyle>(_ подпись: String, фон: Фон, рамка: Bool = false,
-                                                     действие: @escaping () -> Void,
-                                                     @ViewBuilder знак: () -> Знак) -> some View {
+    /// .mksh-b: плитка на поверхности с линией, скругление 14, внутри 14/6 и 8 между значком и подписью.
+    private func кнопка<Знак: View>(_ подпись: String, активна: Bool = false, действие: @escaping () -> Void,
+                                    @ViewBuilder знак: () -> Знак) -> some View {
         Button(action: действие) {
-            VStack(spacing: 7) {
+            VStack(spacing: 8) {
                 знак()
-                    .frame(width: 56, height: 56)
-                    .background(фон, in: Circle())
-                    .overlay {
-                        if рамка { Circle().strokeBorder(Theme.линия, lineWidth: 1.5) }
-                    }
+                    .frame(width: 28, height: 28)
                     .accessibilityHidden(true)
                 Text(подпись)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, minHeight: 82)
+            .background(активна ? Theme.мята : Theme.поверхность,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(активна ? Theme.акцент : Theme.линия, lineWidth: 1)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.95))
@@ -314,7 +321,7 @@ struct ЛистПоделитьсяСайта: View {
 
     private func символ(_ имя: String, цвет: Color = .white) -> some View {
         Image(systemName: имя)
-            .font(.system(size: 22, weight: .semibold))
+            .font(.system(size: 24, weight: .semibold))
             .foregroundStyle(цвет)
     }
 
