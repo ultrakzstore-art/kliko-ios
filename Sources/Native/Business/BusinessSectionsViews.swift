@@ -6,8 +6,7 @@ import Charts
  БИЗНЕС-РАЗДЕЛЫ КАБИНЕТА — СВОИ ЭКРАНЫ (этап 50). Данные и вызовы — BusinessSectionsAPI.swift.
 
  · «Аналитика магазина» (showAnalytics / renderAnalytics): плитки «Просмотры», «Сделки», «Выручка», «Конверсия»,
-   «Рейтинг» с подписями сайта; «Топ по просмотрам» — график Swift Charts (у сайта — полосы той же длины), сделки по
-   статусу — кольцо. За PRO, как proGate("analytics");
+   «Рейтинг» с подписями сайта; «Топ по просмотрам» — график Swift Charts (у сайта — полосы той же длины). За PRO, как proGate("analytics");
  · «Журнал счетов» (jrnLoad): «Счета» · «Склад» · «Действия», период как в #jrn-period, итоги «Выписано» / «Проведено
    (доход)» / «НДС с продаж» / «Отменено», график по месяцам, строки; ссылку на документ счёта — «Поделиться»;
  · «Счета и заказы»: заказы B2B с кнопками продавца, как _b2bRow (Подтвердить → Оплата пришла → Отгрузить / Завершить,
@@ -33,12 +32,13 @@ struct ПлиткаПоказателя: View {
     var краска: Color = Theme.текст
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(заголовок)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
+                .padding(.bottom, 6)
             Text(значение)
-                .font(.system(size: 24, weight: .heavy))
+                .font(.system(size: 26, weight: .heavy))
                 .foregroundStyle(краска)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -48,9 +48,11 @@ struct ПлиткаПоказателя: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(2)
+                    .padding(.top, 5)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
@@ -219,12 +221,13 @@ struct ЭкранАналитики: View {
                     .font(.system(size: 13.5))
                     .foregroundStyle(Theme.текстВторой)
                 плитки(д)
-                if д.сделокВсего > 0 {
-                    КарточкаБизнеса(тР("an_deals_chart"), значок: "chart.pie") {
-                        кольцо(д)
-                    }
-                }
-                КарточкаБизнеса(тР("an_top_views"), значок: "chart.bar") {
+                    .padding(.bottom, 4)
+                // Карточка «Топ по просмотрам» сайта: рамка 1.5, скругление 14, отступ 15, заголовок 14 без значка.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(тР("an_top_views"))
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(Theme.текст)
+                        .accessibilityAddTraits(.isHeader)
                     if д.топ.isEmpty {
                         Text(тР("an_no_data"))
                             .font(.system(size: 13.5))
@@ -234,6 +237,13 @@ struct ЭкранАналитики: View {
                     } else {
                         ГрафикТопа(топ: д.топ)
                     }
+                }
+                .padding(15)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1.5)
                 }
             }
             .padding(12)
@@ -249,39 +259,13 @@ struct ЭкранАналитики: View {
             ПлиткаПоказателя(заголовок: тР("an_views"), значение: СделкиФормат.деньги(д.просмотры),
                              подпись: тР("an_active_listings", ["n": String(д.активных)]), краска: Theme.акцент)
             ПлиткаПоказателя(заголовок: тР("an_deals"), значение: СделкиФормат.деньги(д.сделокЗавершено),
-                             подпись: сделкиПодпись, краска: Theme.проверен)
+                             подпись: сделкиПодпись, краска: Color(uiColor: Theme.hex(0x1A56DB)))
             ПлиткаПоказателя(заголовок: тР("an_revenue"), значение: СделкиФормат.тенге(д.выручка),
                              подпись: тР("an_revenue_sub"), краска: Theme.акцент)
             ПлиткаПоказателя(заголовок: тР("an_conversion"), значение: д.конверсия + "%", подпись: тР("an_conv_sub"))
             ПлиткаПоказателя(заголовок: тР("an_rating"), значение: д.рейтинг,
-                             подпись: тР("an_reviews", ["n": String(д.отзывов)]), краска: Theme.звезда)
+                             подпись: тР("an_reviews", ["n": String(д.отзывов)]), краска: Color(uiColor: Theme.hex(0xE0A013)))
         }
-    }
-
-    private struct Доля: Identifiable {
-        let имя: String
-        let число: Int
-        var id: String { имя }
-    }
-
-    private func кольцо(_ д: АналитикаМагазина) -> some View {
-        let прочие = max(0, д.сделокВсего - д.сделокЗавершено - д.вПроцессе)
-        let доли: [Доля] = [
-            Доля(имя: тР("an_done"), число: д.сделокЗавершено),
-            Доля(имя: тР("an_progress"), число: д.вПроцессе),
-            Доля(имя: тР("an_other"), число: прочие)
-        ].filter { $0.число > 0 }
-        let имена: [String] = [тР("an_done"), тР("an_progress"), тР("an_other")]
-        let краски: [Color] = [Theme.акцент, Theme.проверен, Theme.текстВторой.opacity(0.45)]
-        return Chart(доли) { доля in
-            SectorMark(angle: .value(тР("an_deals"), доля.число), innerRadius: .ratio(0.62), angularInset: 1.5)
-                .cornerRadius(4)
-                .foregroundStyle(by: .value(тР("an_deals"), доля.имя))
-        }
-        .chartForegroundStyleScale(domain: имена, range: краски)
-        .chartLegend(position: .trailing, alignment: .center)
-        .frame(height: 170)
-        .accessibilityLabel(тР("an_deals_chart"))
     }
 }
 
@@ -291,8 +275,8 @@ private struct ГрафикТопа: View {
 
     var body: some View {
         Chart(топ) { товар in
-            BarMark(x: .value(тР("an_views"), товар.просмотры), y: .value("#", String(товар.id)), height: .fixed(10))
-                .foregroundStyle(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный],
+            BarMark(x: .value(тР("an_views"), товар.просмотры), y: .value("#", String(товар.id)), height: .fixed(8))
+                .foregroundStyle(LinearGradient(colors: [Theme.зелёный2, Color(uiColor: Theme.hex(0x0F7A44))],
                                                 startPoint: .leading, endPoint: .trailing))
                 .cornerRadius(5)
                 .annotation(position: .top, alignment: .leading, spacing: 3) {

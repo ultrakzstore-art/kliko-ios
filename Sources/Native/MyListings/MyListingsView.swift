@@ -147,55 +147,75 @@ struct МоиОбъявленияЭкран: View {
     /// Пустая вкладка или поиск без результата (.empty-state сайта); на пустых «Опубликованных» без единого
     /// объявления — ещё блок переноса по ссылке (.imp-empty).
     private var пусто: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             if !модель.запрос.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 34, weight: .semibold))
+                    .font(.system(size: 42))
                     .foregroundStyle(Theme.текстВторой)
+                    .padding(.bottom, 12)
                     .accessibilityHidden(true)
                 Text(String(format: т("not_found"), модель.запрос.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
+                    .padding(.bottom, 20)
                 Button(т("search_clear")) { модель.запрос = "" }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .tint(Theme.акцент)
             } else {
                 Image(systemName: "tray")
-                    .font(.system(size: 34, weight: .semibold))
+                    .font(.system(size: 42))
                     .foregroundStyle(Theme.текстВторой)
+                    .padding(.bottom, 12)
                     .accessibilityHidden(true)
                 Text(модель.вкладка.пусто)
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
-                if модель.вкладка == .published && модель.товары.isEmpty { блокПереноса }
+                if модель.вкладка == .published && модель.товары.isEmpty {
+                    блокПереноса
+                        .padding(.top, 20)
+                }
             }
         }
-        .padding(.vertical, 28)
+        .padding(.vertical, 50)
+        .padding(.horizontal, 20)
         .frame(maxWidth: .infinity)
     }
 
+    /// .imp-empty: по центру, серая подложка с пунктирной рамкой, кнопка #16a34a во всю ширину.
     private var блокПереноса: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 0) {
             Text(т("imp_t"))
                 .font(.system(size: 15, weight: .heavy))
                 .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 6)
             Text(т("imp_s"))
                 .font(.system(size: 13))
+                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(т("imp_b")) { страница("cabinet.php?go=import") }
-                .font(.system(size: 14, weight: .bold))
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.зелёный)
+                .padding(.bottom, 14)
+            Button { страница("cabinet.php?go=import") } label: {
+                Text(т("imp_b"))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(КраскаОбъявлений.зелёнаяКнопка,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(20)
+        .frame(maxWidth: 420)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         }
     }
 
@@ -413,22 +433,37 @@ private struct ШапкаМоихОбъявлений: ViewModifier {
 
 // MARK: - Вкладки и поиск
 
-/// #adv-tabs: три вкладки в одной плашке, выбранная — зелёный градиент (.adv-tab-active), «Удалённые» — красным.
+/// #adv-tabs: три вкладки в одной плашке, выбранная — зелёный градиент (.adv-tab-active), у «Удалённых» — корзина.
+/// Длинные kk/ar подписи не ужимаются: не влезли поровну — плашка листается вбок, как overflow-x сайта.
 struct ВкладкиОбъявлений: View {
     @Binding var выбрана: ВкладкаОбъявлений
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(ВкладкаОбъявлений.allCases, id: \.self) { вкладка in
-                кнопка(вкладка)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                ForEach(ВкладкаОбъявлений.allCases, id: \.self) { вкладка in
+                    кнопка(вкладка)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(4)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(ВкладкаОбъявлений.allCases, id: \.self) { вкладка in
+                        кнопка(вкладка)
+                            .fixedSize()
+                    }
+                }
+                .padding(4)
             }
         }
-        .padding(4)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
         }
+        .compositingGroup()
+        .shadow(color: Color(red: 15 / 255, green: 40 / 255, blue: 25 / 255).opacity(0.14), radius: 5, y: 2)
     }
 
     private func кнопка(_ вкладка: ВкладкаОбъявлений) -> some View {
@@ -436,19 +471,29 @@ struct ВкладкиОбъявлений: View {
         return Button {
             выбрана = вкладка
         } label: {
-            Text(вкладка.название)
-                .font(.system(size: 14, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .foregroundStyle(активна ? Color.white : (вкладка == .deleted ? КраскаОбъявлений.плохоТекст : Theme.текстВторой))
-                .frame(maxWidth: .infinity, minHeight: 38)
-                .background {
-                    if активна {
-                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                            .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
-                                                 endPoint: .bottomTrailing))
-                    }
+            HStack(spacing: 6) {
+                if вкладка == .deleted {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
+                Text(вкладка.название)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(активна ? Color.white : Theme.текстВторой)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity)
+            .background {
+                if активна {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                             endPoint: .bottomTrailing))
+                        .shadow(color: Theme.зелёный2.opacity(0.35), radius: 7, y: 6)
+                }
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(String(format: МоиОбъявленияText.т("a11y_tab"), вкладка.название))
@@ -463,10 +508,11 @@ struct ПолеПоискаОбъявлений: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
+                .font(.system(size: 15))
                 .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
             TextField(МоиОбъявленияText.т("search"), text: $текст)
-                .font(.system(size: 15))
+                .font(.system(size: 14))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -474,15 +520,21 @@ struct ПолеПоискаОбъявлений: View {
                 Button {
                     текст = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Theme.текстВторой)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.цвет(0x51665B, 0x90A499))
+                        .frame(width: 24, height: 24)
+                        .background(Theme.поверхность2, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(МоиОбъявленияText.т("search_clear"))
             }
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 42)
+        // Высота 40 как у поля сайта (14 пт текст, отступ 10, рамка 1.5) и не прыгает, когда появляется крестик 24.
+        .frame(minHeight: 24)
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .padding(.vertical, 8)
         .background(Theme.поверхность, in: Capsule())
         .overlay {
             Capsule().strokeBorder(Theme.линия, lineWidth: 1.5)

@@ -87,14 +87,24 @@ enum ДействиеКарточки {
 
 /// Краски значков и блоков карточки — переменные сайта --tint-*/--on-*/--edge-* в светлой и тёмной теме.
 enum КраскаОбъявлений {
-    static let предупреждениеФон = Theme.цвет(0xFEF3C7, 0x33260A)
-    static let предупреждениеТекст = Theme.цвет(0xB45309, 0xFBBF24)
-    static let предупреждениеКромка = Theme.цвет(0xFCD34D, 0x7A5A14)
-    static let плохоФон = Theme.скидкаФон
-    static let плохоТекст = Theme.скидкаТекст
-    static let плохоКромка = Theme.цвет(0xFCA5A5, 0x6B2020)
-    static let инфоФон = Theme.цвет(0xE0F2FE, 0x0C2A3A)
-    static let инфоТекст = Theme.цвет(0x0369A1, 0x7DD3FC)
+    static let предупреждениеФон = Theme.цвет(светлый: Theme.hex(0xFFF4E5), тёмный: Theme.hex(0xE0BD5E, 0.15))
+    static let предупреждениеТекст = Theme.цвет(0x92400E, 0xE0BD5E)
+    static let предупреждениеКромка = Theme.цвет(светлый: Theme.hex(0xFDE68A), тёмный: Theme.hex(0xE0BD5E, 0.34))
+    static let плохоФон = Theme.цвет(светлый: Theme.hex(0xFEE2E2), тёмный: Theme.hex(0xFF6168, 0.15))
+    static let плохоТекст = Theme.цвет(0x991B1B, 0xFF8A8F)
+    static let плохоКромка = Theme.цвет(светлый: Theme.hex(0xFECACA), тёмный: Theme.hex(0xFF6168, 0.34))
+    static let инфоФон = Theme.цвет(светлый: Theme.hex(0xEEF4FF), тёмный: Theme.hex(0x60A5FA, 0.15))
+    static let инфоТекст = Theme.цвет(0x1E40AF, 0x7CB8F5)
+    /// --red сайта: текст причины отклонения (.adv-reason).
+    static let красный = Theme.цвет(0xC0392B, 0xFF6168)
+    /// Пауза в очереди (chip_paused_slot) — color:#a15a12 сайта.
+    static let пауза = Theme.цвет(0xA15A12, 0xE0BD5E)
+    /// --tint-ai / --on-ai / --edge-ai: фиолетовые плашки PRO и ИИ.
+    static let ииФон = Theme.цвет(светлый: Theme.hex(0xF4EEFB), тёмный: Theme.hex(0xA78BFA, 0.15))
+    static let ииТекст = Theme.цвет(0x6C3FC5, 0xB79BF5)
+    static let ииКромка = Theme.цвет(светлый: Theme.hex(0xE5D9F5), тёмный: Theme.hex(0xA78BFA, 0.32))
+    /// Кнопки «перенести» сайта: #16a34a в обеих темах.
+    static let зелёнаяКнопка = Color(uiColor: Theme.hex(0x16A34A))
     static let хорошоФон = Theme.мята
     static let хорошоТекст = Theme.цвет(0x0B6B3A, 0x57D493)
     static let хорошоКромка = Theme.цвет(0xB1DFC2, 0x1F5236)
@@ -106,12 +116,14 @@ enum КраскаОбъявлений {
 
 /// Значок статуса (.adv-badges).
 struct ЗначокОбъявления: Equatable {
-    enum Вид: Equatable { case предупреждение, плохо, инфо, хорошо, серый, индиго, одобрено }
+    enum Вид: Equatable { case предупреждение, плохо, инфо, хорошо, серый, индиго, одобрено, пауза }
     let текст: String
     let вид: Вид
     let символ: String?
     /// Подсказка сайта (title): причина ручной проверки.
     let подсказка: String?
+    /// Рамка 1.5 — у сайта не у всех значков (у «Удалено» и «На паузе» её нет).
+    var кромка: Bool = true
 
     /// Первое подходящее условие — в том же порядке, что у сайта (карта §3.1.3).
     static func для(_ т: МоёОбъявление, вкладка: ВкладкаОбъявлений, сейчас: Double, одобрено: String) -> ЗначокОбъявления {
@@ -150,10 +162,12 @@ struct ЗначокОбъявления: Equatable {
                                         символ: "clock", подсказка: nil)
             }
             if т.проданоСлот { return ЗначокОбъявления(текст: с("chip_sold_slot"), вид: .хорошо, символ: nil, подсказка: nil) }
-            if т.пауза { return ЗначокОбъявления(текст: с("chip_paused_slot"), вид: .предупреждение, символ: nil, подсказка: nil) }
+            if т.пауза {
+                return ЗначокОбъявления(текст: с("chip_paused_slot"), вид: .пауза, символ: nil, подсказка: nil, кромка: false)
+            }
             return ЗначокОбъявления(текст: с("chip_inactive"), вид: .серый, символ: nil, подсказка: nil)
         case .deleted:
-            return ЗначокОбъявления(текст: с("chip_deleted"), вид: .плохо, символ: nil, подсказка: nil)
+            return ЗначокОбъявления(текст: с("chip_deleted"), вид: .плохо, символ: nil, подсказка: nil, кромка: false)
         case .published:
             let подпись = одобрено.isEmpty ? с("approved") : одобрено
             return ЗначокОбъявления(текст: подпись, вид: .одобрено, символ: "checkmark.circle", подсказка: nil)
@@ -256,14 +270,40 @@ struct КарточкаМоегоОбъявления: View {
             верх
             низ
         }
-        .padding(12)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .padding(14)
+        .background {
+            фонКарточки
+                .shadow(color: товар.топ ? Self.топСвечение : .clear, radius: 10, y: 10)
+        }
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(товар.топ ? Theme.топРамка : Theme.линия, lineWidth: товар.топ ? 1.5 : 1)
+                .strokeBorder(товар.топ ? Self.топКромка : Theme.линия, lineWidth: 1)
         }
-        .теньКарточкиСайта(радиус: Theme.Радиус.md)
         .opacity(занято ? 0.7 : 1)
+    }
+
+    /// .adv-card.top-premium: золотая кромка, тёплая заливка сверху и полоса 4 пт у начала карточки.
+    private static let топКромка = Theme.цвет(0xE4C579, 0x6D5926)
+    private static let топЗаливка = Theme.цвет(0xFFFDF5, 0x221D10)
+    private static let топСвечение = Color(uiColor: Theme.hex(0xB08418, 0.5))
+    private static let топПолоса = LinearGradient(colors: [Color(uiColor: Theme.hex(0xF4D982)),
+                                                          Color(uiColor: Theme.hex(0xD3A02B))],
+                                                 startPoint: .top, endPoint: .bottom)
+
+    @ViewBuilder
+    private var фонКарточки: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+        if товар.топ {
+            ZStack(alignment: .leading) {
+                LinearGradient(colors: [Self.топЗаливка, Theme.поверхность], startPoint: .top, endPoint: .bottom)
+                Rectangle()
+                    .fill(Self.топПолоса)
+                    .frame(width: 4)
+            }
+            .clipShape(форма)
+        } else {
+            форма.fill(Theme.поверхность)
+        }
     }
 
     // MARK: Верх: фото и сведения
@@ -291,14 +331,14 @@ struct КарточкаМоегоОбъявления: View {
     private var фото: some View {
         КартинкаЛенты(Config.url(товар.фото), пунктов: 96) {
             ZStack {
-                Theme.поверхность2
+                Theme.мята
                 Image(systemName: "shippingbox")
                     .font(.system(size: 20))
                     .foregroundStyle(Theme.текстВторой)
             }
         }
         .frame(width: 96, height: 84)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
     }
 
     /// advPriceHTML: «{цена} ₸ · Торг», «Договорная», аренда «{цена} ₸/сут» и « · продажа {цена} ₸».
@@ -306,7 +346,8 @@ struct КарточкаМоегоОбъявления: View {
         let суффикс = суффиксЦены
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(основнаяЦена)
-                .font(.system(size: 19, weight: .heavy))
+                .font(.system(size: 16, weight: .heavy))
+                .tracking(-0.2)
                 .foregroundStyle(Theme.текст)
             if !суффикс.isEmpty {
                 Text(суффикс)
@@ -338,7 +379,8 @@ struct КарточкаМоегоОбъявления: View {
     private var название: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(товар.название)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
+                .lineSpacing(2)
                 .foregroundStyle(Theme.текст)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -405,29 +447,46 @@ struct КарточкаМоегоОбъявления: View {
     }
 
     private var блокВерификации: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: "checkmark.shield")
+                .font(.system(size: 14))
+                .padding(.top, 1)
                 .accessibilityHidden(true)
-            (Text(т("held_verify_t")).bold() + Text(" " + т("held_verify_s")))
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 4)
-            Button(т("held_verify_go")) { действие(.верификация) }
-                .font(.system(size: 13, weight: .bold))
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.зелёный)
-                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(т("held_verify_t")).bold()
+                Text(т("held_verify_s"))
+            }
+            .font(.system(size: 12))
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button { действие(.верификация) } label: {
+                Text(т("held_verify_go"))
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(КраскаОбъявлений.предупреждениеТекст,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+            .fixedSize()
+            .frame(maxHeight: .infinity)
         }
-        .font(.system(size: 13))
         .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-        .padding(10)
-        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
+        .padding(12)
+        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(КраскаОбъявлений.предупреждениеКромка, lineWidth: 1.5)
+        }
     }
 
     private var блокПричины: some View {
         var текст = String(format: т("reason"), товар.причина)
         if товар.отклонений > 1 { текст += " " + String(format: т("attempt"), товар.отклонений) }
         return БлокКарточки(текст: текст, символ: "xmark.circle", фон: КраскаОбъявлений.плохоФон,
-                            цвет: КраскаОбъявлений.плохоТекст)
+                            цвет: КраскаОбъявлений.красный)
     }
 
     /// «В ТОПе до YYYY-MM-DD» — top_until.slice(0,10), как у сайта. Только сведения: продлевают ТОП на сайте.
@@ -436,9 +495,10 @@ struct КарточкаМоегоОбъявления: View {
             Text(String(format: т("adv_top_until"), String(товар.топДо.prefix(10))))
         } icon: {
             Image(systemName: "crown")
+                .font(.system(size: 11))
         }
-        .font(.system(size: 12, weight: .bold))
-        .foregroundStyle(Theme.золото)
+        .font(.system(size: 11, weight: .bold))
+        .foregroundStyle(Theme.цвет(0xA9791A, 0xD8B658))
     }
 
     /// «Бесплатные авто-поднятия (день 7·14·21) — включены · следующее через N дн.» — сведения из окна продвижения сайта
@@ -463,7 +523,9 @@ struct КарточкаМоегоОбъявления: View {
 
     private var кнопки: some View {
         let набор = КнопкаОбъявления.набор(товар, вкладка: вкладка)
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 6)], alignment: .leading, spacing: 6) {
+        // .adv-acts: всегда две равные колонки, зазор 6; margin-top 10 = 8 от стопки + 2.
+        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)],
+                         alignment: .leading, spacing: 6) {
             ForEach(набор, id: \.self) { кнопка in
                 КнопкаКарточки(подпись: кнопка.подпись(топ: товар.топ), значок: кнопка.значок, вид: вид(кнопка)) {
                     действие(.кнопка(кнопка))
@@ -471,12 +533,14 @@ struct КарточкаМоегоОбъявления: View {
                 .disabled(занято || (кнопка == .проверить && проверяем))
             }
         }
+        .padding(.top, 2)
     }
 
     private func вид(_ кнопка: КнопкаОбъявления) -> КнопкаКарточки.Вид {
         switch кнопка {
         case .активировать, .восстановить, .проверить: return .вперёд
         case .удалить, .удалитьНавсегда:               return .удалить
+        case .поделиться:                              return .поделиться
         default:                                       return .обычная
         }
     }
@@ -502,31 +566,40 @@ struct ЗначокТоп: View {
     }
 }
 
-/// Значок статуса — плашка со скруглением 6, как span-значки сайта.
+/// Значок статуса — плашка со скруглением 6, как span-значки сайта; «Опубликовано» — капсула .badge-approved.
 struct ЯрлыкСтатуса: View {
     let значок: ЗначокОбъявления
+
+    private var одобрено: Bool { значок.вид == .одобрено }
 
     var body: some View {
         HStack(spacing: 4) {
             if let символ = значок.символ {
                 Image(systemName: символ)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(одобрено ? Theme.цвет(0x12A05A, 0x57D493) : цвет)
                     .accessibilityHidden(true)
             }
             Text(значок.текст)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
+                .tracking(одобрено ? 0.22 : 0)
                 .lineLimit(2)
         }
         .foregroundStyle(цвет)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous))
+        .padding(.horizontal, одобрено ? 12 : 8)
+        .padding(.vertical, одобрено ? 4 : 2)
+        .background { форма.fill(фон) }
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous)
-                .strokeBorder(кромка, lineWidth: 1)
+            if значок.кромка {
+                форма.strokeBorder(кромка, lineWidth: одобрено ? 1 : 1.5)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint(значок.подсказка ?? "")
+    }
+
+    private var форма: RoundedRectangle {
+        RoundedRectangle(cornerRadius: одобрено ? 100 : Theme.Радиус.xxs, style: .continuous)
     }
 
     private var цвет: Color {
@@ -537,15 +610,17 @@ struct ЯрлыкСтатуса: View {
         case .хорошо, .одобрено: return КраскаОбъявлений.хорошоТекст
         case .серый:          return Theme.текстВторой
         case .индиго:         return КраскаОбъявлений.индиго
+        case .пауза:          return КраскаОбъявлений.пауза
         }
     }
 
     private var фон: Color {
         switch значок.вид {
-        case .предупреждение: return КраскаОбъявлений.предупреждениеФон
+        case .предупреждение, .пауза: return КраскаОбъявлений.предупреждениеФон
         case .плохо:          return КраскаОбъявлений.плохоФон
         case .инфо, .индиго:  return КраскаОбъявлений.инфоФон
-        case .хорошо, .одобрено: return КраскаОбъявлений.хорошоФон
+        case .хорошо:         return КраскаОбъявлений.хорошоФон
+        case .одобрено:       return Theme.цвет(0xE7F6EE, 0x12301F)
         case .серый:          return Theme.поверхность2
         }
     }
@@ -556,7 +631,7 @@ struct ЯрлыкСтатуса: View {
         case .плохо:          return КраскаОбъявлений.плохоКромка
         case .одобрено:       return КраскаОбъявлений.хорошоКромка
         case .индиго:         return КраскаОбъявлений.индигоКромка
-        case .инфо, .хорошо, .серый: return Color.clear
+        case .инфо, .хорошо, .серый, .пауза: return Color.clear
         }
     }
 }
@@ -571,11 +646,11 @@ struct БлокКарточки: View {
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .padding(.top, 1)
                 .accessibilityHidden(true)
             Text(текст)
-                .font(.system(size: 13))
+                .font(.system(size: 12))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(цвет)
@@ -589,7 +664,7 @@ struct БлокКарточки: View {
 
 /// Кнопка ряда .adv-acts: рамка, значок и подпись; «вперёд» — зелёная, «удалить» — красная.
 struct КнопкаКарточки: View {
-    enum Вид { case обычная, вперёд, удалить, топ }
+    enum Вид { case обычная, вперёд, удалить, топ, поделиться }
     let подпись: String
     let значок: String
     let вид: Вид
@@ -597,21 +672,21 @@ struct КнопкаКарточки: View {
 
     var body: some View {
         Button(action: нажать) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: значок)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(подпись)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
             .foregroundStyle(цвет)
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .padding(.horizontal, 6)
-            .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .padding(.horizontal, 10)
+            .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
                     .strokeBorder(Theme.линия, lineWidth: 1)
             }
         }
@@ -621,7 +696,7 @@ struct КнопкаКарточки: View {
     private var цвет: Color {
         switch вид {
         case .обычная: return Theme.текст
-        case .вперёд:  return Theme.акцент
+        case .вперёд, .поделиться: return Theme.акцент
         case .удалить: return КраскаОбъявлений.плохоТекст
         case .топ:     return Theme.золото
         }
@@ -630,6 +705,7 @@ struct КнопкаКарточки: View {
     private var фон: Color {
         switch вид {
         case .топ: return Theme.топФон
+        case .поделиться: return Theme.оттенокАкцента
         case .обычная, .вперёд, .удалить: return Theme.поверхность
         }
     }
@@ -643,7 +719,7 @@ struct СчётчикиОбъявления: View {
     let ждут: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             счётчик("eye", число: статистика.просмотры, ключ: nil, подпись: "views")
             счётчик("heart", число: статистика.избранное, ключ: "like", подпись: "likes")
             счётчик("bubble.left", число: статистика.сообщения, ключ: "msg", подпись: "msgs")
@@ -651,7 +727,7 @@ struct СчётчикиОбъявления: View {
             счётчик("square.and.arrow.up", число: статистика.поделились, ключ: "share", подпись: "shares")
             if статистика.ждут > 0 {
                 Button(action: ждут) {
-                    метка("hand.raised", число: статистика.ждут, активен: true)
+                    метка("hand.raised", число: статистика.ждут, активен: true, ждут: true)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(format: МоиОбъявленияText.т("a11y_stat"), МоиОбъявленияText.т("wl_pill"),
@@ -680,16 +756,22 @@ struct СчётчикиОбъявления: View {
         }
     }
 
-    private func метка(_ символ: String, число: Int, активен: Bool) -> some View {
-        HStack(spacing: 3) {
+    /// .adv-stat: значок 14 цвета #b6c0ba (в обеих темах), число 12 жирное серое; ноль — вся метка 0.55;
+    /// открытый список «кто» и «Ждут» — акцент.
+    private func метка(_ символ: String, число: Int, активен: Bool, ждут: Bool = false) -> some View {
+        HStack(spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(активен ? Theme.акцент : Self.цветЗначка)
             Text(String(число))
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 12, weight: ждут ? .heavy : .bold))
                 .monospacedDigit()
+                .foregroundStyle(активен ? Theme.акцент : Theme.текстВторой)
         }
-        .foregroundStyle(число > 0 ? (активен ? Theme.акцент : Theme.текст) : Theme.текстВторой.opacity(0.6))
+        .opacity(число > 0 ? 1 : 0.55)
     }
+
+    private static let цветЗначка = Color(uiColor: Theme.hex(0xB6C0BA))
 }
 
 /// Список «кто» (advWhoToggle): заголовок, строки «буква · имя · когда», пусто — фраза сайта.
@@ -714,9 +796,14 @@ struct СписокКто: View {
                 }
             }
         }
-        .padding(10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
     }
 
     private var заголовок: String {
@@ -761,35 +848,86 @@ struct СрокКарточки: View {
     let переключить: (Bool) -> Void
 
     var body: some View {
+        // .adv-lifecycle: срок с полосой и чип авто-продления в ряд; не влезает (SE, kk/ar) — чип строкой ниже.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                срокСПолосой
+                чипПродления
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                срокСПолосой
+                чипПродления
+            }
+        }
+        .padding(.top, 2)
+        .opacity(срок.ушло ? 0.85 : 1)
+    }
+
+    private var срокСПолосой: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label {
                 Text(срок.текст)
             } icon: {
                 Image(systemName: "clock")
             }
-            .font(.system(size: 12, weight: .semibold))
+            .labelStyle(МеткаСрока())
+            .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(цвет)
             if let доля = срок.полоса {
                 GeometryReader { гео in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.поверхность2)
-                        Capsule().fill(цветПолосы).frame(width: max(4, гео.size.width * CGFloat(доля)))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.поверхность2)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(цветПолосы)
+                            .frame(width: max(6, гео.size.width * CGFloat(доля)))
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 6)
                 .accessibilityHidden(true)
             }
-            Toggle(isOn: Binding(get: { включено }, set: { новое in переключить(новое) })) {
-                Label(МоиОбъявленияText.т("adv_autorenew"), systemImage: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-            }
-            .tint(Theme.зелёный2)
-            .disabled(занято)
-            .accessibilityHint(МоиОбъявленияText.т("autorenew_hint"))
         }
-        .opacity(срок.ушло ? 0.85 : 1)
+        .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
     }
+
+    /// .adv-renew: чип-кнопка с маленьким переключателем 32×18, включено — акцентная рамка и заливка.
+    private var чипПродления: some View {
+        Button { переключить(!включено) } label: {
+            HStack(spacing: 8) {
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(включено ? Theme.акцент : Self.выключено)
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 14, height: 14)
+                        .offset(x: включено ? 16 : 2)
+                }
+                .frame(width: 32, height: 18)
+                .environment(\.layoutDirection, .leftToRight)
+                .animation(.easeOut(duration: 0.2), value: включено)
+                Text(МоиОбъявленияText.т("adv_autorenew"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(включено ? Theme.акцент : Theme.текстВторой)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(включено ? Theme.оттенокАкцента : Theme.поверхность,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(включено ? Theme.акцент : Theme.линия, lineWidth: 1.5)
+            }
+            .fixedSize()
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+        .disabled(занято)
+        .accessibilityRepresentation {
+            Toggle(МоиОбъявленияText.т("adv_autorenew"), isOn: Binding(get: { включено }, set: { новое in переключить(новое) }))
+        }
+        .accessibilityHint(МоиОбъявленияText.т("autorenew_hint"))
+    }
+
+    private static let выключено = Theme.цвет(светлый: Theme.hex(0xCBD5D1), тёмный: Theme.hex(0xFFFFFF, 0.24))
 
     private var цвет: Color {
         switch срок.вид {
@@ -800,12 +938,25 @@ struct СрокКарточки: View {
         }
     }
 
-    private var цветПолосы: Color {
+    /// .al-bar i: норма — зелёный к акценту, скоро — #d97706→#f59e0b, срочно — #dc2626, авто — #0ea5e9→акцент.
+    private var цветПолосы: LinearGradient {
+        let цвета: [Color]
         switch срок.вид {
-        case .норма:  return Theme.зелёный2
-        case .скоро:  return Theme.оранжевый
-        case .срочно: return Theme.ценаСкидка
-        case .авто:   return КраскаОбъявлений.авто
+        case .норма:  цвета = [Theme.зелёный, Theme.акцент]
+        case .скоро:  цвета = [Theme.оранжевый, Color(uiColor: Theme.hex(0xF59E0B))]
+        case .срочно: цвета = [Theme.ценаСкидка, Theme.ценаСкидка]
+        case .авто:   цвета = [Color(uiColor: Theme.hex(0x0EA5E9)), Theme.акцент]
+        }
+        return LinearGradient(colors: цвета, startPoint: .leading, endPoint: .trailing)
+    }
+}
+
+/// Значок и текст срока с зазором 6, как .al-txt сайта.
+private struct МеткаСрока: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon
+            configuration.title
         }
     }
 }
@@ -885,10 +1036,23 @@ struct СкладКарточки: View {
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10)
-        .background(продано ? КраскаОбъявлений.плохоФон : Theme.поверхность2.opacity(0.5),
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            LinearGradient(colors: продано ? [Self.нетВерх, Theme.поверхность] : [Self.складВерх, Theme.поверхность],
+                           startPoint: .top, endPoint: .bottom)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(продано ? Self.нетКромка : Theme.линия, lineWidth: 1)
+        }
     }
+
+    /// .adv-stock: сверху --surf2 (тёмная — акцент 0.09), вниз к карточке; .out — розовый.
+    private static let складВерх = Theme.цвет(светлый: Theme.hex(0xF6FAF8), тёмный: Theme.hex(0x34C997, 0.09))
+    private static let нетВерх = Theme.цвет(0xFFF5F5, 0x2A1414)
+    private static let нетКромка = Theme.цвет(0xFBCFCF, 0x5B2B2B)
 
     private func шаг(_ на: Int, подпись: String, доступность: String) -> some View {
         Button {

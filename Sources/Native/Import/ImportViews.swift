@@ -80,10 +80,12 @@ private struct ВводИмпорта: View {
                 if let н = модель.незаконченный {
                     незаконченный(н)
                 }
+                // .imp-q: 14 жирный, до плиток 10 (14 стопки − 4).
                 Text(т("imp_q"))
-                    .font(.system(size: 17, weight: .heavy))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, -4)
                 способы
                 if let заметка = модель.заметка {
                     ЗаметкаБизнеса(заметка, тон: .предупреждение, значок: "exclamationmark.circle")
@@ -94,7 +96,16 @@ private struct ВводИмпорта: View {
                 case .каталог: каталог
                 }
                 шаги
-                ЗаметкаБизнеса(т("imp_draft"), тон: .инфо, значок: "tray")
+                // .imp-note: серая подложка без значка.
+                Text(т("imp_draft"))
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             }
             .padding(14)
         }
@@ -136,53 +147,101 @@ private struct ВводИмпорта: View {
     // MARK: Способы
 
     private var способы: some View {
-        VStack(spacing: 8) {
-            плитка(.ссылка, значок: "link", т("src_link_t"), т("src_link_s"), цена: т("src_free"), хорошо: true)
+        VStack(spacing: 10) {
+            плитка(.ссылка, значок: "link", т("src_link_t"), т("src_link_s"), цена: т("src_free"), метка: .бесплатно)
             плитка(.список, значок: "list.bullet", т("src_many_t"), т("src_many_s"),
-                   цена: модель.pro ? т("src_in_tariff") : т("src_many_free"), хорошо: модель.pro)
+                   цена: модель.pro ? т("src_in_tariff") : т("src_many_free"), метка: модель.pro ? .бесплатно : .часть)
             плитка(.каталог, значок: "sparkles", т("src_cat_t"), т("src_cat_s"),
-                   цена: модель.pro ? т("src_in_tariff") : т("src_pro"), хорошо: модель.pro)
+                   цена: модель.pro ? т("src_in_tariff") : т("src_pro"), метка: модель.pro ? .бесплатно : .про)
+        }
+    }
+
+    /// .imp-s-p: --ok (бесплатно), --part («5 бесплатно»), --pro (фиолетовая PRO).
+    private enum МеткаСпособа { case бесплатно, часть, про }
+
+    private func краскиМетки(_ м: МеткаСпособа) -> (фон: Color, текст: Color) {
+        switch м {
+        case .бесплатно: return (Theme.мята, КраскаОбъявлений.хорошоТекст)
+        case .часть:     return (КраскаОбъявлений.инфоФон, КраскаОбъявлений.инфоТекст)
+        case .про:       return (КраскаОбъявлений.ииФон, КраскаОбъявлений.ииТекст)
         }
     }
 
     private func плитка(_ способ: СпособИмпорта, значок: String, _ заголовок: String, _ подпись: String, цена: String,
-                        хорошо: Bool) -> some View {
+                        метка: МеткаСпособа) -> some View {
         let выбран = модель.способ == способ
+        let краски = краскиМетки(метка)
         return Button {
             withAnimation(ДвижениеСайта.смена) {
                 модель.способ = способ
                 модель.заметка = nil
             }
         } label: {
-            HStack(spacing: 12) {
+            // .imp-s: столбиком — значок 38, название 14, подпись 12, метка цены.
+            VStack(alignment: .leading, spacing: 4) {
                 Image(systemName: значок)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(выбран ? Color.white : Theme.акцент)
+                    .foregroundStyle(Theme.зелёный)
                     .frame(width: 38, height: 38)
-                    .background(выбран ? Theme.акцент : Theme.оттенокАкцента,
-                                in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .background(выбран ? Theme.поверхность : Theme.поверхность2,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .padding(.bottom, 4)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(заголовок)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.текст)
-                    Text(подпись)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.текстВторой)
-                }
-                Spacer(minLength: 6)
-                МеткаБизнеса(текст: цена, золото: !хорошо)
+                Text(заголовок)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                Text(подпись)
+                    .font(.system(size: 12))
+                    .lineSpacing(1)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(цена)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(краски.текст)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(краски.фон, in: Capsule())
+                    .padding(.top, 4)
             }
-            .padding(12)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .padding(.top, 14)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(выбран ? Theme.оттенокАкцента : Theme.поверхность,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(выбран ? Theme.акцент : Theme.линия, lineWidth: выбран ? 2 : 1.5)
+                    .strokeBorder(выбран ? Theme.зелёный2 : Theme.линия, lineWidth: выбран ? 2.5 : 1.5)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(выбран ? [.isSelected] : [])
+    }
+
+    /// .li-go: зелёная #16a34a, высота 48, скругление 14, 15 жирный.
+    private func кнопкаПереноса(_ подпись: String, действие: @escaping () -> Void) -> some View {
+        Button(action: действие) {
+            Text(подпись)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.white)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(КраскаОбъявлений.зелёнаяКнопка,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
+    }
+
+    /// .li-note: серая, по центру.
+    private var заметкаСсылки: some View {
+        Text(т("li_note"))
+            .font(.system(size: 12))
+            .lineSpacing(2)
+            .foregroundStyle(Theme.текстВторой)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
     }
 
     // MARK: Одна ссылка
@@ -200,20 +259,23 @@ private struct ВводИмпорта: View {
                     .autocorrectionDisabled()
                     .submitLabel(.go)
                     .onSubmit { модель.перенестиСсылку() }
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .padding(11)
-                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1.5)
+                    }
                 PasteButton(payloadType: String.self) { строки in
                     Task { @MainActor in модель.ссылка = строки.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
                 }
                 .labelStyle(.iconOnly)
                 .buttonBorderShape(.roundedRectangle)
+                .tint(КраскаОбъявлений.зелёнаяКнопка)
             }
             галочка(т("li_own"), $модель.моё)
-            КнопкаБизнеса(подпись: т("li_go")) { модель.перенестиСсылку() }
-            Text(т("li_note"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
+            кнопкаПереноса(т("li_go")) { модель.перенестиСсылку() }
+            заметкаСсылки
         }
     }
 
@@ -247,10 +309,8 @@ private struct ВводИмпорта: View {
                     .foregroundStyle(Theme.текстВторой)
             }
             галочка(т("lm_own"), $модель.моиВсе)
-            КнопкаБизнеса(подпись: подписьКнопки) { модель.перенестиСписок() }
-            Text(т("li_note"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
+            кнопкаПереноса(подписьКнопки) { модель.перенестиСписок() }
+            заметкаСсылки
         }
     }
 
@@ -260,87 +320,188 @@ private struct ВводИмпорта: View {
     private var каталог: some View {
         if модель.pro {
             КарточкаБизнеса(т("src_cat_t"), значок: "sparkles") {
+                // .ai-hints: что годится для разбора.
+                ПереносСтрок(промежуток: 8, междуСтрок: 8) {
+                    подсказка("tablecells", т("hint_xls"))
+                    подсказка("message", т("hint_wa"))
+                    подсказка("list.bullet", т("hint_list"))
+                    подсказка("camera.viewfinder", т("hint_price"))
+                    подсказка("photo.on.rectangle", т("hint_photos"))
+                }
+                // .ai-howto: серая плашка с рамкой.
                 Text(т("howto"))
                     .font(.system(size: 13))
+                    .lineSpacing(4)
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .strokeBorder(Theme.линия, lineWidth: 1)
+                    }
+                // .ai-imp-ta: высота от 120, рамка 1.5, скругление 14.
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $модель.текст)
                         .font(.system(size: 14))
-                        .frame(minHeight: 170)
+                        .frame(minHeight: 120)
                         .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .background(Theme.поверхность2,
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                        .padding(8)
                     if модель.текст.isEmpty {
                         Text(т("text_ph"))
                             .font(.system(size: 14))
                             .foregroundStyle(Theme.текстВторой.opacity(0.8))
-                            .padding(12)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 16)
                             .allowsHitTesting(false)
                     }
                 }
-                Text(т("or_upload"))
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                источник(значок: "doc.text", т("src_file"),
-                         модель.файлПодпись.isEmpty ? т("src_file_none") : модель.файлПодпись) {
-                    Button(т("pick_file")) { файлОткрыт = true }
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1.5)
                 }
-                источник(значок: "camera.viewfinder", т("src_img"),
-                         модель.картинкаПодпись.isEmpty ? т("src_img_hint") : модель.картинкаПодпись) {
-                    if модель.естьКартинка {
-                        Button(т("remove")) { модель.убратьКартинку() }
-                    } else {
-                        PhotosPicker(т("pick_photos"), selection: $картинка, matching: .images)
+                // .ai-src-or: линия «или загрузите» линия.
+                HStack(spacing: 10) {
+                    Rectangle().fill(Theme.линия).frame(height: 1)
+                    Text(т("or_upload"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize()
+                    Rectangle().fill(Theme.линия).frame(height: 1)
+                }
+                Button { файлОткрыт = true } label: {
+                    источник(значок: "doc.text", фон: КраскаОбъявлений.инфоФон, цвет: КраскаОбъявлений.инфоТекст,
+                             т("src_file"), модель.файлПодпись.isEmpty ? т("src_file_none") : модель.файлПодпись)
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
+                if модель.естьКартинка {
+                    Button { модель.убратьКартинку() } label: {
+                        источник(значок: "camera.viewfinder", фон: КраскаОбъявлений.ииФон, цвет: КраскаОбъявлений.ииТекст,
+                                 т("src_img"), модель.картинкаПодпись, убрать: true)
                     }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
+                    .accessibilityHint(т("remove"))
+                } else {
+                    PhotosPicker(selection: $картинка, matching: .images) {
+                        источник(значок: "camera.viewfinder", фон: КраскаОбъявлений.ииФон, цвет: КраскаОбъявлений.ииТекст,
+                                 т("src_img"), модель.картинкаПодпись.isEmpty ? т("src_img_hint") : модель.картинкаПодпись)
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
                 }
-                источник(значок: "photo.on.rectangle", т("src_photos"),
-                         модель.фотоПодпись.isEmpty ? т("src_photos_hint") : модель.фотоПодпись) {
-                    PhotosPicker(т("pick_photos"), selection: $фото, maxSelectionCount: 30, matching: .images)
+                PhotosPicker(selection: $фото, maxSelectionCount: 30, matching: .images) {
+                    источник(значок: "photo.on.rectangle", фон: Theme.мята, цвет: КраскаОбъявлений.хорошоТекст,
+                             т("src_photos"), модель.фотоПодпись.isEmpty ? т("src_photos_hint") : модель.фотоПодпись)
                 }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
                 // .imp-acts сайта: «Показать на примере» (aiDemoFill) рядом с «Разобрать через Kliko AI».
-                КнопкаБизнеса(подпись: т("imp_demo"), второстепенная: true) { модель.показатьПример() }
+                HStack(spacing: 10) {
+                    Button { модель.показатьПример() } label: {
+                        Text(т("imp_demo"))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(КраскаОбъявлений.ииТекст)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 14)
+                            .frame(maxHeight: .infinity)
+                            .background(КраскаОбъявлений.ииФон,
+                                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                    .strokeBorder(КраскаОбъявлений.ииКромка, lineWidth: 1.5)
+                            }
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+                    .fixedSize(horizontal: true, vertical: false)
                     .disabled(модель.грузимВвод)
-                КнопкаБизнеса(подпись: т("parse"), занято: модель.грузимВвод) { модель.разобрать() }
+                    КнопкаБизнеса(подпись: т("parse"), занято: модель.грузимВвод) { модель.разобрать() }
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            КарточкаБизнеса(т("pro_t"), значок: "crown") {
+            // .imp-pro: фиолетовая плашка PRO, «Пока перенесу по ссылке» — подчёркнутая ссылка.
+            VStack(alignment: .leading, spacing: 10) {
+                Text(т("pro_t"))
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(КраскаОбъявлений.ииТекст)
+                    .accessibilityAddTraits(.isHeader)
                 Text(т("pro_s"))
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(Theme.текстВторой)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                 ЦифроваяПокупка()
-                КнопкаБизнеса(подпись: т("pro_alt"), второстепенная: true) {
+                Button {
                     withAnimation(ДвижениеСайта.смена) { модель.способ = .ссылка }
+                } label: {
+                    Text(т("pro_alt"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .underline()
+                        .foregroundStyle(Theme.текстВторой)
                 }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(КраскаОбъявлений.ииФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(КраскаОбъявлений.ииКромка, lineWidth: 1.5)
             }
         }
     }
 
-    private func источник<Кнопка: View>(значок: String, _ заголовок: String, _ подпись: String,
-                                         @ViewBuilder кнопка: () -> Кнопка) -> some View {
-        HStack(spacing: 10) {
+    /// .ai-hint: зелёная плашка-подсказка.
+    private func подсказка(_ значок: String, _ текст: String) -> some View {
+        HStack(spacing: 6) {
             Image(systemName: значок)
-                .foregroundStyle(Theme.акцент)
-                .frame(width: 26)
+                .font(.system(size: 11, weight: .semibold))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
+            Text(текст)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Theme.акцент)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+    }
+
+    /// .ai-src: плитка источника — цветной значок 40, название 13 и серая строка 11; нажатие — выбор.
+    private func источник(значок: String, фон: Color, цвет: Color, _ заголовок: String, _ подпись: String,
+                          убрать: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: значок)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(цвет)
+                .frame(width: 40, height: 40)
+                .background(фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(заголовок)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.текст)
                 Text(подпись)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(2)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 6)
-            кнопка()
-                .font(.system(size: 14, weight: .semibold))
-                .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if убрать {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .accessibilityHidden(true)
+            }
         }
-        .padding(10)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1.5)
+        }
+        .contentShape(Rectangle())
     }
 
     // MARK: Общее
@@ -354,32 +515,34 @@ private struct ВводИмпорта: View {
         .toggleStyle(ГалочкаИмпорта())
     }
 
+    /// .imp-steps: без подложки, кружки 24 с цифрой 11, отступ сверху 20 (14 стопки + 6).
     private var шаги: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             шаг(1, т("imp_s1"), т("imp_s1s"))
             шаг(2, т("imp_s2"), т("imp_s2s"))
             шаг(3, т("imp_s3"), т("imp_s3s"))
         }
-        .padding(14)
+        .padding(.top, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
     }
 
     private func шаг(_ номер: Int, _ заголовок: String, _ подпись: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text(String(номер))
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(Theme.акцент)
-                .frame(width: 26, height: 26)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(Theme.зелёный)
+                .frame(width: 24, height: 24)
                 .background(Theme.оттенокАкцента, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(заголовок)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.текст)
                 Text(подпись)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: 12))
+                    .lineSpacing(2)
                     .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .combine)
@@ -415,7 +578,7 @@ private struct ГалочкаИмпорта: ToggleStyle {
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 20))
+                    .font(.system(size: 18))
                     .foregroundStyle(configuration.isOn ? Theme.акцент : Theme.текстВторой)
                     .accessibilityHidden(true)
                 configuration.label

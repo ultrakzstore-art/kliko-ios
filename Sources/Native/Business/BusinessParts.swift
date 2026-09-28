@@ -6,6 +6,36 @@ import SwiftUI
  «ворота» цифровой покупки. Краски — только динамические Theme / КраскаОбъявлений (светлая и тёмная тема, этап 31).
  */
 
+/// Краски бизнес-экранов, которые у сайта одинаковы в светлой и тёмной теме.
+enum КраскаБизнеса {
+    /// .split-cta, .club-btn.pri: linear-gradient(135deg,#16a34a,#0f7a44).
+    static let градиентКнопки = LinearGradient(colors: [Color(uiColor: Theme.hex(0x16A34A)), Color(uiColor: Theme.hex(0x0F7A44))],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+/// Заметка без подложки (.split-note, .club-note): значок акцентом и серый текст 12.
+struct СтрокаЗаметкиБизнеса: View {
+    let текст: String
+    let значок: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: значок)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.акцент)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+            Text(текст)
+                .font(.system(size: 12))
+                .lineSpacing(4)
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Карточка раздела: заголовок со значком и содержимое.
 struct КарточкаБизнеса<Содержимое: View>: View {
     let заголовок: String

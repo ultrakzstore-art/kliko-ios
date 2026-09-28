@@ -39,7 +39,7 @@ struct СтудияРоликов: View {
         VStack(spacing: 0) {
             шапка
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     сцена
                     строкаСтилей
                     строкаЗвука
@@ -48,7 +48,7 @@ struct СтудияРоликов: View {
                     подсказка
                     действия
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.top, 6)
                 .padding(.bottom, 24)
                 .frame(maxWidth: 520)
@@ -56,7 +56,9 @@ struct СтудияРоликов: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .background(Theme.поверхность.ignoresSafeArea())
+        // .reel-card сайта всегда тёмная, в светлой теме тоже.
+        .background(КраскиСтудии.фон.ignoresSafeArea())
+        .environment(\.colorScheme, .dark)
         .overlay(alignment: .bottom) { плашкаТоста }
         .interactiveDismissDisabled(модель.идётЗапись)
         .task { await модель.начать() }
@@ -81,25 +83,25 @@ struct СтудияРоликов: View {
                 .foregroundStyle(Theme.акцент)
                 .accessibilityHidden(true)
             Text(т("title"))
-                .font(.system(size: 17, weight: .heavy))
-                .foregroundStyle(Theme.текст)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(КраскиСтудии.заголовок)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
             Button { закрытьЛист() } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .frame(width: 32, height: 32)
-                    .background(Theme.поверхность2, in: Circle())
-                    .contentShape(Circle())
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(КраскиСтудии.крестик)
+                    .frame(width: 40, height: 40)
+                    .background(КраскиСтудии.кнопка, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                    .contentShape(Rectangle())
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
             .accessibilityLabel(т("close"))
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
         .padding(.bottom, 10)
     }
 
@@ -125,15 +127,17 @@ struct СтудияРоликов: View {
                 ход(доля, шаг)
             }
         }
-        .frame(width: 252, height: 448)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Theme.линия, lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.18), radius: 16, x: 0, y: 8)
+        .frame(width: размерСцены.width, height: размерСцены.height)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(т("title"))
+    }
+
+    /// .reel-stage: во всю ширину, 9 : 16, но не выше 64 % экрана (содержимое вписано, по бокам чёрное).
+    private var размерСцены: CGSize {
+        let экран = UIScreen.main.bounds.size
+        let ширина = max(200, min(экран.width, 520) - 28)
+        return CGSize(width: ширина, height: min(ширина * 16 / 9, экран.height * 0.64))
     }
 
     /// #reel-prog сайта: полоса и «Рендер N %» поверх сцены, под ней «Отменить».
@@ -147,18 +151,21 @@ struct СтудияРоликов: View {
         return ZStack {
             Color.black.opacity(0.55)
             VStack(spacing: 12) {
+                // .reel-bar: 60 % ширины, 6 пт, белая 0.18 и зелёная заливка.
                 GeometryReader { гео in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.25))
-                        Capsule().fill(Color(uiColor: КраскиРолика.цвет(модель.стиль.акцент)))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white.opacity(0.18))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(LinearGradient(colors: [КраскиСтудии.ходНачало, КраскиСтудии.ходКонец],
+                                                 startPoint: .leading, endPoint: .trailing))
                             .frame(width: max(6, гео.size.width * CGFloat(min(1, max(0, доля)))))
                     }
                 }
-                .frame(height: 6)
+                .frame(width: размерСцены.width * 0.6, height: 6)
                 .animation(ДвижениеСайта.прогресс, value: доля)
                 Text(подпись)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(КраскиСтудии.крестик)
                     .monospacedDigit()
                 Button { модель.отменить() } label: {
                     Text(т("cancel"))
@@ -170,7 +177,6 @@ struct СтудияРоликов: View {
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
             }
-            .padding(.horizontal, 26)
         }
         .accessibilityElement(children: .combine)
     }
@@ -186,10 +192,10 @@ struct СтудияРоликов: View {
                     Button { модель.другойСтиль() } label: {
                         Image(systemName: "dice")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Theme.текст)
+                            .foregroundStyle(КраскиСтудии.текстФишки)
                             .frame(width: 40, height: 40)
-                            .background(Theme.поверхность2, in: Circle())
-                            .overlay(Circle().stroke(Theme.линия, lineWidth: 1))
+                            .background(КраскиСтудии.фишка, in: Circle())
+                            .overlay(Circle().stroke(КраскиСтудии.кромкаФишки, lineWidth: 1))
                     }
                     .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
                     .accessibilityLabel(т("style_other"))
@@ -221,14 +227,14 @@ struct СтудияРоликов: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 1))
                 Text(т(стиль.ключИмени))
                     .font(.system(size: 13, weight: выбран ? .heavy : .semibold))
-                    .foregroundStyle(выбран ? Theme.текст : Theme.текстВторой)
+                    .foregroundStyle(выбран ? Color.white : КраскиСтудии.текстФишки)
                     .lineLimit(1)
             }
             .padding(.leading, 9)
-            .padding(.trailing, 13)
+            .padding(.trailing, 14)
             .frame(height: 40)
-            .background(выбран ? Theme.акцент.opacity(0.12) : Theme.поверхность2, in: Capsule())
-            .overlay(Capsule().stroke(выбран ? Theme.акцент : Theme.линия, lineWidth: выбран ? 1.6 : 1))
+            .background(выбран ? Theme.акцент.opacity(0.14) : КраскиСтудии.фишка, in: Capsule())
+            .overlay(Capsule().stroke(выбран ? Theme.акцент : КраскиСтудии.кромкаФишки, lineWidth: выбран ? 1.6 : 1))
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
         .accessibilityAddTraits(выбран ? [.isSelected] : [])
@@ -240,8 +246,8 @@ struct СтудияРоликов: View {
         VStack(spacing: 6) {
             Toggle(isOn: $модель.звук) {
                 Label(т("sound"), systemImage: модель.звук ? "speaker.wave.2" : "speaker.slash")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(КраскиСтудии.звук)
             }
             .tint(Theme.акцент)
             if модель.звук {
@@ -262,7 +268,11 @@ struct СтудияРоликов: View {
             }
         }
         .padding(12)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(КраскиСтудии.фишка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .stroke(КраскиСтудии.кромкаФишки, lineWidth: 1)
+        )
         .disabled(модель.идётЗапись)
         .animation(ДвижениеСайта.смена, value: модель.звук)
     }
@@ -412,8 +422,9 @@ struct СтудияРоликов: View {
             текст = т("fail")
         }
         return Text(текст)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(модель.этап == .сбой ? Theme.цвет(0xB42318, 0xF97066) : Theme.текстВторой)
+            .font(.system(size: 12))
+            .lineSpacing(3)
+            .foregroundStyle(модель.этап == .сбой ? Theme.цвет(0xB42318, 0xF97066) : КраскиСтудии.подсказка)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
@@ -424,14 +435,14 @@ struct СтудияРоликов: View {
         if модель.готовый != nil {
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
-                    кнопка(т("save"), значок: "arrow.down.to.line", главная: false) { модель.вГалерею() }
-                    кнопка(т("share"), значок: "square.and.arrow.up", главная: true) { модель.поделиться() }
+                    кнопка(т("save"), значок: "arrow.down.to.line", вид: .вторая) { модель.вГалерею() }
+                    кнопка(т("share"), значок: "square.and.arrow.up", вид: .поделиться) { модель.поделиться() }
                 }
                 соцсети
                 Button { модель.сделатьВидео() } label: {
                     Text(т("remake"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.текстВторой)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(КраскиСтудии.заново)
                         .frame(maxWidth: .infinity, minHeight: 40)
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
@@ -448,55 +459,62 @@ struct СтудияРоликов: View {
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         Text(т("make_image"))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 14, weight: .heavy))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         Text(т("tag_now"))
                             .font(.system(size: 10, weight: .heavy))
-                            .padding(.horizontal, 6)
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(Theme.акцент.opacity(0.14), in: Capsule())
-                            .foregroundStyle(Theme.акцент)
+                            .background(КраскиСтудии.ходНачалоТёмное, in: Capsule())
+                            .fixedSize()
                     }
-                    .foregroundStyle(Theme.текст)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                            .stroke(Theme.линия, lineWidth: 1)
-                    )
+                    .foregroundStyle(КраскиСтудии.текстФишки)
+                    .padding(14)
+                    .frame(maxWidth: .infinity)
+                    .background(КраскиСтудии.кнопка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 .disabled(модель.идётЗапись || модель.загружается)
-                кнопка(т("make_video"), значок: "video", главная: true) { модель.сделатьВидео() }
+                кнопка(т("make_video"), значок: "video", вид: .главная) { модель.сделатьВидео() }
                     .disabled(модель.идётЗапись || модель.загружается)
                     .opacity(модель.идётЗапись ? 0.6 : 1)
             }
         }
     }
 
-    private func кнопка(_ подпись: String, значок: String, главная: Bool, действие: @escaping () -> Void) -> some View {
+    /// .reel-btn: cta — зелёный градиент, sec — #232b26, share — градиент Instagram; 14 жирный, отступ 14, скругление 14.
+    private enum ВидКнопкиСтудии { case главная, вторая, поделиться }
+
+    private func кнопка(_ подпись: String, значок: String, вид: ВидКнопкиСтудии,
+                        действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
             HStack(spacing: 7) {
                 Image(systemName: значок)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(подпись)
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.system(size: 14, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(главная ? Color.white : Theme.текст)
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .foregroundStyle(вид == .вторая ? КраскиСтудии.текстФишки : Color.white)
+            .padding(14)
+            .frame(maxWidth: .infinity)
             .background {
-                if главная {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                        .fill(LinearGradient(colors: [Color(uiColor: Theme.hex(0x16A34A)), Color(uiColor: Theme.hex(0x0F7A44))],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                } else {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                        .fill(Theme.поверхность2)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                                .stroke(Theme.линия, lineWidth: 1)
-                        )
+                let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                switch вид {
+                case .главная:
+                    форма.fill(LinearGradient(colors: [КраскиСтудии.ходНачалоТёмное, КраскиСтудии.ходНачало],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing))
+                case .вторая:
+                    форма.fill(КраскиСтудии.кнопка)
+                case .поделиться:
+                    форма.fill(LinearGradient(stops: [
+                        .init(color: Color(uiColor: Theme.hex(0xF9CE34)), location: 0),
+                        .init(color: Color(uiColor: Theme.hex(0xEE2A7B)), location: 0.42),
+                        .init(color: Color(uiColor: Theme.hex(0x6228D7)), location: 1)
+                    ], startPoint: .topLeading, endPoint: .bottomTrailing))
                 }
             }
         }
@@ -680,6 +698,25 @@ struct СтудияРоликов: View {
     }
 }
 
+// MARK: - Краски
+
+/// Краски окна студии (.reel-card сайта): одинаковые в светлой и тёмной теме.
+private enum КраскиСтудии {
+    static let фон = Color(uiColor: Theme.hex(0x0F1512))
+    static let заголовок = Color(uiColor: Theme.hex(0xF1F5F2))
+    static let кнопка = Color(uiColor: Theme.hex(0x232B26))
+    static let крестик = Color(uiColor: Theme.hex(0xCFE0D6))
+    static let подсказка = Color(uiColor: Theme.hex(0x8EA699))
+    static let звук = Color(uiColor: Theme.hex(0x9FB0A6))
+    static let фишка = Color(uiColor: Theme.hex(0x1B241F))
+    static let кромкаФишки = Color(uiColor: Theme.hex(0x2B3630))
+    static let текстФишки = Color(uiColor: Theme.hex(0xDBE7E0))
+    static let заново = Color(uiColor: Theme.hex(0x7F958A))
+    static let ходНачалоТёмное = Color(uiColor: Theme.hex(0x0F7A44))
+    static let ходНачало = Color(uiColor: Theme.hex(0x1D9E5E))
+    static let ходКонец = Color(uiColor: Theme.hex(0x37D07F))
+}
+
 // MARK: - Превью
 
 /// Живое превью: кадр 540 × 960 (как холст #reel-canvas сайта) 30 раз в секунду по кругу.
@@ -726,7 +763,8 @@ extension СтудияРоликов {
         let хост = UIHostingController<AnyView>(rootView: AnyView(EmptyView()))
         let экран = СтудияРоликов(данные: данные, закрыть: { [weak хост] in хост?.dismiss(animated: true) })
         хост.rootView = AnyView(экран)
-        хост.view.backgroundColor = UIColor(Theme.поверхность)
+        хост.view.backgroundColor = Theme.hex(0x0F1512)
+        хост.overrideUserInterfaceStyle = .dark
         хост.modalPresentationStyle = .pageSheet
         if let лист = хост.sheetPresentationController {
             лист.detents = [.large()]

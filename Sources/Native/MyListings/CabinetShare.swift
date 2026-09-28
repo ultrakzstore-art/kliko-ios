@@ -198,11 +198,11 @@ struct ОкноПоделитьсяКабинета: View {
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(данные.название)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(2)
                 Text(данные.строкаЦены)
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Theme.акцент)
                     .lineLimit(1)
             }
@@ -257,12 +257,14 @@ struct ОкноПоделитьсяКабинета: View {
                 .frame(width: 34, height: 34)
                 .background(Color.white.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 Text(т("hero"))
-                    .font(.system(size: 17, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("→")
-                    .font(.system(size: 18, weight: .heavy))
+                // .soc-go: стрелка 19, в RTL смотрит влево.
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 19, weight: .heavy))
+                    .flipsForRightToLeftLayoutDirection(true)
                     .opacity(0.9)
                     .accessibilityHidden(true)
             }

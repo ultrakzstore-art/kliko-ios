@@ -282,26 +282,72 @@ private struct КарточкаМагазина: View {
 
     private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
 
+    // Градиенты шапки .split-hd: g-act, g-pend, g-none (135deg).
+    private static let шапкаАктивен: [Gradient.Stop] = [
+        .init(color: Color(uiColor: Theme.hex(0x0E7490)), location: 0),
+        .init(color: Color(uiColor: Theme.hex(0x0F7A44)), location: 0.55),
+        .init(color: Color(uiColor: Theme.hex(0x16A34A)), location: 1)
+    ]
+    private static let шапкаЖдёт: [Gradient.Stop] = [
+        .init(color: Color(uiColor: Theme.hex(0xB45309)), location: 0),
+        .init(color: Color(uiColor: Theme.hex(0xF59E0B)), location: 0.72)
+    ]
+    private static let шапкаНет: [Gradient.Stop] = [
+        .init(color: Color(uiColor: Theme.hex(0x0F7A44)), location: 0),
+        .init(color: Color(uiColor: Theme.hex(0x16A34A)), location: 0.6),
+        .init(color: Color(uiColor: Theme.hex(0x1BB45A)), location: 1)
+    ]
+
     var body: some View {
         switch с.статусМагазина {
         case "active":
-            шапка(т("split_active_t"), т("split_active_s"), значок: "checkmark.seal.fill", тон: .хорошо) {
-                ЗаметкаБизнеса(т("split_active_note"), тон: .хорошо, значок: "checkmark.shield")
+            шапка(т("split_active_t"), т("split_active_s"), значок: "checkmark.seal.fill", градиент: Self.шапкаАктивен) {
+                СтрокаЗаметкиБизнеса(текст: т("split_active_note"), значок: "checkmark.shield")
+                    .padding(.top, 12)
             }
         case "pending":
-            шапка(т("split_pend_t"), т("split_pend_s"), значок: "clock", тон: .предупреждение) {
-                ЗаметкаБизнеса(т("split_pend_note"), тон: .серый, значок: "clock")
+            шапка(т("split_pend_t"), т("split_pend_s"), значок: "clock", градиент: Self.шапкаЖдёт) {
+                СтрокаЗаметкиБизнеса(текст: т("split_pend_note"), значок: "clock")
+                    .padding(.top, 12)
             }
         default:
-            шапка(т("split_none_t"), т("split_none_s"), значок: "storefront", тон: .инфо) {
+            шапка(т("split_none_t"), т("split_none_s"), значок: "storefront", градиент: Self.шапкаНет) {
                 шаги
+                    .padding(.bottom, 14)
                 if с.статусМагазина == "rejected" {
                     ЗаметкаБизнеса(отказ, тон: .плохо, значок: "exclamationmark.triangle")
+                        .padding(.bottom, 12)
                 }
-                КнопкаБизнеса(подпись: подписьКнопки, занято: подаём, действие: действие)
-                ЗаметкаБизнеса(т("split_none_note"), тон: .серый, значок: "checkmark")
+                кнопка
+                СтрокаЗаметкиБизнеса(текст: т("split_none_note"), значок: "checkmark")
+                    .padding(.top, 12)
             }
         }
+    }
+
+    /// .split-cta: градиент #16a34a→#0f7a44, 15 жирный, скругление 12.
+    private var кнопка: some View {
+        Button(action: действие) {
+            HStack(spacing: 8) {
+                if подаём {
+                    ProgressView()
+                        .tint(Color.white)
+                }
+                Text(подписьКнопки)
+                    .font(.system(size: 15, weight: .heavy))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .padding(14)
+            .background(КраскаБизнеса.градиентКнопки,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .compositingGroup()
+            .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, 0.35)), radius: 8, y: 8)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.985))
+        .disabled(подаём)
+        .opacity(подаём ? 0.55 : 1)
     }
 
     /// «Заявка отклонена: <reason>. Проверьте реквизиты и подайте снова.»
@@ -320,20 +366,24 @@ private struct КарточкаМагазина: View {
     private var шаги: some View {
         let верифицирован = с.верифицированМагазин
         let реквизиты = с.реквизиты.заполнены
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 0) {
             шаг(1, готово: верифицирован, сейчас: !верифицирован, т("split_s1_t"),
                 верифицирован ? т("split_s1_done") : т("split_s1_d"))
             шаг(2, готово: реквизиты, сейчас: верифицирован && !реквизиты, т("split_s2_t"),
                 реквизиты ? т("split_s2_done") : т("split_s2_d"))
-            шаг(3, готово: false, сейчас: верифицирован && реквизиты, т("split_s3_t"), т("split_s3_d"))
+            шаг(3, готово: false, сейчас: верифицирован && реквизиты, т("split_s3_t"), т("split_s3_d"), последний: true)
         }
     }
 
-    private func шаг(_ номер: Int, готово: Bool, сейчас: Bool, _ заголовок: String, _ подпись: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+    /// .split-step: кружок 27 с рамкой 1.5, между шагами — линия 2 пт (у пройденного — акцентом).
+    private func шаг(_ номер: Int, готово: Bool, сейчас: Bool, _ заголовок: String, _ подпись: String,
+                     последний: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(готово ? Theme.акцент : (сейчас ? Theme.оттенокАкцента : Theme.поверхность2))
+                    .fill(готово ? Theme.акцент : Theme.поверхность2)
+                Circle()
+                    .strokeBorder(готово ? Color.clear : (сейчас ? Theme.акцент : Theme.линия), lineWidth: 1.5)
                 if готово {
                     Image(systemName: "checkmark")
                         .font(.system(size: 12, weight: .heavy))
@@ -344,53 +394,81 @@ private struct КарточкаМагазина: View {
                         .foregroundStyle(сейчас ? Theme.акцент : Theme.текстВторой)
                 }
             }
-            .frame(width: 26, height: 26)
+            .frame(width: 27, height: 27)
             .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(заголовок)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                 Text(подпись)
                     .font(.system(size: 12))
+                    .lineSpacing(2)
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.bottom, последний ? 0 : 14)
+        .background(alignment: .topLeading) {
+            if !последний {
+                Rectangle()
+                    .fill(готово ? Theme.акцент : Theme.линия)
+                    .frame(width: 2)
+                    .padding(.top, 27)
+                    .padding(.leading, 12.5)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue(готово ? т("a11y_done") : "")
     }
 
-    private func шапка<Низ: View>(_ заголовок: String, _ подпись: String, значок: String, тон: ЗаметкаБизнеса.Тон,
+    /// .split-card: цветная шапка во всю ширину, под ней тело с отступами 14 / 20 / 16.
+    private func шапка<Низ: View>(_ заголовок: String, _ подпись: String, значок: String, градиент: [Gradient.Stop],
                                   @ViewBuilder низ: () -> Низ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: значок)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .frame(width: 44, height: 44)
-                    .background(тон == .предупреждение ? Theme.оранжевый : Theme.акцент,
-                                in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .background(Color.white.opacity(0.18), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.35), lineWidth: 1.5)
+                    }
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(заголовок)
-                        .font(.system(size: 17, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
+                        .font(.system(size: 16, weight: .heavy))
                         .accessibilityAddTraits(.isHeader)
                     Text(подпись)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
+                        .font(.system(size: 12))
+                        .lineSpacing(3)
+                        .opacity(0.93)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            низ()
+            .foregroundStyle(Color.white)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 20)
+            .background(LinearGradient(stops: градиент, startPoint: .topLeading, endPoint: .bottomTrailing))
+            VStack(alignment: .leading, spacing: 0) {
+                низ()
+            }
+            .padding(.top, 14)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(Theme.поверхность)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
         }
+        .compositingGroup()
+        .shadow(color: Color.black.opacity(0.12), radius: 17, y: 10)
     }
 }
 

@@ -77,7 +77,6 @@ struct ЭкранКлуба: View {
                 if к.акцииИдут {
                     ГеройКлуба(клуб: к)
                     ссылка(к)
-                    ЗаметкаБизнеса(т("club_note"), тон: .серый, значок: "info.circle")
                 } else {
                     ГеройБезАкций()
                 }
@@ -90,55 +89,130 @@ struct ЭкранКлуба: View {
 
     // MARK: - Ссылка
 
+    /// .club-bd: подпись, ссылка в рамке, сетки кнопок по две и заметка по центру внизу.
     private func ссылка(_ к: КлубОснователей) -> some View {
-        КарточкаБизнеса(т("club_your_link_label"), значок: "link") {
-            Text(к.ссылка.replacingOccurrences(of: "^https?://", with: "", options: .regularExpression))
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.текст)
-                .textSelection(.enabled)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        VStack(alignment: .leading, spacing: 0) {
+            метка(т("club_your_link_label"), значок: "link")
+                .padding(.top, 4)
+                .padding(.bottom, 8)
             HStack(spacing: 10) {
-                КнопкаБизнеса(подпись: т("club_copy"), второстепенная: true) { скопировать(к.ссылка) }
+                Image(systemName: "link")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.акцент)
+                    .accessibilityHidden(true)
+                Text(к.ссылка.replacingOccurrences(of: "^https?://", with: "", options: .regularExpression))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1)
+            }
+            HStack(spacing: 10) {
+                Button { скопировать(к.ссылка) } label: {
+                    видКнопки(т("club_copy"), значок: "doc.on.doc", цвет: Theme.текст)
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
                 поделиться(к.ссылка)
             }
-            Text(ТекстыQRКлуба.т("label"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.текстВторой)
-                .padding(.top, 2)
-            if !к.ссылка.isEmpty { ПревьюQRКлуба(ссылка: к.ссылка) }
+            .padding(.top, 10)
+            метка(ТекстыQRКлуба.т("label"), значок: "qrcode")
+                .padding(.top, 16)
             HStack(spacing: 10) {
-                внешняя("WhatsApp", цвет: Theme.whatsApp) {
+                внешняя("WhatsApp", значок: "message.fill", цвет: Theme.whatsApp) {
                     "https://wa.me/?text=" + ПоделитьсяСайта.код(т("club_share_text") + " " + к.ссылка)
                 }
-                внешняя("Telegram", цвет: Theme.проверен) {
+                внешняя("Telegram", значок: "paperplane.fill", цвет: Color(uiColor: Theme.hex(0x2AABEE))) {
                     "https://t.me/share/url?url=" + ПоделитьсяСайта.код(к.ссылка) + "&text="
                         + ПоделитьсяСайта.код(т("club_share_text"))
                 }
             }
+            .padding(.top, 10)
             .disabled(к.ссылка.isEmpty)
             HStack(spacing: 10) {
-                соцсеть("Instagram", цвет: Color(red: 0.84, green: 0.16, blue: 0.46), ссылка: к.ссылка)
-                соцсеть("TikTok", цвет: Color(red: 0.07, green: 0.07, blue: 0.07), ссылка: к.ссылка)
+                соцсеть("Instagram", значок: "camera", цвет: Color(uiColor: Theme.hex(0xE1306C)), ссылка: к.ссылка)
+                соцсеть("TikTok", значок: "music.note", цвет: Color(uiColor: Theme.hex(0xFE2C55)), ссылка: к.ссылка)
             }
+            .padding(.top, 10)
             .disabled(к.ссылка.isEmpty)
+            Text(т("club_note"))
+                .font(.system(size: 12))
+                .lineSpacing(4)
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 16)
         }
     }
 
+    /// .club-lbl: значок 15 акцентом и серая подпись 13.
+    private func метка(_ текст: String, значок: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: значок)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.акцент)
+                .accessibilityHidden(true)
+            Text(текст)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.текстВторой)
+        }
+        .padding(.horizontal, 2)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// .club-btn: серая плашка с рамкой, цветной значок 17 и подпись 14.
+    private func видКнопки(_ подпись: String, значок: String, цвет: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: значок)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(цвет)
+                .accessibilityHidden(true)
+            Text(подпись)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+    }
+
+    /// .club-btn.pri: зелёный градиент, белые значок и подпись.
+    private func видГлавной(_ подпись: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 16, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(подпись)
+                .font(.system(size: 14, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(Color.white)
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(КраскаБизнеса.градиентКнопки, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+    }
+
     /// clubIg / clubTt сайта: кнопка своей соцсети.
-    private func соцсеть(_ имя: String, цвет: Color, ссылка: String) -> some View {
+    private func соцсеть(_ имя: String, значок: String, цвет: Color, ссылка: String) -> some View {
         Button {
             Task { @MainActor in готовитьПост(имя, ссылка: ссылка) }
         } label: {
-            Text(имя)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(цвет, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            видКнопки(имя, значок: значок, цвет: цвет)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
     }
 
     /// _clubSocialShare: подпись со ссылкой — в буфер, тост с именем соцсети, картинка 9:16 — в системный лист.
@@ -163,31 +237,24 @@ struct ЭкранКлуба: View {
     private func поделиться(_ ссылка: String) -> some View {
         if let адрес = URL(string: ссылка), !ссылка.isEmpty {
             ShareLink(item: адрес, subject: Text("Kliko.kz"), message: Text(т("club_share_text"))) {
-                Text(т("club_share"))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(Theme.акцент, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                видГлавной(т("club_share"))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         } else {
-            КнопкаБизнеса(подпись: т("club_share")) { модель.показать(т("club_no_link")) }
+            Button { модель.показать(т("club_no_link")) } label: {
+                видГлавной(т("club_share"))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         }
     }
 
-    private func внешняя(_ подпись: String, цвет: Color, адрес: @escaping () -> String) -> some View {
+    private func внешняя(_ подпись: String, значок: String, цвет: Color, адрес: @escaping () -> String) -> some View {
         Button {
-            if let u = URL(string: адрес()) { UIApplication.shared.open(u) }
+            if let u = URL(string: адрес()) { UIApplication.shared.open(u, options: [:], completionHandler: nil) }
         } label: {
-            Text(подпись)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(цвет, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            видКнопки(подпись, значок: значок, цвет: цвет)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
     }
 
     /// cabRefCopy сайта: «Скопировано!»; ссылки нет — «Ссылка недоступна».
@@ -236,97 +303,145 @@ private struct ГеройКлуба: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 0) {
             if клуб.номер > 0 {
                 участник
             } else {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(Color.white)
-                    .accessibilityHidden(true)
+                ЗамокКлуба(значок: "lock.fill")
                 Text(т("club_locked_title"))
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 19, weight: .heavy))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.center)
+                    .padding(.bottom, 4)
                 Text(т("club_locked_sub"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.шапкаМята)
+                    .font(.system(size: 13))
+                    .foregroundStyle(КраскаКлуба.подпись)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(LinearGradient(colors: [Theme.шапкаВерх, Theme.шапкаНиз], startPoint: .topLeading,
-                                   endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .accessibilityElement(children: .combine)
+        .modifier(ФонГерояКлуба())
     }
 
     @ViewBuilder
     private var участник: some View {
         Label(клуб.ступень.uppercased() + " #" + String(клуб.номер), systemImage: "medal.fill")
-            .font(.system(size: 13, weight: .heavy))
-            .foregroundStyle(Theme.шапкаМятаТекст)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(Theme.шапкаМята, in: Capsule())
-        Text("−" + КлубОснователей.процент(клуб.скидка) + "%")
-            .font(.system(size: 44, weight: .heavy))
-            .foregroundStyle(Color.white)
-            .monospacedDigit()
+            .font(.system(size: 12, weight: .heavy))
+            .tracking(0.6)
+            .foregroundStyle(Color(uiColor: Theme.hex(0x4A3708)))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(LinearGradient(colors: [Color(uiColor: Theme.hex(0xF7E08A)), Color(uiColor: Theme.hex(0xE6BB50))],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing), in: Capsule())
+            .shadow(color: Color(uiColor: Theme.hex(0xE9C15A, 0.5)), radius: 6, y: 5)
+        HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text("−" + КлубОснователей.процент(клуб.скидка))
+                .font(.system(size: 60, weight: .black))
+            Text("%")
+                .font(.system(size: 29, weight: .heavy))
+        }
+        .foregroundStyle(Color.white)
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+        .shadow(color: КраскаКлуба.зелёный.opacity(0.5), radius: 17, y: 6)
+        .environment(\.layoutDirection, .leftToRight)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
         Text(т("club_lifetime_discount_sub"))
-            .font(.system(size: 14))
-            .foregroundStyle(Theme.шапкаМята)
+            .font(.system(size: 13))
+            .foregroundStyle(КраскаКлуба.подпись)
+            .multilineTextAlignment(.center)
         GeometryReader { гео in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.2))
+                Capsule().fill(Color.white.opacity(0.16))
                 HStack(spacing: 0) {
-                    Rectangle().fill(Color.white).frame(width: гео.size.width * доли.0)
-                    Rectangle().fill(Theme.шапкаМята).frame(width: гео.size.width * доли.1)
+                    Rectangle().fill(Color.white.opacity(0.5)).frame(width: гео.size.width * доли.0)
+                    Rectangle()
+                        .fill(LinearGradient(colors: [КраскаКлуба.зелёный, КраскаКлуба.мята],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: гео.size.width * доли.1)
                 }
                 .clipShape(Capsule())
             }
         }
-        .frame(height: 8)
+        .frame(height: 9)
+        .padding(.horizontal, 6)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
         .accessibilityHidden(true)
         Text(подсказка)
-            .font(.system(size: 13))
-            .foregroundStyle(Theme.шапкаМята)
+            .font(.system(size: 12))
+            .foregroundStyle(Color(uiColor: Theme.hex(0x9FE6BD)))
             .multilineTextAlignment(.center)
-        HStack {
-            Text(БизнесText.т("club_friends", ["n": String(клуб.друзей), "b": КлубОснователей.процент(клуб.бонус)]))
-            Spacer(minLength: 8)
-            Text(БизнесText.т("club_cap", ["n": КлубОснователей.процент(клуб.потолок)]))
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(Color.white.opacity(0.85))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Краски .club-hero: в обеих темах одинаковые.
+private enum КраскаКлуба {
+    static let зелёный = Color(uiColor: Theme.hex(0x25D366))
+    static let мята = Color(uiColor: Theme.hex(0x8AFFC4))
+    static let подпись = Color(uiColor: Theme.hex(0xBFF5D4))
+    static let фон = LinearGradient(stops: [
+        .init(color: Color(uiColor: Theme.hex(0x0E5A34)), location: 0),
+        .init(color: Color(uiColor: Theme.hex(0x0B3D24)), location: 0.52),
+        .init(color: Color(uiColor: Theme.hex(0x07130D)), location: 1)
+    ], startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+/// .club-hero: тёмно-зелёный градиент 140° с зелёным свечением справа сверху, отступы 24 / 24 / 20.
+private struct ФонГерояКлуба: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.top, 24)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity)
+            .background {
+                ZStack {
+                    КраскаКлуба.фон
+                    RadialGradient(colors: [КраскаКлуба.зелёный.opacity(0.28), КраскаКлуба.зелёный.opacity(0)],
+                                   center: UnitPoint(x: 0.85, y: 0.1), startRadius: 0, endRadius: 170)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+            }
+            .accessibilityElement(children: .combine)
+    }
+}
+
+/// .club-lock: круг 48 с мятным значком 24.
+private struct ЗамокКлуба: View {
+    let значок: String
+
+    var body: some View {
+        Image(systemName: значок)
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(КраскаКлуба.мята)
+            .frame(width: 48, height: 48)
+            .background(Color.white.opacity(0.12), in: Circle())
+            .padding(.bottom, 12)
+            .accessibilityHidden(true)
     }
 }
 
 /// promos_on === false: «Акций пока нет».
 private struct ГеройБезАкций: View {
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "ticket")
-                .font(.system(size: 26))
-                .foregroundStyle(Color.white)
-                .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            ЗамокКлуба(значок: "ticket")
             Text(БизнесText.т("club_no_promos_title"))
-                .font(.system(size: 20, weight: .heavy))
+                .font(.system(size: 19, weight: .heavy))
                 .foregroundStyle(Color.white)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 4)
             Text(БизнесText.т("club_no_promos_sub"))
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.шапкаМята)
+                .font(.system(size: 13))
+                .foregroundStyle(КраскаКлуба.подпись)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(LinearGradient(colors: [Theme.шапкаВерх, Theme.шапкаНиз], startPoint: .topLeading,
-                                   endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .accessibilityElement(children: .combine)
+        .modifier(ФонГерояКлуба())
     }
 }
 
@@ -426,32 +541,6 @@ private enum QRКлуба {
         let крупный = код.transformed(by: CGAffineTransform(scaleX: масштаб, y: масштаб))
         guard let готово = CIContext().createCGImage(крупный, from: крупный.extent) else { return nil }
         return UIImage(cgImage: готово)
-    }
-}
-
-/// QR на экране: белая скруглённая карточка, под ней — подпись, как на картинке сайта.
-private struct ПревьюQRКлуба: View {
-    let ссылка: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            if let код = QRКлуба.картинка(ссылка, сторона: 480) {
-                Image(uiImage: код)
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 168, height: 168)
-                    .padding(10)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .accessibilityLabel(ТекстыQRКлуба.т("a11y"))
-            }
-            Text(ТекстыQRКлуба.т("scan"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
     }
 }
 
