@@ -892,7 +892,18 @@ struct ОкноEGov: View {
 
     private func т(_ ключ: String) -> String { ДеньгиСделкиText.т(ключ) }
 
+    /// eGov нативно (Sources/Native/Egov): свой поток на SwiftUI; выключен — прежнее окно ниже.
     var body: some View {
+        if ПотокEgov.нативныйEgov {
+            ЛистПотокаEgov(назначение: модель.запрос.назначение, ссылка: модель.запрос.ссылка,
+                           заголовок: модель.запрос.заголовок, подсказка: модель.запрос.подсказка,
+                           готово: готово, закрыть: закрыть)
+        } else {
+            прежнееОкно
+        }
+    }
+
+    private var прежнееОкно: some View {
         NavigationStack {
             содержимое
                 .background(Theme.фонСтраницы.ignoresSafeArea())
