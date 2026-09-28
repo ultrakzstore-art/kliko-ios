@@ -35,6 +35,7 @@ enum СправкаText {
         "no_digital": "Эта возможность недоступна в приложении.",
         "a11y_faq": "Вопрос. Дважды нажмите, чтобы раскрыть ответ",
         "search": "Поиск по справке",
+        "search_clear": "Очистить поиск",
         "nothing_t": "Ничего не найдено",
         "nothing_s": "Попробуйте другое слово или напишите в поддержку.",
     ]
@@ -59,6 +60,7 @@ enum СправкаText {
         "no_digital": "Бұл мүмкіндік қосымшада қолжетімсіз.",
         "a11y_faq": "Сұрақ. Жауапты ашу үшін екі рет басыңыз",
         "search": "Анықтамадан іздеу",
+        "search_clear": "Іздеуді тазарту",
         "nothing_t": "Ештеңе табылмады",
         "nothing_s": "Басқа сөзбен іздеп көріңіз немесе қолдау қызметіне жазыңыз.",
     ]
@@ -83,6 +85,7 @@ enum СправкаText {
         "no_digital": "This feature isn't available in the app.",
         "a11y_faq": "Question. Double-tap to show the answer",
         "search": "Search help",
+        "search_clear": "Clear search",
         "nothing_t": "Nothing found",
         "nothing_s": "Try another word or contact support.",
     ]
@@ -107,6 +110,7 @@ enum СправкаText {
         "no_digital": "هذه الميزة غير متاحة في التطبيق.",
         "a11y_faq": "سؤال. انقر مرتين لعرض الإجابة",
         "search": "البحث في المساعدة",
+        "search_clear": "مسح البحث",
         "nothing_t": "لم يتم العثور على شيء",
         "nothing_s": "جرّب كلمة أخرى أو اكتب إلى الدعم.",
     ]

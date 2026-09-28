@@ -436,3 +436,54 @@ struct КартинкаСтатьи: View {
         .accessibilityHidden(подпись.isEmpty)
     }
 }
+
+/**
+ Поле поиска справки (.help-search сайта): пилюля с лупой, текстом и крестиком «очистить». Стоит в шапке экрана над
+ прокруткой, на непрозрачном фоне страницы: карточки под ним не просвечивают.
+ */
+struct ПолеПоискаСправки: View {
+    @Binding var текст: String
+
+    @FocusState private var вФокусе: Bool
+    @ScaledMetric(relativeTo: .body) private var размер: CGFloat = 15
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: размер, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+                .accessibilityHidden(true)
+            TextField(СправкаText.т("search"), text: $текст)
+                .font(.system(size: размер))
+                .foregroundStyle(Theme.текст)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .focused($вФокусе)
+                .onSubmit { вФокусе = false }
+            if !текст.isEmpty {
+                Button {
+                    текст = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.текстВторой)
+                        .frame(width: 24, height: 24)
+                        .background(Theme.поверхность2, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(СправкаText.т("search_clear"))
+            }
+        }
+        .frame(minHeight: 26)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(Theme.поверхность, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(вФокусе ? Theme.акцент : Theme.линия, lineWidth: 1.5)
+        }
+        .contentShape(Capsule())
+        .onTapGesture { вФокусе = true }
+    }
+}

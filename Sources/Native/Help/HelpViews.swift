@@ -131,6 +131,50 @@ extension СтатьяСайта {
         }
         return блоки[номер].id
     }
+
+    /// Раздел этой страницы по названию (без регистра, эмодзи и знаков, «ё» = «е»): заголовок h1–h4.
+    func раздел(названный название: String) -> Int? {
+        let искомый = РазборСтатьи.ключРаздела(название)
+        guard !искомый.isEmpty else { return nil }
+        let первый = первыйЗаголовок?.id
+        for блок in блоки where блок.id != первый {
+            guard case .заголовок(let уровень) = блок.вид, уровень <= 4 else { continue }
+            if РазборСтатьи.ключРаздела(блок.простой) == искомый { return блок.id }
+        }
+        return nil
+    }
+
+    /**
+     Куда на этой странице ведёт ссылка (плитка раздела, чип, ссылка в тексте): якорь (#start), слово адреса
+     (help/start, help?sec=start) как якорь, а если ни того ни другого нет — раздел с названием плитки. Сама плитка
+     целью не бывает (иначе нажатие «ничего не делает»).
+     */
+    func цель(ссылки адрес: URL, страницы другая: СтраницаСайта) -> Int? {
+        var плитки: Set<Int> = []
+        var названия: [String] = []
+        let строка = адрес.absoluteString
+        for блок in блоки {
+            guard case .карточка(let цельПлитки) = блок.вид else { continue }
+            плитки.insert(блок.id)
+            if цельПлитки.absoluteString == строка { названия.append(блок.простой) }
+        }
+        var слова: [String] = []
+        if let якорь = другая.якорь, !якорь.isEmpty { слова.append(якорь) }
+        let части = другая.слаг.split(separator: "/")
+        if части.count > 1, let последняя = части.last { слова.append(String(последняя)) }
+        if let запрос = другая.запрос, let параметры = URLComponents(string: "?" + запрос)?.queryItems {
+            for параметр in параметры {
+                if let значение = параметр.value, !значение.isEmpty { слова.append(значение) }
+            }
+        }
+        for слово in слова {
+            if let найден = цель(якоря: слово), !плитки.contains(найден) { return найден }
+        }
+        for название in названия {
+            if let найден = раздел(названный: название) { return найден }
+        }
+        return nil
+    }
 }
 
 // MARK: - Загрузка
@@ -333,6 +377,8 @@ struct ЭкранСтраницыСайта: View {
     /// Якорь адреса и <details open> уже учтены (при обновлении статьи не прыгаем заново).
     @State private var начатоС: Bool = false
     @State private var поиск = ""
+    /// Вопросы, раскрытые поиском: пустой запрос их снова сворачивает.
+    @State private var раскрытоПоиском: Set<Int> = []
     /// Размеры, растущие с Dynamic Type вместе с текстом статьи (HelpBlocks): h1 не мельче абзацев.
     @ScaledMetric(relativeTo: .title) private var размерH1: CGFloat = 24
     @ScaledMetric(relativeTo: .footnote) private var размерЧипа: CGFloat = 13
@@ -351,23 +397,37 @@ struct ЭкранСтраницыСайта: View {
 
     private var запросПоиска: String { поиск.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /*
+     Шапка непрозрачная, краской страницы: системный поиск в панели (.searchable) на iOS 26 — стекло, и карточки,
+     уехавшие вверх, просвечивали под «Закрыть» и полем поиска. Теперь поле поиска — своё, над прокруткой
+     (шапкаПоиска), а прокрутка начинается под ним и под ним не проходит.
+     */
     var body: some View {
-        if страница.справка {
-            оформленное
-                .searchable(text: $поиск, placement: .navigationBarDrawer(displayMode: .always),
-                            prompt: Text(т("search")))
-        } else {
-            оформленное
-        }
-    }
-
-    private var оформленное: some View {
         содержимое
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .navigationTitle(заголовокЭкрана)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.фонСтраницы, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .task { await загрузка.загрузить() }
+    }
+
+    /// Поле поиска справки над прокруткой: фон страницы и черта снизу, прокрутка — под ней.
+    private var шапкаПоиска: some View {
+        VStack(spacing: 0) {
+            ПолеПоискаСправки(текст: $поиск)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 10)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
+            Rectangle()
+                .fill(Theme.линия)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
+        .background(Theme.фонСтраницы)
     }
 
     /// Название в шапке: страница подвала — как в подвале; статья справки — её h1, когда загрузилась.
@@ -408,33 +468,38 @@ struct ЭкранСтраницыСайта: View {
 
     private func статьяВид(_ статья: СтатьяСайта, изКопии: Bool) -> some View {
         ScrollViewReader { прокрутка in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if изКопии {
-                        ЗаметкаБизнеса(т("cached"), тон: .предупреждение, значок: "wifi.slash")
-                    }
-                    if страница.тарифы {
-                        ЗаметкаБизнеса(т("no_digital"), тон: .серый, значок: "lock")
-                    }
-                    if запросПоиска.isEmpty {
-                        статьяЦеликом(статья)
-                    } else {
-                        найденноеВид(статья)
-                    }
-                    if страница.справка {
-                        поддержка
-                    }
+            VStack(spacing: 0) {
+                if страница.справка {
+                    шапкаПоиска
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
-                /* На iPad строка не тянется во всю ширину — читать как на сайте. */
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if изКопии {
+                            ЗаметкаБизнеса(т("cached"), тон: .предупреждение, значок: "wifi.slash")
+                        }
+                        if страница.тарифы {
+                            ЗаметкаБизнеса(т("no_digital"), тон: .серый, значок: "lock")
+                        }
+                        if запросПоиска.isEmpty {
+                            статьяЦеликом(статья)
+                        } else {
+                            найденноеВид(статья)
+                        }
+                        if страница.справка {
+                            поддержка
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                    /* На iPad строка не тянется во всю ширину — читать как на сайте. */
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .refreshable { await загрузка.загрузить(заново: true) }
+                .environment(\.openURL, OpenURLAction { адрес in обработать(адрес, статья: статья) })
             }
-            .scrollDismissesKeyboard(.interactively)
-            .refreshable { await загрузка.загрузить(заново: true) }
-            .environment(\.openURL, OpenURLAction { адрес in обработать(адрес, статья: статья) })
             .onAppear { начать(статья) }
             .onChange(of: прокрутить) { _, цель in
                 guard let цель else { return }
@@ -563,10 +628,17 @@ struct ЭкранСтраницыСайта: View {
         }
     }
 
-    /// Найденные вопросы — раскрыты: ответ виден сразу.
+    /// Найденные вопросы — раскрыты: ответ виден сразу. Запрос стёрт — раскрытые поиском свёрнуты.
     private func раскрытьНайденное(_ статья: СтатьяСайта) {
+        if запросПоиска.isEmpty {
+            раскрытые.subtract(раскрытоПоиском)
+            раскрытоПоиском = []
+            return
+        }
         for блок in найденное(статья) {
-            if case .вопрос = блок.вид { раскрытые.insert(блок.id) }
+            guard case .вопрос = блок.вид, !раскрытые.contains(блок.id) else { continue }
+            раскрытые.insert(блок.id)
+            раскрытоПоиском.insert(блок.id)
         }
     }
 
@@ -619,14 +691,16 @@ struct ЭкранСтраницыСайта: View {
         /* Оплата услуг сайта из приложения не открывается (правило App Store 3.1.1). */
         if РазборСтатьи.оплата(адрес) { return .handled }
         if let другая = СтраницаСайта.из(адрес) {
-            if другая.таЖе(страница) {
-                if let якорь = другая.якорь, let цель = статья.цель(якоря: якорь) {
-                    поиск = ""
-                    раскрыть(цель, статья: статья)
-                    прокрутить = цель
-                }
+            /* Плитка и ссылка на раздел: сначала — раздел этой же страницы (якорь, help/start, help?sec=start или
+               название плитки); нет его здесь — другая статья справки своим экраном. */
+            let рядом = другая.таЖе(страница) || (страница.справка && другая.справка)
+            if рядом, let цель = статья.цель(ссылки: адрес, страницы: другая) {
+                поиск = ""
+                раскрыть(цель, статья: статья)
+                прокрутить = цель
                 return .handled
             }
+            if другая.таЖе(страница) { return .handled }
             перейти(другая)
             return .handled
         }
