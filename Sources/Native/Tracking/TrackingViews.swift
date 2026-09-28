@@ -771,6 +771,7 @@ struct ЛистПравкиТрека: View {
                     }
                 }
                 .padding(20)
+                .мерилоФормы()
             }
             .background(Theme.поверхность.ignoresSafeArea())
             .navigationTitle(т("edit_t"))
@@ -792,7 +793,8 @@ struct ЛистПравкиТрека: View {
                 if ввод.isEmpty { фокус = true }
             }
         }
-        .presentationDetents([.medium, .large])
+        /* По высоте формы, без пустоты снизу (было .medium с пустым низом). */
+        .листПоВысоте()
     }
 
     private var ошибкаНаЭкране: Binding<Bool> {

@@ -404,6 +404,7 @@ struct ЧекСделки: View {
                 }
                 .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
                 .padding(16)
+                .мерилоФормы()
             }
             .background(Theme.фонСтраницы.ignoresSafeArea())
             .modifier(ШапкаСделок(заголовок: т("rc_t")))
@@ -413,6 +414,8 @@ struct ЧекСделки: View {
                 }
             }
         }
+        /* Чек по высоте содержимого; длинный — большой лист с прокруткой. */
+        .листПоВысоте()
     }
 
     private var шапка: some View {

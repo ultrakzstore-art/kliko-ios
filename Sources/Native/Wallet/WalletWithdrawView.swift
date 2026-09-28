@@ -41,6 +41,7 @@ struct ЭкранВывода: View {
                     }
                 }
                 .padding(16)
+                .мерилоФормы()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.фонСтраницы.ignoresSafeArea())
@@ -63,6 +64,8 @@ struct ЭкранВывода: View {
                 }
             }
         }
+        /* По высоте шага — без пустоты снизу; длинный шаг — большой лист с прокруткой. */
+        .листПоВысоте()
         .interactiveDismissDisabled(модель.идёт)
         .modifier(ОкнаВывода(модель: модель, открыть: открыть, закрыть: закрыть))
     }
