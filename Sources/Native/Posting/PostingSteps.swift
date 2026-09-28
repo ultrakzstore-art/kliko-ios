@@ -45,10 +45,12 @@ struct ШагиПодачи: View {
                     if модель.страница.нуженEgov && !модель.правка { плашкаEgov }
                     if !модель.правка { полосаТипа }
                     полоса
+                        .padding(.top, 2)
                     шаг
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
             }
             .scrollDismissesKeyboard(.interactively)
             .submitLabel(.next)
@@ -74,33 +76,41 @@ struct ШагиПодачи: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { низ }
+        .fullScreenCover(item: $модель.мастер) { м in
+            мастер(м)
+        }
+    }
+
+    /// Мастера поверх шагов: авто (кузов — дети раздела со старта) и объект недвижимости.
+    @ViewBuilder
+    private func мастер(_ м: МастерПодачи) -> some View {
+        switch м {
+        case .авто(let кузов):
+            МастерАвтоВид(модель: модель, форма: модель.форма,
+                          кузова: модель.справочники.разделы[модель.форма.раздел]?.дети ?? [], сКузовом: кузов)
+        case .недвижимость(let сШага):
+            МастерНедвижимостиВид(модель: модель, форма: модель.форма, сШага: сШага)
+        }
     }
 
     // MARK: Шапка шага
 
-    /// .add-steps: семь полосок .ast-line (пройденные, текущая, впереди) и «Фото  1 / 7»; в правке — ряд шагов.
+    /**
+     .add-steps: полоса из сегментов во всю ширину — по одному на каждый шаг, который есть у этого вида объявления
+     (пустые шаги пропускаются, как у сайта), пройденные — зелёные; под ней «Фото  1 / 6»; в правке — ряд шагов.
+     */
     private var полоса: some View {
-        let всего = ШагПодачи.allCases.count
-        let пройдено = Theme.цвет(светлый: Theme.hex(0x85A897), тёмный: Theme.hex(0x6ED8A5, 0.51))
+        let номер = модель.номерШага
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                ForEach(ШагПодачи.allCases) { ш in
-                    Capsule()
-                        .fill(ш.rawValue < модель.шаг.rawValue ? пройдено
-                              : (ш == модель.шаг ? КраскаПодачи.акцентТекст : КраскаПодачи.линия))
-                        .frame(height: 4)
-                }
-            }
-            .animation(ДвижениеСайта.шаг, value: модель.шаг)
-            .accessibilityHidden(true)
+            ПолосаШаговПодачи(всего: номер.всего, текущий: номер.номер - 1)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(модель.шаг.название)
-                    .font(.system(size: 15, weight: .heavy))
+                Text(модель.названиеШага(модель.шаг))
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(КраскаПодачи.текст)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                Text(String(модель.шаг.rawValue + 1) + " / " + String(всего))
-                    .font(.system(size: 12).monospacedDigit())
+                Text(String(номер.номер) + " / " + String(номер.всего))
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(Theme.текстВторой)
                 Spacer(minLength: 0)
             }
@@ -129,7 +139,7 @@ struct ШагиПодачи: View {
             модель.перейти(к: ш)
         } label: {
             HStack(spacing: 5) {
-                Text(ш.название)
+                Text(модель.названиеШага(ш))
                     .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
                 if изменён {
@@ -259,11 +269,12 @@ struct ШагиПодачи: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
-        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
                 .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
         }
+        .shadow(color: КраскаПодачи.тень, radius: 6, y: 2)
     }
 
     private var названиеТипа: String {
@@ -280,7 +291,7 @@ struct ШагиПодачи: View {
     @ViewBuilder
     private var шаг: some View {
         switch модель.шаг {
-        case .фото: ШагФото(модель: модель)
+        case .фото: ШагФото(модель: модель, фокус: $фокус)
         case .данные: ШагДанные(модель: модель, фокус: $фокус)
         case .характеристики: ШагХарактеристики(модель: модель, фокус: $фокус)
         case .цена: ШагЦена(модель: модель, фокус: $фокус)
@@ -417,7 +428,11 @@ struct ШагиПодачи: View {
         case .адрес:
             if модель.городВводом { п.append("city") }
             п.append("address")
-        case .дополнительно, .фото, .проверка:
+        case .фото:
+            if модель.режим == .услуга && !модель.услуга.направление.isEmpty {
+                п.append(contentsOf: ["svc_do", "svc_inc", "svc_price", "svc_city"])
+            }
+        case .дополнительно, .проверка:
             break
         }
         return п
@@ -428,28 +443,31 @@ struct ШагиПодачи: View {
 
 struct ШагФото: View {
     @ObservedObject var модель: ПодачаМодель
+    let фокус: FocusState<String?>.Binding
     @State private var выбор: [PhotosPickerItem] = []
     @State private var камера = false
     @State private var тащим: UUID? = nil
+    /// Услуга: фото свёрнуто (у сайта «необязательно для услуги») — разворачивается «Добавить своё фото».
+    @State private var фотоУслуги = false
 
-    init(модель: ПодачаМодель) {
+    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding) {
         self.модель = модель
+        self.фокус = фокус
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
 
+    /// Услуга (не правка): сначала мастер услуги, фото — по желанию.
+    private var услуга: Bool { модель.режим == .услуга && !модель.правка }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            КарточкаПодачи(т("step_photo"), подпись: подпись, значок: "camera") {
-                if модель.плитки.isEmpty {
-                    зона
-                } else {
-                    сетка
-                    if КамераПодачи.есть && модель.местоФото > 0 { кнопкаКамеры }
-                }
-                if модель.местоФото == 0 {
-                    ПодсказкаПоля(String(format: т("photo_cap_full"), модель.лимитФото))
-                }
+            if !модель.правка { входМастера }
+            if услуга { МастерУслугиВид(модель: модель, фокус: фокус) }
+            if !услуга || фотоУслуги || !модель.плитки.isEmpty {
+                карточкаФото
+            } else {
+                свёрнутоеФото
             }
             if модель.распознаваниеДоступно { блокИИ }
             if let статус = модель.статусИИ {
@@ -468,6 +486,89 @@ struct ШагФото: View {
         }
     }
 
+    /// Авто и недвижимость: карточка параметров над фото (#aw2-entry / #rw2-entry) — сначала марка и модель.
+    @ViewBuilder
+    private var входМастера: some View {
+        let тм = МастерПодачиText.т
+        let есть = !модель.форма.бренд.trimmingCharacters(in: .whitespaces).isEmpty
+        let сводка = модель.сводкаНедвижимости
+        switch модель.режим {
+        case .авто:
+            VStack(alignment: .leading, spacing: 6) {
+                ВходМастераПодачи(значок: "car", заголовок: тм(есть ? "aw_entry_t" : "aw_entry_new"),
+                                  подпись: есть ? модель.сводкаАвто : тм("aw_entry_s"), заполнено: есть,
+                                  ошибка: модель.ошибка("auto") != nil) {
+                    модель.открытьМастерАвто()
+                }
+                СтрокаОшибки(модель.ошибка("auto"))
+            }
+            .id("auto")
+        case .недвижимость:
+            ВходМастераПодачи(значок: "house", заголовок: сводка.заголовок, подпись: сводка.подпись,
+                              заполнено: !модель.форма.вид.isEmpty && !модель.форма.недвижимость.isEmpty) {
+                модель.открытьМастерНедвижимости()
+            }
+        case .товар, .запчасти, .услуга, .работа:
+            EmptyView()
+        }
+    }
+
+    /// #photo-ecard: зона «Добавьте фото» или сетка, под ними — план съёмки сайта (что и как снять).
+    private var карточкаФото: some View {
+        КарточкаПодачи(т("step_photo"), подпись: подпись, значок: "camera") {
+            if модель.плитки.isEmpty {
+                зона
+            } else {
+                сетка
+                if КамераПодачи.есть && модель.местоФото > 0 { кнопкаКамеры }
+            }
+            if модель.местоФото == 0 {
+                ПодсказкаПоля(String(format: т("photo_cap_full"), модель.лимитФото))
+            }
+            if let план = модель.планСъёмки {
+                ПланСъёмкиВид(план: план, снято: модель.плитки.count)
+            }
+        }
+    }
+
+    /// Фото услуги свёрнуто: «Фото · необязательно для услуги» и «Добавить своё фото».
+    private var свёрнутоеФото: some View {
+        Button {
+            withAnimation(ДвижениеСайта.смена) { фотоУслуги = true }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "camera")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(КраскаПодачи.хорошоТекст)
+                    .frame(width: 34, height: 34)
+                    .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(МастерПодачиText.т("svc_photo_add"))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.текст)
+                    Text(т("step_photo") + " · " + МастерПодачиText.т("svc_photo_opt"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.хорошоТекст)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(КраскаПодачи.линия, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+    }
+
     /// Пусто — подсказки нет (она в зоне); есть фото — «2 из 5 фото · первое — обложка, перетащите…».
     private var подпись: String? {
         if модель.плитки.isEmpty { return nil }
@@ -475,28 +576,39 @@ struct ШагФото: View {
         return счёт + " · " + т("photo_order_hint")
     }
 
-    /// .photo-zone: пунктир --line 2 px на --surf2, значок, «Добавьте фото», «Галерея» (--g) и «Камера» (--tint-info),
-    /// «до 5 фото · jpg/png/webp».
+    /**
+     .photo-zone: пунктир --line 2 px на --surf2, значок в мятном круге, «Добавьте фото», «Галерея» (--g) и «Камера»
+     (светло-зелёная, как вторичные кнопки кабинета — не синяя), «до N фото · jpg/png/webp». Зона высокая — главное
+     действие шага, пустоты под карточкой нет.
+     */
     private var зона: some View {
         VStack(spacing: 0) {
             Image(systemName: "camera")
-                .font(.system(size: 32, weight: .regular))
-                .foregroundStyle(Theme.текстВторой)
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(КраскаПодачи.хорошоТекст)
+                .frame(width: 64, height: 64)
+                .background(КраскаПодачи.хорошоФон, in: Circle())
                 .accessibilityHidden(true)
             Text(т("form_add_photo"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(КраскаПодачи.текст)
+                .padding(.top, 12)
+            Text(т("add_photo_sub"))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-            HStack(spacing: 8) {
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+                .padding(.bottom, 16)
+            HStack(spacing: 10) {
                 PhotosPicker(selection: $выбор, maxSelectionCount: max(1, модель.местоФото), selectionBehavior: .ordered,
                              matching: .images) {
-                    кнопкаЗоны(т("form_gallery"), значок: "folder", главная: true)
+                    кнопкаЗоны(т("form_gallery"), значок: "photo.on.rectangle", главная: true, широкая: true)
                 }
                 .buttonStyle(.plain)
                 if КамераПодачи.есть {
                     Button { камера = true } label: {
-                        кнопкаЗоны(т("form_camera"), значок: "camera", главная: false)
+                        кнопкаЗоны(т("form_camera"), значок: "camera", главная: false, широкая: true)
                     }
                     .buttonStyle(.plain)
                 }
@@ -504,11 +616,11 @@ struct ШагФото: View {
             Text(String(format: т("form_photo_hint"), модель.лимитФото))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
-                .padding(.top, 8)
+                .padding(.top, 12)
         }
-        .padding(.vertical, 28)
+        .padding(.vertical, 30)
         .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 250)
         .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
@@ -516,25 +628,27 @@ struct ШагФото: View {
         }
     }
 
-    /// .photo-btn: высота 38, 13/700, скругление 12; .pri — --g с белым, .alt — --tint-info с кромкой --edge-info.
+    /// .photo-btn: высота 44, 14/700, скругление 12; главная — --g с белым, вторая — мятная --tint-ok с зелёным
+    /// текстом и кромкой (вторичная кнопка кабинета).
     private func кнопкаЗоны(_ подпись: String, значок: String, главная: Bool, широкая: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: значок)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .accessibilityHidden(true)
             Text(подпись)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
-        .foregroundStyle(главная ? Color.white : КраскаПодачи.инфоТекст)
+        .foregroundStyle(главная ? Color.white : КраскаПодачи.хорошоТекст)
         .padding(.horizontal, 16)
         .frame(maxWidth: широкая ? .infinity : nil)
-        .frame(height: 38)
-        .background(главная ? Theme.зелёный : КраскаПодачи.инфоФон,
+        .frame(height: 44)
+        .background(главная ? Theme.зелёный : КраскаПодачи.хорошоФон,
                     in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                .strokeBorder(главная ? Color.clear : КраскаПодачи.инфоКромка, lineWidth: 1.5)
+                .strokeBorder(главная ? Color.clear : КраскаПодачи.хорошоТекст.opacity(0.35), lineWidth: 1.5)
         }
         .contentShape(Rectangle())
     }
@@ -574,7 +688,7 @@ struct ШагФото: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(Theme.текстВторой)
+            .foregroundStyle(КраскаПодачи.хорошоТекст)
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
             .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
@@ -1255,12 +1369,20 @@ struct ПоляАвто: View {
     private static let топливо = ["Бензин", "Дизель", "Газ", "Гибрид", "Электро"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            КарточкаПодачи(т("aw_title"), подпись: т("aw_sub")) {
-                марка
-                if !модель.форма.бренд.isEmpty { модельАвто }
-                if !поколения.isEmpty { поколение }
+        let тм = МастерПодачиText.т
+        let есть = !модель.форма.бренд.trimmingCharacters(in: .whitespaces).isEmpty
+        return VStack(alignment: .leading, spacing: 14) {
+            /* Марка, модель и поколение — только мастером (справочник сайта): название собирается из них. */
+            VStack(alignment: .leading, spacing: 6) {
+                ВходМастераПодачи(значок: "car", заголовок: тм(есть ? "aw_entry_t" : "aw_entry_new"),
+                                  подпись: есть ? модель.сводкаАвто : тм("aw_entry_s"), заполнено: есть,
+                                  ошибка: модель.ошибка("auto") != nil) {
+                    фокус.wrappedValue = nil
+                    модель.открытьМастерАвто()
+                }
+                СтрокаОшибки(модель.ошибка("auto"))
             }
+            .id("auto")
             КарточкаПодачи(т("aw_params")) {
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1295,92 +1417,6 @@ struct ПоляАвто: View {
                 }
             }
         }
-        .task {
-            await модель.загрузитьМарки()
-            if модель.моделиАвто.isEmpty && !модель.форма.бренд.isEmpty {
-                await модель.загрузитьМодели(модель.форма.бренд)
-            }
-        }
-    }
-
-    private var марка: some View {
-        let ошибка = модель.ошибка("auto")
-        return VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("aw_brand"), обязательно: true)
-            СтрокаВыбора(модель.форма.бренд, подсказка: т("aw_brand_pick")) {
-                выбратьМарку()
-            }
-            СтрокаОшибки(ошибка)
-        }
-        .id("auto")
-    }
-
-    private func выбратьМарку() {
-        let м = модель
-        фокус.wrappedValue = nil
-        показатьСписок(СписокВыбора(заголовок: т("aw_brand"),
-                                    варианты: м.маркиАвто.map { ВариантПоля(ключ: $0, подпись: $0) },
-                                    своё: т("spec_other_write")) { марка in
-            guard м.форма.бренд != марка else { return }
-            var ф = м.форма
-            ф.бренд = марка
-            ф.модель = ""
-            ф.поколение = ""
-            м.форма = ф
-            Task { await м.загрузитьМодели(марка) }
-        })
-    }
-
-    private var модельАвто: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("aw_model"))
-            СтрокаВыбора(модель.форма.модель, подсказка: т("spec_model")) {
-                выбратьМодель()
-            }
-        }
-    }
-
-    private func выбратьМодель() {
-        let м = модель
-        фокус.wrappedValue = nil
-        показатьСписок(СписокВыбора(заголовок: т("aw_model"),
-                                    варианты: м.моделиАвто.map { ВариантПоля(ключ: $0.имя, подпись: $0.имя) },
-                                    своё: т("spec_write_model")) { имя in
-            var ф = м.форма
-            ф.модель = имя
-            ф.поколение = ""
-            м.форма = ф
-        })
-    }
-
-    private var поколение: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоля(т("aw_gen"))
-            СтрокаВыбора(модель.форма.поколение, подсказка: т("spec_unset")) {
-                выбратьПоколение()
-            }
-        }
-    }
-
-    private func выбратьПоколение() {
-        let м = модель
-        фокус.wrappedValue = nil
-        var варианты: [ВариантПоля] = []
-        for п in поколения {
-            var подпись = п.имя
-            if п.с > 0 {
-                let до = п.по > 0 ? String(п.по) : т("aw_now")
-                подпись += " · " + String(п.с) + "–" + до
-            }
-            варианты.append(ВариантПоля(ключ: п.имя, подпись: подпись))
-        }
-        показатьСписок(СписокВыбора(заголовок: т("aw_gen"), варианты: варианты, сброс: т("spec_unset")) { имя in
-            м.форма.поколение = имя
-        })
-    }
-
-    private var поколения: [ПоколениеАвто] {
-        модель.моделиАвто.first(where: { $0.имя == модель.форма.модель })?.поколения ?? []
     }
 
     private func цифры(_ связь: Binding<String>, предел: Int) -> Binding<String> {

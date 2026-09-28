@@ -84,23 +84,28 @@ struct ГеройПодачи: View {
         return Theme.цвет(светлый: Theme.hex(0x060A0E, 0), тёмный: Theme.hex(0x060A0E, 0.48))
     }
 
+    /**
+     Заголовок и подзаголовок слева, «✕» — в правом верхнем углу на линии заголовка, «Черновик» — под подзаголовком.
+     Блик — наложением на градиент: размер шапки задаёт её текст (раньше круг 180×180 в фоне растягивал зелёную
+     подложку выше и ниже шапки, и полоса типа «Легковая / Изменить» наезжала на неё).
+     */
     var body: some View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-        return HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(т(правка ? "edit_title" : "form_title_new"))
-                    .font(.system(size: 19, weight: .heavy))
-                    .kerning(-0.3)
-                    .foregroundStyle(Color.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                Text(т(правка ? "edit_sub" : "form_hero_sub"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-            HStack(spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(т(правка ? "edit_title" : "form_title_new"))
+                        .font(.system(size: 19, weight: .heavy))
+                        .kerning(-0.3)
+                        .foregroundStyle(Color.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(т(правка ? "edit_sub" : "form_hero_sub"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
                 Button(action: закрыть) {
                     Image(systemName: "xmark")
                         .font(.system(size: 14, weight: .bold))
@@ -112,27 +117,26 @@ struct ГеройПодачи: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(т("close"))
-                плашка
             }
-            .fixedSize()
+            плашка
         }
-        .padding(20)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            ZStack(alignment: .topTrailing) {
-                LinearGradient(colors: [Theme.зелёный2, Theme.зелёный], startPoint: .topLeading, endPoint: .bottomTrailing)
-                затемнение
-                Circle()
-                    .fill(RadialGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0)], center: .center,
-                                         startRadius: 0, endRadius: 63))
-                    .frame(width: 180, height: 180)
-                    .offset(x: 50, y: -50)
-            }
-            .clipShape(форма)
+            LinearGradient(colors: [Theme.зелёный2, Theme.зелёный], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .overlay { затемнение }
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(RadialGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0)], center: .center,
+                                             startRadius: 0, endRadius: 63))
+                        .frame(width: 180, height: 180)
+                        .offset(x: 50, y: -50)
+                        .allowsHitTesting(false)
+                }
+                .clipShape(форма)
         }
-        .shadow(color: Color(uiColor: Theme.hex(0x0F5132, 0.35)), radius: 8, y: 10)
-        .padding(.horizontal, -2)
-        .padding(.bottom, 2)
+        .shadow(color: Color(uiColor: Theme.hex(0x0F5132, 0.22)), radius: 6, y: 4)
     }
 
     /// .estatus: точка --acc-rgb2 с кольцом 30 %, 11/700 белым на белом 20 %.
@@ -612,7 +616,7 @@ struct СтартПодачи: View {
             guard части.count == 2 else { return }
             модель.применитьНедвижимость(сделка: сделка, вид: части[0], раздел: части[1])
         case .транспорт:
-            /* _asAutoGo: ADD_TYPE="" — тип «транспорт» без отдельного значения; уточнение кузова — на шаге «Данные». */
+            /* _asAutoGo: ADD_TYPE="" — тип «транспорт» без отдельного значения; уточнение кузова — первым шагом мастера авто (_asRenderAutoKids), потом марка и модель. */
             модель.применитьСтарт(тип: "", раздел: id, плитка: подпись, подсказка: "", подпись: под)
         }
     }

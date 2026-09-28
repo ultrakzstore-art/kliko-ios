@@ -197,41 +197,55 @@ extension ПодачаМодель {
 
     // MARK: - Справочники мастеров (только чтение)
 
-    /// GET /api/auto_models.php?brands=1 → {groups:[{region, brands:[{brand, models}]}]} — марки по порядку сайта.
+    /// GET /api/auto_models.php?brands=1 → {groups:[{region, brands:[{brand, models}]}]} — марки группами по порядку
+    /// сайта (_awLoadBrands); не ответил — пусто, мастер предложит вписать марку.
     func загрузитьМарки() async {
         guard маркиАвто.isEmpty else { return }
+        маркиНеДоступны = false
         typealias A = МоиОбъявленияAPI
         guard let j = try? await A.получить("/api/auto_models.php?brands=1", отКорня: true), A.да(j["ok"]) else {
-            показать(т("aw_load_err"))
+            маркиНеДоступны = true
             return
         }
         var список: [String] = []
+        var группы: [ГруппаМарок] = []
         var были = Set<String>()
         for группа in (j["groups"] as? [Any]) ?? [] {
             guard let г = группа as? [String: Any] else { continue }
+            var свои: [String] = []
             for марка in (г["brands"] as? [Any]) ?? [] {
-                let имя = A.строка((марка as? [String: Any])?["brand"])
+                let имя = A.строка((марка as? [String: Any])?["brand"]).trimmingCharacters(in: .whitespaces)
                 if !имя.isEmpty && !были.contains(имя) {
                     были.insert(имя)
                     список.append(имя)
+                    свои.append(имя)
                 }
             }
+            guard !свои.isEmpty else { continue }
+            let регион = A.строка(г["region"]).trimmingCharacters(in: .whitespaces)
+            let подпись = регион.isEmpty ? МастерПодачиText.т("aw_others") : регион
+            if let был = группы.firstIndex(where: { $0.регион == подпись }) {
+                группы[был] = ГруппаМарок(регион: подпись, марки: группы[был].марки + свои)
+            } else {
+                группы.append(ГруппаМарок(регион: подпись, марки: свои))
+            }
         }
+        маркиНеДоступны = список.isEmpty
         маркиАвто = список
+        группыМарок = группы
     }
 
-    /// GET /api/auto_models.php?brand=<марка> → {models:[{name, body, gens:[{name, from, to}]}]}.
-    func загрузитьМодели(_ марка: String) async {
-        моделиАвто = []
+    /// GET /api/auto_models.php?brand=<марка> → {models:[{name, body, gens:[{name, from, to}]}]}; кэш — как _AW_MODELS.
+    func моделиМарки(_ марка: String) async -> [МодельАвто] {
         let чистая = марка.trimmingCharacters(in: .whitespaces)
-        guard !чистая.isEmpty else { return }
+        guard !чистая.isEmpty else { return [] }
+        if let были = кэшМоделейАвто[чистая] { return были }
         typealias A = МоиОбъявленияAPI
         let код = чистая.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? чистая
         guard let j = try? await A.получить("/api/auto_models.php?brand=" + код, отКорня: true), A.да(j["ok"]) else {
-            return
+            return []
         }
-        guard форма.бренд.trimmingCharacters(in: .whitespaces) == чистая else { return }
-        моделиАвто = ((j["models"] as? [Any]) ?? []).compactMap { запись -> МодельАвто? in
+        let модели = ((j["models"] as? [Any]) ?? []).compactMap { запись -> МодельАвто? in
             guard let м = запись as? [String: Any] else { return nil }
             let имя = A.строка(м["name"])
             guard !имя.isEmpty else { return nil }
@@ -241,8 +255,20 @@ extension ПодачаМодель {
                 guard !название.isEmpty else { return nil }
                 return ПоколениеАвто(имя: название, с: A.целое(г["from"]), по: A.целое(г["to"]))
             }
-            return МодельАвто(имя: имя, поколения: поколения)
+            let кузов = ((м["body"] as? [Any]) ?? []).map { A.строка($0) }.filter { !$0.isEmpty }
+            return МодельАвто(имя: имя, поколения: поколения, кузов: кузов)
         }
+        кэшМоделейАвто[чистая] = модели
+        return модели
+    }
+
+    /// Модели выбранной марки формы (поколения на шаге «Характеристики»).
+    func загрузитьМодели(_ марка: String) async {
+        моделиАвто = []
+        let чистая = марка.trimmingCharacters(in: .whitespaces)
+        let модели = await моделиМарки(чистая)
+        guard !чистая.isEmpty, форма.бренд.trimmingCharacters(in: .whitespaces) == чистая else { return }
+        моделиАвто = модели
     }
 
     /// GET /api/parts_types.php?syn=1 → {groups:[{items:[{k, n, s}]}]} — «Что за деталь».
@@ -266,7 +292,7 @@ extension ПодачаМодель {
 
     var распознаваниеДоступно: Bool {
         Config.распознаваниеВПодаче && !правка && страница.ключИИ && !страница.иИЗаблокирован
-            && режим != .недвижимость && !готовыеФото.isEmpty
+            && режим != .недвижимость && режим != .услуга && !готовыеФото.isEmpty
     }
 
     func распознать() {
@@ -356,20 +382,42 @@ extension ПодачаМодель {
                 показать(заметка.isEmpty ? т("ai_cache") : заметка)
             }
             let было = форма.раздел
+            /* Авто: марку, модель и поколение человек выбрал в мастере — Kliko AI их не трогает (владелец: «AI не
+               должен перезаписывать выбранные бренд и модель»); год, пробег, объём, коробку и топливо дописывает только
+               в пустые. Марка без мастера — к написанию справочника (autoWizFromAi сайта). */
+            let авто = режим == .авто
+            let маркаВыбрана = авто && !форма.бренд.trimmingCharacters(in: .whitespaces).isEmpty
             заполняем = true
             var ф = форма
-            ф.бренд = A.строка(поля["brand"])
-            ф.cpu = A.строка(поля["cpu"])
-            ф.gpu = A.строка(поля["gpu"])
-            ф.ram = A.строка(поля["ram"])
-            ф.storage = A.строка(поля["storage"])
-            ф.year = A.строка(поля["year"])
+            if маркаВыбрана {
+                if ф.cpu.isEmpty { ф.cpu = A.строка(поля["cpu"]) }
+                if ф.gpu.isEmpty { ф.gpu = A.строка(поля["gpu"]) }
+                if ф.ram.isEmpty { ф.ram = A.строка(поля["ram"]) }
+                if ф.storage.isEmpty { ф.storage = A.строка(поля["storage"]) }
+                if ф.year.isEmpty { ф.year = A.строка(поля["year"]) }
+            } else {
+                ф.бренд = авто ? каноническаяМарка(A.строка(поля["brand"])) : A.строка(поля["brand"])
+                ф.cpu = A.строка(поля["cpu"])
+                ф.gpu = A.строка(поля["gpu"])
+                ф.ram = A.строка(поля["ram"])
+                ф.storage = A.строка(поля["storage"])
+                ф.year = A.строка(поля["year"])
+            }
             ф.описание = A.строка(поля["description"])
-            ф.название = Self.полноеИмя(A.строка(поля["brand"]), A.строка(поля["title"]))
+            if !авто { ф.название = Self.полноеИмя(A.строка(поля["brand"]), A.строка(поля["title"])) }
             ф.состояние = A.строка(поля["condition"]) == "new" ? "new" : "used"
             форма = ф
             заполняем = false
-            let новый = A.строка(поля["category"])
+            if авто {
+                /* Название авто — только из параметров (autoTitleCompose), не из ответа Kliko AI. */
+                let собранное = ПределыПодачи.обрезать(составитьНазваниеАвто(), ПределыПодачи.название)
+                if !собранное.isEmpty && форма.название != собранное { форма.название = собранное }
+            }
+            var новый = A.строка(поля["category"])
+            /* Авто остаётся транспортом: раздел не из транспорта (или запчасти) Kliko AI не подставляет. */
+            if авто && (!справочники.внутри(новый, ["transport"]) || справочники.внутри(новый, ["auto-parts"])) {
+                новый = ""
+            }
             if !новый.isEmpty && справочники.разделы[новый] != nil {
                 выбратьРаздел(новый)
                 if !было.isEmpty && было != новый {
@@ -443,6 +491,33 @@ extension ПодачаМодель {
         статусИИ = т("ai_fail")
     }
 
+    /// autoWizFromAi сайта: марку из ответа — к написанию справочника («тойота» → Toyota, «Mercedes» → Mercedes-Benz).
+    func каноническаяМарка(_ марка: String) -> String {
+        let чистая = марка.trimmingCharacters(in: .whitespaces)
+        guard !чистая.isEmpty, !маркиАвто.isEmpty else { return чистая }
+        func ключ(_ с: String) -> String {
+            String(с.lowercased().filter { !" -_.".contains($0) })
+        }
+        let русские: [String: String] = [
+            "тойота": "Toyota", "лексус": "Lexus", "ниссан": "Nissan", "хонда": "Honda", "мазда": "Mazda",
+            "митсубиси": "Mitsubishi", "мицубиси": "Mitsubishi", "субару": "Subaru", "сузуки": "Suzuki",
+            "хендай": "Hyundai", "хёндай": "Hyundai", "хундай": "Hyundai", "киа": "Kia", "дэу": "Daewoo",
+            "мерседес": "Mercedes-Benz", "мерседесбенц": "Mercedes-Benz", "бмв": "BMW", "ауди": "Audi",
+            "фольксваген": "Volkswagen", "порше": "Porsche", "опель": "Opel", "шкода": "Skoda", "вольво": "Volvo",
+            "рено": "Renault", "пежо": "Peugeot", "шевроле": "Chevrolet", "форд": "Ford", "лада": "Lada",
+            "ваз": "Lada", "уаз": "UAZ", "газ": "GAZ", "чери": "Chery", "хавал": "Haval", "джили": "Geely",
+            "джилли": "Geely", "чанган": "Changan"
+        ]
+        func найти(_ слово: String) -> String? {
+            var к = ключ(слово)
+            if let р = русские[к] { к = ключ(р) }
+            return маркиАвто.first(where: { ключ($0) == к })
+        }
+        if let точно = найти(чистая) { return точно }
+        let первое = чистая.split(separator: " ").first.map(String.init) ?? чистая
+        return найти(первое) ?? чистая
+    }
+
     /// cabFullName сайта: «бренд название», если название бренда ещё не содержит.
     static func полноеИмя(_ бренд: String, _ название: String) -> String {
         let б = бренд.trimmingCharacters(in: .whitespaces)
@@ -458,8 +533,10 @@ extension ПодачаМодель {
     func выставить() {
         if форма.название.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if режим == .авто {
+                /* doSubmit сайта: «Заполните параметры автомобиля — название соберётся само» и сразу мастер авто. */
                 пометить("auto", т("need_auto"))
                 шаг = .характеристики
+                мастер = .авто(кузов: false)
             } else {
                 пометить("title", т("need_title"))
                 шаг = .данные
