@@ -402,8 +402,8 @@ extension ПодачаМодель {
             return
         }
         if A.да(j["slots_full"]) {
-            вопрос = ВопросПодачи(заголовок: т("limit_t"), текст: т("limit_d"), да: т("slots_more"), нет: т("later"),
-                                  действие: { [weak self] in self?.открытьСтраницу = "cabinet.php?go=items" })
+            /* Слоты в приложении не продаются: только сведения. */
+            сообщение = СообщениеПодачи(заголовок: т("limit_t"), текст: т("limit_d"))
             return
         }
         let причина = A.строка(j["ai_reason"])
@@ -413,7 +413,7 @@ extension ПодачаМодель {
             return
         }
         if причина == "need_paid" || A.да(j["need_payment"]) {
-            /* 🔴 Пакет Kliko AI и платный разбор — деньги (Config.цифровыеПокупки): только страница сайта. */
+            /* Пакет Kliko AI и платный разбор в приложении не продаются: только сведения. */
             статусИИ = т("ai_need_paid")
             return
         }
@@ -432,40 +432,6 @@ extension ПодачаМодель {
         if б.isEmpty { return н }
         if н.isEmpty { return б }
         return н.lowercased().contains(б.lowercased()) ? н : б + " " + н
-    }
-
-    // MARK: - ТОП при подаче (🔴 деньги: только Config.цифровыеПокупки)
-
-    /// publishTopPick: GET promo_quote (только цена и баланс) → PUBLISH_TOP. Деньги спишутся при публикации.
-    func выбратьТоп(_ пакет: ПакетТоп) {
-        guard Config.цифровыеПокупки, ПродуктыApple.топПодачиСКошелька, проверяемТоп.isEmpty else { return }
-        проверяемТоп = пакет.id
-        let код = пакет.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? пакет.id
-        Task { @MainActor in
-            let j = try? await МоиОбъявленияAPI.получить("cabinet.php?action=promo_quote&preset=" + код)
-            self.проверяемТоп = ""
-            self.разобратьЦенуТоп(j)
-        }
-    }
-
-    private func разобратьЦенуТоп(_ ответ: [String: Any]?) {
-        typealias A = МоиОбъявленияAPI
-        guard let j = ответ, A.да(j["ok"]) else {
-            показать(т("top_check_err"))
-            return
-        }
-        if A.да(j["enough"]) {
-            форма.топ = ТопПодачи(ключ: A.строка(j["preset"]), подпись: A.строка(j["label"]), цена: A.целое(j["price"]))
-            показать(т("top_on"))
-        } else {
-            показать(String(format: т("top_short"), ПодачаМодель.деньги(A.целое(j["balance"])), A.строка(j["label"]),
-                            ПодачаМодель.деньги(A.целое(j["price"])), ПодачаМодель.деньги(A.целое(j["need"]))))
-        }
-    }
-
-    func убратьТоп() {
-        форма.топ = nil
-        показать(т("top_off"))
     }
 
     // MARK: - Отправка новой (doSubmit → showPublishConfirm → _doSubmitReal)
@@ -529,29 +495,11 @@ extension ПодачаМодель {
         defer { отправляем = false }
         let тело = телоПодачи()
         do {
-            let j: [String: Any]
-            if Config.цифровыеПокупки && форма.топ != nil {
-                /* 🔴 С ТОПом submit списывает деньги — один раз, без повтора даже на «csrf». */
-                j = try await отправитьОдинРаз("cabinet.php?action=submit", тело: тело)
-            } else {
-                j = try await МоиОбъявленияAPI.отправить("cabinet.php?action=submit", тело: тело)
-            }
+            let j = try await МоиОбъявленияAPI.отправить("cabinet.php?action=submit", тело: тело)
             разобратьПодачу(j)
         } catch {
             показать(т("no_conn"))
         }
-    }
-
-    /// POST без повтора — для денежного запроса.
-    private func отправитьОдинРаз(_ хвост: String, тело: [String: Any]) async throws -> [String: Any] {
-        let токен = try await МоиОбъявленияAPI.токенСейчас()
-        guard !токен.isEmpty else { return ["ok": false, "error": "auth"] }
-        var полное = тело
-        полное["csrf"] = токен
-        let ответ = try await КабинетСайта.вызвать(хвост, метод: "POST", тело: полное)
-        guard let j = ответ.json else { throw КабинетСайта.Сбой.приложение }
-        if МоиОбъявленияAPI.строка(j["error"]) == "csrf" { МоиОбъявленияAPI.забыть() }
-        return j
     }
 
     /// Тело submit — поля _doSubmitReal по порядку (карта §2.4.1). Опт, вариации, раздел магазина мастер не
@@ -594,7 +542,7 @@ extension ПодачаМодель {
             "variants": [Any](),
             "shop_section": "",
             "sn_hidden": false,
-            "top_preset": Config.цифровыеПокупки && ПродуктыApple.топПодачиСКошелька ? (ф.топ?.ключ ?? "") : "",
+            "top_preset": "",
             "vin": vinРазрешён ? ф.vin.trimmingCharacters(in: .whitespaces) : "",
             "images": готовыеФото,
             "shot_slots": [String: String]()
@@ -686,14 +634,10 @@ extension ПодачаМодель {
             if A.да(j["verify_required"]) {
                 вопрос = ВопросПодачи(заголовок: т("limit_t"), текст: текст.isEmpty ? т("limit_d") : текст,
                                       да: т("verify_plus5"), нет: т("later"),
-                                      действие: { [weak self] in self?.открытьСтраницу = "cabinet.php?go=verify" },
-                                      ещё: т("limit_more"),
-                                      ещёДействие: { [weak self] in self?.открытьСтраницу = "cabinet.php?go=items" })
+                                      действие: { [weak self] in self?.открытьСтраницу = "cabinet.php?go=verify" })
             } else {
-                /* Сайт: плашка и окно покупки слотов. Слоты — деньги (Config.цифровыеПокупки): окно ведёт на сайт. */
-                вопрос = ВопросПодачи(заголовок: т("limit_t"), текст: текст.isEmpty ? т("limit_d") : текст,
-                                      да: т("limit_more"), нет: т("later"),
-                                      действие: { [weak self] in self?.открытьСтраницу = "cabinet.php?go=items" })
+                /* Сайт: плашка и окно покупки слотов. Слоты в приложении не продаются: только сведения. */
+                сообщение = СообщениеПодачи(заголовок: т("limit_t"), текст: текст.isEmpty ? т("limit_d") : текст)
             }
             return
         }

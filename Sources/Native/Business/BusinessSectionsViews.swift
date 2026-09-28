@@ -103,7 +103,7 @@ struct РамкаРаздела<Содержимое: View>: View {
                             .font(.system(size: 14))
                             .foregroundStyle(Theme.текстВторой)
                             .fixedSize(horizontal: false, vertical: true)
-                        ЦифроваяПокупка(подпись: БизнесText.т("cab_get_pro"), путь: "cabinet.php", открыть: открыть)
+                        ЦифроваяПокупка()
                     }
                     .padding(12)
                 }

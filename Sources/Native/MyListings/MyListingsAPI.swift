@@ -14,7 +14,7 @@ import Foundation
    · deactivate_item {id} · activate_item {id} (он же «Восстановить») · delete_item {id, reason:"Удалено пользователем"}
    · delete_permanent {id} · toggle_autorenew {item_id, on} · stock_adjust {id, stock} · mod_recheck {id}
    · send_to_manual {id} · /api/jobs.php?action=delete|restore {id}.
- Денег здесь нет: продвижение, слоты, пакеты Kliko AI и «В ТОП» резюме — страницей сайта (Config.цифровыеПокупки).
+ Денег здесь нет: продвижение, слоты, пакеты Kliko AI и «В ТОП» резюме в приложении не продаются.
 
  🔴 ТОКЕН. Отдельного API нет, токен печатает страница кабинета (§0.2). Каждый раз качать её ради нажатия — лишние сотни
  килобайт, поэтому токен запоминается при загрузке списка (там страница читается всё равно — IS_SHOP, CAB_AI). Ответ

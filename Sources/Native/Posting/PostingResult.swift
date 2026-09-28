@@ -9,14 +9,14 @@ import UIKit
  «Продвинуть объявление» → openPromote; «или расскажите о нём» и быстрые кнопки WhatsApp, Telegram, «Ссылка» —
  socialQuickShare: текст «Название — цена ₸» и адрес /marketplace.php?item=<id>). Иначе — окно _modOver «Объявление
  на проверке» с текстами mod_wait_*. Здесь оба случая — один экран: статус словами сайта, карточка ленты (ListingCard),
- «Продвинуть» — и при проверке (владелец), быстрые кнопки и «Поделиться» — окно кабинета ОкноПоделитьсяКабинета
+ быстрые кнопки и «Поделиться» — окно кабинета ОкноПоделитьсяКабинета
  (ролик для Reels, автопостинг), «Посмотреть объявление», «Мои объявления», «Подать ещё».
 
- 🔴 ДЕНЬГИ. «Продвинуть» — платная услуга: при Config.цифровыеПокупки окно покупки App Store (ЛистУслугиApple), иначе
- страница сайта cabinet.php?promote=<id>. Решает ЭкранПодачи (послеПодачиНажат), здесь — только кнопка.
+ Платные услуги в приложении не продаются: блока «Продвиньте» и кнопки «Продвинуть» здесь нет, только сведения
+ «ТОП уже подключён».
  */
 struct ЭкранПослеПодачи: View {
-    enum Действие { case продвинуть, посмотреть, мои, ещё, закрыть }
+    enum Действие { case посмотреть, мои, ещё, закрыть }
 
     let итог: ИтогПодачи
     let товар: Listing
@@ -26,7 +26,6 @@ struct ЭкранПослеПодачи: View {
 
     @Environment(\.openURL) private var открытьСсылку
     @State private var скопировано = false
-    @State private var полосы = false
 
     init(итог: ИтогПодачи, товар: Listing, топПодключён: Bool, действие: @escaping (Действие) -> Void) {
         self.итог = итог
@@ -88,7 +87,7 @@ struct ЭкранПослеПодачи: View {
                             .foregroundStyle(Theme.текстВторой)
                         КарточкаЛентыПодачи(товар: товар)
                     }
-                    if !id.isEmpty { продвижение }
+                    if !id.isEmpty && топПодключён { продвижение }
                     if let ссылка { поделиться(ссылка) }
                     кнопки
                 }
@@ -149,7 +148,7 @@ struct ЭкранПослеПодачи: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Продвижение (promoUpsellHTML)
+    // MARK: - ТОП уже подключён (из promoUpsellHTML — только сведения)
 
     @ViewBuilder
     private var продвижение: some View {
@@ -173,58 +172,6 @@ struct ЭкранПослеПодачи: View {
             .padding(14)
             .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .accessibilityElement(children: .combine)
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(т("promo_h"), systemImage: "arrow.up.forward.circle.fill")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                VStack(spacing: 8) {
-                    полоса(т("promo_lo"), "×1", доля: 0.16, горячая: false)
-                    полоса(т("promo_hi"), т("promo_x7"), доля: 1, горячая: true)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(т("promo_lo") + " ×1, " + т("promo_hi") + " " + т("promo_x7"))
-                Text(т("promo_note"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-                КнопкаПодачи(т("promo_cta")) { действие(.продвинуть) }
-            }
-            .padding(14)
-            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(Theme.топРамка, lineWidth: 1.5)
-            }
-            .onAppear {
-                withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.9).delay(0.1))) { полосы = true }
-            }
-        }
-    }
-
-    private func полоса(_ подпись: String, _ значение: String, доля: CGFloat, горячая: Bool) -> some View {
-        HStack(spacing: 8) {
-            Text(подпись)
-                .font(.system(size: 12, weight: горячая ? .bold : .regular))
-                .foregroundStyle(горячая ? Theme.текст : Theme.текстВторой)
-                .frame(width: 112, alignment: .leading)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            GeometryReader { г in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.поверхность2)
-                    Capsule()
-                        .fill(горячая ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий],
-                                                                    startPoint: .leading, endPoint: .trailing))
-                                      : AnyShapeStyle(Theme.текстВторой.opacity(0.45)))
-                        .frame(width: г.size.width * (полосы ? доля : 0))
-                }
-            }
-            .frame(height: 8)
-            Text(значение)
-                .font(.system(size: 12, weight: .heavy).monospacedDigit())
-                .foregroundStyle(горячая ? Theme.акцент : Theme.текстВторой)
-                .frame(minWidth: 44, alignment: .trailing)
         }
     }
 

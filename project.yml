@@ -13,12 +13,6 @@ settings:
     # виден в архиве и в логах, и держать его в репозитории незачем.
     DEVELOPMENT_TEAM: ""
     SWIFT_VERSION: "5.9"
-# ЛОКАЛЬНЫЕ ПОКУПКИ ДЛЯ СИМУЛЯТОРА. Kliko.storekit — те же product id, что в ПродуктыApple (StoreKitStore.swift), с
-# примерными ценами витрины Казахстана. Файл лежит в проекте (fileGroups — без членства в целевой сборке, в приложение
-# не попадает) и подключён к схеме Kliko ниже: запуск из Xcode на симуляторе покупает у локального StoreKit, без App
-# Store Connect. Архив и TestFlight его не видят — там товары из App Store Connect (Sandbox).
-fileGroups:
-  - Kliko.storekit
 targets:
   # ── Приложение: PWA-обёртка ──
   Kliko:
@@ -29,11 +23,6 @@ targets:
       - Shared                      # общие с виджетом типы (DealActivityAttributes)
     dependencies:
       - target: KlikoWidgets        # встраиваем виджет-расширение в приложение
-    # Схема Kliko (её же собирает CI: -scheme Kliko). Своё здесь одно — файл StoreKit для запуска из Xcode.
-    # In-App Purchase отдельного entitlement не требует: возможность включена у каждого App ID, StoreKit 2 работает
-    # без правок в Kliko.entitlements.
-    scheme:
-      storeKitConfiguration: Kliko.storekit
     entitlements:
       path: Kliko.entitlements
       properties:

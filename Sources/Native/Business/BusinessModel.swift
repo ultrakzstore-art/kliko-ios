@@ -13,17 +13,14 @@ import UIKit
    · страница кабинета (JSON-API у этого нет, §0.7): PROMO_CFG, AI_PACKS, AI_DISC, AI_FREE, COMBO_PACKS, window.CAB_AI,
      FREE_SLOTS, IS_VERIFIED, IS_SHOP, IS_PRO, PRO_* (статус, тарифы, уровни функций), let CAB_SPLIT, let
      CAB_IS_VERIFIED, const CAB_COMPANY (реквизиты и шаблон счёта). Сверено по снимку user/kz_ru_cabinet.php.html;
-   · только чтение: GET cabinet.php?action=promo_quote&preset=<key> (серверная цена пакета ТОП — карта §3.8 советует
-     показывать её, где она есть), GET my_items (slots: тарифы слотов и их скидка), GET ai_scan_credits, GET ref_stats
+   · только чтение: GET my_items (slots: занято и лимит), GET ai_scan_credits, GET ref_stats
      (клуб основателей), POST company_lookup_bin {csrf, bin} (реестр по БИН), POST b2b_orders_list {csrf} (заказы B2B);
    · запись без денег, только по нажатию, каждая за своим рубильником: save_company {csrf, company, invoice_tpl}
      (Config.реквизитыКомпании) и split_submit {csrf} (Config.заявкаМагазина). Тела — как у сайта.
 
- 🔴 ДЕНЬГИ (Config.цифровыеПокупки = false, правило App Store 3.1.1): promote_item / promote_bulk, buy_slots, buy_combo,
- buy_pro / buy_pro_card, buy_ai_package, start_trial, ai_scan_pay здесь НЕ ВЫЗЫВАЮТСЯ вовсе — ни при выключенном, ни при
- включённом рубильнике: пока владелец не решил вопрос In-App Purchase, покупка — страница кабинета сайта. Единственная
- запись за этим рубильником — промокод (redeem_coupon, окно клуба): денег он не списывает, но сайт прячет его вместе с
- покупками (klkAppNoDigital), поэтому и здесь он только при включённом рубильнике.
+ Платные услуги в приложении не продаются (решение владельца: без покупок Apple, правило App Store 3.1.1):
+ promote_item / promote_bulk, buy_slots, buy_combo, buy_pro / buy_pro_card, buy_ai_package, start_trial, ai_scan_pay
+ и промокод redeem_coupon здесь не вызываются вовсе, ссылок на их оплату нет.
 
  Всё личное — в памяти модели; выход стирает (ВыходНачисто), ответ, пришедший после выхода, не примется (поколение).
  */
@@ -293,15 +290,6 @@ struct СтраницаБизнеса: Equatable {
 
 // MARK: - Ответы API
 
-/// promo_quote: {ok, enough, preset, label, price, balance, need}.
-struct КотировкаТопа: Equatable {
-    let хватает: Bool
-    let подпись: String
-    let цена: Int
-    let баланс: Int
-    let нехватка: Int
-}
-
 /// Тариф слотов из my_items → slots.tiers[{price, slots}].
 struct ТарифСлотов: Equatable, Identifiable {
     let слотов: Int
@@ -463,9 +451,6 @@ final class БизнесМодель: ObservableObject {
 
     @Published private(set) var страница: СтраницаБизнеса? = nil
     @Published private(set) var загрузка: Загрузка = .нет
-    @Published private(set) var котировки: [String: КотировкаТопа] = [:]
-    /// Ключи пакетов, по которым promo_quote не ответил: у такого — текст сайта «Не удалось проверить баланс…».
-    @Published private(set) var котировкиБезОтвета: Set<String> = []
     @Published private(set) var слоты: СлотыТарифа? = nil
     @Published private(set) var запусков: Int? = nil
     @Published private(set) var клуб: КлубОснователей? = nil
@@ -517,26 +502,11 @@ final class БизнесМодель: ObservableObject {
 
     // MARK: Платные услуги — только чтение
 
-    /// promo_quote по каждому пакету, slots из my_items и ai_scan_credits. Ничего не покупает.
+    /// slots из my_items и ai_scan_credits. Ничего не покупает.
     func загрузитьУслуги() async {
         await загрузитьСтраницу()
-        guard let с = страница else { return }
+        guard страница != nil else { return }
         let моё = поколение
-        typealias A = МоиОбъявленияAPI
-        for пакет in с.пакеты where пакет.id.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil {
-            let j = try? await МоиОбъявленияAPI.получить("cabinet.php?action=promo_quote&preset=" + пакет.id)
-            guard моё == поколение else { return }
-            if let j, A.да(j["ok"]) {
-                котировки[пакет.id] = КотировкаТопа(хватает: A.да(j["enough"]),
-                                                    подпись: A.строка(j["label"]).isEmpty ? пакет.подпись : A.строка(j["label"]),
-                                                    цена: КошелёкAPI.тенге(j["price"]),
-                                                    баланс: КошелёкAPI.тенге(j["balance"]),
-                                                    нехватка: КошелёкAPI.тенге(j["need"]))
-                котировкиБезОтвета.remove(пакет.id)
-            } else {
-                котировкиБезОтвета.insert(пакет.id)
-            }
-        }
         if let j = try? await МоиОбъявленияAPI.получить("cabinet.php?action=my_items"),
            МоиОбъявленияAPI.да(j["ok"]), let сырые = j["slots"] as? [String: Any] {
             guard моё == поколение else { return }
@@ -571,20 +541,6 @@ final class БизнесМодель: ObservableObject {
         } catch {
             guard моё == поколение else { return }
             if клуб == nil { клубЗагрузка = .ошибка(т("no_conn")) }
-        }
-    }
-
-    /**
-     Промокод (clubApplyPromo → redeem_coupon {csrf, code}). 🔴 Только при Config.цифровыеПокупки: сайт прячет его вместе
-     с покупками (klkAppNoDigital). Денег не списывает — поэтому обычная запись с одним повтором на «csrf».
-     Возвращает ответ сервера целиком (окно результата разбирает причины used / expired / limit / notfound).
-     */
-    func применитьПромокод(_ код: String) async -> [String: Any] {
-        guard Config.цифровыеПокупки else { return ["ok": false, "error": т("no_digital")] }
-        do {
-            return try await МоиОбъявленияAPI.отправить("cabinet.php?action=redeem_coupon", тело: ["code": код])
-        } catch {
-            return ["ok": false, "error": т("no_conn")]
         }
     }
 
@@ -715,8 +671,6 @@ final class БизнесМодель: ObservableObject {
 
     private func сбросить() {
         страница = nil
-        котировки = [:]
-        котировкиБезОтвета = []
         слоты = nil
         запусков = nil
         клуб = nil

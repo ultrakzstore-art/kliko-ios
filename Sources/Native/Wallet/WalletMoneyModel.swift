@@ -266,7 +266,7 @@ final class ПополнениеМодель: ObservableObject {
                 self.ошибка = self.т("err_net")
                 return
             }
-            if пауза && !Config.цифровыеПокупки {
+            if пауза {
                 self.идёт = nil
                 self.ошибка = self.т("topup_paused_app")
                 return

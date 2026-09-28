@@ -216,7 +216,7 @@ struct ЭкранНалогов: View {
                         Text(т("tax_sub"))
                             .font(.system(size: 14))
                             .foregroundStyle(Theme.текстВторой)
-                        ЦифроваяПокупка(подпись: БизнесText.т("cab_get_pro"), путь: "cabinet.php", открыть: открыть)
+                        ЦифроваяПокупка()
                     }
                     .padding(12)
                 }

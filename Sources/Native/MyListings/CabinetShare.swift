@@ -14,8 +14,8 @@ import UIKit
      галочка (опубликовано) с задержкой .4 с, всё «выпрыгивает» (.45 с); заголовок «Поделитесь объявлением» /
      «Опубликовано! Поделитесь роликом» (подзаголовок .soc-sub сайт прячет);
    · .soc-prev: фото 44, название в две строки, цена зелёным или «Договорная»;
-   · только «опубликовано» — promoUpsellHTML: «Продвиньте — продайте быстрее», полосы «Без продвижения ×1» и «В ТОПе
-     до ×7» (дорастают за 1 с), пояснение и «Продвинуть объявление» → openPromote; ТОП уже есть — «ТОП уже подключён»;
+   · только «опубликовано» и ТОП уже есть — «ТОП уже подключён» (блок «Продвиньте» сайта в приложении не показывается:
+     платные услуги здесь не продаются);
    · .soc-orshare — «или расскажите о нём» (у share пусто, остаётся отступ);
    · .soc-hero — «Сделать видео и поделиться» на градиенте Instagram (у сайта — студия роликов openReelForListing);
    · .soc-quick — WhatsApp, Telegram, «Ссылка» (socialQuickShare: «Название — 12 000 ₸» и адрес /marketplace.php?item=
@@ -30,8 +30,7 @@ import UIKit
  модуля reel сайта (openReelForListing): стили, фото объявления, звук, запись 1080 × 1920 и отправка в Reels, Stories,
  TikTok и автопостинг.
 
- 🔴 ДЕНЬГИ. «Продвинуть объявление» и PRO для автопостинга — при Config.цифровыеПокупки окно App Store
- (ЛистУслугиApple), иначе страница кабинета сайта (ПереходыКабинета.сайт), как у «Моих объявлений».
+ Платные услуги (продвижение, PRO для автопостинга) в приложении не продаются и не ведут на оплату: только сведения.
  */
 enum ВидЛистаКабинета: Equatable {
     /// advShare — «Мои объявления».
@@ -71,7 +70,6 @@ struct ОкноПоделитьсяКабинета: View {
     @State private var появился = false
     @State private var круг = false
     @State private var знак = false
-    @State private var полосы = false
 
     init(данные: ДанныеОтправкиСайта, вид: ВидЛистаКабинета = .поделиться, топ: Bool = false, подписьТопа: String = "",
          закрыть: (() -> Void)? = nil, высота: ((CGFloat) -> Void)? = nil) {
@@ -91,7 +89,7 @@ struct ОкноПоделитьсяКабинета: View {
                 шапка
                 превью
                     .padding(.vertical, 10)
-                if вид == .опубликовано {
+                if вид == .опубликовано && топ {
                     продвижение
                         .padding(.top, 2)
                     Text(т("or_share"))
@@ -219,66 +217,24 @@ struct ОкноПоделитьсяКабинета: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: Продвижение (promoUpsellHTML)
+    // MARK: ТОП уже подключён (promoUpsellHTML, только сведения)
 
-    @ViewBuilder
     private var продвижение: some View {
-        if топ {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(т("pu_done"), systemImage: "checkmark")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.зелёный)
-                Text(заметкаТопа)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                    .strokeBorder(Theme.акцент, lineWidth: 1.5)
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(т("pu_h"), systemImage: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                VStack(spacing: 10) {
-                    полоса(т("pu_lo"), "×1", доля: 0.16, горячая: false)
-                    полоса(т("pu_hi"), т("pu_x7"), доля: 1, горячая: true)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(т("pu_lo")) ×1, \(т("pu_hi")) \(т("pu_x7"))")
-                Text(т("pu_note"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button { продвинуть() } label: {
-                    Label(т("pu_cta"), systemImage: "arrow.up")
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий],
-                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                        .shadow(color: Theme.зелёный2.opacity(0.35), radius: 10, x: 0, y: 8)
-                }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            }
-            .padding(14)
-            .background(LinearGradient(colors: [Theme.мята, Theme.поверхность], startPoint: .top, endPoint: .bottom),
-                        in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                    .strokeBorder(Theme.акцент, lineWidth: 1.5)
-            }
-            .onAppear {
-                withAnimation(ДвижениеСайта.мягко(.timingCurve(0.2, 0.85, 0.25, 1, duration: 1).delay(0.07))) {
-                    полосы = true
-                }
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Label(т("pu_done"), systemImage: "checkmark")
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(Theme.зелёный)
+            Text(заметкаТопа)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.акцент, lineWidth: 1.5)
         }
     }
 
@@ -286,36 +242,6 @@ struct ОкноПоделитьсяКабинета: View {
     private var заметкаТопа: String {
         let хвост = подписьТопа.isEmpty ? "" : " · \(подписьТопа)"
         return "\(т("pu_done_a"))\(хвост). \(т("pu_done_b"))"
-    }
-
-    /// .pu-bar: подпись 104 справа, дорожка 15, значение 48.
-    private func полоса(_ подпись: String, _ значение: String, доля: CGFloat, горячая: Bool) -> some View {
-        HStack(spacing: 10) {
-            Text(подпись)
-                .font(.system(size: 12, weight: горячая ? .bold : .semibold))
-                .foregroundStyle(горячая ? Theme.текст : Theme.текстВторой)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(width: 104, alignment: .trailing)
-            GeometryReader { г in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Theme.поверхность2)
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(горячая
-                              ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий],
-                                                             startPoint: .leading, endPoint: .trailing))
-                              : AnyShapeStyle(Theme.цвет(0xC2CCC7, 0x55625B)))
-                        .frame(width: г.size.width * (полосы ? доля : 0))
-                }
-            }
-            .frame(height: 15)
-            Text(значение)
-                .font(.system(size: 14, weight: .heavy).monospacedDigit())
-                .foregroundStyle(горячая ? Theme.акцент : Theme.текстВторой)
-                .lineLimit(1)
-                .frame(width: 48, alignment: .leading)
-        }
     }
 
     // MARK: Ролик, быстрые кнопки, автопостинг
@@ -590,17 +516,6 @@ struct ОкноПоделитьсяКабинета: View {
         }
     }
 
-    /// openPromote: платно — App Store при Config.цифровыеПокупки, иначе cabinet.php?promote=<id> сайта.
-    private func продвинуть() {
-        let номер = данные.id
-        закрыть()
-        if Config.цифровыеПокупки {
-            ЛистУслугиApple.показать(.продвижение, цель: номер)
-        } else {
-            ПереходыКабинета.сайт("cabinet.php?promote=" + ПоделитьсяСайта.код(номер))
-        }
-    }
-
     /// cabinet.php?action=social_status → {ok, instagram: {enabled, connected, username}, tiktok: {…}}. Сбой — обе
     /// кнопки серые «скоро», как renderSocialBtns(null) сайта.
     private func загрузитьСоцсети() async {
@@ -639,18 +554,9 @@ struct ОкноПоделитьсяКабинета: View {
         return страница.естьФункция("autopost")
     }
 
-    /// showProOffer: PRO — окно App Store при Config.цифровыеПокупки, иначе кабинет сайта.
+    /// showProOffer: PRO в приложении не продаётся — только подсказка, без перехода на оплату.
     private func нуженПРО() {
         показатьТост(т("pro_need"), секунд: 2)
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            закрыть()
-            if Config.цифровыеПокупки {
-                ЛистУслугиApple.показать(.про)
-            } else {
-                ПереходыКабинета.сайт("cabinet.php")
-            }
-        }
     }
 
     /// socialConnect: «Переходим к подключению …» и social_connect.php?platform=&do=start страницей сайта.

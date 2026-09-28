@@ -27,7 +27,7 @@ struct ЭкранПополнения: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(LocalizedStringKey(т(Config.цифровыеПокупки ? "topup_sub" : "topup_sub_app")))
+                    Text(LocalizedStringKey(т("topup_sub_app")))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.текстВторой)
                         .fixedSize(horizontal: false, vertical: true)
@@ -267,7 +267,7 @@ private struct ОкнаПополнения: ViewModifier {
             ОкноИтогаКошелька(вид: .хорошо, заголовок: т("tpm_ok_t"),
                               сумма: сумма > 0 ? "+" + КошелёкФормат.тенге(сумма) : nil,
                               строки: строкаБаланса(баланс),
-                              текст: т(Config.цифровыеПокупки ? "tpm_ok_s" : "tpm_ok_s_app"),
+                              текст: т("tpm_ok_s_app"),
                               кнопки: [ОкноИтогаКошелька.Кнопка(подпись: т("tpm_ok_btn"), главная: true, действие: {
                                   модель.итог = nil
                                   закрыть()

@@ -444,13 +444,8 @@ struct ФормаЧатов: View {
                     текстСЖирным(тН("chat_ai_note"))
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.текст)
-                    /* openUpgrade('ai') — цифровая покупка (Config.цифровыеПокупки = false): страница кабинета сайта. */
-                    Button {
-                        if let адрес = Config.страницаСайта("cabinet.php") { ОткрытьСтраницуНастроек.открыть(адрес) }
-                    } label: {
-                        Label(тН("chat_ai_buy"), systemImage: "arrow.up.right.square")
-                            .font(.system(size: 15, weight: .bold))
-                    }
+                    /* openUpgrade('ai') — цифровая покупка: в приложении не продаётся, ссылки на оплату нет. */
+                    ЗаметкаБизнеса(БизнесText.т("no_digital"), тон: .серый, значок: "lock")
                 }
             }
             if let ошибка {

@@ -20,8 +20,8 @@ import WebKit
    · перенос списком ссылок публикует тем же ai_import_publish, но JSON {csrf, items} (liMassGo);
    · POST cabinet.php?action=ai_import_extract — multipart {csrf, file} → {ok, text, chars} (Excel, PDF, Word).
  Отказы — как у сайта (_aiJobFail): csrf, auth, gone, ai_off, slots_full (+verify_required), ai_reason need_paid /
- need_verify, shop_required / need_tier. 🔴 Пакеты Kliko AI, слоты и PRO — покупки (Config.цифровыеПокупки): здесь
- не покупаются, только текст сайта и кабинет сайта.
+ need_verify, shop_required / need_tier. Пакеты Kliko AI, слоты и PRO — покупки: в приложении не продаются, только
+ текст сайта «Эта возможность недоступна в приложении.».
 
  Всё — только по нажатию: разбор тратит квоту Kliko AI, публикация создаёт черновики в «Неактивных» (на витрину без
  «Опубликовать» они не уходят, imp_draft сайта).

@@ -310,7 +310,7 @@ private struct ВводИмпорта: View {
                     .font(.system(size: 13.5))
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
-                ЦифроваяПокупка(подпись: БизнесText.т("cab_get_pro"), путь: "cabinet.php", открыть: открыть)
+                ЦифроваяПокупка()
                 КнопкаБизнеса(подпись: т("pro_alt"), второстепенная: true) {
                     withAnimation(ДвижениеСайта.смена) { модель.способ = .ссылка }
                 }
@@ -441,18 +441,16 @@ private struct ОкнаИмпорта: ViewModifier {
             .alert(заголовок, isPresented: Binding(get: { модель.окно != nil }, set: { if !$0 { модель.окно = nil } }),
                    presenting: модель.окно) { окно in
                 switch окно {
+                /* Слоты и пакеты Kliko AI в приложении не продаются: без кнопки на страницу оплаты. */
                 case .лимит(_, let нужнаВерификация):
                     if нужнаВерификация {
                         Button(т("lim_verify")) { верификация = true }
-                    } else {
-                        Button(т("on_site")) { наСайт() }
                     }
                     Button(т("later"), role: .cancel) {}
                 case .лимитИИ(let нужнаВерификация):
                     if нужнаВерификация {
                         Button(т("verify")) { верификация = true }
                     }
-                    Button(т("on_site")) { наСайт() }
                     Button(т("later"), role: .cancel) {}
                 case .начатьЗаново(let номер):
                     Button(т("unf_drop"), role: .destructive) { модель.начатьЗаново(номер) }
@@ -478,19 +476,14 @@ private struct ОкнаИмпорта: ViewModifier {
     private func сообщение(_ окно: ИмпортМодель.Окно) -> String {
         switch окно {
         case .лимит(let текст, let нужнаВерификация):
-            if нужнаВерификация || Config.цифровыеПокупки { return текст }
+            if нужнаВерификация { return текст }
             return "\(текст)\n\(т("no_digital"))"
         case .лимитИИ(let нужнаВерификация):
             let основа = нужнаВерификация ? т("ai_ended_d") : т("ai_out_d")
-            if Config.цифровыеПокупки { return основа }
             return "\(основа)\n\(т("no_digital"))"
         case .начатьЗаново:
             return т("unf_drop_s")
         }
-    }
-
-    private func наСайт() {
-        if let u = Config.страницаСайта("cabinet.php") { открыть(u) }
     }
 }
 

@@ -566,17 +566,9 @@ final class МодельСтудииРоликов: ObservableObject {
         return страница.естьФункция("autopost")
     }
 
+    /// PRO в приложении не продаётся (без покупок Apple): только подсказка, без перехода на оплату.
     private func нуженПРО() {
         показатьТост(т("pro_need"), секунд: 2)
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            self?.закрыть?()
-            if Config.цифровыеПокупки {
-                ЛистУслугиApple.показать(.про)
-            } else {
-                ПереходыКабинета.сайт("cabinet.php")
-            }
-        }
     }
 
     private func подключить(_ ключ: String, _ имя: String) {

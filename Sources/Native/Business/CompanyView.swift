@@ -56,11 +56,11 @@ struct ЭкранКомпании: View {
             } message: {
                 Text(т("split_s3_d"))
             }
-            .alert(т("cab_get_pro"), isPresented: $нуженПРО) {
-                Button(т("on_site")) { наСайт("cabinet.php") }
+            .alert(т("pxd_eyebrow"), isPresented: $нуженПРО) {
+                /* PRO в приложении не продаётся: только сведения, без перехода на оплату. */
                 Button(т("close"), role: .cancel) {}
             } message: {
-                Text(Config.цифровыеПокупки ? т("pro_h2") : т("pro_h2") + "\n" + т("no_digital"))
+                Text(т("pro_h2") + "\n" + т("no_digital"))
             }
             .overlay(alignment: .bottom) {
                 if let текст = модель.плашка { ПлашкаКошелька(текст: текст) }

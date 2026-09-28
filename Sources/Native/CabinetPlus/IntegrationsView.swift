@@ -3,8 +3,8 @@ import UIKit
 
 /**
  «ИНТЕГРАЦИИ» — СВОИМ ЭКРАНОМ (showIntegrations / intgLoad / intgRender модуля js/cabinet-business.min.js; владелец:
- «кабинет полностью SwiftUI»). За PRO: без него — замок сайта «Подключите Kliko к своей системе» и покупка PRO
- (Config.цифровыеПокупки).
+ «кабинет полностью SwiftUI»). За PRO: без него — замок сайта «Подключите Kliko к своей системе» и текст «Эта
+ возможность недоступна в приложении.» (PRO здесь не продаётся).
 
    · POST cabinet.php?action=intg_state {csrf} → {ok, pro, base, keys[{id, name, prefix, scopes[], last_used}],
      hooks[{id, name, url, events[], active, last_ok, last_err, kind, has_b24_token}], scopes{код: подпись},
@@ -334,7 +334,7 @@ struct ЭкранИнтеграций: View {
                             .font(.system(size: 14))
                             .foregroundStyle(Theme.текстВторой)
                             .fixedSize(horizontal: false, vertical: true)
-                        ЦифроваяПокупка(подпись: т("ig_lock_b"), путь: "cabinet.php", открыть: открыть)
+                        ЦифроваяПокупка()
                     }
                     .padding(12)
                 }
