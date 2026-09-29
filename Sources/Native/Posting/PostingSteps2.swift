@@ -622,6 +622,8 @@ struct ШагДополнительно: View {
     let открытьСайт: (String) -> Void
     /// Открытое окно настройки строки: pay · del · trust; пусто — закрыто.
     @State private var настройка = ""
+    /// Строки «Уточнить» раскрыты.
+    @State private var раскрыто = false
 
     init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding, открытьСайт: @escaping (String) -> Void) {
         self.модель = модель
@@ -655,36 +657,69 @@ struct ШагДополнительно: View {
 
     // MARK: .advcfg-sec — строки «Настроить»
 
+    /// Настроено ли что-то — тогда строки видны сразу.
+    private var настроено: Bool {
+        let ф = модель.форма
+        return ф.рассрочка || ф.кредит || ф.доставкаЗадана || ф.доверияЗадано
+    }
+
+    private var показатьСтроки: Bool { раскрыто || настроено }
+
     private var секция: some View {
         КарточкаПодачи {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .medium))
-                        .accessibilityHidden(true)
-                    Text(т("form_additional"))
-                        .font(.system(size: 14, weight: .heavy))
-                        .accessibilityAddTraits(.isHeader)
+                /* Свёрнуто (владелец, обход новичком): «Уточнить (необязательно)» — строки по нажатию. */
+                Button {
+                    фокус.wrappedValue = nil
+                    guard !настроено else { return }
+                    withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.2))) { раскрыто.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 14, weight: .medium))
+                            .accessibilityHidden(true)
+                        Text(т("step_extra"))
+                            .font(.system(size: 14, weight: .heavy))
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                        if !настроено {
+                            Image(systemName: раскрыто ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Theme.текстВторой)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(КраскаПодачи.текст)
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityValue(показатьСтроки ? "" : т("cfg_collapsed"))
                 Text(т("extra_sub"))
                     .font(.system(size: 12))
                     .lineSpacing(3)
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
-                    .padding(.bottom, 12)
-                VStack(spacing: 10) {
-                    if модель.строкиДополнительно.contains("pay") {
-                        строка("pay", заголовок: т("cfg_pay_t"), значок: "creditcard", итог: итогОплаты)
-                    }
-                    if модель.строкиДополнительно.contains("del") {
-                        строка("del", заголовок: т("cfg_del_t"), значок: "truck.box", итог: итогДоставки)
-                    }
-                    if модель.строкиДополнительно.contains("trust") {
-                        строка("trust", заголовок: т("wr_title"), значок: "checkmark.shield", итог: итогДоверия)
-                    }
+                    .padding(.bottom, показатьСтроки ? 12 : 0)
+                if показатьСтроки {
+                    строкиНастроек
                 }
+            }
+        }
+    }
+
+    private var строкиНастроек: some View {
+        VStack(spacing: 10) {
+            if модель.строкиДополнительно.contains("pay") {
+                строка("pay", заголовок: т("cfg_pay_t"), значок: "creditcard", итог: итогОплаты)
+            }
+            if модель.строкиДополнительно.contains("del") {
+                строка("del", заголовок: т("cfg_del_t"), значок: "truck.box", итог: итогДоставки)
+            }
+            if модель.строкиДополнительно.contains("trust") {
+                строка("trust", заголовок: т("wr_title"), значок: "checkmark.shield", итог: итогДоверия)
             }
         }
     }
@@ -748,7 +783,7 @@ struct ШагДополнительно: View {
         return части.isEmpty ? т("cfg_off") : части.joined(separator: " · ")
     }
 
-    /// «Бесплатная · ~3 дн.» или «Аукцион (по умолчанию)».
+    /// «Бесплатная · ~3 дн.» или умолчание — цену предложат службы доставки.
     private var итогДоставки: String {
         var части: [String] = []
         if модель.форма.доставкаБесплатно { части.append(т("cfg_del_free")) }

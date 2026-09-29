@@ -10,8 +10,10 @@ import UIKit
  для Reels, автопостинг), быстрые плитки WhatsApp, Telegram, «Ссылка» (socialQuickShare: «Название — цена ₸» и адрес
  /marketplace.php?item=<id>) и «Позже». «На проверке» — окно _modOver (ОкноИтогаПодачи), не этот лист.
 
- ТОП подключён — сведения «ТОП уже подключён». Нет ТОПа — блок «Продвиньте» с кнопкой «Продвинуть объявление»
- (окно покупки App Store), только при Config.цифровыеПокупки; выключено — блока нет. Ссылок на оплату на сайте нет.
+ Владелец (обход новичком): спокойный лист — «Опубликовано. Сообщим, когда напишет покупатель», строка объявления,
+ одна ссылка «Поделиться» и «Готово». Ролик для Reels / TikTok и быстрые плитки — за «Поделиться», не первым делом.
+ Предложение ТОПа отсюда убрано — «Продвинуть» есть на карточке в «Моих объявлениях» (App Store, при
+ Config.цифровыеПокупки). ТОП подключён при подаче — короткие сведения «ТОП уже подключён».
  */
 struct ЭкранПослеПодачи: View {
     enum Действие { case продвинуть, посмотреть, мои, ещё, закрыть }
@@ -23,7 +25,8 @@ struct ЭкранПослеПодачи: View {
     let действие: (Действие) -> Void
 
     @State private var скопировано = false
-    @State private var полосы = false
+    /// «Поделиться» нажато — ролик и быстрые плитки раскрыты.
+    @State private var делимся = false
 
     init(итог: ИтогПодачи, товар: Listing, топПодключён: Bool, действие: @escaping (Действие) -> Void) {
         self.итог = итог
@@ -97,15 +100,15 @@ struct ЭкранПослеПодачи: View {
                 .foregroundStyle(Theme.зелёныйЯркий)
                 .frame(width: 62, height: 62)
                 .accessibilityHidden(true)
-            Text(п("soc_ttl"))
+            Text(п("pub_calm_t"))
                 .font(.system(size: 19, weight: .heavy))
                 .foregroundStyle(КраскаПодачи.текст)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 10)
                 .accessibilityAddTraits(.isHeader)
-            Text(п("soc_sub"))
-                .font(.system(size: 13))
+            Text(п("pub_calm_s"))
+                .font(.system(size: 14))
                 .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
@@ -113,21 +116,38 @@ struct ЭкранПослеПодачи: View {
                 .padding(.top, 4)
             строкаОбъявления
                 .padding(.top, 16)
-            блокПродвижения
-            if let ссылка { поделиться(ссылка) }
-            Button { действие(.закрыть) } label: {
-                Text(п("later"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(Rectangle())
+            if топПодключён {
+                продвижение.padding(.top, 12)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
+            if let ссылка {
+                if делимся {
+                    поделиться(ссылка)
+                        .transition(.opacity)
+                } else {
+                    ссылкаПоделиться
+                }
+            }
+            КнопкаПодачи(п("done")) { действие(.закрыть) }
+                .padding(.top, 14)
         }
         .padding(.horizontal, 18)
         .padding(.bottom, 18)
         .frame(maxWidth: 560)
+    }
+
+    /// Одна ссылка «Поделиться» — раскрывает ролик и быстрые плитки.
+    private var ссылкаПоделиться: some View {
+        Button {
+            withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.2))) { делимся = true }
+        } label: {
+            Label(п("share"), systemImage: "square.and.arrow.up")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(КраскаПодачи.акцентТекст)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 10)
     }
 
     /// .soc-top: ручка 42×4 и «✕» 32×32 на --surf2.
@@ -213,72 +233,6 @@ struct ЭкранПослеПодачи: View {
         return цена > 0 ? ПодачаМодель.деньги(цена) + " ₸" : п("price_negotiable")
     }
 
-    // MARK: - Продвижение (promoUpsellHTML)
-
-    /// ТОП есть — сведения; нет — предложение с покупкой App Store (только при Config.цифровыеПокупки).
-    @ViewBuilder
-    private var блокПродвижения: some View {
-        if топПодключён {
-            продвижение.padding(.top, 12)
-        } else if Config.цифровыеПокупки && !id.isEmpty {
-            предложениеТопа.padding(.top, 12)
-        }
-    }
-
-    private var предложениеТопа: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(т("promo_h"), systemImage: "arrow.up.forward.circle.fill")
-                .font(.system(size: 16, weight: .heavy))
-                .foregroundStyle(КраскаПодачи.текст)
-            VStack(spacing: 8) {
-                полоса(т("promo_lo"), "×1", доля: 0.16, горячая: false)
-                полоса(т("promo_hi"), т("promo_x7"), доля: 1, горячая: true)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(т("promo_lo") + " ×1, " + т("promo_hi") + " " + т("promo_x7"))
-            Text(т("promo_note"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .fixedSize(horizontal: false, vertical: true)
-            КнопкаПокупкиApple(подпись: т("promo_cta"), значок: "arrow.up") { действие(.продвинуть) }
-        }
-        .padding(14)
-        .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.топРамка, lineWidth: 1.5)
-        }
-        .onAppear {
-            withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.9).delay(0.1))) { полосы = true }
-        }
-    }
-
-    private func полоса(_ подпись: String, _ значение: String, доля: CGFloat, горячая: Bool) -> some View {
-        HStack(spacing: 8) {
-            Text(подпись)
-                .font(.system(size: 12, weight: горячая ? .bold : .regular))
-                .foregroundStyle(горячая ? КраскаПодачи.текст : Theme.текстВторой)
-                .frame(width: 112, alignment: .leading)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            GeometryReader { г in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(КраскаПодачи.поле)
-                    Capsule()
-                        .fill(горячая ? AnyShapeStyle(LinearGradient(colors: [Theme.зелёный2, Theme.зелёныйЯркий],
-                                                                    startPoint: .leading, endPoint: .trailing))
-                                      : AnyShapeStyle(Theme.текстВторой.opacity(0.45)))
-                        .frame(width: г.size.width * (полосы ? доля : 0))
-                }
-            }
-            .frame(height: 8)
-            Text(значение)
-                .font(.system(size: 12, weight: .heavy).monospacedDigit())
-                .foregroundStyle(горячая ? Theme.акцент : Theme.текстВторой)
-                .frame(minWidth: 44, alignment: .trailing)
-        }
-    }
-
     // MARK: - ТОП уже подключён (из promoUpsellHTML — только сведения)
 
     private var продвижение: some View {
@@ -307,9 +261,11 @@ struct ЭкранПослеПодачи: View {
 
     private func поделиться(_ ссылка: URL) -> some View {
         VStack(spacing: 0) {
-            Text(п("soc_or"))
+            Text(п("soc_sub"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 16)
                 .padding(.bottom, 10)
             Button {
