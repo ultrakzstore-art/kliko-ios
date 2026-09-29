@@ -62,13 +62,7 @@ struct БлокСтатьиВид: View {
     var body: some View {
         switch блок.вид {
         case .заголовок(let уровень):
-            Text(блок.текст)
-                .font(.system(size: размерЗаголовка(уровень), weight: уровень <= 2 ? .heavy : .bold))
-                .foregroundStyle(Theme.текст)
-                .lineSpacing(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            ЗаголовокСтатьи(блок: блок, размер: размерЗаголовка(уровень), жирность: уровень <= 2 ? .heavy : .bold)
         case .абзац:
             ТекстСтатьи(текст: блок.текст, размер: размер)
         case .пункт(let маркер, let уровень):
@@ -123,6 +117,48 @@ struct БлокСтатьиВид: View {
 }
 
 /**
+ Заголовок раздела. Номер сайта в своём значке («<span>1</span>Оператор данных» политики, соглашения, оферты) —
+ зелёным кружком перед названием, как у сайта, а не слитно «1Оператор данных».
+ */
+struct ЗаголовокСтатьи: View {
+    let блок: БлокСтатьи
+    let размер: CGFloat
+    let жирность: Font.Weight
+
+    var body: some View {
+        if let номер = РазборСтатьи.номерЗаголовка(блок.простой) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(номер.номер)
+                    .font(.system(size: размер * 0.62, weight: .heavy))
+                    .foregroundStyle(Theme.поверхность)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: размер * 1.35, height: размер * 1.35)
+                    .background(Theme.акцент, in: Circle())
+                    .accessibilityHidden(true)
+                Text(номер.название)
+                    .font(.system(size: размер, weight: жирность))
+                    .foregroundStyle(Theme.текст)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(номер.номер + ". " + номер.название)
+            .accessibilityAddTraits(.isHeader)
+        } else {
+            Text(блок.текст)
+                .font(.system(size: размер, weight: жирность))
+                .foregroundStyle(Theme.текст)
+                .lineSpacing(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+/**
  Плитка раздела справки (ссылка-карточка сайта): значок, название, подпись и стрелка — своей карточкой, как разделы
  статьи (поверхность, рамка 1.5, скругление 14, поля 16). Нажатие — адрес плитки: якорь этой же страницы прокручивает
  к разделу, другая статья справки открывается следующим экраном.
@@ -134,10 +170,16 @@ struct ПлиткаСтатьи: View {
     @ScaledMetric(relativeTo: .body) private var размер: CGFloat = 15
     @ScaledMetric(relativeTo: .body) private var сторонаЗначка: CGFloat = 38
     @Environment(\.openURL) private var открытьАдрес
+    @Environment(\.нажатьПлиткуСтатьи) private var нажатьПлитку
 
     var body: some View {
         Button {
-            открытьАдрес(адрес)
+            /* Экран статьи знает плитку целиком (название, подпись, метки) — ему и решать, куда вести. */
+            if let нажатьПлитку {
+                нажатьПлитку(блок)
+            } else {
+                открытьАдрес(адрес)
+            }
         } label: {
             HStack(spacing: 12) {
                 if !блок.значок.isEmpty {
@@ -485,5 +527,19 @@ struct ПолеПоискаСправки: View {
         }
         .contentShape(Capsule())
         .onTapGesture { вФокусе = true }
+    }
+}
+
+// MARK: - Нажатие плитки раздела
+
+private struct КлючНажатияПлиткиСтатьи: EnvironmentKey {
+    static let defaultValue: ((БлокСтатьи) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// Что делает плитка раздела: ставит экран статьи (ЭкранСтраницыСайта). Нет — плитка открывает свой адрес.
+    var нажатьПлиткуСтатьи: ((БлокСтатьи) -> Void)? {
+        get { self[КлючНажатияПлиткиСтатьи.self] }
+        set { self[КлючНажатияПлиткиСтатьи.self] = newValue }
     }
 }

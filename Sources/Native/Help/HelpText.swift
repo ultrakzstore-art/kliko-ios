@@ -38,6 +38,8 @@ enum СправкаText {
         "search_clear": "Очистить поиск",
         "nothing_t": "Ничего не найдено",
         "nothing_s": "Попробуйте другое слово или напишите в поддержку.",
+        "all_sections": "Все разделы",
+        "section_empty": "В этом разделе пока нет ответов в приложении. Попробуйте поиск или напишите в поддержку.",
     ]
 
     private static let kk: [String: String] = [
@@ -63,6 +65,8 @@ enum СправкаText {
         "search_clear": "Іздеуді тазарту",
         "nothing_t": "Ештеңе табылмады",
         "nothing_s": "Басқа сөзбен іздеп көріңіз немесе қолдау қызметіне жазыңыз.",
+        "all_sections": "Барлық бөлімдер",
+        "section_empty": "Бұл бөлімде қосымшада әзірге жауап жоқ. Іздеуді қолданып көріңіз немесе қолдау қызметіне жазыңыз.",
     ]
 
     private static let en: [String: String] = [
@@ -88,6 +92,8 @@ enum СправкаText {
         "search_clear": "Clear search",
         "nothing_t": "Nothing found",
         "nothing_s": "Try another word or contact support.",
+        "all_sections": "All sections",
+        "section_empty": "This section has no answers in the app yet. Try search or contact support.",
     ]
 
     private static let ar: [String: String] = [
@@ -113,5 +119,7 @@ enum СправкаText {
         "search_clear": "مسح البحث",
         "nothing_t": "لم يتم العثور على شيء",
         "nothing_s": "جرّب كلمة أخرى أو اكتب إلى الدعم.",
+        "all_sections": "كل الأقسام",
+        "section_empty": "لا توجد إجابات في هذا القسم في التطبيق بعد. جرّب البحث أو اكتب إلى الدعم.",
     ]
 }

@@ -59,6 +59,11 @@ struct БлокСтатьи: Identifiable {
     var якоря: [String]
     /// Значок плитки (эмодзи сайта), если был.
     var значок: String = ""
+    /// Метки разделов, внутри которых стоял блок (id и data-sec/data-cat/… предков), строчными: плитка раздела
+    /// находит по ним свою панель, даже если у той нет заголовка.
+    var группы: [String] = []
+    /// Блок из скрытой панели сайта (показывается скриптом по плитке): на странице его нет, есть в поиске и в разделе.
+    var скрыт: Bool = false
 
     init(id: Int, вид: Вид, текст: AttributedString, подпись: String = "", якоря: [String] = []) {
         self.id = id
@@ -117,7 +122,7 @@ struct СтатьяСайта {
     var разделы: [БлокСтатьи] {
         let первый = первыйЗаголовок?.id
         return блоки.filter {
-            guard $0.id != первый else { return false }
+            guard $0.id != первый, !$0.скрыт else { return false }
             if case .заголовок(let уровень) = $0.вид { return уровень <= 2 }
             return false
         }
@@ -151,7 +156,8 @@ struct СтатьяСайта {
         var итог: [РазделСтатьи] = []
         var текущие: [БлокСтатьи] = []
         let первый = первыйЗаголовок?.id
-        let список = блоки.filter { $0.id != первый }
+        /* Скрытые панели сайта — не на странице: их открывает плитка раздела (ЭкранСтраницыСайта). */
+        let список = блоки.filter { $0.id != первый && !$0.скрыт }
         var i = 0
         while i < список.count {
             /* Две и больше плиток подряд — свой ряд карточек; сводка перед ними уходит с ними. */
@@ -306,8 +312,10 @@ enum РазборСтатьи {
                 номер += 1
                 continue
             }
-            let вопрос = БлокСтатьи(id: блок.id, вид: .вопрос(ответ, открыт: false), текст: AttributedString(блок.простой),
+            var вопрос = БлокСтатьи(id: блок.id, вид: .вопрос(ответ, открыт: false), текст: AttributedString(блок.простой),
                                     подпись: блок.подпись, якоря: блок.якоря)
+            вопрос.группы = блок.группы
+            вопрос.скрыт = блок.скрыт
             итог.append(вопрос)
             номер = дальше
         }
@@ -450,6 +458,39 @@ enum РазборСтатьи {
         return итог
     }
 
+    /// Слова-приставки якорей и панелей сайта: «#sec-start», «hc-start», «data-cat="start"» — один раздел «start».
+    private static let приставкиЯкоря: Set<String> = ["sec", "section", "cat", "category", "hc", "help", "faq", "tab",
+                                                      "panel", "pane", "topic", "group", "grp", "block", "id", "s", "c"]
+
+    /// Якорь или метка панели для сравнения: строчными, без приставок (sec-, hc-, help-, …) и знаков.
+    static func ключЯкоря(_ текст: String) -> String {
+        let части = текст.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        let свои = части.filter { !приставкиЯкоря.contains($0) }
+        return (свои.isEmpty ? части : свои).joined(separator: "-")
+    }
+
+    /// Номер заголовка сайта («1 Оператор данных» из <span>1</span>Оператор, «2. Какие данные», «3) Цели»).
+    private static let номерВыражение = try? NSRegularExpression(
+        pattern: "^\\s*(\\d{1,2})(?:[.)][\\s\\u2002]*|\\u2002\\s*)(\\S[\\s\\S]*)$", options: [])
+
+    /// Заголовок с номером впереди: номер отдельно (кружок, как у сайта) и название.
+    static func номерЗаголовка(_ текст: String) -> (номер: String, название: String)? {
+        guard let выражение = номерВыражение else { return nil }
+        let весь = NSRange(текст.startIndex..<текст.endIndex, in: текст)
+        guard let найдено = выражение.firstMatch(in: текст, options: [], range: весь),
+              let номер = Range(найдено.range(at: 1), in: текст),
+              let название = Range(найдено.range(at: 2), in: текст) else { return nil }
+        let чистое = String(текст[название]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard чистое.first.map({ $0.isLetter || $0 == "«" || $0 == "\"" }) ?? false else { return nil }
+        return (String(текст[номер]), чистое)
+    }
+
+    /// Название раздела для чипа оглавления: «1. Оператор данных».
+    static func названиеЧипа(_ текст: String) -> String {
+        guard let н = номерЗаголовка(текст) else { return текст.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return н.номер + ". " + н.название
+    }
+
     private static func тотЖеАдрес(_ а: URL, _ б: URL) -> Bool {
         (а.host ?? "").lowercased() == (б.host ?? "").lowercased() && а.path == б.path
     }
@@ -528,6 +569,8 @@ enum РазборСтатьи {
             let название = блоки[номер]
             var плитка = БлокСтатьи(id: название.id, вид: .карточка(цель),
                                     текст: AttributedString(название.простой), якоря: название.якоря)
+            плитка.группы = название.группы
+            плитка.скрыт = название.скрыт
             /* Значок перед названием: короткая строка без букв и цифр (эмодзи). */
             if let прежний = итог.last, case .абзац = прежний.вид, прежний.простой.count <= 4,
                !прежний.простой.contains(where: { $0.isLetter || $0.isNumber }) {
@@ -785,6 +828,12 @@ enum РазборСтатьи {
         private var вложенныеТаблицы = 0
         private var счётчик = 0
         private var пробелБыл = true
+        /// Места в стеке скрытых панелей сайта (hidden, display:none), что оставлены: их блоки — «скрыт».
+        private var скрытыеПанели: [Int] = []
+        /// Метки разделов открытых элементов (id, data-sec, data-cat, …): место в стеке и метки.
+        private var метки: [(глубина: Int, ключи: [String])] = []
+        /// Ключи разделов, куда ведут уже встреченные плитки (ключЯкоря): скрытая панель с таким id — их раздел.
+        private var целиПлиток: Set<String> = []
 
         init(база: URL) {
             self.база = база
@@ -888,9 +937,26 @@ enum РазборСтатьи {
                 ответСейчас = true
             }
             if !самозакрытый { стек.append(имя) }
-            if пропустить(имя, атрибуты, ответ: ответСейчас) {
+            let блочныйТег = Разбор.блочные.contains(имя) || заголовок(имя) != nil
+            switch пропустить(имя, атрибуты, ответ: ответСейчас) {
+            case .да:
                 if !самозакрытый { глубинаПропуска = стек.count }
                 return
+            case .панель:
+                /* Скрытая панель раздела (сайт показывает её скриптом по плитке): блоки остаются, помеченные. */
+                if самозакрытый { return }
+                сбросить()
+                скрытыеПанели.append(стек.count)
+            case .нет:
+                break
+            }
+            /* Метки раздела (id, data-sec, data-cat, …) — всем блокам внутри элемента. */
+            if !самозакрытый {
+                let ключи = Разбор.меткиЭлемента(атрибуты)
+                if !ключи.isEmpty {
+                    if блочныйТег { сбросить() }
+                    метки.append((глубина: стек.count, ключи: ключи))
+                }
             }
             let вопрос = !вВопросе && !самозакрытый && !вЯчейке && Разбор.этоВопрос(имя, атрибуты)
             /* Плитка без <a>: div/li/button с переходом в data-* или onclick — ссылкой-карточкой. */
@@ -938,6 +1004,9 @@ enum РазборСтатьи {
             }
             if let переход {
                 сбросить()
+                if let фрагмент = переход.fragment, !фрагмент.isEmpty {
+                    целиПлиток.insert(РазборСтатьи.ключЯкоря(фрагмент))
+                }
                 let оплатная = РазборСтатьи.оплата(переход)
                 let контейнер = раскрытия.last?.блоки.count ?? итог.count
                 ссылки.append(ОткрытаяСсылка(адрес: оплатная ? nil : переход, глубина: стек.count,
@@ -958,7 +1027,16 @@ enum РазборСтатьи {
                 if !самозакрытый { курсивы.append(стек.count) }
             case "a":
                 guard !самозакрытый else { break }
-                let сырой = адрес(атрибуты["href"])
+                var сырой = адрес(атрибуты["href"])
+                /* Ссылка-пустышка (href="#", javascript:, эта же страница без якоря), а раздел — в data-* или onclick
+                   (data-cat="start", onclick="hcShow('start')"): ведёт к разделу. */
+                if !вВопросе, сырой.map({ этаЖеСтраница($0) }) ?? true,
+                   let изАтрибутов = переходИзАтрибутов(атрибуты, словоВСкобках: true) {
+                    сырой = изАтрибутов
+                }
+                if let сырой, let фрагмент = сырой.fragment, !фрагмент.isEmpty, этаЖеСтраница(сырой, безЯкоря: false) {
+                    целиПлиток.insert(РазборСтатьи.ключЯкоря(фрагмент))
+                }
                 let оплатная = сырой.map { РазборСтатьи.оплата($0) } ?? false
                 /* Плитка или кнопка-ссылка сайта (class="help-card", "btn", …) — карточкой, даже без блоков внутри. */
                 let этоПлитка = !вВопросе && Разбор.плитка(атрибуты["class"] ?? "")
@@ -1129,6 +1207,9 @@ enum РазборСтатьи {
             курсивы.removeAll { $0 > n }
             списки.removeAll { $0.глубина > n }
             пункты.removeAll { $0 > n }
+            /* Последними: блоки, закрытые выше (вопрос, плитка), ещё получили метки и скрытость своей панели. */
+            метки.removeAll { $0.глубина > n }
+            скрытыеПанели.removeAll { $0 > n }
             цитаты.removeAll { $0 > n }
         }
 
@@ -1138,32 +1219,71 @@ enum РазборСтатьи {
             return уровень
         }
 
-        private func пропустить(_ имя: String, _ атрибуты: [String: String], ответ: Bool) -> Bool {
-            if Разбор.пропускаемые.contains(имя) { return true }
-            if (атрибуты["role"] ?? "").lowercased() == "dialog" { return true }
-            if (атрибуты["role"] ?? "").lowercased() == "tablist" { return true }
+        /// Что делать с элементом: читать, пропустить целиком или читать как скрытую панель раздела.
+        private enum Пропуск {
+            case нет, да, панель
+        }
+
+        private func пропустить(_ имя: String, _ атрибуты: [String: String], ответ: Bool) -> Пропуск {
+            if Разбор.пропускаемые.contains(имя) { return .да }
+            if (атрибуты["role"] ?? "").lowercased() == "dialog" { return .да }
+            if (атрибуты["role"] ?? "").lowercased() == "tablist" { return .да }
             let класс = (атрибуты["class"] ?? "") + " " + (атрибуты["id"] ?? "")
             if let окна = Разбор.окна {
                 let весь = NSRange(класс.startIndex..<класс.endIndex, in: класс)
-                if окна.firstMatch(in: класс, options: [], range: весь) != nil { return true }
+                if окна.firstMatch(in: класс, options: [], range: весь) != nil { return .да }
             }
-            if Разбор.шапкаСайта(класс, атрибуты) { return true }
+            if Разбор.шапкаСайта(класс, атрибуты) { return .да }
             /* «Ничего не найдено» поиска сайта (скрыт, показывается скриптом) — не статья. */
-            if Разбор.пустоеСостояние(класс) { return true }
+            if Разбор.пустоеСостояние(класс) { return .да }
             /* Скрытое: ответ раскрывашки, вкладку и панель сайт показывает скриптом — их оставляем. */
             let стиль = (атрибуты["style"] ?? "").lowercased().replacingOccurrences(of: " ", with: "")
             let скрыто = атрибуты["hidden"] != nil || (атрибуты["aria-hidden"] ?? "").lowercased() == "true"
                 || стиль.contains("display:none") || стиль.contains("visibility:hidden")
-            guard скрыто else { return false }
-            if ответ { return false }
+            guard скрыто else { return .нет }
+            if ответ { return .нет }
             let роль = (атрибуты["role"] ?? "").lowercased()
-            if роль == "tabpanel" || роль == "region" { return false }
-            if имя == "img" { return true }
+            if роль == "tabpanel" || роль == "region" { return .нет }
+            if имя == "img" { return .да }
             if let раскрываемое = Разбор.раскрываемое {
                 let весь = NSRange(класс.startIndex..<класс.endIndex, in: класс)
-                if раскрываемое.firstMatch(in: класс, options: [], range: весь) != nil { return false }
+                if раскрываемое.firstMatch(in: класс, options: [], range: весь) != nil { return .нет }
             }
-            return true
+            /* Панель раздела справки, что сайт открывает по плитке (<div class="hc-sec" data-cat="start" hidden>):
+               раньше пропадала целиком — и плитке некуда было вести. */
+            if Разбор.панельРаздела(имя, атрибуты, цели: целиПлиток) { return .панель }
+            return .да
+        }
+
+        /// Атрибуты, где сайт держит метку раздела (панели или вопроса) и цель плитки.
+        private static let атрибутыМеток: [String] = ["data-sec", "data-section", "data-cat", "data-category",
+                                                     "data-topic", "data-tab", "data-panel", "data-group", "data-slug",
+                                                     "data-key", "data-filter"]
+
+        /// Метки раздела элемента: id и data-sec/data-cat/… — ключами якоря (без приставок sec-, hc-, …).
+        static func меткиЭлемента(_ а: [String: String]) -> [String] {
+            var итог: [String] = []
+            for имя in ["id"] + атрибутыМеток {
+                guard let значение = а[имя]?.trimmingCharacters(in: .whitespacesAndNewlines), !значение.isEmpty,
+                      значение.count <= 64 else { continue }
+                let ключ = РазборСтатьи.ключЯкоря(значение)
+                if !ключ.isEmpty, !итог.contains(ключ) { итог.append(ключ) }
+            }
+            return итог
+        }
+
+        /// Скрытый элемент — панель раздела: блочный, с меткой раздела (data-*, id плитки) или классом раздела.
+        private static func панельРаздела(_ имя: String, _ а: [String: String], цели: Set<String>) -> Bool {
+            let годные: Set<String> = ["div", "section", "article", "ul", "ol", "dl", "li", "main"]
+            guard годные.contains(имя) else { return false }
+            if атрибутыМеток.contains(where: { !(а[$0] ?? "").isEmpty }) { return true }
+            if let id = а["id"], !id.isEmpty, цели.contains(РазборСтатьи.ключЯкоря(id)) { return true }
+            let корни = ["sec", "cat", "topic", "group", "pane", "qa", "question", "help", "hc", "faq", "list", "items"]
+            let класс = ((а["class"] ?? "") + " " + (а["id"] ?? "")).lowercased()
+            for слово in класс.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+                if корни.contains(where: { слово.hasPrefix($0) }) { return true }
+            }
+            return false
         }
 
         /**
@@ -1289,23 +1409,45 @@ enum РазборСтатьи {
 
         /**
          Куда ведёт плитка без <a>: data-href / data-url / data-link, якорь в data-sec / data-section / data-anchor /
-         data-target, адрес или якорь в onclick («location.href='/kz/ru/help#safe'», «hcOpen('start')»). Раскрывашки
-         (aria-expanded, data-toggle) — не плитки.
+         data-target, адрес или якорь в onclick («location.href='/kz/ru/help#safe'», «hcOpen('start')»); у нажимаемого
+         элемента (button, role=button, tabindex, onclick, класс плитки) — ещё data-cat / data-topic / data-tab / …
+         Раскрывашки (aria-expanded, data-toggle) — не плитки.
          */
         private func переходПлитки(_ имя: String, _ а: [String: String]) -> URL? {
             let годные: Set<String> = ["div", "li", "button", "article", "section", "span"]
             guard годные.contains(имя) else { return nil }
             if а["aria-expanded"] != nil || а["aria-controls"] != nil { return nil }
             if а["data-toggle"] != nil || а["data-bs-toggle"] != nil { return nil }
+            let роль = (а["role"] ?? "").lowercased()
+            let нажимаемый = имя == "button" || роль == "button" || роль == "tab" || роль == "link"
+                || а["tabindex"] != nil || а["onclick"] != nil || Разбор.плитка(а["class"] ?? "")
+            return переходИзАтрибутов(а, словоВСкобках: нажимаемый, меткаРаздела: нажимаемый)
+        }
+
+        /**
+         Переход из атрибутов элемента (плитка без <a> или ссылка-пустышка href="#"): адрес в data-href/…, якорь
+         в data-sec/data-target/…, метка раздела в data-cat/data-topic/… (только у нажимаемого: у вопроса такая
+         метка — фильтр, а не переход), адрес или якорь в onclick.
+         */
+        private func переходИзАтрибутов(_ а: [String: String], словоВСкобках: Bool,
+                                        меткаРаздела: Bool = true) -> URL? {
             for ключ in ["data-href", "data-url", "data-link", "data-path"] {
                 if let значение = а[ключ], let цель = адрес(значение) { return цель }
             }
-            for ключ in ["data-sec", "data-section", "data-anchor", "data-scroll", "data-goto", "data-target"] {
+            var ключи = ["data-sec", "data-section", "data-anchor", "data-scroll", "data-goto", "data-target"]
+            let класс = (а["class"] ?? "").lowercased()
+            let вопросный = ["faq", "question", "answer", "qa-", "vopros"].contains(where: { класс.contains($0) })
+            if меткаРаздела, !вопросный {
+                ключи += ["data-cat", "data-category", "data-topic", "data-tab", "data-panel", "data-group",
+                          "data-slug", "data-key", "data-filter", "data-open", "data-show"]
+            }
+            for ключ in ключи {
                 guard var значение = а[ключ]?.trimmingCharacters(in: .whitespacesAndNewlines), !значение.isEmpty else {
                     continue
                 }
                 if значение.hasPrefix("#") { значение.removeFirst() }
-                guard !значение.isEmpty, значение.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }),
+                guard !значение.isEmpty, значение.count <= 64,
+                      значение.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }),
                       let цель = адрес("#" + значение) else { continue }
                 return цель
             }
@@ -1316,16 +1458,24 @@ enum РазборСтатьи {
                let диапазон = Range(найдено.range(at: 1), in: скрипт), let цель = адрес(String(скрипт[диапазон])) {
                 return цель
             }
-            /* Слово в скобках — якорь раздела, только у элемента с классом плитки (иначе это счётчик, лог, …). */
-            guard Разбор.плитка(а["class"] ?? "") || имя == "button", !скрипт.lowercased().contains("toggle") else {
-                return nil
-            }
+            /* Слово в скобках — якорь раздела, только у нажимаемого элемента (иначе это счётчик, лог, …). */
+            guard словоВСкобках, !скрипт.lowercased().contains("toggle") else { return nil }
             if let выражение = Разбор.словоВСкрипте,
                let найдено = выражение.firstMatch(in: скрипт, options: [], range: весь),
                let диапазон = Range(найдено.range(at: 1), in: скрипт) {
                 return адрес("#" + String(скрипт[диапазон]))
             }
             return nil
+        }
+
+        /// Адрес — эта же страница (путь базы). безЯкоря: и без якоря и параметров (ссылка-пустышка).
+        private func этаЖеСтраница(_ цель: URL, безЯкоря: Bool = true) -> Bool {
+            guard (цель.host ?? "").lowercased() == (база.host ?? "").lowercased() else { return false }
+            let свой = цель.path.hasSuffix("/") ? String(цель.path.dropLast()) : цель.path
+            let базы = база.path.hasSuffix("/") ? String(база.path.dropLast()) : база.path
+            guard свой == базы else { return false }
+            guard безЯкоря else { return true }
+            return (цель.fragment ?? "").isEmpty && (цель.query ?? "").isEmpty
         }
 
         // MARK: Картинки
@@ -1581,6 +1731,7 @@ enum РазборСтатьи {
             var карточка = БлокСтатьи(id: счётчик, вид: .карточка(адрес), текст: заголовок, подпись: подпись,
                                       якоря: якоряКарточки)
             карточка.значок = значок
+            карточка.скрыт = свои.contains(where: { $0.скрыт }) || !скрытыеПанели.isEmpty
             контейнер.append(карточка)
             сохранить(контейнер)
         }
@@ -1614,6 +1765,18 @@ enum РазборСтатьи {
             let текст = РазборСтатьи.декодировать(сырой)
             var чистый = ""
             чистый.reserveCapacity(текст.count)
+            /* Граница элементов без пробела: число сайта в своём значке — «<span>1</span>Оператор данных»,
+               «Содержание<span>14 разделов</span>». Слитно («1Оператор», «Содержание14») не склеивать: число и
+               слово — через широкий пробел (по нему экран узнаёт номер заголовка), счёт после слова — через «·».
+               Только на границе тегов: «Kliko.kz», «24/7», «iPhone15» одним куском не трогаются. */
+            if !пробелБыл, стек.last != "sup", стек.last != "sub",
+               let прежний = куски.last?.текст.last, let первый = текст.first {
+                if прежний.isNumber, первый.isLetter {
+                    чистый.append("\u{2002}")
+                } else if прежний.isLetter, первый.isNumber {
+                    чистый.append(Разбор.счёт(текст) ? " · " : " ")
+                }
+            }
             for c in текст {
                 if c.isWhitespace && c != "\u{00A0}" {
                     if !пробелБыл { чистый.append(" ") }
@@ -1705,7 +1868,17 @@ enum РазборСтатьи {
             положить(блок)
         }
 
-        private mutating func положить(_ блок: БлокСтатьи) {
+        private mutating func положить(_ исходный: БлокСтатьи) {
+            var блок = исходный
+            /* Метки разделов вокруг и скрытость панели — для плиток разделов (ЭкранСтраницыСайта). */
+            if блок.группы.isEmpty, !метки.isEmpty {
+                var все: [String] = []
+                for метка in метки {
+                    for ключ in метка.ключи where !все.contains(ключ) { все.append(ключ) }
+                }
+                блок.группы = все
+            }
+            if !скрытыеПанели.isEmpty { блок.скрыт = true }
             if раскрытия.isEmpty {
                 итог.append(блок)
             } else {
@@ -1756,6 +1929,15 @@ enum РазборСтатьи {
                 }
             }
             return итог
+        }
+
+        /// «14 разделов», «3 ответа» — счёт (число, пробел, слово), а не номер пункта.
+        private static func счёт(_ текст: String) -> Bool {
+            let цифры = текст.prefix(while: { $0.isNumber })
+            guard !цифры.isEmpty else { return false }
+            let хвост = текст.dropFirst(цифры.count)
+            guard let пробел = хвост.first, пробел.isWhitespace else { return false }
+            return хвост.drop(while: { $0.isWhitespace }).first?.isLetter ?? false
         }
 
         private static func пробел(_ c: Unicode.Scalar) -> Bool {
