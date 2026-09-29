@@ -25,10 +25,10 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 | `kz.kliko.app.promo.top30b9` | consumable | Consumable | Promo TOP 30 days + 9 bumps | ТОП 30 дней + 9 поднятий / TOP 30 days + 9 bumps | Listing in TOP for 30 days plus 9 bumps. |
 | `kz.kliko.app.promo.bump1` | consumable | Consumable | Promo Bump x1 | Поднятие / Bump | Moves one listing to the top of the feed once. |
 | `kz.kliko.app.resume.top7` | consumable | Consumable | Resume TOP 7 days | Резюме в ТОП на 7 дней / Résumé in TOP for 7 days | Shows the user's résumé at the top of the jobs section for 7 days. |
-| `kz.kliko.app.slots.10` | consumable | Non-Renewing Subscription (рекомендуется) или Consumable | Slots +10 30 days | +10 объявлений на 30 дней / +10 listing slots for 30 days | Raises the number of simultaneously active listings by 10 for 30 days. |
-| `kz.kliko.app.slots.25` | consumable | то же | Slots +25 30 days | +25 объявлений на 30 дней / +25 listing slots for 30 days | Raises the active listings limit by 25 for 30 days. |
+| `kz.kliko.app.slots.20` | consumable | Non-Renewing Subscription (рекомендуется) или Consumable | Slots +20 30 days | +20 объявлений на 30 дней / +20 listing slots for 30 days | Raises the number of simultaneously active listings by 20 for 30 days. |
 | `kz.kliko.app.slots.50` | consumable | то же | Slots +50 30 days | +50 объявлений на 30 дней / +50 listing slots for 30 days | Raises the active listings limit by 50 for 30 days. |
 | `kz.kliko.app.slots.100` | consumable | то же | Slots +100 30 days | +100 объявлений на 30 дней / +100 listing slots for 30 days | Raises the active listings limit by 100 for 30 days. |
+| `kz.kliko.app.slots.200` | consumable | то же | Slots +200 30 days | +200 объявлений на 30 дней / +200 listing slots for 30 days | Raises the active listings limit by 200 for 30 days. |
 | `kz.kliko.app.combo.start` | consumable | то же | Combo Start | Комбо «Старт» / Combo Start | 20 extra listing slots and unlimited Kliko AI listing analysis for 7 days. |
 | `kz.kliko.app.combo.active` | consumable | то же | Combo Active | Комбо «Актив» / Combo Active | 50 extra listing slots and unlimited Kliko AI for 14 days. |
 | `kz.kliko.app.combo.max` | consumable | то же | Combo Max | Комбо «Макс» / Combo Max | 100 extra listing slots and unlimited Kliko AI for 30 days. |
