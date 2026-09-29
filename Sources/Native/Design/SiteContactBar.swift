@@ -37,7 +37,12 @@ import UIKit
  Запрос идёт с куками веб-сессии и CSRF загруженной страницы (window._MKP_CSRF, запасной — KlikoCsrf), как чат (ChatAPI).
  Токена нет — сессии сайта нет — свой экран входа (ОкнаПриложения / ВходПоверх), не страница сайта. Кнопки видны, только
  если сайт их показал бы: has_phone и contact.call.ok / contact.wa.ok; нет ни одной — круглая кнопка чата. Вне режима
- работы звонок и WhatsApp не открываются (mkHoursGateModal) — окно «Звонок — в рабочее время».
+ работы звонок и WhatsApp не открываются (mkHoursGateModal) — окно «Звонок — в рабочее время»; его «Напомнить»
+ (mkHoursRemind, ссылка /ics.php у сайта) — системное окно события календаря (SiteListingCalendar.swift).
+
+ РЕЖИМ СДЕЛОК eds (MK_DEAL_MODE сайта): вместо гаранта в строке над пилюлей — «Сделка с подписью eGov» (mkEdsStart:
+ расчёт, окно mkEdsShow, создание договора и окно сделки — SiteListingEds.swift). Ссылка ?buy=1 / ?chat=1
+ (_mkAfterCard) — панель сама жмёт кнопку сделки или открывает чат, когда карточка догрузилась (НамерениеОбъявления).
  */
 struct ПанельСвязиСайта: View {
     let товар: Listing
@@ -63,8 +68,12 @@ struct ПанельСвязиСайта: View {
     @State private var листГаранта: ЛистГарантаОбъявления? = nil
     @State private var послеЛиста: URL? = nil
     @State private var ждёмГарант = false
+    /// Что сделать, когда уедет окно «Сделка с подписью eGov»: вход, верификация или адрес созданной сделки.
+    @State private var послеEDS: ПослеЛистаEDS? = nil
     /// Своё ждущее предложение цены по этому объявлению (TestFlight 26.09.2026: «отозвать предложение нет»).
     @ObservedObject private var торг = ТоргПредложений.shared
+    /// MK_DEAL_MODE сайта: «eds» — вместо гаранта «Сделка с подписью eGov» (SiteListingEds.swift).
+    @ObservedObject private var режимСделок = РежимСделокСайта.shared
 
     enum Канал { case звонок, whatsApp }
 
@@ -157,10 +166,17 @@ struct ПанельСвязиСайта: View {
         case аренда
         /// «Купить безопасно» (у проверенного в разделе services — «Заказать безопасно»).
         case купить
+        /// «Сделка с подписью eGov» — A сайта в режиме MK_DEAL_MODE = "eds" (mkEdsStart).
+        case подписьEDS
     }
 
     private var гарант: Гарант? {
         if своё { return nil }
+        /* Режим eds: вместо гаранта — «Сделка с подписью eGov», если T сайта (цена и продавец годятся, раздел не авто,
+           не жильё, не услуги, не работа и не животные); цену в договоре можно согласовать в чате, поэтому и при «Торг». */
+        if режимСделок.eds {
+            return СделкаEDSОбъявления.подходит(товар) ? .подписьEDS : nil
+        }
         if товар.услуга {
             switch ГарантОбъявления.кнопка(товар) {
             case .аренда?: return .аренда
@@ -197,10 +213,19 @@ struct ПанельСвязиСайта: View {
         return чат
     }
 
-    /// Главная кнопка и то, что ей нужно: кто смотрит (своё ли, проверен ли) и окна гаранта.
+    /// Главная кнопка и то, что ей нужно: кто смотрит (своё ли, проверен ли), окна гаранта и намерение ссылки
+    /// (?buy=1, ?chat=1 — NativeRouter): его исполняем, когда известно, своё ли объявление.
     private var главнаяЧасть: some View {
         главнаяКнопка
-            .task(id: товар.id) { await узнатьЧеловека() }
+            .task(id: товар.id) {
+                await узнатьЧеловека()
+                /* Намерение ссылки — когда карточка уже въехала (_mkAfterCard сайта ждёт открытую карточку): чат и окна
+                   не наезжают на анимацию стека. Ушли раньше — намерение ждёт следующего показа. */
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled else { return }
+                выполнитьНамерение()
+            }
+            .task { await режимСделок.сверить() }
             .sheet(item: $листГаранта, onDismiss: { открытьПослеЛиста() }) { лист in
                 окноГаранта(лист)
             }
@@ -227,30 +252,46 @@ struct ПанельСвязиСайта: View {
     @ViewBuilder
     private var второстепенные: some View {
         let гарантСейчас = гарант
-        if гарантСейчас != nil || можноПредложить {
-            HStack(spacing: 8) {
-                switch гарантСейчас {
-                case .аренда?:
-                    КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: ListingPageText.т("rent_safe"),
-                                      главная: true) {
-                        /* mkRentJump: не страница сайта — страница объявления доезжает до своего блока аренды. */
-                        NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
-                    }
-                case .купить?:
-                    КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: подписьГаранта, главная: true) {
-                        нажатьГарант()
-                    }
-                    .disabled(ждёмГарант)
-                case nil:
-                    EmptyView()
-                }
-                if можноПредложить {
-                    КнопкаВторогоРяда(значок: "tag", заголовок: ListingPageText.т("offer"), главная: false) {
-                        открытьЧат(предложить: true)
-                    }
-                }
+        if гарантСейчас == .подписьEDS && можноПредложить {
+            /* «Сделка с подписью eGov» длиннее «Купить безопасно»: рядом с «Предложить цену» не влезла — друг под другом. */
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
+                VStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
             }
             .padding(.bottom, 8)
+        } else if гарантСейчас != nil || можноПредложить {
+            HStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
+                .padding(.bottom, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func кнопкиВторогоРяда(_ гарантСейчас: Гарант?) -> some View {
+        switch гарантСейчас {
+        case .аренда?:
+            КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: ListingPageText.т("rent_safe"),
+                              главная: true) {
+                /* mkRentJump: не страница сайта — страница объявления доезжает до своего блока аренды. */
+                NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
+            }
+        case .купить?:
+            КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: подписьГаранта, главная: true) {
+                нажатьГарант()
+            }
+            .disabled(ждёмГарант)
+        case .подписьEDS?:
+            КнопкаВторогоРяда(значок: "pencil.line", заголовок: ТекстыСделкиEDSОбъявления.т("eds_btn"),
+                              главная: true) {
+                начатьEDS()
+            }
+            .disabled(ждёмГарант)
+        case nil:
+            EmptyView()
+        }
+        if можноПредложить {
+            КнопкаВторогоРяда(значок: "tag", заголовок: ListingPageText.т("offer"), главная: false) {
+                открытьЧат(предложить: true)
+            }
         }
     }
 
@@ -342,14 +383,105 @@ struct ПанельСвязиСайта: View {
             ЛистГарантСделки(кнопка: кнопка, открыть: { адрес in послеЛиста = адрес })
         case .оформление:
             ОкноБезопаснойСделки(товар: товар, открыть: { адрес in послеЛиста = адрес })
+        case .подписьEDS(let расчёт):
+            ЛистСделкиEDSОбъявления(товар: товар, расчёт: расчёт, после: { куда in послеEDS = куда })
         }
     }
 
     /// Окно закрылось — страница сайта, которую оно попросило открыть (лист поверх листа не открывается).
     private func открытьПослеЛиста() {
+        if let куда = послеEDS {
+            послеEDS = nil
+            послеОкнаEDS(куда)
+            return
+        }
         guard let адрес = послеЛиста else { return }
         послеЛиста = nil
         открыть(адрес)
+    }
+
+    // MARK: - Сделка с подписью eGov (mkEdsStart, SiteListingEds.swift)
+
+    /// «Сделка с подписью eGov»: расчёт сервера; идёт своя сделка — сразу она, иначе окно mkEdsShow; ошибка — окно с
+    /// текстом сервера (тост сайта).
+    private func начатьEDS() {
+        guard !ждёмГарант else { return }
+        ждёмГарант = true
+        Task { @MainActor in
+            let итог = await СделкаEDSОбъявления.расчёт(товар.id)
+            ждёмГарант = false
+            switch итог {
+            case .окно(let расчёт):
+                листГаранта = .подписьEDS(расчёт)
+            case .идёт(let номер):
+                /* location.href = APP_L + "/cabinet.php?eds=" + live — своим путём: «Мои сделки» и окно сделки. */
+                if let адрес = СделкаEDSОбъявления.адресСделки(номер) { открыть(адрес) }
+            case .ошибка(let текст):
+                окно = ОкноСвязи(заголовок: текст, текст: "", регистрация: false)
+            }
+        }
+    }
+
+    /// Окно «Сделка с подписью eGov» уехало: вход, верификация или созданная сделка (/cabinet.php?eds=<id>).
+    private func послеОкнаEDS(_ куда: ПослеЛистаEDS) {
+        switch куда {
+        case .вход:
+            if !ОкнаПриложения.shared.показать(.вход, задержка: 300_000_000) { ВходПоверх.показать() }
+        case .верификация:
+            /* APP_L + "/cabinet.php?go=verify" сайта — тем же адресом, что «Пройти верификацию» окна гаранта: своё окно
+               eGov (ПереходыКабинета → ОкноEgov), не страница сайта. */
+            if let адрес = Config.страницаСайта("cabinet.php?go=verify") { открыть(адрес) }
+        case .сделка(let адрес):
+            открыть(адрес)
+        }
+    }
+
+    // MARK: - Намерение ссылки (?buy=1, ?chat=1 — _mkAfterCard сайта)
+
+    /// Карточку открыли ссылкой с ?chat=1 или ?buy=1 — сделать это один раз, как только знаем, кто смотрит.
+    private func выполнитьНамерение() {
+        guard let намерение = НамеренияОбъявления.shared.взять(товар.id) else { return }
+        switch намерение {
+        case .нет:
+            break
+        case .чат:
+            /* mkChatOpen — чат с продавцом; гостю сначала лист входа (открытьЧат). */
+            открытьЧат(предложить: false)
+        case .купить:
+            купитьПоСсылке()
+        }
+    }
+
+    /**
+     mkBuyNow: нажать кнопку сделки карточки (A сайта) — «Сделка с подписью eGov», «Арендовать безопасно» или «Купить /
+     Заказать безопасно» — независимо от того, вынесена ли она в строку над пилюлей. Своё объявление — ничего. Гарант на
+     паузе — у сайта на месте кнопки плашка, нажать нечего. Кнопки нет — сайт нажимает первую .mk-mescrow карточки:
+     у товара это «Предложить цену», у услуги — «Связаться» (здесь — чат).
+     */
+    private func купитьПоСсылке() {
+        guard !своё else { return }
+        if режимСделок.eds {
+            if СделкаEDSОбъявления.подходит(товар) { начатьEDS() } else { запаснойПоСсылке() }
+            return
+        }
+        if ГарантОбъявления.наПаузеУОбъявления(товар) { return }
+        switch ГарантОбъявления.кнопка(товар) {
+        case .аренда?:
+            NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
+        case .купить?:
+            нажатьГарант()
+        case nil:
+            запаснойПоСсылке()
+        }
+    }
+
+    /// Кнопки сделки у объявления нет: товар — «Предложить цену» (W сайта), услуга — «Связаться» (et сайта).
+    private func запаснойПоСсылке() {
+        if товар.услуга {
+            открытьЧат(предложить: false)
+        } else if можноПредложить {
+            открытьЧат(предложить: true)
+        }
     }
 
     /// «Предложить цену» / «Связаться»: нативный чат (гостю сначала лист входа); написать некуда — «Связь недоступна».
@@ -495,8 +627,10 @@ struct ПанельСвязиСайта: View {
         guard ждём == nil else { return }
         /* mkContactGo: вне часов работы номер не открывается — окно с часами приёма звонков. */
         if !товар.открытоСейчас() {
+            /* «Напомнить» окна (mkHoursRemind) — событие в календаре на время открытия (SiteListingCalendar.swift). */
             показатьКарточку(ОкноСвязи(заголовок: ListingPageText.т("hours_gate_t"), текст: ListingPageText.т("hours_gate_b"),
-                                       регистрация: false, значок: "clock", часы: товар.текстЧасов))
+                                       регистрация: false, значок: "clock", часы: товар.текстЧасов,
+                                       напоминание: НапоминаниеЗвонка(товар: товар)))
             return
         }
         ждём = канал
@@ -558,6 +692,8 @@ struct ОкноСвязи: Identifiable {
     var значок: String? = nil
     /// Окно часов работы («09:00–18:00») — блок «Принимает звонки» карточки вне часов.
     var часы: String? = nil
+    /// Карточка вне часов: «Напомнить» — событие в календаре на время открытия (mkHoursRemind); nil — кнопки нет.
+    var напоминание: НапоминаниеЗвонка? = nil
 
     var id: String { заголовок + текст }
 }
@@ -571,6 +707,10 @@ private struct ОкноСвязиСайта: View {
     let окно: ОкноСвязи
     let закрыть: (Bool) -> Void
     @State private var видно = false
+    /// Окно события календаря открывается («Напомнить» — второй раз не нажать).
+    @State private var календарь = false
+    /// Тост сайта после «Напомнить»: «Напоминание сохранено в календарь».
+    @State private var тост: String? = nil
 
     var body: some View {
         ZStack {
@@ -588,7 +728,40 @@ private struct ОкноСвязиСайта: View {
             .opacity(видно ? 1 : 0)
             .offset(y: видно ? 0 : 8)
         }
+        .overlay(alignment: .bottom) {
+            if let тост {
+                ТостEDS(текст: тост)
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(ДвижениеСайта.мягко(.easeOut(duration: 0.2)), value: тост)
         .onAppear { withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 0.22))) { видно = true } }
+    }
+
+    /// mkHoursRemind: событие календаря на время открытия; добавили — тост сайта, окно остаётся, как у сайта.
+    private func напомнить(_ напоминание: НапоминаниеЗвонка) {
+        guard !календарь else { return }
+        календарь = true
+        КалендарьНапоминаний.добавить(напоминание) { итог in
+            календарь = false
+            switch итог {
+            case .добавлено:
+                показатьТост(ТекстыНапоминания.т("hours_remind_set"))
+            case .отменено:
+                break
+            case .неВышло:
+                показатьТост(ТекстыНапоминания.т("remind_fail"))
+            }
+        }
+    }
+
+    private func показатьТост(_ текст: String) {
+        тост = текст
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            if тост == текст { тост = nil }
+        }
     }
 
     private func уйти(вЧат: Bool) {
@@ -648,6 +821,9 @@ private struct ОкноСвязиСайта: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            if let напоминание = окно.напоминание {
+                кнопкаНапомнить(напоминание)
+            }
             Button { уйти(вЧат: false) } label: {
                 Text(ListingPageText.т("later"))
                     .font(.system(size: 14, weight: .semibold))
@@ -689,12 +865,61 @@ private struct ОкноСвязиСайта: View {
                 .foregroundStyle(Theme.зелёный)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            /* .mk-hrgate-until: «откроется через 2 ч 15 мин» (mkHoursUntilText). */
+            if let минут = окно.напоминание?.минутДоОткрытия, минут >= 1 {
+                Text(ТекстыНапоминания.черезСколько(минут))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity)
         .background(Theme.зелёный.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .accessibilityElement(children: .combine)
+    }
+
+    /// #mk-hrgate-remind: «Напомнить» 44 pt — поверхность с рамкой 1,5 и значком календаря, под ней серая подсказка
+    /// hours_remind_hint.
+    @ViewBuilder
+    private func кнопкаНапомнить(_ напоминание: НапоминаниеЗвонка) -> some View {
+        Button { напомнить(напоминание) } label: {
+            HStack(spacing: 8) {
+                if календарь {
+                    SiteSpinner(размер: 16)
+                } else {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 15, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+                Text(ТекстыНапоминания.т("hours_remind"))
+                    .font(.system(size: 14, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(Theme.текст)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1.5)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .disabled(календарь)
+        .padding(.top, 10)
+        .accessibilityHint(ТекстыНапоминания.т("hours_remind_hint"))
+        Text(ТекстыНапоминания.т("hours_remind_hint"))
+            .font(.system(size: 12))
+            .lineSpacing(2)
+            .foregroundStyle(Theme.текстВторой)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 8)
+            .accessibilityHidden(true)
     }
 }
 

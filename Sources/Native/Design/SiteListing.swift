@@ -554,6 +554,8 @@ struct КарточкаНаЭкране: Equatable {
 extension SiteSession {
     /// Список магазинов за время работы приложения: страница сайта его не меняет от объявления к объявлению.
     @MainActor private static var кэшМагазинов: Set<String>?
+    /// Загрузка страницы уже идёт — второй вызов (страница объявления и режим сделок разом) ждёт её, а не качает снова.
+    @MainActor private static var загрузкаМагазинов: Task<Set<String>, Never>?
 
     /// Магазины (MK_SHOPS страницы сайта) — продавцы с витриной: у их услуг вне часов работы плашка «закрыто», в
     /// карточке продавца — «Магазин». Список читается из разметки страницы витрины обычным запросом, без WebView;
@@ -561,11 +563,25 @@ extension SiteSession {
     @MainActor
     static func магазины() async -> Set<String> {
         if let готовый = кэшМагазинов { return готовый }
+        if let идёт = загрузкаМагазинов { return await идёт.value }
+        let задача = Task { @MainActor () -> Set<String> in
+            await SiteSession.загрузитьМагазины()
+        }
+        загрузкаМагазинов = задача
+        let итог = await задача.value
+        загрузкаМагазинов = nil
+        return итог
+    }
+
+    @MainActor
+    private static func загрузитьМагазины() async -> Set<String> {
         var запрос = URLRequest(url: Config.apiBase.appendingPathComponent("marketplace"))
         запрос.timeoutInterval = 15
         guard let ответ = try? await URLSession.shared.data(for: запрос),
-              let страница = String(data: ответ.0, encoding: .utf8),
-              let образец = try? NSRegularExpression(pattern: "MK_SHOPS\\s*=\\s*new Set\\((\\[[^\\]]*\\])\\)"),
+              let страница = String(data: ответ.0, encoding: .utf8) else { return [] }
+        /* Та же страница несёт MK_DEAL_MODE — режим сделок (SiteListingEds.swift): второй раз её не качаем. */
+        РежимСделокСайта.shared.принять(страница)
+        guard let образец = try? NSRegularExpression(pattern: "MK_SHOPS\\s*=\\s*new Set\\((\\[[^\\]]*\\])\\)"),
               let найдено = образец.firstMatch(in: страница, range: NSRange(страница.startIndex..., in: страница)),
               let часть = Range(найдено.range(at: 1), in: страница),
               let список = try? JSONDecoder().decode([String].self, from: Data(страница[часть].utf8)) else { return [] }
