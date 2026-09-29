@@ -1880,7 +1880,8 @@ private struct ПолеДатыАренды: View {
     }
 }
 
-/// POST rentals.php {action:"request", csrf, me_id, item_id, start_date, end_date, message} — как mkRentRequest.
+/// POST rentals.php {action:"request", csrf, item_id, start_date, end_date, message} — как mkRentRequest. csrf — токен
+/// вошедшей сессии (ДоставкаТКAPI.csrfСессииЗапроса): по нему сервер пропускает запрос без Origin (правка 93).
 enum АрендаОбъявленияAPI {
     enum Итог {
         case готово
@@ -1900,8 +1901,7 @@ enum АрендаОбъявленияAPI {
 
     @MainActor
     static func запросить(объявление: String, начало: Date, конец: Date, сообщение: String) async -> Итог {
-        let состояние = await SiteSession.состояние()
-        guard let csrf = состояние.csrf else { return .нетСессии }
+        guard let csrf = await ДоставкаТКAPI.csrfСессииЗапроса() else { return .нетСессии }
         guard let адрес = URL(string: "rentals.php", relativeTo: Config.apiBase)?.absoluteURL else { return .сеть }
         let ф = DateFormatter()
         ф.locale = Locale(identifier: "en_US_POSIX")
@@ -1915,7 +1915,7 @@ enum АрендаОбъявленияAPI {
             запрос.setValue(значение, forHTTPHeaderField: имя)
         }
         let тело: [String: Any] = [
-            "action": "request", "csrf": csrf, "me_id": состояние.пользователь ?? "", "item_id": объявление,
+            "action": "request", "csrf": csrf, "item_id": объявление,
             "start_date": ф.string(from: начало), "end_date": ф.string(from: конец), "message": сообщение
         ]
         запрос.httpBody = try? JSONSerialization.data(withJSONObject: тело)

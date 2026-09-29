@@ -296,13 +296,28 @@ enum ДоставкаТКAPI {
                                  минут: минут > 0 ? минут : nil)
     }
 
-    /// mkBcSend: POST broadcast.php с CSRF страницы и куками веб-сессии. раздел — section тела: у сайта первый аргумент
+    /**
+     CSRF той сессии, чьи куки уйдут с запросом. Приложение шлёт без Origin, и broadcast.php / rentals.php пропускают его
+     по вошедшей сессии и её токену csrf_cab (inc/app_origin_ok.php, правки сервера 92–94). Берём его со страницы
+     кабинета, прочитанной сейчас (после входа токен меняется, а страница под слоем могла быть отрисована до входа);
+     не прочиталась — токен страницы под слоем (тот же csrf_cab). Кабинет сказал «гость» — nil: нужен вход.
+     */
+    @MainActor
+    static func csrfСессииЗапроса() async -> String? {
+        if let кабинет = try? await КабинетСайта.состояние(ждать: false) {
+            if кабинет.вошёл == false { return nil }
+            if !кабинет.csrf.isEmpty { return кабинет.csrf }
+        }
+        return await SiteSession.состояние().csrf
+    }
+
+    /// mkBcSend: POST broadcast.php с CSRF сессии и куками веб-сессии (без Origin — сервер верит сессии и токену).
+    /// Кто отправляет — сервер берёт из сессии, me_id не шлём. раздел — section тела: у сайта первый аргумент
     /// mkBroadcast (грузоперевозки — «services», пустая лента — mkSt.cat или «other»).
     @MainActor
     static func отправитьЗапрос(текст: String, город: String, широта: String, долгота: String,
                                 раздел: String = "services", специальность: String = "") async -> ИтогЗапроса {
-        let состояние = await SiteSession.состояние()
-        guard let csrf = состояние.csrf else { return .нетСессии }
+        guard let csrf = await csrfСессииЗапроса() else { return .нетСессии }
         guard let адрес = URL(string: "broadcast.php", relativeTo: Config.apiBase)?.absoluteURL else { return .сеть }
         var запрос = URLRequest(url: адрес)
         запрос.httpMethod = "POST"
@@ -313,7 +328,6 @@ enum ДоставкаТКAPI {
         }
         let тело: [String: Any] = [
             "text": текст, "section": раздел.isEmpty ? "other" : раздел, "specialty": специальность,
-            "me_id": состояние.пользователь ?? "",
             "city": город, "lat": широта, "lon": долгота, "radius_km": 2, "csrf": csrf
         ]
         запрос.httpBody = try? JSONSerialization.data(withJSONObject: тело)
