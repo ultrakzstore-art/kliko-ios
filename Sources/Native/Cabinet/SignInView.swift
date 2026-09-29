@@ -2,33 +2,32 @@ import SwiftUI
 import UIKit
 
 /**
- ЭКРАН ВХОДА КАК У САЙТА — ЭТАП 40 (владелец 26.09.2026: «всё одно и то же, просто код разный»).
+ ЭКРАН ВХОДА — ЭТАП 40 (владелец 26.09.2026), упрощён по «пути новичка» (владелец 29.09.2026).
 
- Гостевая страница /kz/ru/cabinet.php (карта кабинета §1.1): сначала ворота «С чего начнём?» — «Я покупатель» ведёт в
- форму регистрации по номеру, «Я продавец» — в окно eGov (оно живёт на странице сайта, cabinet.php?egov=1: там
- iframe biometric.kz с камерой, §1.2.4); «Уже есть аккаунт? Войти» — во вкладку входа. Дальше вкладки «Войти» /
- «Регистрация». Как у сайта (switchTab), путь к регистрации всегда идёт через ворота, пока человек не выбрал «Я
- покупатель»: «Зарегистрируйтесь» со вкладки входа тоже сначала показывает предложение eGov.
+ Гостевая страница /kz/ru/cabinet.php (карта кабинета §1.1), но без ворот «С чего начнём? Я покупатель / Я продавец»
+ и без таблицы «Без eGov / С eGov»: сразу вкладки «Войти» / «Регистрация». Роль и зачем нужен eGov объясняются позже —
+ при первой публикации объявления (шаг eGov после публикации). «Войти через eGov» остаётся второй кнопкой под формами.
 
  Вход: номер с маской +7 (7XX) XXX-XX-XX и проверкой кода оператора (НомерКЗ = klkFmt/klkPhoneCheck), пароль, «Забыли
  пароль?» — окно «Восстановить доступ» (eGov по ИИН на странице сайта или поддержка: SMS-восстановления у сайта нет).
+ Номер помечен .username, пароль — .password: система подставляет доступ из Связки ключей (webcredentials:kliko.kz).
  Ответы — как у doLogin: вошёл → лист закрывается, кабинет перечитывает сеанс; need_egov → окно «Подтвердите вход через
  eGov» на странице сайта (?egov_confirm=1); deleted → «Аккаунт удалён» с причиной и «Обратиться в поддержку»; иначе —
  текст сервера или «Ошибка входа»; нет сети — «Нет соединения», прочее — «Ошибка приложения…».
 
- Регистрация: номер, ИИН (необязательно, 12 цифр), согласие с соглашением; «Создать аккаунт» → окно «Подтвердите
+ Регистрация: номер и согласие с соглашением. ИИН не спрашиваем: register_quick принимает пустой iin (карта §2.2,
+ окно регистрации витрины iin не шлёт вовсе) — ИИН попросит проверка eGov. «Создать аккаунт» → окно «Подтвердите
  номер» → register_quick только по «Всё верно, создать» → окно «Аккаунт создан» с паролем, показанным один раз.
- Пароль — чувствительные данные (§1.9): никуда не сохраняется сам, только по нажатию «Сохранить и продолжить» — в
- системном листе «Поделиться», как у сайта.
+ Пароль сразу предлагаем сохранить в Связку ключей системным окном (SecAddSharedWebCredential, СвязкаКлючей); рядом —
+ «Копировать» и запасной путь «Сохранить файлом» (лист «Поделиться», как у сайта). Сам пароль никуда больше не пишется.
 
- «или войдите через» (в карточке под формами; на воротах, как у сайта, их нет): eGov — листом поверх (ОкноEgov), Apple — нативным листом Apple (ВходApple, apple_auth.php?action=native);
- пока сервер его не умеет — прежней страницей сайта apple_auth.php?action=start (§1.2.6). Telegram сайт скрыл по правилу
- App Store 4.8 — его нет и здесь.
+ «или войдите через» (в карточке под формами): eGov — листом поверх (ОкноEgov), Apple — нативным листом Apple (ВходApple,
+ apple_auth.php?action=native); пока сервер его не умеет — прежней страницей сайта apple_auth.php?action=start (§1.2.6).
+ Telegram сайт скрыл по правилу App Store 4.8 — его нет и здесь.
  */
 struct ЭкранВхода: View {
-    enum Шаг: Equatable { case ворота, формы }
     enum Вкладка: Equatable { case вход, регистрация }
-    enum Поле: Hashable { case телефон, пароль, номерРег, иин }
+    enum Поле: Hashable { case телефон, пароль, номерРег }
 
     /// const BIO_ON страницы: от него зависит окно «Восстановить доступ».
     let eGovВключён: Bool
@@ -38,15 +37,11 @@ struct ЭкранВхода: View {
     let вошли: () -> Void
 
     @Environment(\.dismiss) private var закрыть
-    @State private var шаг: Шаг
     @State private var вкладка: Вкладка = .вход
-    /// window.__gateDone сайта: «Я покупатель» выбран — ворота больше не встают перед регистрацией.
-    @State private var решениеПринято = false
     @State private var телефон = ""
     @State private var пароль = ""
     @State private var парольВиден = false
     @State private var номерРег = ""
-    @State private var иин = ""
     @State private var согласие = false
     @State private var ошибкаНомера: String? = nil
     @State private var ошибкаНомераРег: String? = nil
@@ -57,7 +52,6 @@ struct ЭкранВхода: View {
     @State private var идёт = false
     @State private var окно: ОкноВхода? = nil
     @State private var доступ: ДоступАккаунта? = nil
-    @State private var сравнение = false
     /// С этого мгновения считается ft регистрации — сколько человек пробыл на экране.
     @State private var открыт = Date()
     @FocusState private var фокус: Поле?
@@ -66,7 +60,6 @@ struct ЭкранВхода: View {
         self.eGovВключён = eGovВключён
         self.открыть = открыть
         self.вошли = вошли
-        _шаг = State(initialValue: Config.нативнаяРегистрация ? .ворота : .формы)
     }
 
     private func т(_ ключ: String) -> String { ВходText.т(ключ) }
@@ -74,16 +67,8 @@ struct ЭкранВхода: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if шаг == .ворота {
-                        ВоротаВхода(выбрать: { роль in выбратьРоль(роль) },
-                                    войти: { открытьФормы(.вход) },
-                                    сравнить: { сравнение = true })
-                    } else {
-                        формы
-                    }
-                }
-                .padding(20)
+                формы
+                    .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(КраскаВходаСайта.фон.ignoresSafeArea())
@@ -109,10 +94,6 @@ struct ЭкранВхода: View {
             if верное != стало { номерРег = верное }
             ошибкаНомераРег = Self.ошибкаКода(верное)
         }
-        .onChange(of: иин) { _, стало in
-            let цифры = String(НомерКЗ.цифры(стало).prefix(12))
-            if цифры != стало { иин = цифры }
-        }
         .alert(окно?.заголовок ?? "", isPresented: окноПоказано, presenting: окно) { о in
             кнопкиОкна(о)
         } message: { о in
@@ -120,17 +101,6 @@ struct ЭкранВхода: View {
         }
         .sheet(item: $доступ) { д in
             ЛистДоступа(доступ: д, продолжить: { продолжитьПослеРегистрации() })
-        }
-        .sheet(isPresented: $сравнение) {
-            ЛистСравнения(выбрать: { роль in
-                сравнение = false
-                /* Сначала уходит лист сравнения: «Регистрация через eGov» закрывает и этот лист — два разом SwiftUI
-                   закрывает ненадёжно. */
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 400_000_000)
-                    выбратьРоль(роль)
-                }
-            })
         }
     }
 
@@ -157,9 +127,10 @@ struct ЭкранВхода: View {
     private var формаВхода: some View {
         VStack(alignment: .leading, spacing: 14) {
             ПолеВхода(подпись: т("auth_phone"), ошибка: ошибкаНомера, вФокусе: фокус == .телефон) {
+                /* .username, а не .telephoneNumber: номер — логин, система подставит его в паре с паролем из Связки. */
                 TextField(т("auth_phone"), text: $телефон, prompt: Text(verbatim: "+7 (700) 000-00-00"))
                     .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
+                    .textContentType(.username)
                     .focused($фокус, equals: .телефон)
             }
             ПолеВхода(подпись: т("auth_pass"), ошибка: nil, вФокусе: фокус == .пароль) {
@@ -218,17 +189,9 @@ struct ЭкранВхода: View {
             ПолеВхода(подпись: т("auth_phone"), ошибка: ошибкаНомераРег, вФокусе: фокус == .номерРег) {
                 TextField(т("auth_phone"), text: $номерРег, prompt: Text(verbatim: "+7 (700) 000-00-00"))
                     .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
+                    .textContentType(.username)
                     .focused($фокус, equals: .номерРег)
             }
-            ПолеВхода(подпись: т("auth_iin_opt"), ошибка: nil, вФокусе: фокус == .иин) {
-                TextField(т("auth_iin_opt"), text: $иин, prompt: Text(verbatim: "000000000000"))
-                    .keyboardType(.numberPad)
-                    .focused($фокус, equals: .иин)
-            }
-            Text(т("auth_iin_note"))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.текстВторой)
             СогласиеВхода(принято: $согласие)
             if let ошибка = ошибкаРег { ОшибкаФормы(текст: ошибка) }
             КнопкаСайта(подпись: т("auth_create"), идёт: идёт) { создать() }
@@ -240,7 +203,7 @@ struct ЭкранВхода: View {
 
     // MARK: - Вход через сервисы
 
-    /// «или войдите через» (.soc-btns — в карточке под формами, на воротах их нет): eGov — листом поверх (ОкноEgov),
+    /// «или войдите через» (.soc-btns — в карточке под формами): eGov — листом поверх (ОкноEgov),
     /// Apple — нативно (откат — страница сайта); ниже — согласие и примечание о номере, как у сайта.
     private var способы: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -303,7 +266,7 @@ struct ЭкранВхода: View {
             Button(т("reg_recover_egov")) { eGov("cabinet.php?egov=1") }
             Button(т("reg_recover_pass")) {
                 телефон = номерРег
-                открытьФормы(.вход)
+                выбратьВкладку(.вход)
             }
             Button(т("close"), role: .cancel) {}
         case .удалён:
@@ -321,39 +284,13 @@ struct ЭкранВхода: View {
 
     // MARK: - Действия
 
-    /// authGateRole сайта: роль — в localStorage; продавец — окно eGov на странице сайта, покупатель — регистрация.
-    private func выбратьРоль(_ роль: String) {
-        Task { await КабинетСайта.запомнитьРоль(роль) }
-        if роль == "seller" {
-            eGov("cabinet.php?egov=1")
-            return
-        }
-        guard Config.нативнаяРегистрация else {
-            наСайт(Config.страницаСайта("cabinet.php"))
-            return
-        }
-        решениеПринято = true
-        открытьФормы(.регистрация)
-    }
-
-    private func открытьФормы(_ куда: Вкладка) {
-        шаг = .формы
-        вкладка = куда
-    }
-
-    /// switchTab сайта: к регистрации — через ворота, пока человек не выбрал «Я покупатель».
+    /// switchTab сайта, но без ворот ролей: регистрация открывается сразу (роль спросим при первой публикации).
     private func выбратьВкладку(_ куда: Вкладка) {
         ошибкаВхода = nil
         ошибкаРег = nil
-        if куда == .регистрация {
-            guard Config.нативнаяРегистрация else {
-                наСайт(Config.страницаСайта("cabinet.php"))
-                return
-            }
-            if !решениеПринято {
-                шаг = .ворота
-                return
-            }
+        if куда == .регистрация && !Config.нативнаяРегистрация {
+            наСайт(Config.страницаСайта("cabinet.php"))
+            return
         }
         вкладка = куда
     }
@@ -401,18 +338,13 @@ struct ЭкранВхода: View {
         }
     }
 
-    /// doQuickRegister: номер, ИИН (пусто или 12 цифр), согласие — потом окно «Подтвердите номер».
+    /// doQuickRegister: номер и согласие — потом окно «Подтвердите номер». ИИН не спрашиваем (сервер его не требует).
     private func создать() {
         guard !идёт else { return }
         ошибкаРег = nil
         if let ошибка = НомерКЗ.ошибка(номерРег) {
             ошибкаНомераРег = ошибка
             фокус = .номерРег
-            return
-        }
-        let чистый = НомерКЗ.цифры(иин)
-        if !чистый.isEmpty && чистый.count != 12 {
-            ошибкаРег = т("auth_iin_bad")
             return
         }
         guard согласие else {
@@ -428,12 +360,11 @@ struct ЭкранВхода: View {
         guard !идёт else { return }
         идёт = true
         let номер = номерРег
-        let чистый = НомерКЗ.цифры(иин)
         let мс = Int(max(0, Date().timeIntervalSince(открыт)) * 1000)
         Task { @MainActor in
             defer { идёт = false }
             do {
-                let итог = try await КабинетСайта.зарегистрировать(телефон: номер, иин: чистый, мсНаЭкране: мс)
+                let итог = try await КабинетСайта.зарегистрировать(телефон: номер, иин: "", мсНаЭкране: мс)
                 switch итог {
                 case .создан(let тел, let секрет):
                     доступ = ДоступАккаунта(телефон: НомерКЗ.дляДоступа(тел), пароль: секрет)
@@ -450,7 +381,7 @@ struct ЭкранВхода: View {
         }
     }
 
-    /// «Сохранить и продолжить» / «Продолжить без сохранения» — как у сайта, перезагрузка уже вошедшим.
+    /// «Продолжить» из окна «Аккаунт создан» — как у сайта, перезагрузка уже вошедшим.
     private func продолжитьПослеРегистрации() {
         доступ = nil
         Task { @MainActor in
@@ -609,18 +540,12 @@ private enum КраскаВходаСайта {
     static let зелёный = Theme.цвет(0x0F5132, 0x22A05B)
     /// --on-ok: #0f7a44 и #5cd39a (ссылки согласия, значок «Аккаунт создан»).
     static let наЗелёный = Theme.цвет(0x0F7A44, 0x5CD39A)
-    /// --acc-on: #0f5132 и #5cd39a (значки ролей, кнопка eGov, колонка «С eGov»).
+    /// --acc-on: #0f5132 и #5cd39a (кнопка eGov).
     static let акцент = Theme.цвет(0x0F5132, 0x5CD39A)
     /// --tint-ok: #e7f6ee и rgba(52,201,151,.14).
     static let тинт = Theme.цвет(светлый: Theme.hex(0xE7F6EE), тёмный: Theme.hex(0x34C997, 0.14))
-    /// --edge-ok: #cdebd7 и rgba(52,201,151,.32).
-    static let кромка = Theme.цвет(светлый: Theme.hex(0xCDEBD7), тёмный: Theme.hex(0x34C997, 0.32))
-    /// surf2 плитки значка роли: #f6faf8 и #23232f.
-    static let плитка = Theme.цвет(0xF6FAF8, 0x23232F)
     /// --red ошибок формы: #c0392b и #ff6168.
     static let ошибка = Theme.цвет(0xC0392B, 0xFF6168)
-    /// --danger: #991b1b и #ff8a8f (крестик «Без eGov»).
-    static let опасно = Theme.цвет(0x991B1B, 0xFF8A8F)
     /// Тень карточки и кнопки: rgba(15,81,50,…).
     static let тень = Color(red: 15 / 255, green: 81 / 255, blue: 50 / 255)
 }
@@ -638,104 +563,6 @@ private extension View {
                     .shadow(color: КраскаВходаСайта.тень.opacity(0.15), radius: 15, y: 8)
             }
             .overlay { форма.strokeBorder(КраскаВходаСайта.линия, lineWidth: 1) }
-    }
-}
-
-/// Ворота #auth-gate: «С чего начнём?», две роли, «Уже есть аккаунт? Войти», «Чем отличаются пути».
-private struct ВоротаВхода: View {
-    let выбрать: (String) -> Void
-    let войти: () -> Void
-    let сравнить: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(ВходText.т("gate_role_t"))
-                .font(.system(size: 19, weight: .heavy))
-                .lineSpacing(4)
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 16)
-                .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 10) {
-                КнопкаРоли(заголовок: ВходText.т("gate_role_buyer"), подпись: ВходText.т("gate_role_buyer_s"),
-                           значок: "cart", главная: false) { выбрать("buyer") }
-                КнопкаРоли(заголовок: ВходText.т("gate_role_seller"), подпись: ВходText.т("gate_role_seller_s"),
-                           значок: "checkmark.shield", главная: true) { выбрать("seller") }
-            }
-            ПереходФормы(вопрос: ВходText.т("gate_have"), ссылка: ВходText.т("auth_login"), жирная: true,
-                         действие: войти)
-                .padding(.top, 16)
-            /* Второй абзац: 12, по центру, lh 1.5; «Чем отличаются пути» — серая подчёркнутая (.auth-cmp). */
-            VStack(spacing: 2) {
-                Text(ВходText.т("gate_role_note"))
-                    .lineSpacing(6)
-                    .foregroundStyle(Theme.текстВторой)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(action: сравнить) {
-                    Text(ВходText.т("gate_role_cmp"))
-                        .underline()
-                        .foregroundStyle(Theme.текстВторой)
-                        .padding(.vertical, 2)
-                }
-                .buttonStyle(.plain)
-            }
-            .font(.system(size: 12))
-            .frame(maxWidth: .infinity)
-            .padding(.top, 8)
-        }
-        .карточкаВходаСайта()
-    }
-}
-
-/// .auth-role: 14 внутри, радиус 18, плитка 42 (радиус 14), заголовок 15/800, подпись 13; продавец — .primary (тинт).
-private struct КнопкаРоли: View {
-    let заголовок: String
-    let подпись: String
-    let значок: String
-    let главная: Bool
-    let действие: () -> Void
-
-    var body: some View {
-        let форма = RoundedRectangle(cornerRadius: 18, style: .continuous)
-        Button(action: действие) {
-            HStack(spacing: 12) {
-                Image(systemName: значок)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(КраскаВходаСайта.акцент)
-                    .frame(width: 42, height: 42)
-                    .background(главная ? КраскаВходаСайта.карточка : КраскаВходаСайта.плитка,
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(заголовок)
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
-                    Text(подпись)
-                        .font(.system(size: 13))
-                        .lineSpacing(4)
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 15, weight: .semibold))
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .foregroundStyle(Theme.текстВторой)
-                    .frame(width: 18, height: 18)
-                    .accessibilityHidden(true)
-            }
-            .padding(14)
-            .background(главная ? КраскаВходаСайта.тинт : КраскаВходаСайта.карточка, in: форма)
-            .overlay {
-                форма.strokeBorder(главная ? КраскаВходаСайта.кромка : КраскаВходаСайта.линия, lineWidth: 1.5)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -899,7 +726,7 @@ private struct КнопкаСервиса: View {
     }
 }
 
-/// «Нет аккаунта? Зарегистрируйтесь» и подобные: 13, по центру, ссылка --g (на воротах — жирная).
+/// «Нет аккаунта? Зарегистрируйтесь» и подобные: 13, по центру, ссылка --g (жирная — по выбору).
 private struct ПереходФормы: View {
     let вопрос: String
     let ссылка: String
@@ -999,53 +826,34 @@ enum ТекстСогласия {
 
 // MARK: - «Аккаунт создан»
 
-/// Окно showCredsWindow сайта: телефон и пароль один раз; сохранить — только по нажатию, через «Поделиться».
+/**
+ Окно showCredsWindow сайта: телефон и пароль один раз. Пароль сразу предлагаем сохранить в Связку ключей системным
+ окном (СвязкаКлючей) — вместо совета «сделайте скриншот»; под окном — итог («Сохранено в Связку ключей» или «не
+ сохранилось»), у пароля — «Копировать» (буфер только на этом телефоне и на 2 минуты), запасной путь — «Сохранить
+ файлом» через «Поделиться», как у сайта.
+ */
 private struct ЛистДоступа: View {
     let доступ: ДоступАккаунта
     let продолжить: () -> Void
     @State private var делимся = false
+    @State private var связка: СвязкаКлючей.Итог = .идёт
+    @State private var скопирован = false
 
     private func т(_ ключ: String) -> String { ВходText.т(ключ) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                /* Шапка окна: круг 56 --tint-ok со значком --on-ok, заголовок 19/800, подпись 13 — по центру. */
-                VStack(spacing: 0) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(КраскаВходаСайта.наЗелёный)
-                        .frame(width: 56, height: 56)
-                        .background(КраскаВходаСайта.тинт, in: Circle())
-                        .padding(.bottom, 12)
-                        .accessibilityHidden(true)
-                    Text(т("cr_t"))
-                        .font(.system(size: 19, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(т("cr_s"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
-                }
-                .frame(maxWidth: .infinity)
+                шапка
                 данные
-                Text(т("cr_how"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-                Text(т("cr_shot"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
+                итогСвязки
                 Text(т("cr_change"))
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
-                КнопкаСайта(подпись: т("cr_go"), идёт: false) { делимся = true }
-                Button(т("cr_skip"), action: продолжить)
-                    .font(.system(size: 16, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                КнопкаСайта(подпись: т("cr_go"), идёт: false, действие: продолжить)
+                Button(т("cr_file_btn")) { делимся = true }
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.текст)
                     .frame(maxWidth: .infinity, minHeight: 46)
             }
@@ -1058,10 +866,76 @@ private struct ЛистДоступа: View {
         /* По высоте содержимого; смахнуть нельзя — без полоски. */
         .листПоВысоте(полоска: false)
         .interactiveDismissDisabled(true)
+        .task {
+            /* Один раз за показ окна: системное «Сохранить пароль?» поверх этого листа. */
+            guard связка == .идёт else { return }
+            связка = await СвязкаКлючей.сохранить(логин: НомерКЗ.формат(доступ.телефон), пароль: доступ.пароль)
+        }
         .sheet(isPresented: $делимся) {
             ЛистПоделиться(предметы: [файл]) { сохранили in
                 делимся = false
                 if сохранили { продолжить() }
+            }
+        }
+    }
+
+    /// Шапка окна: круг 56 --tint-ok со значком --on-ok, заголовок 19/800, подпись 13 — по центру.
+    private var шапка: some View {
+        VStack(spacing: 0) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(КраскаВходаСайта.наЗелёный)
+                .frame(width: 56, height: 56)
+                .background(КраскаВходаСайта.тинт, in: Circle())
+                .padding(.bottom, 12)
+                .accessibilityHidden(true)
+            Text(т("cr_t"))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            Text(т("cr_s"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Итог Связки ключей: ждём ответа системного окна, сохранено (ключ, зелёным) или нет (подсказка скопировать).
+    @ViewBuilder
+    private var итогСвязки: some View {
+        switch связка {
+        case .идёт:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(т("cr_kc_wait"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .сохранено:
+            Label {
+                Text(т("cr_kc_ok"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "key.fill")
+                    .foregroundStyle(КраскаВходаСайта.наЗелёный)
+            }
+        case .нет:
+            Label {
+                Text(т("cr_kc_no"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(Theme.текстВторой)
             }
         }
     }
@@ -1073,6 +947,7 @@ private struct ЛистДоступа: View {
             строка(т("cr_phone"), доступ.телефон, пароль: false)
             Rectangle().fill(КраскаВходаСайта.линия).frame(height: 1)
             строка(т("cr_pass"), доступ.пароль, пароль: true)
+            кнопкаКопировать
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
@@ -1099,6 +974,23 @@ private struct ЛистДоступа: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// «Копировать» пароль: только этот телефон (без Универсального буфера) и на 2 минуты.
+    private var кнопкаКопировать: some View {
+        Button {
+            UIPasteboard.general.setItems([["public.utf8-plain-text": доступ.пароль]],
+                                          options: [.localOnly: true,
+                                                    .expirationDate: Date().addingTimeInterval(120)])
+            скопирован = true
+        } label: {
+            Label(т(скопирован ? "cr_copied" : "cr_copy"), systemImage: скопирован ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(КраскаВходаСайта.зелёный)
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     /// Файл kliko-dostup.txt сайта — текстом, лист «Поделиться» сохранит его в Файлы или отправит.
     private var файл: String {
         String(format: т("cr_file"), доступ.телефон, доступ.пароль)
@@ -1120,109 +1012,4 @@ private struct ЛистПоделиться: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-// MARK: - «Чем отличаются пути»
-
-/// Сравнительная таблица сайта: «Без eGov» / «С eGov», пример карточки, «Регистрация через eGov» / «Всё равно продолжить».
-private struct ЛистСравнения: View {
-    let выбрать: (String) -> Void
-    @Environment(\.dismiss) private var закрыть
-
-    private static let строки: [String] = ["feed", "esc", "chat", "extra", "money", "trust"]
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    Text(ВходText.т("gate_why_t"))
-                        .font(.system(size: 19, weight: .heavy))
-                        .foregroundStyle(Theme.текст)
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(ВходText.т("gate_why_s"))
-                        .font(.system(size: 13))
-                        .lineSpacing(6)
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 6)
-                    шапкаТаблицы
-                        .padding(.top, 16)
-                    /* .gw-row: две равные колонки, 10 сверху и снизу, черта между строками (у первой — нет). */
-                    VStack(spacing: 0) {
-                        ForEach(Array(Self.строки.enumerated()), id: \.element) { номер, ключ in
-                            строка(ключ)
-                                .padding(.vertical, 10)
-                                .overlay(alignment: .top) {
-                                    if номер > 0 {
-                                        Rectangle().fill(КраскаВходаСайта.линия).frame(height: 1)
-                                    }
-                                }
-                        }
-                    }
-                    .padding(.top, 8)
-                    КнопкаСайта(подпись: ВходText.т("gate_go"), идёт: false) { выбрать("seller") }
-                        .padding(.top, 16)
-                    Button(ВходText.т("gate_anyway")) { выбрать("buyer") }
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .padding(.top, 6)
-                }
-                .padding(20)
-                .мерилоФормы()
-            }
-            .background(КраскаВходаСайта.карточка.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(ВходText.т("close")) { закрыть() }
-                }
-            }
-        }
-        /* По высоте таблицы и кнопок — без пустоты снизу. */
-        .листПоВысоте()
-    }
-
-    /// .gw-head: 11/800 прописными, разрядка .06em, по центру; правая колонка — --acc-on.
-    private var шапкаТаблицы: some View {
-        HStack(spacing: 8) {
-            Text(ВходText.т("gate_col_n").uppercased())
-                .foregroundStyle(Theme.текстВторой)
-                .frame(maxWidth: .infinity)
-            Text(ВходText.т("gate_col_y").uppercased())
-                .foregroundStyle(КраскаВходаСайта.акцент)
-                .frame(maxWidth: .infinity)
-        }
-        .font(.system(size: 11, weight: .heavy))
-        .tracking(0.66)
-        .multilineTextAlignment(.center)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func строка(_ ключ: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            ячейка(ВходText.т("gate_r_" + ключ + "_n"), да: false)
-            ячейка(ВходText.т("gate_r_" + ключ + "_y"), да: true)
-        }
-    }
-
-    /// .gw-c: значок и текст через 6, 13 (lh 1.4); «Без eGov» — серым с красным крестом, «С eGov» — ink 600 с галочкой.
-    private func ячейка(_ текст: String, да: Bool) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: да ? "checkmark" : "xmark")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(да ? КраскаВходаСайта.акцент : КраскаВходаСайта.опасно)
-                .frame(width: 14, height: 18)
-                .accessibilityHidden(true)
-            Text(текст)
-                .font(.system(size: 13, weight: да ? .semibold : .regular))
-                .lineSpacing(5)
-                .foregroundStyle(да ? Theme.текст : Theme.текстВторой)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(ВходText.т(да ? "gate_col_y" : "gate_col_n") + ": " + текст))
-    }
 }
