@@ -19,13 +19,14 @@ import WebKit
  это сохранённый выбор, а без рубильника Config.выборГорода — вся страна, как раньше.
 
  Этап 33 (владелец 25.09.2026): фильтры и сортировка — тоже параметрами _mkApiQS (Запрос.фильтры: sort, cond, verified,
- photo, pmin, pmax, ymin, ymax, rooms), а лента берёт страницы по 48, как сайт (mkApiNext: per=48), и со второй страницы
+ photo, pmin, pmax, brands, models, gear, fuel, ymin, ymax, rooms; марка, модель, коробка и топливо — из ссылки ленты и
+ листа «Фильтры»), а лента берёт страницы по 48, как сайт (mkApiNext: per=48), и со второй страницы
  несёт gs — «снимок» первой страницы из её ответа (window._mkGoldSnap сайта), чтобы выдача не перетасовывалась между
  страницами. По умолчанию фильтров нет и sort=reco — запрос прежний.
 
  Порядок «Новые» (владелец 26.09.2026, по умолчанию, как <option value="date" selected> сайта): сервер его не знает —
  _mkApiQS шлёт для него sort=reco (СортировкаЛенты.параметр), а «новые + 3 ТОП через 10» лента ставит у себя
- (ЗолотойРитм, FeedRhythm.swift).
+ (ЗолотойРитм, FeedRhythm.swift). Ссылка ?sort=new — date_desc сайта, «новые подряд» без ТОП: sort=new.
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -73,7 +74,8 @@ enum ListingsAPI {
         поля.append(contentsOf: Self.параметрыРаздела(з.cat))   // этап 49: «Товары» — cats=, как vs=goods у сайта
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
-        поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, ymin, ymax, rooms
+        поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, brands, models,
+                                                          // gear, fuel, ymin, ymax, rooms
         if з.аренда { поля.append(URLQueryItem(name: "intent", value: "rent")) }     // «Аренда», как _mkApiQS
         if з.page > 1, let gs = з.gs, gs > 0 { поля.append(URLQueryItem(name: "gs", value: String(gs))) }
         ч.queryItems = поля

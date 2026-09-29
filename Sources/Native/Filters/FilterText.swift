@@ -10,6 +10,8 @@ import Foundation
  af_cond_used, «Продавец» и «Проверенные» — af_seller и af_verified, «Фото» и «Только с фото» — af_photo_lbl и
  af_photo_only, чипы «Проверенные продавцы» и «С фото» — verified_sellers и af_photo, «Сбросить», «Показать», «Сбросить
  всё», «Закрыть» — f_reset, f_show, reset_all, close; «×» на чипе читается «Сбросить: …», как aria-label сайта.
+ «Коробка» и «Топливо» — af_gear и af_fuel мастера авто, их значения («Автомат», «Бензин», …) — fac_auto … fac_electric
+ (MKF_TR сайта).
  */
 enum FilterText {
     static func т(_ ключ: String) -> String {
@@ -29,7 +31,11 @@ enum FilterText {
                "photo": "Фото", "photo_only": "Только с фото", "photo_chip": "С фото",
                "reset": "Сбросить", "reset_all": "Сбросить всё", "show": "Показать", "close": "Закрыть",
                "remove_a11y": "Сбросить: %@", "facet": "%@: %@",
-               "search_chip": "Поиск: %@", "price_short": "Цена", "rent": "Аренда"],
+               "search_chip": "Поиск: %@", "price_short": "Цена", "rent": "Аренда",
+               "gear": "Коробка", "fuel": "Топливо",
+               "fac_auto": "Автомат", "fac_manual": "Механика", "fac_robot": "Робот", "fac_cvt": "Вариатор",
+               "fac_petrol": "Бензин", "fac_diesel": "Дизель", "fac_gas": "Газ", "fac_hybrid": "Гибрид",
+               "fac_electric": "Электро"],
         "kk": ["filters": "Сүзгілер", "sort_title": "Алдымен көрсету",
                "sort_reco": "Ұсынылатындар", "sort_new": "Жаңалары", "sort_old": "Ескілері", "sort_rating": "Рейтинг бойынша", "sort_cheap": "Арзанырақ", "sort_expensive": "Қымбатырақ",
                "price": "Бағасы, ₸", "from": "бастап", "to": "дейін", "from_x": "%@ бастап", "to_x": "%@ дейін",
@@ -40,7 +46,11 @@ enum FilterText {
                "photo": "Фото", "photo_only": "Тек фотосы барлар", "photo_chip": "Фотосы бар",
                "reset": "Тазалау", "reset_all": "Барлығын тазалау", "show": "Көрсету", "close": "Жабу",
                "remove_a11y": "Тазалау: %@", "facet": "%@: %@",
-               "search_chip": "Іздеу: %@", "price_short": "Баға", "rent": "Жалға алу"],
+               "search_chip": "Іздеу: %@", "price_short": "Баға", "rent": "Жалға алу",
+               "gear": "Беріліс қорабы", "fuel": "Отын",
+               "fac_auto": "Автомат", "fac_manual": "Механика", "fac_robot": "Робот", "fac_cvt": "Вариатор",
+               "fac_petrol": "Бензин", "fac_diesel": "Дизель", "fac_gas": "Газ", "fac_hybrid": "Гибрид",
+               "fac_electric": "Электр"],
         "en": ["filters": "Filters", "sort_title": "Show first",
                "sort_reco": "Recommended", "sort_new": "Newest", "sort_old": "Oldest", "sort_rating": "By rating", "sort_cheap": "Cheapest", "sort_expensive": "Most expensive",
                "price": "Price, ₸", "from": "from", "to": "to", "from_x": "from %@", "to_x": "up to %@",
@@ -51,7 +61,11 @@ enum FilterText {
                "photo": "Photo", "photo_only": "With photos only", "photo_chip": "With photos",
                "reset": "Reset", "reset_all": "Reset all", "show": "Show", "close": "Close",
                "remove_a11y": "Remove: %@", "facet": "%@: %@",
-               "search_chip": "Search: %@", "price_short": "Price", "rent": "Rent"],
+               "search_chip": "Search: %@", "price_short": "Price", "rent": "Rent",
+               "gear": "Gearbox", "fuel": "Fuel",
+               "fac_auto": "Automatic", "fac_manual": "Manual", "fac_robot": "Robotic", "fac_cvt": "CVT",
+               "fac_petrol": "Petrol", "fac_diesel": "Diesel", "fac_gas": "Gas", "fac_hybrid": "Hybrid",
+               "fac_electric": "Electric"],
         "ar": ["filters": "عوامل التصفية", "sort_title": "اعرض أولًا",
                "sort_reco": "المقترحة", "sort_new": "الأحدث", "sort_old": "الأقدم", "sort_rating": "حسب التقييم", "sort_cheap": "الأرخص", "sort_expensive": "الأغلى",
                "price": "السعر، ₸", "from": "من", "to": "إلى", "from_x": "من %@", "to_x": "حتى %@",
@@ -62,6 +76,10 @@ enum FilterText {
                "photo": "الصور", "photo_only": "مع صور فقط", "photo_chip": "مع صور",
                "reset": "إعادة الضبط", "reset_all": "إعادة ضبط الكل", "show": "عرض", "close": "إغلاق",
                "remove_a11y": "إزالة: %@", "facet": "%@: %@",
-               "search_chip": "بحث: %@", "price_short": "السعر", "rent": "إيجار"]
+               "search_chip": "بحث: %@", "price_short": "السعر", "rent": "إيجار",
+               "gear": "ناقل الحركة", "fuel": "الوقود",
+               "fac_auto": "أوتوماتيك", "fac_manual": "يدوي", "fac_robot": "روبوتي", "fac_cvt": "CVT",
+               "fac_petrol": "بنزين", "fac_diesel": "ديزل", "fac_gas": "غاز", "fac_hybrid": "هجين",
+               "fac_electric": "كهربائي"]
     ]
 }
