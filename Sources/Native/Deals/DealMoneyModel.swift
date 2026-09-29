@@ -759,6 +759,9 @@ final class ДеньгиСделкиМодель: ObservableObject {
         var хвост = "api/ship_quote.php?item=" + СделкиAPI.вАдрес(с.товар) + "&lat=" + String(точка.широта)
         хвост += "&lon=" + String(точка.долгота)
         if с.деньги.уПодъезда { хвост += "&dd=out" }
+        /* Сделка оплачена — объявление в резерве (escrow.php ставит reserved), и без номера сделки сервер отвечал
+           no_item. С deal= он узнаёт покупателя этой сделки и берёт точку забора, отмеченную продавцом в сделке. */
+        хвост += "&deal=" + СделкиAPI.вАдрес(id)
         let запрос = хвост
         Task { @MainActor in
             defer { self.идёт = false }
@@ -793,7 +796,26 @@ final class ДеньгиСделкиМодель: ObservableObject {
         if причина == "no_courier" { return т("co_ship_bulky") }
         if причина == "slow_down" { return т("co_ship_retry") }
         if СделкиAPI.да(j["ok"]) && СделкиAPI.да(j["free"]) && !СделкиAPI.да(j["courier"]) { return т("shp_e_free_self") }
-        return т("shp_e_na")
+        /* Свои причины вместо общего «сюда не возит»: человек должен понять, что делать дальше. */
+        switch причина {
+        case "no_from":
+            /* У продавца нет точной точки (у объявления только город): курьеру неоткуда забрать. */
+            return т("shp_e_no_from")
+        case "no_item":
+            return т("shp_e_no_item")
+        case "region":
+            return т("shp_e_region")
+        case "off":
+            return т("shp_e_off")
+        case "no_price", "unavailable", "currency":
+            return т("shp_e_busy")
+        case "bad_args":
+            /* Точка сделки не годится — снова окно точки на карте. */
+            карточка?.просьбаТочкиКуда += 1
+            return т("shp_need_pt")
+        default:
+            return т("shp_e_na")
+        }
     }
 
     /// Выбор тарифа — сам по себе подтверждение (у сайта после него сразу ship_add).
