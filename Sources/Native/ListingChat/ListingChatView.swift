@@ -12,8 +12,10 @@ import UIKit
  согласована; переписка .kc-thread — облака .kc-msg с подписью «Продавец» / «Kliko AI-ассистент», строки .kc-sys,
  карточки предложения .mk-ofc, гео .mk-geo, «✓ Отправлено» / «✓✓ Прочитано» под последним своим, три точки, пока
  собеседник пишет, и строка статуса («Продавец на связи», «С вами продавец», «Продавец уведомлён и скоро подключится»);
- окно входа .mk-chat-gate; внизу «Позвать продавца» (.mk-chat-callbar), строка ввода .kc-bar этапа 30 или, при
- блокировке, .mk-chat-block с «Разблокировать» / «Запросить разблокировку». Краски — динамические Theme: светлая и тёмная.
+ окно входа .mk-chat-gate; внизу чип «Предложить цену» (у товаров с ценой — окно предложения), строка ввода .kc-bar
+ этапа 30 или, при блокировке, .mk-chat-block с «Разблокировать» / «Запросить разблокировку». Краски — динамические Theme:
+ светлая и тёмная. Прогулка новичка (владелец): это чат с продавцом — кружок помощника и его подпись в шапке только когда
+ помощник включён и продавец не в сети; «Позвать продавца» нет (первое сообщение зовёт продавца само).
  */
 struct ЭкранЧатаОбъявления: View {
     @StateObject private var модель: МодельЧатаОбъявления
@@ -30,16 +32,20 @@ struct ЭкранЧатаОбъявления: View {
     /// Открыт с готовым вопросом (mkChatOpen(id, q) сайта) — после загрузки курсор в строке ввода.
     private let сВопросом: Bool
 
-    /// текст — вопрос в строку ввода (быстрые вопросы услуги); по умолчанию пусто, как раньше.
-    init(товар: Listing, предложить: Bool, открыть: @escaping (URL) -> Void, текст: String = "") {
-        _модель = StateObject(wrappedValue: МодельЧатаОбъявления(товар: товар, предложить: предложить, черновик: текст))
+    /// текст — вопрос в строку ввода (быстрые вопросы услуги); по умолчанию пусто, как раньше. вопросЕслиНовый — в строку
+    /// ввода, только если своих сообщений в чате ещё нет («Здравствуйте! Ещё актуально?» после входа); сам не уходит.
+    init(товар: Listing, предложить: Bool, открыть: @escaping (URL) -> Void, текст: String = "",
+         вопросЕслиНовый: String = "") {
+        _модель = StateObject(wrappedValue: МодельЧатаОбъявления(товар: товар, предложить: предложить, черновик: текст,
+                                                                 вопросЕслиНовый: вопросЕслиНовый))
         self.открыть = открыть
-        self.сВопросом = !текст.isEmpty
+        self.сВопросом = !текст.isEmpty || !вопросЕслиНовый.isEmpty
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаЧатаОбъявления(подпись: модель.подписьШапки, нетСвязи: модель.нетСвязи, назад: { закрыть() })
+            ШапкаЧатаОбъявления(подпись: модель.подписьШапки, нетСвязи: модель.нетСвязи,
+                                помощник: модель.помощникОтвечает, назад: { закрыть() })
             КонтекстЧатаОбъявления(товар: модель.товар, изЧата: модель.товарЧата,
                                    кОбъявлению: { закрыть() }, кПродавцу: открытьПродавца)
             полосаСделки
@@ -178,7 +184,7 @@ struct ЭкранЧатаОбъявления: View {
                 ТочкиПечатиЧата()
             }
             СостояниеЧатаОбъявления(статус: модель.статус, наСвязи: модель.продавецНаСвязи,
-                                    присутствие: модель.присутствие)
+                                    присутствие: модель.присутствие, помощник: модель.помощник)
             if let барьер = модель.барьер {
                 БарьерЧата(барьер: барьер, войти: войти, верифицировать: верифицировать)
             }
@@ -224,10 +230,12 @@ struct ЭкранЧатаОбъявления: View {
                                       действие: действиеБлокировки)
             } else {
                 VStack(spacing: 0) {
-                    if модель.можноПозвать {
-                        КнопкаПозватьПродавца {
-                            Task { await модель.позватьПродавца() }
+                    if модель.можноПредложить {
+                        ЧипПредложитьЦену {
+                            полеВФокусе = false
+                            окноПредложения = true
                         }
+                        .disabled(модель.отправляем)
                     }
                     if модель.неОтправлено {
                         Text(неОтправленоТекст)
@@ -370,6 +378,8 @@ struct ЭкранЧатаОбъявления: View {
 struct ШапкаЧатаОбъявления: View {
     let подпись: String
     var нетСвязи: Bool = false
+    /// Отвечает помощник — зелёный квадрат с искрами; иначе — человек (это чат с продавцом).
+    var помощник: Bool = false
     let назад: () -> Void
 
     var body: some View {
@@ -390,7 +400,7 @@ struct ШапкаЧатаОбъявления: View {
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
             .accessibilityLabel(ListingPageText.т("back"))
             HStack(spacing: 12) {
-                Image(systemName: "sparkles")
+                Image(systemName: помощник ? "sparkles" : "person.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .frame(width: 40, height: 40)
@@ -416,7 +426,8 @@ struct ШапкаЧатаОбъявления: View {
                         Text(подпись)
                             .font(.system(size: 12))
                             .foregroundStyle(нетСвязи ? Self.красныйСвязи : Theme.текстВторой)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -828,6 +839,8 @@ struct СостояниеЧатаОбъявления: View {
     let статус: String
     let наСвязи: Bool
     let присутствие: String
+    /// Помощник включён — «скоро подключится»; нет — «Продавец получил уведомление и ответит здесь».
+    var помощник: Bool = false
 
     var body: some View {
         switch статус {
@@ -839,7 +852,7 @@ struct СостояниеЧатаОбъявления: View {
                                     хорошая: false, значок: true)
             }
         case "hot_lead":
-            СтрокаСлужебнаяЧата(текст: ListingChatText.т("st_hot"), хорошая: false, значок: true)
+            СтрокаСлужебнаяЧата(текст: ListingChatText.т(помощник ? "st_hot" : "st_notified"), хорошая: false, значок: true)
         default:
             EmptyView()
         }
@@ -1302,32 +1315,37 @@ struct БарьерЧата: View {
 
 // MARK: - Низ: позвать продавца, блокировка
 
-/// «Позвать продавца» (.mk-chat-callbar): на всю ширину, рамка --mk-line 1,5 на --mk-surf2, значок человека с плюсом.
-struct КнопкаПозватьПродавца: View {
+/// Чип «Предложить цену» над строкой ввода (прогулка новичка: торг — внутри чата): слева, капсулой на --mk-surf2 с
+/// рамкой, значок ценника; нажатие — окно предложения ЛистПредложенияЦены.
+struct ЧипПредложитьЦену: View {
     let нажать: () -> Void
 
     var body: some View {
-        Button(action: нажать) {
-            HStack(spacing: 8) {
-                Image(systemName: "person.badge.plus")
-                    .font(.system(size: 16, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(ListingChatText.т("call_seller"))
-                    .font(.system(size: 14, weight: .bold))
+        HStack(spacing: 0) {
+            Button(action: нажать) {
+                HStack(spacing: 6) {
+                    Image(systemName: "tag")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(ListingChatText.т("offer_chip"))
+                        .font(.system(size: 13, weight: .bold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Theme.акцент)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 32)
+                .background(Theme.поверхность2, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(Theme.линия, lineWidth: 1)
+                }
+                .contentShape(Capsule())
             }
-            .foregroundStyle(Theme.текст)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1.5)
-            }
-            .contentShape(Rectangle())
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+            Spacer(minLength: 0)
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         .padding(.horizontal, 14)
-        .padding(.bottom, 4)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 }
 

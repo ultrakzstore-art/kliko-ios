@@ -39,7 +39,7 @@ enum ListingChatText {
             "reconnecting": "Нет соединения — переподключение…", "listing": "Объявление",
             "gone_goods": "Продано", "gone_service": "Услуга больше не актуальна", "gone_rent": "Объект сдан",
             "seller_goods": "Все товары продавца", "seller_services": "Все услуги продавца",
-            "who_seller": "Продавец", "who_ai": "Kliko AI-ассистент", "via_tg": "из Telegram",
+            "who_seller": "Продавец", "who_ai": "Помощник Kliko", "via_tg": "из Telegram",
             "greeting": "Здравствуйте! Я Kliko AI-ассистент продавца. Спрашивайте о товаре — отвечу сразу. Когда будете готовы купить, подключу продавца.",
             "loading": "Загрузка…", "load_failed": "Не удалось загрузить чат", "no_conn": "Нет соединения",
             "retry": "Повторить", "read": "✓✓ Прочитано", "sent": "✓ Отправлено",
@@ -79,7 +79,12 @@ enum ListingChatText {
             "offer_under": "Больше {n}% скидки предложить нельзя", "offer_args": "Чем подкрепить просьбу",
             "arg_pickup": "Заберу сам", "arg_take_both": "Заберу или оплачу доставку сам",
             "arg_pickup_s": "вам не нужно возиться с передачей", "offer_send": "Отправить предложение",
-            "close": "Закрыть"
+            "close": "Закрыть",
+            "sub_helper": "Пока продавец не в сети, отвечает помощник Kliko",
+            "st_notified": "Продавец получил уведомление и ответит здесь", "offer_chip": "Предложить цену",
+            "write_seller": "Написать продавцу", "signin_t": "Войдите, чтобы написать продавцу",
+            "signin_s": "Это быстро. Переписка сохранится в разделе «Чат», а продавец получит уведомление.",
+            "signin_btn": "Войти", "later": "Позже", "hello_q": "Здравствуйте! Ещё актуально?"
         ],
         "kk": [
             "title": "Сатушымен чат", "sub_ai": "Kliko AI-көмекшісі жауап береді · %@", "seller_lc": "сатушы",
@@ -87,7 +92,7 @@ enum ListingChatText {
             "reconnecting": "Байланыс жоқ — қайта қосылуда…", "listing": "Хабарландыру",
             "gone_goods": "Сатылды", "gone_service": "Қызмет енді өзекті емес", "gone_rent": "Нысан жалға берілді",
             "seller_goods": "Сатушының барлық тауарлары", "seller_services": "Сатушының барлық қызметтері",
-            "who_seller": "Сатушы", "who_ai": "Kliko AI-көмекшісі", "via_tg": "Telegram-нан",
+            "who_seller": "Сатушы", "who_ai": "Kliko көмекшісі", "via_tg": "Telegram-нан",
             "greeting": "Сәлеметсіз бе! Мен сатушының Kliko AI-көмекшісімін. Тауар туралы сұраңыз — бірден жауап беремін. Сатып алуға дайын болғанда, сатушыны қосамын.",
             "loading": "Жүктелуде…", "load_failed": "Чатты жүктеу мүмкін болмады", "no_conn": "Байланыс жоқ",
             "retry": "Қайталау", "read": "✓✓ Оқылды", "sent": "✓ Жіберілді",
@@ -127,7 +132,12 @@ enum ListingChatText {
             "offer_under": "{n}%-дан артық жеңілдік ұсынуға болмайды", "offer_args": "Өтінішті немен бекітесіз",
             "arg_pickup": "Өзім алып кетемін", "arg_take_both": "Өзім алып кетемін немесе жеткізуді өзім төлеймін",
             "arg_pickup_s": "сізге тауарды берумен әуре болудың қажеті жоқ", "offer_send": "Ұсынысты жіберу",
-            "close": "Жабу"
+            "close": "Жабу",
+            "sub_helper": "Сатушы желіде болмаған кезде Kliko көмекшісі жауап береді",
+            "st_notified": "Сатушыға хабарлама келді, ол осында жауап береді", "offer_chip": "Баға ұсыну",
+            "write_seller": "Сатушыға жазу", "signin_t": "Сатушыға жазу үшін кіріңіз",
+            "signin_s": "Бұл жылдам. Хат алмасу «Чат» бөлімінде сақталады, ал сатушыға хабарлама келеді.",
+            "signin_btn": "Кіру", "later": "Кейін", "hello_q": "Сәлеметсіз бе! Әлі өзекті ме?"
         ],
         "en": [
             "title": "Chat with the seller", "sub_ai": "Kliko AI assistant is replying · %@", "seller_lc": "seller",
@@ -135,7 +145,7 @@ enum ListingChatText {
             "reconnecting": "No connection — reconnecting…", "listing": "Listing",
             "gone_goods": "Sold", "gone_service": "This service is no longer available", "gone_rent": "Already rented",
             "seller_goods": "All seller's items", "seller_services": "All seller's services",
-            "who_seller": "Seller", "who_ai": "Kliko AI assistant", "via_tg": "from Telegram",
+            "who_seller": "Seller", "who_ai": "Kliko assistant", "via_tg": "from Telegram",
             "greeting": "Hello! I'm the seller's Kliko AI assistant. Ask about the item — I'll answer right away. When you're ready to buy, I'll bring in the seller.",
             "loading": "Loading…", "load_failed": "Couldn't load the chat", "no_conn": "No connection",
             "retry": "Try again", "read": "✓✓ Read", "sent": "✓ Sent",
@@ -175,7 +185,12 @@ enum ListingChatText {
             "offer_under": "You can't offer more than {n}% off", "offer_args": "Make your request stronger",
             "arg_pickup": "I'll pick it up myself", "arg_take_both": "I'll pick it up or pay for delivery myself",
             "arg_pickup_s": "you won't have to deal with the handover", "offer_send": "Send offer",
-            "close": "Close"
+            "close": "Close",
+            "sub_helper": "While the seller is offline, the Kliko assistant replies",
+            "st_notified": "The seller has been notified and will reply here", "offer_chip": "Make an offer",
+            "write_seller": "Message the seller", "signin_t": "Sign in to message the seller",
+            "signin_s": "It's quick. The conversation will be kept in «Chat», and the seller will be notified.",
+            "signin_btn": "Sign in", "later": "Later", "hello_q": "Hello! Is this still available?"
         ],
         "ar": [
             "title": "الدردشة مع البائع", "sub_ai": "مساعد Kliko الذكي يرد · %@", "seller_lc": "البائع",
@@ -183,7 +198,7 @@ enum ListingChatText {
             "reconnecting": "لا يوجد اتصال — جارٍ إعادة الاتصال…", "listing": "الإعلان",
             "gone_goods": "تم البيع", "gone_service": "الخدمة لم تعد متاحة", "gone_rent": "تم التأجير",
             "seller_goods": "كل منتجات البائع", "seller_services": "كل خدمات البائع",
-            "who_seller": "البائع", "who_ai": "مساعد Kliko الذكي", "via_tg": "من Telegram",
+            "who_seller": "البائع", "who_ai": "مساعد Kliko", "via_tg": "من Telegram",
             "greeting": "مرحبًا! أنا مساعد Kliko الذكي للبائع. اسأل عن المنتج وسأجيب فورًا. عندما تكون مستعدًا للشراء سأوصلك بالبائع.",
             "loading": "جارٍ التحميل…", "load_failed": "تعذّر تحميل الدردشة", "no_conn": "لا يوجد اتصال",
             "retry": "إعادة المحاولة", "read": "✓✓ تمت القراءة", "sent": "✓ تم الإرسال",
@@ -223,7 +238,12 @@ enum ListingChatText {
             "offer_under": "لا يمكن عرض خصم أكبر من {n}%", "offer_args": "ما يدعم طلبك",
             "arg_pickup": "سأستلمه بنفسي", "arg_take_both": "سأستلمه أو أدفع التوصيل بنفسي",
             "arg_pickup_s": "لن تحتاج إلى عناء التسليم", "offer_send": "إرسال العرض",
-            "close": "إغلاق"
+            "close": "إغلاق",
+            "sub_helper": "بينما البائع غير متصل، يرد مساعد Kliko",
+            "st_notified": "تم إبلاغ البائع وسيرد هنا", "offer_chip": "اقترح سعرًا",
+            "write_seller": "راسل البائع", "signin_t": "سجّل الدخول لمراسلة البائع",
+            "signin_s": "الأمر سريع. ستُحفظ المحادثة في «الدردشة»، وسيتلقى البائع إشعارًا.",
+            "signin_btn": "تسجيل الدخول", "later": "لاحقًا", "hello_q": "مرحبًا! هل ما زال متاحًا؟"
         ]
     ]
 }

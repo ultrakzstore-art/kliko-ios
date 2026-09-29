@@ -74,6 +74,8 @@ enum ЧатОбъявленияAPI {
         /// count опроса — since следующего.
         var счёт: Int? = nil
         var печатает = false
+        /// Помощник продавца включён (флаг ответа, если сервер его прислал; нет флага — nil, решает переписка).
+        var помощник: Bool? = nil
     }
 
     enum ИтогЗагрузки: Sendable {
@@ -324,7 +326,34 @@ enum ЧатОбъявленияAPI {
         if есть(поля["seller_online"]) { с.онлайн = да(поля["seller_online"]) }
         с.счёт = целое(поля["count"])
         с.печатает = да(поля["typing"])
+        с.помощник = флагПомощника(поля, чат: чат)
         return с
+    }
+
+    /// Ключи, которыми сервер может сказать, включён ли помощник продавца (настройка «Kliko AI-помощник в чате»,
+    /// save_pref_chat {ai}). Витрина сайта их не читает — поэтому только терпимо: нет ключа — nil.
+    private static let ключиПомощника = ["ai_on", "ai_enabled", "ai_active", "seller_ai", "assistant", "ai"]
+
+    /// Флаг помощника сверху, в chat{} или в seller{}; только да/нет (число, логическое, строка), не объект.
+    private static func флагПомощника(_ поля: [String: Any], чат: [String: Any]?) -> Bool? {
+        var места: [[String: Any]] = [поля]
+        if let чат { места.append(чат) }
+        if let продавец = поля["seller"] as? [String: Any] { места.append(продавец) }
+        for место in места {
+            for ключ in ключиПомощника {
+                guard let значение = место[ключ] else { continue }
+                if let b = значение as? Bool { return b }
+                if let n = значение as? NSNumber { return n.intValue != 0 }
+                if let строкаЗначения = значение as? String {
+                    switch строкаЗначения.lowercased() {
+                    case "1", "true", "on", "yes": return true
+                    case "0", "false", "off", "no", "": return false
+                    default: continue
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// messages[] — по порядку; запись не словарём пропускаем. Номер — место в переписке: своего id у сообщения чата нет.

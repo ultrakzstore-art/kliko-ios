@@ -43,6 +43,13 @@ struct ПанельСвязиСайта: View {
     @State private var карточка: ОкноСвязи? = nil
     /// «Написать в чат» из карточки: она уехала — страница кладёт чат в стек.
     @State private var чатПослеОкна = false
+    /// Чат, который кладём в стек: с окном предложения ли и что подставить в строку ввода нового чата.
+    @State private var предложитьВЧате = false
+    @State private var вопросВЧат = ""
+    /// Гость нажал «Написать»: сначала лист «Войдите, чтобы написать продавцу» (прогулка новичка — вход ДО чата).
+    @State private var просимВойти = false
+    /// Какой чат открыть после входа (предложить ли цену); nil — не ждём.
+    @State private var чатПослеВхода: Bool? = nil
     /// Номер вошедшего (getMkMe) — своё объявление; проверен ли он (_MK_ME_VERIFIED) — подпись кнопки гаранта услуг.
     @State private var я: String? = nil
     @State private var проверен = false
@@ -85,6 +92,22 @@ struct ПанельСвязиСайта: View {
         .navigationDestination(isPresented: $чатПослеОкна) {
             экранЧатаПослеОкна
         }
+        .sheet(isPresented: $просимВойти) {
+            ЛистВходаДляЧата(войти: { войтиДляЧата() }, позже: {
+                чатПослеВхода = nil
+                просимВойти = false
+            })
+        }
+        /* Вошли (свой лист входа или вход поверх) — чат, ради которого просили войти, с «Здравствуйте! Ещё актуально?». */
+        .onReceive(NotificationCenter.default.publisher(for: ОкнаПриложения.вошли)) { _ in
+            guard let предложить = чатПослеВхода else { return }
+            чатПослеВхода = nil
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                положитьЧат(предложить: предложить)
+            }
+        }
+        .onDisappear { чатПослеВхода = nil }
         .alert(окно?.заголовок ?? "", isPresented: Binding(get: { окно != nil }, set: { if !$0 { окно = nil } }),
                presenting: окно) { о in
             if о.регистрация, let вход = Config.url("/cabinet.php") {
@@ -312,21 +335,52 @@ struct ПанельСвязиСайта: View {
         открыть(адрес)
     }
 
-    /// «Предложить цену» / «Связаться»: нативный чат, без него — страница объявления на сайте.
-    @ViewBuilder
-    private func кЧату(значок: String, заголовок: String, подпись: String, предложить: Bool) -> some View {
-        if let цель = цельЧата(предложить: предложить) {
-            NavigationLink(value: цель) {
-                ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
+    /// «Предложить цену» / «Связаться»: нативный чат (гостю сначала лист входа); написать некуда — «Связь недоступна».
+    private func кЧату(значок: String, заголовок: String, подпись: String?, предложить: Bool) -> some View {
+        Button {
+            открытьЧат(предложить: предложить)
+        } label: {
+            ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+    }
+
+    /**
+     Открыть чат с продавцом. Прогулка новичка (владелец): вход спрашиваем ДО чата — гостю лист «Войдите, чтобы написать
+     продавцу», после входа чат откроется сам. Вошедшему (или когда страница не сказала) — сразу чат; в строке ввода
+     нового чата «Здравствуйте! Ещё актуально?» — не отправляется само.
+     */
+    private func открытьЧат(предложить: Bool) {
+        guard цельЧата(предложить: предложить) != nil else {
+            чатНедоступен()
+            return
+        }
+        Task { @MainActor in
+            let страница = await SiteSession.состояние()
+            if страница.вошёл == false {
+                чатПослеВхода = предложить
+                просимВойти = true
+                return
             }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-        } else {
-            Button {
-                чатНедоступен()
-            } label: {
-                ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
+            положитьЧат(предложить: предложить)
+        }
+    }
+
+    /// Чат в стек страницы объявления.
+    private func положитьЧат(предложить: Bool) {
+        предложитьВЧате = предложить
+        вопросВЧат = предложить ? "" : ListingChatText.т("hello_q")
+        чатПослеОкна = true
+    }
+
+    /// «Войти» в листе: лист уезжает, затем свой экран входа (слой вкладок или поверх всего).
+    private func войтиДляЧата() {
+        просимВойти = false
+        if !ОкнаПриложения.shared.показать(.вход, задержка: 450_000_000) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                ВходПоверх.показать()
             }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         }
     }
 
@@ -392,19 +446,13 @@ struct ПанельСвязиСайта: View {
             .frame(width: 44, height: 44)
             .background(Color.white.opacity(0.16), in: Circle())
             .contentShape(Circle())
-        if let цель = цельЧата(предложить: false) {
-            NavigationLink(value: цель) { значок }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
-                .accessibilityLabel(ListingPageText.т("chat"))
-        } else {
-            Button {
-                чатНедоступен()
-            } label: {
-                значок
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
-            .accessibilityLabel(ListingPageText.т("chat"))
+        Button {
+            открытьЧат(предложить: false)
+        } label: {
+            значок
         }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+        .accessibilityLabel(ListingPageText.т("chat"))
     }
 
     /// Карточка встаёт без выезда снизу — появляется сама, как окно сайта.
@@ -420,13 +468,9 @@ struct ПанельСвязиСайта: View {
         без.disablesAnimations = true
         withTransaction(без) { карточка = nil }
         guard вЧат else { return }
-        guard цельЧата(предложить: false) != nil else {
-            чатНедоступен()
-            return
-        }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 300_000_000)
-            чатПослеОкна = true
+            открытьЧат(предложить: false)
         }
     }
 
@@ -434,7 +478,7 @@ struct ПанельСвязиСайта: View {
     @ViewBuilder
     private var экранЧатаПослеОкна: some View {
         if Config.нативныйЧат && Config.чатОбъявления {
-            ЭкранЧатаОбъявления(товар: товар, предложить: false, открыть: открыть)
+            ЭкранЧатаОбъявления(товар: товар, предложить: предложитьВЧате, открыть: открыть, вопросЕслиНовый: вопросВЧат)
         } else if let продавец = товар.продавецID {
             ChatThreadView(модель: ChatThreadModel(собеседник: продавец, объявление: товар.id),
                            заголовок: товар.продавец ?? "", открыть: открыть)
@@ -652,6 +696,66 @@ private struct ОкноСвязиСайта: View {
         .frame(maxWidth: .infinity)
         .background(Theme.зелёный.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// «Войдите, чтобы написать продавцу» — лист до чата (прогулка новичка): значок в зелёном квадрате, заголовок, пояснение,
+/// «Войти» зелёной кнопкой и «Позже».
+private struct ЛистВходаДляЧата: View {
+    let войти: () -> Void
+    let позже: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 24, weight: .regular))
+                .foregroundStyle(Theme.зелёный2)
+                .frame(width: 56, height: 56)
+                .background(Theme.зелёный.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+                .padding(.bottom, 14)
+                .accessibilityHidden(true)
+            Text(ListingChatText.т("signin_t"))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 8)
+                .accessibilityAddTraits(.isHeader)
+            Text(ListingChatText.т("signin_s"))
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 20)
+            Button(action: войти) {
+                Text(ListingChatText.т("signin_btn"))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            Button(action: позже) {
+                Text(ListingChatText.т("later"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(maxWidth: .infinity, minHeight: 42)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .padding(.bottom, 16)
+        .frame(maxWidth: 480)
+        .presentationDetents([.height(360), .medium])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Theme.поверхность)
     }
 }
 
