@@ -24,6 +24,12 @@ import UIKit
  mkOfferOpen, то есть чат и сразу окно предложения цены; «Связаться» и круглая кнопка чата — mkChatOpen. Выключен —
  прежний диалог dm.php.
 
+ ПРАВИЛО W ЗАМЕНЕНО (владелец, прогулка новичка, пункт 6 — сознательно не как у сайта): главная кнопка пилюли у чужого
+ объявления всегда «Написать продавцу» (чат; гостю сначала лист входа), справа круглые «Позвонить» и WhatsApp, если
+ продавец их разрешил. Над пилюлей — строка второстепенных: «Купить безопасно» (цена без торга, гарант не на паузе —
+ ГарантОбъявления.купитьСразу; у услуг — кнопка гаранта A: «Арендовать / Купить / Заказать безопасно») и маленькая
+ «Предложить цену» (товар с ценой — как W сайта для не-услуг; она же — чип внутри чата). Своё объявление — «Редактировать».
+
  ЗВОНОК И WHATSAPP — ТЕМ ЖЕ ЗАПРОСОМ, ЧТО САЙТ. mkContactGo → mkRevealCall / mkRevealWa → mkGetContact:
  fetch(_MKB+"marketplace.php?contact="+id, {method:"POST", body: JSON.stringify({csrf:_MKP_CSRF})}), _MKB = "/" (_ULX_BASE
  пуст). Ответ {ok, tel, disp, wa} — «tel:» из цифр и «+» и wa-ссылка с текстом «Здравствуйте! Интересует «…» за … ₸. Ещё
@@ -77,6 +83,7 @@ struct ПанельСвязиСайта: View {
                     .padding(.bottom, 8)
                     .transition(.opacity)
             }
+            второстепенные
             пилюля
         }
         .animation(ДвижениеСайта.смена, value: торг.ждущие[товар.id] != nil || торг.итоги[товар.id] != nil)
@@ -144,28 +151,29 @@ struct ПанельСвязиСайта: View {
 
     // MARK: - Главная часть
 
-    private enum Главная {
-        case предложитьЦену
-        case связаться
+    /// Гарант второстепенной кнопкой: у товара — цена без торга (купитьСразу), у услуги — кнопка A сайта.
+    private enum Гарант {
         /// «Арендовать безопасно» — E сайта у услуги.
         case аренда
         /// «Купить безопасно» (у проверенного в разделе services — «Заказать безопасно»).
-        case купитьБезопасно
-        /// Своё объявление — «Редактировать».
-        case своё
+        case купить
     }
 
-    /// Правило сайта для W / A / et (см. описание выше) и «Купить безопасно» при цене без торга.
-    private var главная: Главная {
-        if своё { return .своё }
+    private var гарант: Гарант? {
+        if своё { return nil }
         if товар.услуга {
             switch ГарантОбъявления.кнопка(товар) {
             case .аренда?: return .аренда
-            case .купить?: return .купитьБезопасно
-            case nil: return .связаться
+            case .купить?: return .купить
+            case nil: return nil
             }
         }
-        return ГарантОбъявления.купитьСразу(товар) ? .купитьБезопасно : .предложитьЦену
+        return ГарантОбъявления.купитьСразу(товар) ? .купить : nil
+    }
+
+    /// «Предложить цену» маленькой кнопкой: торг сайта (W) — у товаров с ценой, не у услуг; нужен чат объявления.
+    private var можноПредложить: Bool {
+        !своё && !товар.услуга && (товар.price ?? 0) > 0 && Config.нативныйЧат && Config.чатОбъявления
     }
 
     /// Объявление вошедшего: P = w && w === r.seller_id.
@@ -200,31 +208,9 @@ struct ПанельСвязиСайта: View {
 
     @ViewBuilder
     private var главнаяКнопка: some View {
-        switch главная {
-        case .предложитьЦену:
-            кЧату(значок: "tag", заголовок: ListingPageText.т("offer"), подпись: ListingPageText.т("offer_sub"),
-                  предложить: true)
-        case .связаться:
-            кЧату(значок: "message", заголовок: ListingPageText.т("contact"), подпись: ListingPageText.т("contact_sub"),
-                  предложить: false)
-        case .аренда:
-            Button {
-                /* mkRentJump: не страница сайта — страница объявления доезжает до своего блока аренды. */
-                NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
-            } label: {
-                ПодписьПанелиСвязи(значок: "checkmark.shield", заголовок: ListingPageText.т("rent_safe"), подпись: nil)
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-        case .купитьБезопасно:
-            Button {
-                нажатьГарант()
-            } label: {
-                ПодписьПанелиСвязи(значок: "checkmark.shield", заголовок: подписьГаранта,
-                                   подпись: товар.услуга ? nil : БезопаснаяСделкаТекст.т("buy_safe_sub"))
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            .disabled(ждёмГарант)
-        case .своё:
+        if !своё {
+            кЧату(значок: "message", заголовок: ListingChatText.т("write_seller"), подпись: nil, предложить: false)
+        } else {
             HStack(spacing: 0) {
                 Button {
                     править()
@@ -234,6 +220,37 @@ struct ПанельСвязиСайта: View {
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
                 /* klkAppNoDigital сайта: платные услуги в приложении не продаются — «Продвинуть» нет. */
             }
+        }
+    }
+
+    /// Строка над пилюлей: гарант и «Предложить цену»; нет ни того, ни другого — строки нет.
+    @ViewBuilder
+    private var второстепенные: some View {
+        let гарантСейчас = гарант
+        if гарантСейчас != nil || можноПредложить {
+            HStack(spacing: 8) {
+                switch гарантСейчас {
+                case .аренда?:
+                    КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: ListingPageText.т("rent_safe"),
+                                      главная: true) {
+                        /* mkRentJump: не страница сайта — страница объявления доезжает до своего блока аренды. */
+                        NotificationCenter.default.post(name: БлокАрендыСайта.кАренде, object: товар.id)
+                    }
+                case .купить?:
+                    КнопкаВторогоРяда(значок: "checkmark.shield", заголовок: подписьГаранта, главная: true) {
+                        нажатьГарант()
+                    }
+                    .disabled(ждёмГарант)
+                case nil:
+                    EmptyView()
+                }
+                if можноПредложить {
+                    КнопкаВторогоРяда(значок: "tag", заголовок: ListingPageText.т("offer"), главная: false) {
+                        открытьЧат(предложить: true)
+                    }
+                }
+            }
+            .padding(.bottom, 8)
         }
     }
 
@@ -396,13 +413,10 @@ struct ПанельСвязиСайта: View {
                 if товар.whatsApp {
                     круг(.whatsApp)
                 }
-                if !товар.звонок && !товар.whatsApp {
-                    кругЧата
-                }
             }
         }
-        .padding(.leading, своё ? 0 : 12)
-        .padding(.trailing, своё ? 0 : 10)
+        .padding(.leading, своё || !естьКруги ? 0 : 12)
+        .padding(.trailing, своё || !естьКруги ? 0 : 10)
         /* Без своей подложки и черты: тёмный прямоугольник за кругами читался «квадратиком» на зелёной пилюле
            (владелец 26.09.2026, TestFlight) — панель одна цельная, как у сайта, круги лежат прямо на ней. */
     }
@@ -437,23 +451,8 @@ struct ПанельСвязиСайта: View {
         .accessibilityLabel(ListingPageText.т(канал == .звонок ? "call" : "wa"))
     }
 
-    /// Ни звонка, ни WhatsApp — круглая кнопка чата (.mk-sb-chat), как у сайта.
-    @ViewBuilder
-    private var кругЧата: some View {
-        let значок = Image(systemName: "message")
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(Color.white)
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.16), in: Circle())
-            .contentShape(Circle())
-        Button {
-            открытьЧат(предложить: false)
-        } label: {
-            значок
-        }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
-        .accessibilityLabel(ListingPageText.т("chat"))
-    }
+    /// Круглые «Позвонить» / WhatsApp есть. Круглой кнопки чата больше нет: чат — главная кнопка «Написать продавцу».
+    private var естьКруги: Bool { товар.звонок || товар.whatsApp }
 
     /// Карточка встаёт без выезда снизу — появляется сама, как окно сайта.
     private func показатьКарточку(_ о: ОкноСвязи) {
@@ -696,6 +695,39 @@ private struct ОкноСвязиСайта: View {
         .frame(maxWidth: .infinity)
         .background(Theme.зелёный.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Кнопка строки над пилюлей: главная (гарант) — зелёная заливка, иначе — поверхность с рамкой; 40 pt, делят ширину.
+private struct КнопкаВторогоРяда: View {
+    let значок: String
+    let заголовок: String
+    let главная: Bool
+    let нажать: () -> Void
+
+    var body: some View {
+        Button(action: нажать) {
+            HStack(spacing: 6) {
+                Image(systemName: значок)
+                    .font(.system(size: 14, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(заголовок)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(главная ? Theme.зелёный2 : Theme.текст)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(главная ? Theme.зелёный.opacity(0.12) : Theme.поверхность,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(главная ? Theme.зелёный.opacity(0.35) : Theme.линия, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 }
 

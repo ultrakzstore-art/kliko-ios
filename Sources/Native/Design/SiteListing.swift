@@ -311,20 +311,11 @@ private struct НизСтраницы: View {
                 БлокОписанияВида(характеристики: пункты, описание: товар.описаниеДляЭкрана,
                                  добавлено: товар.когдаДобавлено, просмотры: товар.просмотры)
             }
-            Group {
-                /* «Быстрые вопросы» у услуг (mkSvcQuestions) — в .mk-mcol-d сайта после кнопок связи, до оплаты;
-                   нажатие — чат по объявлению с вопросом в строке ввода (SiteListingServices.swift). */
-                if БыстрыеВопросыУслуги.есть(товар) {
-                    БыстрыеВопросыУслуги(товар: товар, открыть: открыть)
-                }
-                /* mkPayBlock — у любого раздела с ценой и рассрочкой или кредитом. */
-                if let оплата = товар.поляВида.оплата, (товар.price ?? 0) > 0, оплата.рассрочка || оплата.кредит {
-                    СпособыОплатыСайта(товар: товар, оплата: оплата)
-                }
-                /* mkB2bBtn — «Счёт для юрлица» перед чертой продавца (SiteListingB2B.swift). */
-                if КнопкаСчётаЮрлица.есть(товар) {
-                    КнопкаСчётаЮрлица(товар: товар, открыть: открыть)
-                }
+            /* «Быстрые вопросы» у услуг (mkSvcQuestions) — в .mk-mcol-d сайта после кнопок связи; нажатие — чат по
+               объявлению с вопросом в строке ввода (SiteListingServices.swift). Рассрочка и кредит, «Счёт для юрлица»,
+               «Обмен» и услуги рядом — под «Ещё» после продавца (прогулка новичка, владелец). */
+            if БыстрыеВопросыУслуги.есть(товар) {
+                БыстрыеВопросыУслуги(товар: товар, открыть: открыть)
             }
             if товар.продавец != nil {
                 /* .mk-mdivide перед карточкой продавца. */
@@ -342,17 +333,15 @@ private struct НизСтраницы: View {
                     КарточкаПродавцаСайта(товар: товар, магазин: магазин)
                 }
             }
-            /* mkRentBlock — в колонке продавца, после карточки (margin-top 20); за ним — .mk-exch-btn
-               (SiteListingExchange.swift), как it = mkRentBlock(r) + кнопка обмена у сайта. */
-            Group {
-                if товар.forRent {
-                    БлокАрендыСайта(товар: товар)
-                        .padding(.top, 6)
-                        .id(БлокАрендыСайта.якорь)
-                }
-                if КнопкаОбменаОбъявления.есть(товар) {
-                    КнопкаОбменаОбъявления(товар: товар, открыть: открыть)
-                }
+            /* Прогулка новичка (владелец): дополнительное — одним свёрнутым «Ещё» сразу после продавца. */
+            if БлокЕщёОбъявления.есть(товар) {
+                БлокЕщёОбъявления(товар: товар, открыть: открыть)
+            }
+            /* mkRentBlock — в колонке продавца, после карточки (margin-top 20). Кнопка обмена (.mk-exch-btn) — под «Ещё». */
+            if товар.forRent {
+                БлокАрендыСайта(товар: товар)
+                    .padding(.top, 6)
+                    .id(БлокАрендыСайта.якорь)
             }
             /* «Расположение» — у всех разделов, как rt = mkLocationBlock(r) в колонке .mk-mcol-e сайта; нет ни места,
                ни точки — нет и блока (SiteListingLocation.swift). */
@@ -360,11 +349,6 @@ private struct НизСтраницы: View {
             Group {
                 if РасположениеСайта.есть(товар) {
                     РасположениеСайта(товар: товар, открыть: открыть)
-                }
-                /* «Нужна помощь?» — услуги рядом по разделу, у всего, кроме самих услуг (mkServiceBlock,
-                   SiteListingServices.swift): эвакуатор и СТО у авто, грузчики у мебели, риелтор у жилья… */
-                if !товар.услуга {
-                    БлокУслугСайта(товар: товар)
                 }
                 if догружаем {
                     SiteSpinner()
@@ -374,6 +358,121 @@ private struct НизСтраницы: View {
             }
         }
     }
+}
+
+/**
+ «Ещё» — прогулка новичка (владелец): второстепенное страницы объявления одним свёрнутым блоком после продавца, чтобы
+ главным оставалось «Написать продавцу». Внутри, в прежнем порядке сайта: рассрочка и кредит (mkPayBlock), «Счёт для
+ юрлица» (mkB2bBtn), «Обмен» (.mk-exch-btn) и «Нужна помощь?» — услуги рядом (mkServiceBlock, кроме самих услуг).
+ Заголовок перечисляет, что внутри; нажатие раскрывает и сворачивает. Ничего не убрано — только спрятано.
+ */
+private struct БлокЕщёОбъявления: View {
+    let товар: Listing
+    let открыть: ((URL) -> Void)?
+    @State private var раскрыто = false
+
+    init(товар: Listing, открыть: ((URL) -> Void)?) {
+        self.товар = товар
+        self.открыть = открыть
+    }
+
+    /// mkPayBlock — у любого раздела с ценой и рассрочкой или кредитом.
+    private static func оплата(_ т: Listing) -> ОплатаОбъявления? {
+        guard let оплата = т.поляВида.оплата, (т.price ?? 0) > 0, оплата.рассрочка || оплата.кредит else { return nil }
+        return оплата
+    }
+
+    static func есть(_ т: Listing) -> Bool {
+        оплата(т) != nil || КнопкаСчётаЮрлица.есть(т) || КнопкаОбменаОбъявления.есть(т) || !т.услуга
+    }
+
+    /// Что внутри — строкой под «Ещё»: «Рассрочка и кредит · Обмен · Услуги рядом».
+    private var состав: String {
+        var части: [String] = []
+        if Self.оплата(товар) != nil { части.append(Self.т("pay")) }
+        if КнопкаСчётаЮрлица.есть(товар) { части.append(Self.т("b2b")) }
+        if КнопкаОбменаОбъявления.есть(товар) { части.append(Self.т("exch")) }
+        if !товар.услуга { части.append(Self.т("svc")) }
+        return части.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                withAnimation(ДвижениеСайта.смена) { раскрыто.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Self.т("more"))
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(Theme.текст)
+                        Text(состав)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.текстВторой)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
+                        .rotationEffect(.degrees(раскрыто ? 180 : 0))
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            .accessibilityValue(раскрыто ? Self.т("open") : Self.т("closed"))
+            if раскрыто {
+                содержимое
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var содержимое: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let оплата = Self.оплата(товар) {
+                СпособыОплатыСайта(товар: товар, оплата: оплата)
+            }
+            if КнопкаСчётаЮрлица.есть(товар) {
+                КнопкаСчётаЮрлица(товар: товар, открыть: открыть)
+            }
+            if КнопкаОбменаОбъявления.есть(товар) {
+                КнопкаОбменаОбъявления(товар: товар, открыть: открыть)
+            }
+            /* «Нужна помощь?» — услуги рядом по разделу, у всего, кроме самих услуг (SiteListingServices.swift). */
+            if !товар.услуга {
+                БлокУслугСайта(товар: товар)
+            }
+        }
+    }
+
+    /// Подписи «Ещё» на языке телефона.
+    private static func т(_ ключ: String) -> String {
+        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let словарь = тексты[язык] ?? тексты["ru"] ?? [:]
+        return словарь[ключ] ?? ключ
+    }
+
+    private static let тексты: [String: [String: String]] = [
+        "ru": ["more": "Ещё", "pay": "Рассрочка и кредит", "b2b": "Счёт для юрлица", "exch": "Обмен",
+               "svc": "Услуги рядом", "open": "Раскрыто", "closed": "Свёрнуто"],
+        "kk": ["more": "Тағы", "pay": "Бөліп төлеу және несие", "b2b": "Заңды тұлғаға шот", "exch": "Айырбас",
+               "svc": "Жақын маңдағы қызметтер", "open": "Ашық", "closed": "Жиналған"],
+        "en": ["more": "More", "pay": "Installments and credit", "b2b": "Invoice for a company", "exch": "Exchange",
+               "svc": "Services nearby", "open": "Expanded", "closed": "Collapsed"],
+        "ar": ["more": "المزيد", "pay": "التقسيط والائتمان", "b2b": "فاتورة لشركة", "exch": "مقايضة",
+               "svc": "خدمات قريبة", "open": "مفتوح", "closed": "مطوي"]
+    ]
 }
 
 /// «Сохранённая копия · когда» (этап 13) — плашкой поверхности 2, как .mk-escrow-note сайта.
