@@ -105,7 +105,11 @@ struct Listing: Identifiable, Hashable {
         let ключ: String
         let значение: String
         let образец: Bool
+        /// SF Symbol факта по SVG-значку сайта (emoji у specs) — значок в чипах карточки (VerticalCards.swift). Нет — nil.
+        var значок: String? = nil
     }
+    /// brand — марка (у запчастей — марка машины, для которой деталь: «для Toyota Camry» на карточке).
+    var марка: String? = nil
     /// realty — поля жилья («rooms», «area», «floor», «floors», «kind»…) строками; не объект — пусто.
     var жильё: [String: String] = [:]
     /// shop_accent «#RRGGBB» — фирменный цвет магазина: полоса сверху карточки ленты и цена (.mk-cbrand сайта).
@@ -233,6 +237,8 @@ extension Listing: Decodable {
             let value: String?
             /// Этап 49: образец цвета (swatch) — у сайта такие пункты в строке характеристик карточки не участвуют.
             let образец: Bool
+            /// Витрина под вертикали: значок факта по SVG сайта (ICO_* inc/categories.php, e_spec_icon).
+            let значок: String?
 
             init(from decoder: Decoder) throws {
                 let к = try decoder.container(keyedBy: Ключ.self)
@@ -246,13 +252,15 @@ extension Listing: Decodable {
                     value = nil
                 }
                 образец = !(((try? к.decode([String].self, forKey: Ключ("swatch"))) ?? []).isEmpty)
+                значок = (try? к.decode(String.self, forKey: Ключ("emoji"))).flatMap { Listing.значокХарактеристики($0) }
             }
         }
         if let пункты = try? c.decode([ПунктХарактеристик].self, forKey: Ключ("specs")) {
             for п in пункты {
                 if let к = непусто(п.label), let з = непусто(п.value) {
                     х.append(Характеристика(ключ: к, значение: з))
-                    характеристикиКарточки.append(ПунктКарточки(ключ: к, значение: з, образец: п.образец))
+                    характеристикиКарточки.append(ПунктКарточки(ключ: к, значение: з, образец: п.образец,
+                                                                 значок: п.значок))
                 }
             }
         }
@@ -325,6 +333,7 @@ extension Listing: Decodable {
             return true
         }
         районНазвание = непусто(строка("district_name"))
+        марка = непусто(строка("brand"))
         вРезерве = строка("status") == "reserved"
         проверкаАвто = истинно("auto_check")
         проверкаЖилья = истинно("realty_check")

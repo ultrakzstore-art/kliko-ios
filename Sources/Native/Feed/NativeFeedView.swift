@@ -65,6 +65,8 @@ struct NativeFeedView: View {
     /// диска и разбирался JSONDecoder на главной очереди. Теперь — один раз за запуск (FeedStore.разделыНаЗапуске);
     /// @State и раньше брал только первое значение, так что показ тот же.
     @State private var разделы: [FeedSnapshot.Row] = FeedStore.разделыНаЗапуске
+    /// Витрина под вертикали: выбор «сетка / список» для каждого корня («transport:1,realty:0», VerticalCards.swift).
+    @AppStorage("kliko.vitrina.layout") private var раскладкиВитрины = ""
 
     /// Размер текста в Настройках: при крупном для доступности — сетка в одну колонку (этап 11, ListingCard.сетка).
     @Environment(\.dynamicTypeSize) private var размерТекста
@@ -1067,6 +1069,15 @@ struct NativeFeedView: View {
                 }
             }
             Spacer(minLength: 0)
+            /* Витрина под вертикали: в ленте одного корня — «сеткой / списком», выбор помнится для корня. */
+            if РасстановкаВитрины.корниСВыбором.contains(кореньВыдачи) {
+                ПереключательРасстановки(выбрано: расстановкаВыдачи) { новая in
+                    let корень = кореньВыдачи
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        раскладкиВитрины = РасстановкаВитрины.записать(новая, корень: корень, в: раскладкиВитрины)
+                    }
+                }
+            }
             /* Этап 18: «Уточнить» — у заголовка ленты, когда фильтров на сервере нет. */
             if FeedModel.уточнениеНаТелефоне {
                 ЧипУточнения(уточнено: модель.уточнено) { уточнятьПоказан = true }
@@ -1075,6 +1086,14 @@ struct NativeFeedView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
+    }
+
+    /// Корень раздела выдачи («transport», «realty»…); вся лента и поиск без раздела — пусто.
+    private var кореньВыдачи: String { РазделыСайта.корень(модель.действующее.раздел) }
+
+    /// Сетка или список: в ленте одного корня — выбор человека (по умолчанию транспорт и жильё списком), иначе сетка.
+    private var расстановкаВыдачи: РасстановкаВитрины {
+        РасстановкаВитрины.выбор(корень: кореньВыдачи, запись: раскладкиВитрины)
     }
 
     /// mkFeedHead: поиск — «По запросу «…»», раздел — его название, иначе «Предложения от проверенных продавцов».
@@ -1583,7 +1602,10 @@ struct NativeFeedView: View {
                              подпись: RefineText.т("none_sub"))
                 }
             }
-            LazyVGrid(columns: ListingCard.сетка(размерТекста), spacing: ListingCard.зазор) {
+            let расстановка = расстановкаВыдачи
+            LazyVGrid(columns: расстановка == .список ? ListingCard.сеткаСписка(размерТекста)
+                                                     : ListingCard.сетка(размерТекста),
+                      spacing: ListingCard.зазор) {
                 /* Порядок витрины сайта (ЗолотойРитм): ячейки, а не объявления — одно объявление бывает и в золотом месте,
                    и в обычном. Золото карточки — по месту (ячейка.показ), открывается объявление как пришло. */
                 ForEach(модель.видимыеЯчейки) { ячейка in
@@ -1611,6 +1633,7 @@ struct NativeFeedView: View {
                 }
             }
             .environment(\.режимАренды, модель.аренда)     // «Аренда»: цена аренды на карточках
+            .environment(\.расстановкаВитрины, расстановка)  // лента одного корня списком — широкие карточки
             .padding(.horizontal, ListingCard.поле)
             if модель.уточнено { низУточнённой }
             низЛенты
@@ -1754,6 +1777,8 @@ struct ListingCard: View {
     /// Точка человека — расстояние вместо города до 5 км (mkVitCardHTML) и время в пути (mkEtaFill), FeedGeo.swift.
     @ObservedObject private var гео = ГеоЛенты.shared
     @ObservedObject private var пути = ОценкиПути.shared
+    /// Витрина под вертикали (VerticalCards.swift): лента одного корня списком — широкая карточка.
+    @Environment(\.расстановкаВитрины) private var расстановка
 
     init(товар: Listing, вип: Bool = false) {
         self.товар = товар
@@ -1777,11 +1802,26 @@ struct ListingCard: View {
         return [GridItem(.adaptive(minimum: 158, maximum: 260), spacing: зазор, alignment: .top)]
     }
 
-    /// Одна карточка на всё (владелец 26.09.2026): карточка витрины сайта. Прежняя карточка этапов 1–23 убрана, чтобы в
-    /// одной сетке не оказалось двух видов; ТОП и VIP отличаются только золотом (рамка, метка, подложка).
-    var body: some View {
-        карточкаСайта
+    /// Колонки ленты списком: одна широкая карточка на iPhone, на iPad — сколько влезет от 330 pt.
+    static func сеткаСписка(_ размер: DynamicTypeSize) -> [GridItem] {
+        [GridItem(.adaptive(minimum: размер.isAccessibilitySize ? 300 : 330, maximum: 640), spacing: зазор,
+                  alignment: .top)]
     }
+
+    /// Карточка витрины сайта одного размера для всех (ТОП и VIP — золотом), но со своим содержимым у каждой вертикали
+    /// (владелец 29.09.2026: «витрина под вертикали»): факты-чипы, заголовок жилья, фото техники целиком. Лента одного
+    /// корня списком — широкая карточка (карточкаСписка).
+    @ViewBuilder
+    var body: some View {
+        if расстановка == .список {
+            карточкаСписка
+        } else {
+            карточкаСайта
+        }
+    }
+
+    /// Вертикаль объявления — один раз на отрисовку.
+    private var вертикаль: ВертикальВитрины { товар.вертикаль }
 
     private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
 
@@ -1789,8 +1829,11 @@ struct ListingCard: View {
     /// eGov»), если они есть.
     private var голосКарточки: String {
         var части = [товар.голос]
-        let факты = характеристики
-        if !факты.isEmpty { части.append(факты.replacingOccurrences(of: " · ", with: ", ")) }
+        if let заголовок = товар.заголовокЖилья { части.append(заголовок.replacingOccurrences(of: " · ", with: ", ")) }
+        if let заМетр = товар.ценаЗаМетр { части.append(заМетр) }
+        if товар.даром { части.append(ВитринаВертикалейТекст.т("free")) }
+        let факты = товар.фактыВитрины(список: расстановка == .список).map(\.текст)
+        if !факты.isEmpty { части.append(факты.joined(separator: ", ")) }
         if let знак = товар.знакДоверияЛенты { части.append(знак.текст) }
         return части.joined(separator: ", ")
     }
@@ -1806,11 +1849,19 @@ struct ListingCard: View {
      Строки держат место и пустыми — карточки в ряду сетки одной высоты, как у CSS-сетки сайта (там низ прижат книзу).
      */
     private var карточкаСайта: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            фотоСайта
-            телоСайта
-        }
-        .вВысотуРядаСетки()             // владелец 26.09.2026: карточки ряда сетки одной высоты, как у сайта
+        рамкаКарточки(
+            VStack(alignment: .leading, spacing: 0) {
+                фотоСайта
+                телоСайта
+            }
+            .вВысотуРядаСетки()             // владелец 26.09.2026: карточки ряда сетки одной высоты, как у сайта
+        )
+    }
+
+    /// Оформление карточки — одно у сетки и списка: подложка, полоса магазина, рамка (у ТОПа и VIP — золото), тень,
+    /// предел «Размера текста» и голос.
+    private func рамкаКарточки<Содержимое: View>(_ содержимое: Содержимое) -> some View {
+        содержимое
         .background(фонКарточкиСайта)
         .overlay(alignment: .top) {
             if let краска = краскаМагазина {
@@ -1844,10 +1895,95 @@ struct ListingCard: View {
 
     private func кегль(_ пикселей: CGFloat) -> CGFloat { пикселей * сотня / 100 }
 
+    // MARK: Широкая карточка (лента одного корня списком)
+
+    /**
+     Широкая карточка — как у Kolesa и Krisha и как .k-card--wide макета владельца: фото слева во всю высоту карточки,
+     справа цена (у жилья — и за м²), название или заголовок жилья, район и дата, факты чипами в две строки, внизу знак
+     доверия и город. Сердце и «Поделиться» — те же слои справа сверху, поэтому цена и название не заходят под них.
+     */
+    private var карточкаСписка: some View {
+        рамкаКарточки(
+            HStack(alignment: .top, spacing: 0) {
+                фотоСписка
+                телоСписка
+            }
+            .fixedSize(horizontal: false, vertical: true)    // фото тянется на высоту текста
+        )
+    }
+
+    /// Ширина фото широкой карточки.
+    private var ширинаФотоСписка: CGFloat { крупныйТекст ? 150 : 136 }
+
+    private var фотоСписка: some View {
+        фонФото
+            .frame(width: ширинаФотоСписка)
+            .frame(minHeight: ширинаФотоСписка * 3 / 4, maxHeight: .infinity)
+            .overlay {
+                КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 300 : 220,
+                              заполнить: !товар.услуга && !вертикаль.фотоЦеликом) {
+                    заглушкаФото
+                }
+                .padding(вертикаль == .техника ? 6 : 0)
+            }
+            .clipped()
+            .overlay(alignment: .topLeading) { меткиФото }
+            .overlay(alignment: .bottomLeading) {
+                if товар.isTop {
+                    меткаТопЛенты
+                        .padding(8)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !товар.isTop { аватарМастера }
+            }
+    }
+
+    private var телоСписка: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            строкаЦены(кегль(20))
+                .padding(.trailing, 34)
+            Text(товар.заголовокЖилья ?? товар.title)
+                .font(.system(size: кегль(14), weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Theme.текст)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 34)
+            if let вторая = втораяСтрокаСписка {
+                Text(вторая)
+                    .font(.system(size: кегль(12)))
+                    .foregroundStyle(Theme.текстВторой)
+                    .lineLimit(1)
+            }
+            ПотокЧиповВитрины(факты: товар.фактыВитрины(список: true), кегль: кегль(11.5), строк: крупныйТекст ? 3 : 2)
+                .padding(.top, 1)
+            Spacer(minLength: 0)
+            подвалСайта
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Под названием широкой карточки: у жилья — район (название, если заголовок занял его место) и дата подачи; у
+    /// прочих — дата. Нечего — nil.
+    private var втораяСтрокаСписка: String? {
+        var части: [String] = []
+        if товар.заголовокЖилья != nil { части.append(товар.адресЖилья) }
+        if let создано = товар.создано, !товар.city.isEmpty {
+            let дата = Listing.датаСайта(создано, коротко: true)
+            if !дата.isEmpty { части.append(дата) }
+        }
+        return части.isEmpty ? nil : части.joined(separator: " · ")
+    }
+
     /// .mk-cshot: 4:3, фото с обрезкой по центру; подложка — мятный градиент (в тёмной — тёмно-зелёный).
     private var фотоСайта: some View {
-        LinearGradient(colors: [Theme.цвет(0xEEF4F0, 0x1A2A22), Theme.цвет(0xDFEAE3, 0x101914)],
-                       startPoint: .top, endPoint: .bottom)
+        фонФото
             .наШиринуКарточки(3 / 4)      // 4:3 ровно во всю ширину карточки (SiteCards.swift)
             .overlay {
                 /* Владелец 25.09.2026, проверка на телефоне, сборка 33 («лента подвисает»): не AsyncImage, а
@@ -1855,13 +1991,15 @@ struct ListingCard: View {
                 /* Владелец 26.09.2026 (ряд «Услуги»: «монт компьютеров с…», «5 000 ₸», обрезанный кружок «K»): обложка
                    услуги — обычно баннер с надписями прямо на картинке (название, цена, аватар). Обрезка по центру
                    срезала их края, поэтому у услуг картинка целиком на мятной подложке; у прочих — по центру, как у сайта. */
-                КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 520 : 260, заполнить: !товар.услуга) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 26))
-                        .foregroundStyle(Theme.текстВторой.opacity(0.5))
+                /* Витрина под вертикали: техника — целиком на светлой подложке с полями (предмет не обрезан). */
+                КартинкаЛенты(товар.обложка, пунктов: крупныйТекст ? 520 : 260,
+                              заполнить: !товар.услуга && !вертикаль.фотоЦеликом) {
+                    заглушкаФото
                 }
+                .padding(вертикаль == .техника ? 8 : 0)
             }
             .clipped()
+            .overlay(alignment: .bottomLeading) { аватарМастера }
             .overlay(alignment: .topLeading) { меткиФото }
             .overlay(alignment: .topTrailing) {
                 if товар.isTop {
@@ -1871,6 +2009,39 @@ struct ListingCard: View {
                 }
             }
             .overlay(alignment: .bottom) { точкиФото }
+    }
+
+    /// Подложка фото: мятный градиент сайта; у техники — светлая ровная (предмет целиком, как на витрине магазина).
+    @ViewBuilder
+    private var фонФото: some View {
+        if вертикаль == .техника {
+            Theme.цвет(0xFFFFFF, 0x22282B)
+        } else {
+            LinearGradient(colors: [Theme.цвет(0xEEF4F0, 0x1A2A22), Theme.цвет(0xDFEAE3, 0x101914)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    /// Нет фото — значок корня раздела (машина, дом, лапа…), а не общий «фото».
+    private var заглушкаФото: some View {
+        Image(systemName: товар.категория == nil ? "photo" : РазделыСайта.значок(товар.категория))
+            .font(.system(size: 26))
+            .foregroundStyle(Theme.текстВторой.opacity(0.5))
+    }
+
+    /// Услуги: аватар мастера в углу фото (белая кромка) — у услуги решает человек, а не предмет.
+    @ViewBuilder
+    private var аватарМастера: some View {
+        if вертикаль == .услуги, let адрес = товар.аватарПродавца.flatMap({ Config.url($0) }) {
+            КартинкаЛенты(адрес, пунктов: 34) {
+                Circle().fill(Theme.мята)
+            }
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+            .padding(8)
+            .accessibilityHidden(true)
+        }
     }
 
     /// .mk-cond — (8, 8), под ним .mk-resv-badge — (8, 34).
@@ -1966,25 +2137,14 @@ struct ListingCard: View {
     /// .mk-body: отступы 10 / 12 / 12, между строками 4.
     private var телоСайта: some View {
         VStack(alignment: .leading, spacing: 4) {
-            строкаЦены
+            строкаЦены(кегль(19))
             /* Владелец 29.09.2026 («для глаз должна быть удобной»): название до двух строк (.mk-vc .mk-title —
                line-clamp: 2), и место под вторую строку держится и у короткого — карточки сетки одной высоты. */
-            Text(товар.title)
-                .font(.system(size: кегль(13), weight: .medium))
-                .foregroundStyle(Theme.текст)
-                .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: true)
-                .truncationMode(.tail)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            /* Строка фактов вертикали (.mk-vc-spec): одна, вторичным цветом, через « · », многоточие в конце; пустая —
-               держит место, чтобы подвал у всех карточек стоял на одной линии. */
-            Text(характеристики.isEmpty ? " " : характеристики)
-                .font(.system(size: кегль(12)))
-                .monospacedDigit()
-                .foregroundStyle(Theme.текстВторой)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            названиеСетки
+            /* Факты вертикали чипами со значками (VerticalCards.swift): одна строка, что не влезло — не рисуется;
+               пустая держит место, чтобы подвал у всех карточек стоял на одной линии. */
+            СтрокаФактовВитрины(факты: товар.фактыВитрины(список: false), кегль: кегль(11))
+                .padding(.top, 2)
             подвалСайта
                 .padding(.top, 6)
                 .frame(maxHeight: .infinity, alignment: .bottom)    // растянутая в ряду — низ прижат книзу
@@ -1994,23 +2154,90 @@ struct ListingCard: View {
         .padding(.bottom, 12)
     }
 
-    /// Строка характеристик (mkCapSpecs, до трёх через «·»).
-    private var характеристики: String { товар.строкаХарактеристикЛенты }
-
-    /// .mk-vc-price: 19 px, 800, разрядка −0,02 em; нет цены (_mkVitHasPrice) — пустая строка той же высоты.
+    /// Название карточки сетки — две строки держат место. У жилья — заголовок «3-комн. · 75 м² · 5/9 эт.» и под ним
+    /// район (как у Krisha); нечего сказать о квартире — название.
     @ViewBuilder
-    private var строкаЦены: some View {
+    private var названиеСетки: some View {
+        if let заголовок = товар.заголовокЖилья {
+            Text(" ")
+                .font(.system(size: кегль(13), weight: .medium))
+                .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: true)
+                .hidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topLeading) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(заголовок)
+                            .font(.system(size: кегль(13), weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.текст)
+                            .lineLimit(1)
+                        Text(товар.адресЖилья)
+                            .font(.system(size: кегль(12)))
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(1)
+                    }
+                }
+        } else {
+            Text(товар.title)
+                .font(.system(size: кегль(13), weight: .medium))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: true)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// .mk-vc-price: 19 px, 800, разрядка −0,02 em; нет цены (_mkVitHasPrice) — пустая строка той же высоты. Витрина
+    /// под вертикали: у услуг «от», у продажи жилья — цена за м² рядом (не влезла — только цена), животное без цены —
+    /// «Даром».
+    @ViewBuilder
+    private func строкаЦены(_ размер: CGFloat) -> some View {
         if let цена = ЦенаКарточкиСайта.для(товар, режимАренды: режимАренды) {
-            цена.текст(кегль: кегль(19), главная: false, краска: краскаМагазина)
-                .tracking(-0.02 * кегль(19))
+            let сумма = текстЦены(цена, размер)
+            if let заМетр = товар.ценаЗаМетр {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        сумма.lineLimit(1).fixedSize()
+                        Text(заМетр)
+                            .font(.system(size: размер * 0.6, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    сумма
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .вСтрокуКарточки(.system(size: размер, weight: .heavy))
+            } else {
+                сумма
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .вСтрокуКарточки(.system(size: размер, weight: .heavy))
+            }
+        } else if товар.даром {
+            Text(ВитринаВертикалейТекст.т("free"))
+                .font(.system(size: размер * 0.9, weight: .heavy))
+                .foregroundStyle(Theme.акцент)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .вСтрокуКарточки(.system(size: кегль(19), weight: .heavy))
+                .вСтрокуКарточки(.system(size: размер, weight: .heavy))
         } else {
             Text(" ")
-                .font(.system(size: кегль(19), weight: .heavy))
+                .font(.system(size: размер, weight: .heavy))
                 .hidden()
         }
+    }
+
+    /// Сумма строки цены: у услуги с ценой — «от» мелко перед ней.
+    private func текстЦены(_ цена: ЦенаКарточкиСайта, _ размер: CGFloat) -> Text {
+        let сумма = цена.текст(кегль: размер, главная: false, краска: краскаМагазина)
+            .tracking(-0.02 * размер)
+        guard товар.ценаОт && цена.вид == .сумма else { return сумма }
+        return Text(ListingPageText.т("price_from") + " ")
+            .font(.system(size: размер * 0.62, weight: .bold))
+            .foregroundColor(Theme.текстВторой) + сумма
     }
 
     /// .mk-foot: линия сверху; слева знак доверия зелёным (обрезается первым), справа город с булавкой — не переносится;

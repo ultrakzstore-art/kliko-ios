@@ -179,7 +179,7 @@ extension Listing {
     }
 
     /// parseFloat сайта: число в начале строки («75.5 м²» → 75,5); не число — nil.
-    fileprivate static func числоВНачале(_ строка: String) -> Double? {
+    static func числоВНачале(_ строка: String) -> Double? {
         var цифры = ""
         var точка = false
         for знак in строка.trimmingCharacters(in: .whitespaces) {
@@ -198,7 +198,7 @@ extension Listing {
     }
 
     /// fmt(): разряды пробелом, дробь запятой — «75,5».
-    fileprivate static func дробь(_ n: Double) -> String {
+    static func дробь(_ n: Double) -> String {
         форматДробиКарточки.string(from: NSNumber(value: n)) ?? String(n)
     }
 
@@ -263,7 +263,7 @@ extension Listing {
     }
 
     /// «512 ГБ» из «512GB», «1 ТБ» из «1TB» — _mhVol.
-    fileprivate static func объёмПамяти(_ строка: String) -> String {
+    static func объёмПамяти(_ строка: String) -> String {
         let чистая = строка.trimmingCharacters(in: .whitespaces)
         guard let совпадение = чистая.range(of: "^(\\d+(?:[.,]\\d+)?)\\s*(gb|гб|tb|тб)$",
                                             options: [.regularExpression, .caseInsensitive]) else { return чистая }
@@ -392,7 +392,7 @@ extension Listing {
     /// Значение в строке характеристик ленты: пробег — с разрядами и «км» («120 000 км»), слово справочника — на языке
     /// приложения («Automatic»), число с единицей в подписи («Двигатель, л», «Площадь, м²») — с ней («2.0 л»), как
     /// _mxSpecVal сайта; прочее — как пришло («2019», «Лабрадор»).
-    fileprivate static func значениеСтрокиЛенты(_ подпись: String, _ сырое: String) -> String {
+    static func значениеСтрокиЛенты(_ подпись: String, _ сырое: String) -> String {
         let з = сырое.trimmingCharacters(in: .whitespaces)
         let п = подпись.trimmingCharacters(in: .whitespaces)
         if подписиПробега.contains(п) {
