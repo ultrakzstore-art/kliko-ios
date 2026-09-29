@@ -388,6 +388,7 @@ extension View {
             case .диалог(let д):
                 ChatThreadView(модель: ChatThreadModel(tid: д.id, собеседник: д.собеседникID), заголовок: д.собеседник,
                                открыть: открыть)
+                    .местоЭкрана(.чат(д.id))       // с того же места: только номер диалога (StateRestore)
             case .продавец(let id, let имя, let объявление):
                 ChatThreadView(модель: ChatThreadModel(собеседник: id, объявление: объявление),
                                заголовок: имя, открыть: открыть)
