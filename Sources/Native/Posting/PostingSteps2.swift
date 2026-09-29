@@ -619,16 +619,16 @@ extension ПодачаМодель {
 struct ШагДополнительно: View {
     @ObservedObject var модель: ПодачаМодель
     let фокус: FocusState<String?>.Binding
-    let открытьСайт: (String) -> Void
+    let открытьАдрес: (String) -> Void
     /// Открытое окно настройки строки: pay · del · trust; пусто — закрыто.
     @State private var настройка = ""
     /// Строки «Уточнить» раскрыты.
     @State private var раскрыто = false
 
-    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding, открытьСайт: @escaping (String) -> Void) {
+    init(модель: ПодачаМодель, фокус: FocusState<String?>.Binding, открытьАдрес: @escaping (String) -> Void) {
         self.модель = модель
         self.фокус = фокус
-        self.открытьСайт = открытьСайт
+        self.открытьАдрес = открытьАдрес
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
@@ -947,11 +947,11 @@ struct ШагДополнительно: View {
 
 struct ШагПроверка: View {
     @ObservedObject var модель: ПодачаМодель
-    let открытьСайт: (String) -> Void
+    let открытьАдрес: (String) -> Void
 
-    init(модель: ПодачаМодель, открытьСайт: @escaping (String) -> Void) {
+    init(модель: ПодачаМодель, открытьАдрес: @escaping (String) -> Void) {
         self.модель = модель
-        self.открытьСайт = открытьСайт
+        self.открытьАдрес = открытьАдрес
     }
 
     private func т(_ ключ: String) -> String { ПодачаText.т(ключ) }
@@ -1230,6 +1230,7 @@ struct ПревьюОкнаПодачи: View {
                 }
                 .clipped()
         } else if let адрес = первая.flatMap({ Config.url($0.url) }) {
+            /* Адрес фото сервера — только картинка, нажатием не открывается. */
             Color.clear
                 .frame(height: 190)
                 .overlay {
