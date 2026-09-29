@@ -244,18 +244,23 @@ enum РазборСтатьи {
     // MARK: - Вход
 
     static func разобрать(_ html: String, адрес: URL) -> СтатьяСайта {
+        /* Адрес страницы — полный. Config.страницаСайта отдаёт относительный («/kz/ru/help» от https://kliko.kz), а
+           URLComponents(url:resolvingAgainstBaseURL: false) берёт у такого только «/kz/ru/help»: якорь плитки
+           (onclick="location.hash='#start'") становился «/kz/ru/help#start» без схемы и домена — не страница справки,
+           не адрес сайта, и нажатие молча уходило в UIApplication.open. Отсюда все «#…» статьи — с https://kliko.kz. */
+        let полный = адрес.absoluteURL
         let заголовокСтраницы = заголовокTitle(html)
         let корень = вырезатьКорень(html)
         let чистый = убратьЛишнее(корень)
-        var разбор = Разбор(база: адрес)
+        var разбор = Разбор(база: полный)
         разбор.пройти(Array(чистый.unicodeScalars))
         разбор.закончить()
         var заголовок = разбор.первыйH1
         if заголовок.isEmpty { заголовок = заголовокСтраницы }
         let чистые = безНичегоНеНайдено(безШапкиСайта(разбор.итог))
-        let сПлитками = плиткиРазделов(чистые, адрес: адрес)
-        let нумерованные = пронумеровать(вопросыИзСтрок(сПлитками, адрес: адрес))
-        return СтатьяСайта(заголовок: заголовок, блоки: ссылкиНаРазделы(нумерованные, адрес: адрес))
+        let сПлитками = плиткиРазделов(чистые, адрес: полный)
+        let нумерованные = пронумеровать(вопросыИзСтрок(сПлитками, адрес: полный))
+        return СтатьяСайта(заголовок: заголовок, блоки: ссылкиНаРазделы(нумерованные, адрес: полный))
     }
 
     // MARK: - Нумерация пунктов
@@ -424,7 +429,7 @@ enum РазборСтатьи {
                 guard let ссылка = кусок.link else { continue }
                 let подпись = String(текст[кусок.range].characters)
                 guard let место = цель(ссылка, подпись: подпись) else { continue }
-                var части = URLComponents(url: ссылка, resolvingAgainstBaseURL: false)
+                var части = URLComponents(url: ссылка, resolvingAgainstBaseURL: true)
                 части?.fragment = якорь(место)
                 guard let новая = части?.url else { continue }
                 итог[кусок.range].link = новая
@@ -746,7 +751,7 @@ enum РазборСтатьи {
             return новый
         }
         func адресРаздела(_ номер: Int) -> URL {
-            var части = URLComponents(url: адрес, resolvingAgainstBaseURL: false)
+            var части = URLComponents(url: адрес, resolvingAgainstBaseURL: true)
             части?.fragment = якорь(номер)
             return части?.url ?? адрес
         }
@@ -1615,7 +1620,7 @@ enum РазборСтатьи {
             let результат: URL?
             if чистый.hasPrefix("#") {
                 guard чистый.count > 1 else { return nil }
-                var части = URLComponents(url: база, resolvingAgainstBaseURL: false)
+                var части = URLComponents(url: база, resolvingAgainstBaseURL: true)
                 части?.fragment = String(чистый.dropFirst())
                 результат = части?.url
             } else if let прямой = URL(string: чистый, relativeTo: база) {
