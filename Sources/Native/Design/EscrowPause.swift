@@ -18,8 +18,12 @@ final class ПаузаГаранта: ObservableObject {
 
     private var сверено: Date? = nil
     private var идёт = false
-    private static let ключ = "kliko.escrowPaused"
-    private static let шаблон = #"MK_ESCROW_PAUSED\s*=\s*(true|1|!0)\b"#
+    nonisolated private static let ключ = "kliko.escrowPaused"
+    nonisolated private static let шаблон = #"MK_ESCROW_PAUSED\s*=\s*(true|1|!0)\b"#
+
+    /// Последнее известное значение без главного потока — для карточек, списков и расчётов вне вида (значок «Безопасно»,
+    /// кнопка «Купить безопасно», советы). Виды, которым нужно перерисоваться при смене, наблюдают shared.
+    nonisolated static var наПаузеСейчас: Bool { UserDefaults.standard.bool(forKey: ключ) }
 
     private init() {
         наПаузе = UserDefaults.standard.bool(forKey: Self.ключ)

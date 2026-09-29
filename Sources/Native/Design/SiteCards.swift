@@ -374,7 +374,8 @@ extension Listing {
     }
 
     /// mkVitTrust: проверки VIN, кадастра и IMEI, гарантия, «Мастер проверен» у проверенного исполнителя услуг,
-    /// «Гарант» у проверенного продавца — кроме «без гаранта» и цены ниже MK_ESCROW_MIN (20 000 ₸, home.html).
+    /// «Безопасно» со щитом у проверенного продавца — кроме «без гаранта», цены ниже MK_ESCROW_MIN (20 000 ₸, home.html)
+    /// и паузы гаранта.
     var знакДоверияЛенты: ЗнакДоверияКарточки? {
         if проверкаАвто { return ЗнакДоверияКарточки(текст: DesignText.т("t_vin"), щит: false) }
         if проверкаЖилья { return ЗнакДоверияКарточки(текст: DesignText.т("t_cad"), щит: false) }
@@ -388,6 +389,8 @@ extension Listing {
         let цена = price ?? 0
         let аренда = forRent && (rentPriceDay ?? 0) > 0 && (negotiable || цена <= 0)
         if безГаранта || (цена > 0 && цена < 20_000 && !аренда) { return nil }
+        /* Упрощение для новичка: щит «Безопасно» (не путать с «Гарантия 6 мес») — только пока гарант не на паузе. */
+        if ПаузаГаранта.наПаузеСейчас { return nil }
         return ЗнакДоверияКарточки(текст: DesignText.т("t_escrow"), щит: true)
     }
 
@@ -884,7 +887,7 @@ struct БаннерПродажСайта: View {
                     .font(.system(.title3, weight: .heavy))
                     .foregroundStyle(тёмная ? Theme.текст : Color.white)
                     .accessibilityAddTraits(.isHeader)
-                Text(DesignText.т("sell_p"))
+                Text(DesignText.т(ПаузаГаранта.наПаузеСейчас ? "sell_p_np" : "sell_p"))
                     .font(.footnote)
                     .foregroundStyle(тёмная ? Theme.текстВторой : Color.white.opacity(0.78))
             }
@@ -968,6 +971,11 @@ struct ПодвалСайта: View {
     private static let документы = [Ссылка(ключ: "f_agreement", хвост: "soglashenie"), Ссылка(ключ: "f_offer", хвост: "oferta"),
                                     Ссылка(ключ: "f_privacy", хвост: "privacy")]
 
+    /// «Как работает Безопасная сделка» — только пока гарант не на паузе.
+    private var покупателям: [Ссылка] {
+        ПаузаГаранта.наПаузеСейчас ? Self.покупателям.filter { $0.ключ != "f_safe" } : Self.покупателям
+    }
+
     /// --hero-1 (#0e2a1c) — и в светлой, и в тёмной теме сайта.
     private static let фон = Color(uiColor: Theme.hex(0x0E2A1C))
     /// Кромка html.mk-gtop .ulxsf: rgba(163,220,192,…).
@@ -1020,7 +1028,7 @@ struct ПодвалСайта: View {
         if размерТекста.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 24) {
                 бренд
-                колонка("f_buyers", Self.покупателям)
+                колонка("f_buyers", покупателям)
                 колонка("f_sellers", Self.продавцам)
                 колонка("f_docs", Self.документы)
             }
@@ -1028,7 +1036,7 @@ struct ПодвалСайта: View {
             HStack(alignment: .top, spacing: 36) {
                 бренд
                     .frame(maxWidth: .infinity, alignment: .leading)
-                колонка("f_buyers", Self.покупателям)
+                колонка("f_buyers", покупателям)
                 колонка("f_sellers", Self.продавцам)
                 колонка("f_docs", Self.документы)
             }
@@ -1036,7 +1044,7 @@ struct ПодвалСайта: View {
             VStack(alignment: .leading, spacing: 24) {
                 бренд
                 HStack(alignment: .top, spacing: 20) {
-                    колонка("f_buyers", Self.покупателям)
+                    колонка("f_buyers", покупателям)
                     колонка("f_sellers", Self.продавцам)
                 }
                 HStack(alignment: .top, spacing: 20) {
@@ -1058,7 +1066,7 @@ struct ПодвалСайта: View {
                 .tracking(-0.42)
                 .foregroundStyle(Color.white)
                 .accessibilityAddTraits(.isHeader)
-            Text(DesignText.т("f_about"))
+            Text(DesignText.т(ПаузаГаранта.наПаузеСейчас ? "f_about_np" : "f_about"))
                 .font(.system(.caption, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.62))
                 .lineSpacing(6)

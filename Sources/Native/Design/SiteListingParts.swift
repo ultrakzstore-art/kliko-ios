@@ -1066,8 +1066,11 @@ struct ЛистДоверия: View {
 
     private var разделы: [РазделЛистаДоверия] {
         var итог: [РазделЛистаДоверия] = []
-        if !товар.заявления.isEmpty {
-            let строки = товар.заявления.map { ключ in
+        /* «Безопасная сделка» (guarantor) продавца — только пока гарант не на паузе. */
+        let пауза = ПаузаГаранта.наПаузеСейчас
+        let заявления = товар.заявления.filter { ключ in !(пауза && ключ == "guarantor") }
+        if !заявления.isEmpty {
+            let строки = заявления.map { ключ in
                 СтрокаЛистаДоверия(значок: Self.значок(ключ), текст: ListingPageText.т("t_" + ключ),
                                    описание: ListingPageText.т("t_" + ключ + "_d"), вкл: true, заявлено: true)
             }
@@ -1087,16 +1090,18 @@ struct ЛистДоверия: View {
         let к = товар.корень
         guard !товар.услуга, !["services", "jobs", "realty"].contains(к), !товар.гарантияВыключена else { return nil }
         let дни = товар.гарантияДней ?? 0
+        /* Гарант на паузе — без обещаний «Безопасной сделки» (строки cov_w2, cov_a2, талон в сделке). */
+        let пауза = ПаузаГаранта.наПаузеСейчас
         if дни > 0 {
             let срок = Listing.срокГарантии(дни)
-            let талон = !товар.поляВида.безГаранта && к != "transport" && !(товар.forRent && (товар.price ?? 0) <= 0)
+            let талон = !пауза && !товар.поляВида.безГаранта && к != "transport" && !(товар.forRent && (товар.price ?? 0) <= 0)
             return РазделЛистаДоверия(
                 заголовок: String(format: ListingPageText.т("cov_warr_title"), срок),
                 строки: [
                     СтрокаЛистаДоверия(значок: "shield", текст: String(format: ListingPageText.т("cov_w1_l"), срок),
                                        описание: ListingPageText.т("cov_w1_d"), вкл: true),
-                    СтрокаЛистаДоверия(значок: "checkmark", текст: ListingPageText.т("cov_w2_l"),
-                                       описание: ListingPageText.т("cov_w2_d")),
+                    СтрокаЛистаДоверия(значок: "checkmark", текст: ListingPageText.т(пауза ? "cov_w2_l_np" : "cov_w2_l"),
+                                       описание: ListingPageText.т(пауза ? "cov_w2_d_np" : "cov_w2_d")),
                     СтрокаЛистаДоверия(значок: "doc.text", текст: ListingPageText.т(талон ? "cov_w3_l2" : "cov_w3_l"),
                                        описание: ListingPageText.т(талон ? "cov_w3_d2" : "cov_w3_d"))
                 ])
@@ -1107,7 +1112,7 @@ struct ЛистДоверия: View {
                 СтрокаЛистаДоверия(значок: "lock.open", текст: ListingPageText.т("cov_a1_l"),
                                    описание: ListingPageText.т("cov_a1_d")),
                 СтрокаЛистаДоверия(значок: "checkmark", текст: ListingPageText.т("cov_a2_l"),
-                                   описание: ListingPageText.т("cov_a2_d"), вкл: true),
+                                   описание: ListingPageText.т(пауза ? "cov_a2_d_np" : "cov_a2_d"), вкл: true),
                 СтрокаЛистаДоверия(значок: "shield", текст: ListingPageText.т("cov_a3_l"),
                                    описание: ListingPageText.т("cov_a3_d"))
             ])
@@ -1129,8 +1134,12 @@ struct ЛистДоверия: View {
             строки.append(СтрокаЛистаДоверия(значок: "shippingbox", текст: ListingPageText.т("dlv_carrier_l"),
                                              описание: перевозчик))
         }
-        строки.append(СтрокаЛистаДоверия(значок: "shield", текст: ListingPageText.т("dlv_safe_l"),
-                                         описание: ListingPageText.т("dlv_safe_d")))
+        /* Гарант на паузе — строки «Курьер и безопасная сделка» нет. */
+        if !ПаузаГаранта.наПаузеСейчас {
+            строки.append(СтрокаЛистаДоверия(значок: "shield", текст: ListingPageText.т("dlv_safe_l"),
+                                             описание: ListingPageText.т("dlv_safe_d")))
+        }
+        guard !строки.isEmpty else { return nil }
         return РазделЛистаДоверия(заголовок: ListingPageText.т("dlv_title"), строки: строки)
     }
 
@@ -1229,9 +1238,17 @@ struct КрошкиСайта: View {
 struct СписокСовета: View {
     let ключ: String
 
+    /// Советы, которые обещают «Безопасную сделку»: на паузе гаранта их нет.
+    private static let проСделку: Set<String> = ["auto_4", "tech_4", "realty_4", "rent_4", "service_3"]
+
+    private var номера: [Int] {
+        let пауза = ПаузаГаранта.наПаузеСейчас
+        return (1...4).filter { номер in !(пауза && Self.проСделку.contains("\(ключ)_\(номер)")) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(1...4, id: \.self) { номер in
+            ForEach(номера, id: \.self) { номер in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: "checkmark")
                         .font(.system(size: 12, weight: .bold))

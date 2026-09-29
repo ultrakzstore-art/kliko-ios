@@ -20,6 +20,10 @@ import SwiftUI
  полная цена; авто и недвижимость — задаток-бронь (deposit_amount), аренда — залог (rent_deposit); этих двух полей в
  ответе, который разбирает приложение, нет, поэтому там только пояснение сайта, без чисел.
 
+ Упрощение для новичка: одно название — «Безопасная сделка», одна фраза — «Деньги у Kliko, пока вы не получите товар»;
+ кнопка окна — «Оплатить безопасно», «Комиссия гаранта» — «Сервисный сбор», банковский остаток — «Сбор банка». Суммы и
+ действия прежние. На паузе гаранта (ПаузаГаранта) кнопки «Купить/Заказать безопасно» нет.
+
  🔴 ДЕНЬГИ — ТОЛЬКО ЗА Config.деньгиСделок (false). Выключен — окно лишь объясняет, а его кнопка открывает страницу
  оформления сделки сайта (cabinet.php?start_deal=<номер>) в веб-обёртке, как другие денежные кнопки приложения.
  Включён — сразу своё создание сделки (DealCreate.swift): задание в ЗаданияДенегСделок и «Мои сделки», тот же путь,
@@ -45,6 +49,8 @@ enum ГарантОбъявления {
         let цена = т.price ?? 0
         let нижеГаранта = цена > 0 && цена < минимум
         if нижеГаранта || т.безГаранта || !т.продавецПроверен { return nil }
+        /* Гарант на паузе (MK_ESCROW_PAUSED) — «Купить безопасно» и его обещание не показываем; деньги не затронуты. */
+        if ПаузаГаранта.наПаузеСейчас { return nil }
         return .купить
     }
 
@@ -435,93 +441,93 @@ enum БезопаснаяСделкаТекст {
 
     private static let тексты: [String: [String: String]] = [
         "ru": [
-            "buy_safe_sub": "Деньги у нас, пока вы не проверите товар",
+            "buy_safe_sub": "Деньги у Kliko, пока вы не получите товар",
             "order_safe": "Заказать безопасно",
             "edit": "Редактировать", "promote": "Продвинуть",
-            "co_title": "Безопасная сделка", "co_sub": "Деньги под защитой гаранта",
-            "co_price": "Цена товара", "co_fee_s": "Комиссия гаранта {pct}%", "co_service": "Сервисный сбор",
-            "co_total": "Итого", "co_pay": "Оплатить и заморозить",
+            "co_title": "Безопасная сделка", "co_sub": "Деньги у Kliko, пока вы не получите товар",
+            "co_price": "Цена товара", "co_fee_s": "Сервисный сбор {pct}%", "co_service": "Сбор банка",
+            "co_total": "Итого", "co_pay": "Оплатить безопасно",
             "co_why": "За что эти деньги",
-            "co_why_1_t": "Комиссия гаранта",
+            "co_why_1_t": "Сервисный сбор",
             "co_why_1": "деньги у нас, а не у продавца. Он получит их после вашего подтверждения. Что-то не так — спор и возврат.",
-            "co_why_2_t": "Сервисный сбор",
+            "co_why_2_t": "Сбор банка",
             "co_why_2": "то, что берёт банк за перевод. Мы на нём не зарабатываем.",
             "co_price_dep": "Задаток (бронь)",
-            "co_note_dep": "Замораживается только задаток-бронь, не полная цена. Остальное — при встрече и оформлении.",
+            "co_note_dep": "У Kliko остаётся только задаток-бронь, не полная цена. Остальное — при встрече и оформлении.",
             "co_price_rent": "Залог за аренду",
-            "co_note_rent": "Замораживается только залог. Он вернётся вам после аренды, если с вещью всё в порядке.",
+            "co_note_rent": "У Kliko остаётся только залог. Он вернётся вам после аренды, если с вещью всё в порядке.",
             "steps_h": "Как проходит сделка",
             "steps_g": "Что-то не так при получении — открываете спор, деньги вернём.",
-            "s1_t": "Оплата замораживается", "s1_d": "Деньги держит гарант, а не продавец.",
+            "s1_t": "Вы оплачиваете — деньги у Kliko", "s1_d": "Деньги у Kliko, а не у продавца.",
             "s2_t": "Продавец передаёт товар", "s2_d": "Лично или доставкой/курьером.",
             "s3_t": "Вы получаете и проверяете", "s3_d": "Осмотрите и протестируйте до подтверждения.",
             "s4_t": "Подтверждаете — деньги продавцу", "s4_d": "Всё ок → отправляем оплату продавцу."
         ],
         "kk": [
-            "buy_safe_sub": "Тауарды тексергенше ақша бізде",
+            "buy_safe_sub": "Тауарды алғанша ақша Kliko-да тұрады",
             "order_safe": "Қауіпсіз тапсырыс беру",
             "edit": "Өңдеу", "promote": "Жарнамалау",
-            "co_title": "Қауіпсіз мәміле", "co_sub": "Ақша кепілгердің қорғауында",
-            "co_price": "Тауар бағасы", "co_fee_s": "Кепілгер комиссиясы {pct}%", "co_service": "Қызмет алымы",
-            "co_total": "Барлығы", "co_pay": "Төлеу және бұғаттау",
+            "co_title": "Қауіпсіз мәміле", "co_sub": "Тауарды алғанша ақша Kliko-да тұрады",
+            "co_price": "Тауар бағасы", "co_fee_s": "Сервистік алым {pct}%", "co_service": "Банк алымы",
+            "co_total": "Барлығы", "co_pay": "Қауіпсіз төлеу",
             "co_why": "Бұл ақша не үшін",
-            "co_why_1_t": "Кепілгер комиссиясы",
+            "co_why_1_t": "Сервистік алым",
             "co_why_1": "ақша сатушыда емес, бізде. Ол сіз растағаннан кейін алады. Бірдеңе дұрыс болмаса — дау және қайтару.",
-            "co_why_2_t": "Қызмет алымы",
+            "co_why_2_t": "Банк алымы",
             "co_why_2": "банк аударым үшін алатын сома. Біз одан табыс таппаймыз.",
             "co_price_dep": "Кепілақы (брондау)",
-            "co_note_dep": "Толық баға емес, тек брондау кепілақысы бұғатталады. Қалғаны — кездесу мен рәсімдеу кезінде.",
+            "co_note_dep": "Kliko-да толық баға емес, тек брондау кепілақысы тұрады. Қалғаны — кездесу мен рәсімдеу кезінде.",
             "co_price_rent": "Жалға алу кепілі",
-            "co_note_rent": "Тек кепіл бұғатталады. Затқа бәрі дұрыс болса, жалдан кейін ол өзіңізге қайтады.",
+            "co_note_rent": "Kliko-да тек кепіл тұрады. Затқа бәрі дұрыс болса, жалдан кейін ол өзіңізге қайтады.",
             "steps_h": "Мәміле қалай өтеді",
             "steps_g": "Алу кезінде бірдеңе дұрыс болмаса — дау ашасыз, ақшаны қайтарамыз.",
-            "s1_t": "Төлем бұғатталады", "s1_d": "Ақшаны сатушы емес, кепілгер ұстайды.",
+            "s1_t": "Төлейсіз — ақша Kliko-да", "s1_d": "Ақша сатушыда емес, Kliko-да.",
             "s2_t": "Сатушы тауарды береді", "s2_d": "Жеке немесе жеткізу/курьермен.",
             "s3_t": "Сіз алып, тексересіз", "s3_d": "Растамас бұрын қарап, сынап көріңіз.",
             "s4_t": "Растайсыз — ақша сатушыға", "s4_d": "Бәрі жақсы → төлемді сатушыға жібереміз."
         ],
         "en": [
-            "buy_safe_sub": "We hold the money until you check the item",
+            "buy_safe_sub": "Kliko holds the money until you receive the item",
             "order_safe": "Order safely",
             "edit": "Edit", "promote": "Promote",
-            "co_title": "Safe deal", "co_sub": "Your money is protected by escrow",
-            "co_price": "Item price", "co_fee_s": "Escrow fee {pct}%", "co_service": "Service fee",
-            "co_total": "Total", "co_pay": "Pay and freeze",
+            "co_title": "Safe deal", "co_sub": "Kliko holds the money until you receive the item",
+            "co_price": "Item price", "co_fee_s": "Service fee {pct}%", "co_service": "Bank fee",
+            "co_total": "Total", "co_pay": "Pay safely",
             "co_why": "What this money is for",
-            "co_why_1_t": "Escrow fee",
+            "co_why_1_t": "Service fee",
             "co_why_1": "the money stays with us, not the seller. They get it after you confirm. Something wrong — dispute and refund.",
-            "co_why_2_t": "Service fee",
+            "co_why_2_t": "Bank fee",
             "co_why_2": "what the bank charges for the transfer. We don't earn on it.",
             "co_price_dep": "Deposit (reservation)",
-            "co_note_dep": "Only the reservation deposit is frozen, not the full price. The rest is paid when you meet and sign.",
+            "co_note_dep": "Kliko holds only the reservation deposit, not the full price. The rest is paid when you meet and sign.",
             "co_price_rent": "Rental deposit",
-            "co_note_rent": "Only the deposit is frozen. It comes back to you after the rental if the item is fine.",
+            "co_note_rent": "Kliko holds only the deposit. It comes back to you after the rental if the item is fine.",
             "steps_h": "How the deal works",
             "steps_g": "Something wrong on delivery — open a dispute and get your money back.",
-            "s1_t": "Payment is frozen", "s1_d": "Escrow holds the money, not the seller.",
+            "s1_t": "You pay — Kliko holds the money", "s1_d": "Kliko holds the money, not the seller.",
             "s2_t": "Seller hands over the item", "s2_d": "In person or by delivery/courier.",
             "s3_t": "You receive and inspect", "s3_d": "Check and test it before confirming.",
             "s4_t": "You confirm — seller gets paid", "s4_d": "All good → we release payment to the seller."
         ],
         "ar": [
-            "buy_safe_sub": "نحتفظ بالمال حتى تفحص السلعة",
+            "buy_safe_sub": "يحتفظ Kliko بالمال حتى تستلم السلعة",
             "order_safe": "اطلب بأمان",
             "edit": "تعديل", "promote": "ترويج",
-            "co_title": "صفقة آمنة", "co_sub": "أموالك محمية لدى الضمان",
-            "co_price": "سعر السلعة", "co_fee_s": "عمولة الضمان {pct}%", "co_service": "رسوم الخدمة",
-            "co_total": "الإجمالي", "co_pay": "ادفع واحجز المبلغ",
+            "co_title": "صفقة آمنة", "co_sub": "يحتفظ Kliko بالمال حتى تستلم السلعة",
+            "co_price": "سعر السلعة", "co_fee_s": "رسوم الخدمة {pct}%", "co_service": "رسوم البنك",
+            "co_total": "الإجمالي", "co_pay": "ادفع بأمان",
             "co_why": "مقابل ماذا هذا المبلغ",
-            "co_why_1_t": "عمولة الضمان",
+            "co_why_1_t": "رسوم الخدمة",
             "co_why_1": "المال لدينا وليس لدى البائع. يحصل عليه بعد تأكيدك. إن حدث خطأ — نزاع واسترداد.",
-            "co_why_2_t": "رسوم الخدمة",
+            "co_why_2_t": "رسوم البنك",
             "co_why_2": "ما يأخذه البنك مقابل التحويل. لا نربح منه.",
             "co_price_dep": "عربون (حجز)",
-            "co_note_dep": "يُجمّد عربون الحجز فقط وليس السعر كاملًا. الباقي عند اللقاء والتوثيق.",
+            "co_note_dep": "يحتفظ Kliko بعربون الحجز فقط وليس بالسعر كاملًا. الباقي عند اللقاء والتوثيق.",
             "co_price_rent": "تأمين الإيجار",
-            "co_note_rent": "يُجمّد التأمين فقط. يعود إليك بعد الإيجار إن كانت السلعة سليمة.",
+            "co_note_rent": "يحتفظ Kliko بالتأمين فقط. يعود إليك بعد الإيجار إن كانت السلعة سليمة.",
             "steps_h": "كيف تتم الصفقة",
             "steps_g": "حدث خطأ عند الاستلام — افتح نزاعًا واسترد أموالك.",
-            "s1_t": "يُجمّد الدفع", "s1_d": "الضمان يحتفظ بالمال وليس البائع.",
+            "s1_t": "تدفع — المال لدى Kliko", "s1_d": "المال لدى Kliko وليس لدى البائع.",
             "s2_t": "يسلّم البائع السلعة", "s2_d": "شخصيًا أو عبر التوصيل/المندوب.",
             "s3_t": "تستلم وتفحص", "s3_d": "افحصها وجرّبها قبل التأكيد.",
             "s4_t": "تؤكد — يُدفع للبائع", "s4_d": "كل شيء جيد → نحوّل الدفع للبائع."

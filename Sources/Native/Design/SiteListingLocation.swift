@@ -60,7 +60,7 @@ enum ListingLocationText {
             "addr_detected_call": "Адрес определён — можно вызывать",
             "geo_fail": "Не удалось получить геолокацию (разрешите доступ)",
             "courier_safe_t": "Купить безопасно с доставкой",
-            "courier_safe_s": "Деньги замораживаются у гаранта, адрес уходит в сделку",
+            "courier_safe_s": "Деньги у Kliko, пока вы не получите товар; адрес уходит в сделку",
             "call_courier_yandex": "Вызвать курьера Яндекс Go",
             "courier_ya_warn": "Вне защиты сделки: заказ и оплата — на стороне Яндекса, мы его не отслеживаем",
             "agree_with_seller": "Согласовать с продавцом",
@@ -111,7 +111,7 @@ enum ListingLocationText {
             "addr_detected_call": "Мекенжай анықталды — шақыруға болады",
             "geo_fail": "Геолокация алынбады (рұқсат беріңіз)",
             "courier_safe_t": "Жеткізумен қауіпсіз сатып алу",
-            "courier_safe_s": "Ақша кепілгерде тоқтатылады, мекенжай мәмілеге кетеді",
+            "courier_safe_s": "Тауарды алғанша ақша Kliko-да; мекенжай мәмілеге кетеді",
             "call_courier_yandex": "Яндекс Go курьерін шақыру",
             "courier_ya_warn": "Мәміле қорғауынан тыс: тапсырыс пен төлем — Яндекс жағында, біз оны бақыламаймыз",
             "agree_with_seller": "Сатушымен келісу",
@@ -162,7 +162,7 @@ enum ListingLocationText {
             "addr_detected_call": "Address found — you can call a courier",
             "geo_fail": "Couldn't get your location (allow access)",
             "courier_safe_t": "Buy safely with delivery",
-            "courier_safe_s": "The money is held by the escrow, the address goes into the deal",
+            "courier_safe_s": "Kliko holds the money until you receive the item; the address goes into the deal",
             "call_courier_yandex": "Call a Yandex Go courier",
             "courier_ya_warn": "Not covered by deal protection: the order and payment are handled by Yandex, we don't track it",
             "agree_with_seller": "Arrange with the seller",
@@ -213,7 +213,7 @@ enum ListingLocationText {
             "addr_detected_call": "تم تحديد العنوان — يمكنك الطلب",
             "geo_fail": "تعذّر الحصول على الموقع (اسمح بالوصول)",
             "courier_safe_t": "شراء آمن مع التوصيل",
-            "courier_safe_s": "يُحجز المال لدى الضامن، ويُضاف العنوان إلى الصفقة",
+            "courier_safe_s": "يحتفظ Kliko بالمال حتى تستلم السلعة، ويُضاف العنوان إلى الصفقة",
             "call_courier_yandex": "اطلب مندوب Yandex Go",
             "courier_ya_warn": "خارج حماية الصفقة: الطلب والدفع لدى Yandex، ونحن لا نتابعه",
             "agree_with_seller": "الاتفاق مع البائع",
@@ -1011,7 +1011,8 @@ struct ЛистКурьераСайта: View {
                 if let моя {
                     КотировкаДоставкиСайта(товар: товар, точка: моя)
                 }
-                if let купитьБезопасно {
+                /* Гарант на паузе — без «Купить безопасно с доставкой» и его обещания. */
+                if let купитьБезопасно, !ПаузаГаранта.наПаузеСейчас {
                     Button { купитьБезопасно() } label: {
                         Label(тМеста("courier_safe_t"), systemImage: "checkmark.shield.fill")
                             .font(.system(size: 15, weight: .heavy))

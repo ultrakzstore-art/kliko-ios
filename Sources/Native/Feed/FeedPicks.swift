@@ -38,6 +38,8 @@ struct КарусельПодсказок: View {
 
     @ObservedObject private var гео = ГеоЛенты.shared
     @ObservedObject private var сохранённые = SavedSearchStore.shared
+    /// Гарант на паузе — слайда «Безопасная сделка» нет.
+    @ObservedObject private var паузаГаранта = ПаузаГаранта.shared
     @Environment(\.accessibilityReduceMotion) private var меньшеДвижения
     @Environment(\.colorScheme) private var схема
     @State private var скрытые: Set<String> = КарусельПодсказок.прочитатьСкрытые()
@@ -58,13 +60,13 @@ struct КарусельПодсказок: View {
     private var слайды: [String] {
         var итог: [String] = []
         if !скрытые.contains("near") { итог.append("near") }
-        if !скрытые.contains("trust") { итог.append("trust") }
+        if !скрытые.contains("trust") && паузаГаранта.работает { итог.append("trust") }
         if Self.вашПоискНаТелефоне { итог.append("sub") }
         return итог
     }
 
     var body: some View {
-        if !(скрытые.contains("near") && скрытые.contains("trust")) {
+        if !(скрытые.contains("near") && (скрытые.contains("trust") || паузаГаранта.наПаузе)) {
             VStack(spacing: 6) {             // .mk-vdots: margin 6 0 14
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 12) {

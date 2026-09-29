@@ -843,12 +843,15 @@ struct ПостерОбъявленияСайта: View {
                 .font(.system(size: 48, weight: .black))
                 .foregroundStyle(зелёный)
             Spacer(minLength: 16)
-            Text(т("poster_guarantee"))
-                .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(зелёный)
-                .padding(.horizontal, 22)
-                .frame(height: 48)
-                .background(Color(uiColor: Theme.hex(0xE9F5EE)), in: Capsule())
+            /* Гарант на паузе — без плашки «Безопасная сделка». */
+            if !ПаузаГаранта.наПаузеСейчас {
+                Text(т("poster_guarantee"))
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(зелёный)
+                    .padding(.horizontal, 22)
+                    .frame(height: 48)
+                    .background(Color(uiColor: Theme.hex(0xE9F5EE)), in: Capsule())
+            }
         }
     }
 
@@ -884,10 +887,15 @@ struct ПостерОбъявленияСайта: View {
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
+    /// Пункты внизу постера; «Оплата защищена (Безопасная сделка)» — только пока гарант не на паузе.
+    private var пунктыПостера: [String] {
+        ПаузаГаранта.наПаузеСейчас ? ["poster_b2", "poster_b3"] : ["poster_b1", "poster_b2", "poster_b3"]
+    }
+
     private var низ: some View {
         HStack(alignment: .bottom, spacing: 24) {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(["poster_b1", "poster_b2", "poster_b3"], id: \.self) { ключ in
+                ForEach(пунктыПостера, id: \.self) { ключ in
                     HStack(spacing: 14) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 16, weight: .black))
@@ -983,8 +991,8 @@ enum SiteShareText {
             "save": "Сохранить", "share": "Поделиться", "saved": "Картинка сохранена",
             "save_denied": "Нет доступа к Фото — разрешите в Настройках",
             "qr_label": "QR-код ссылки на объявление", "qr_hint": "Наведите камеру телефона — откроется объявление",
-            "poster_item": "Объявление", "poster_guarantee": "Гарант-сделка",
-            "poster_b1": "Оплата защищена (гарант-сделка)", "poster_b2": "Проверенные продавцы",
+            "poster_item": "Объявление", "poster_guarantee": "Безопасная сделка",
+            "poster_b1": "Оплата защищена (Безопасная сделка)", "poster_b2": "Проверенные продавцы",
             "poster_b3": "Доставка по Казахстану", "poster_qr": "Наведи камеру на QR →",
             "poster_open": "Открыть на Kliko.kz  →",
             "svc_label": "УСЛУГА · KLIKO.KZ", "svc_cta": "Записаться на Kliko.kz  →", "svc_verified": "✓ Проверен",
@@ -999,8 +1007,8 @@ enum SiteShareText {
             "save": "Сақтау", "share": "Бөлісу", "saved": "Сурет сақталды",
             "save_denied": "Фотоға рұқсат жоқ — Баптауларда рұқсат етіңіз",
             "qr_label": "Хабарландыру сілтемесінің QR-коды", "qr_hint": "Телефон камерасын бағыттаңыз — хабарландыру ашылады",
-            "poster_item": "Хабарландыру", "poster_guarantee": "Кепіл-мәміле",
-            "poster_b1": "Төлем қорғалған (кепіл-мәміле)", "poster_b2": "Тексерілген сатушылар",
+            "poster_item": "Хабарландыру", "poster_guarantee": "Қауіпсіз мәміле",
+            "poster_b1": "Төлем қорғалған (Қауіпсіз мәміле)", "poster_b2": "Тексерілген сатушылар",
             "poster_b3": "Қазақстан бойынша жеткізу", "poster_qr": "Камераны QR-ға бағытта →",
             "poster_open": "Kliko.kz-те ашу  →",
             "svc_label": "ҚЫЗМЕТ · KLIKO.KZ", "svc_cta": "Kliko.kz-те жазылу  →", "svc_verified": "✓ Тексерілген",
@@ -1015,8 +1023,8 @@ enum SiteShareText {
             "save": "Save", "share": "Share", "saved": "Image saved",
             "save_denied": "No access to Photos — allow it in Settings",
             "qr_label": "QR code of the listing link", "qr_hint": "Point a phone camera at it to open the listing",
-            "poster_item": "Listing", "poster_guarantee": "Escrow deal",
-            "poster_b1": "Payment protected (escrow deal)", "poster_b2": "Verified sellers",
+            "poster_item": "Listing", "poster_guarantee": "Safe deal",
+            "poster_b1": "Payment protected (Safe deal)", "poster_b2": "Verified sellers",
             "poster_b3": "Delivery across Kazakhstan", "poster_qr": "Point your camera at the QR →",
             "poster_open": "Open on Kliko.kz  →",
             "svc_label": "SERVICE · KLIKO.KZ", "svc_cta": "Book on Kliko.kz  →", "svc_verified": "✓ Verified",
@@ -1031,8 +1039,8 @@ enum SiteShareText {
             "save": "حفظ", "share": "مشاركة", "saved": "تم حفظ الصورة",
             "save_denied": "لا يوجد وصول إلى الصور — اسمح به في الإعدادات",
             "qr_label": "رمز QR لرابط الإعلان", "qr_hint": "وجّه كاميرا الهاتف لفتح الإعلان",
-            "poster_item": "إعلان", "poster_guarantee": "صفقة مضمونة",
-            "poster_b1": "الدفع محمي (صفقة مضمونة)", "poster_b2": "بائعون موثّقون",
+            "poster_item": "إعلان", "poster_guarantee": "صفقة آمنة",
+            "poster_b1": "الدفع محمي (صفقة آمنة)", "poster_b2": "بائعون موثّقون",
             "poster_b3": "التوصيل في جميع أنحاء كازاخستان", "poster_qr": "وجّه الكاميرا إلى رمز QR ←",
             "poster_open": "افتح على Kliko.kz  ←",
             "svc_label": "خدمة · KLIKO.KZ", "svc_cta": "احجز على Kliko.kz  ←", "svc_verified": "✓ موثّق",
