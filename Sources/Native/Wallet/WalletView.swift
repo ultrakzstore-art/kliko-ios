@@ -382,16 +382,21 @@ struct РазделКошелька: View {
     }
 
     var body: some View {
+        /* Карточка — своей секцией: иначе строка «История операций» срасталась с ней (прямые нижние углы). */
         Section {
             КарточкаКошелька(кошелёк: кошелёк, пополнить: { нажато(.пополнить) }, вывести: { нажато(.вывести) })
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             if let выплата = кошелёк.сведения?.выплаты.first {
                 /* Баннер под шапкой (#payout-ready-hero): «Указать карту» — на экране кошелька или сайте. */
                 БаннерВыплаты(выплата: выплата, открываем: false, указать: { нажато(.показать) }, подШапкой: true)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0))
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
+        }
+        Section {
             строка(КошелёкText.т("history"), значок: "clock.arrow.circlepath", цель: .кошелёк)
             if сессия.баллыВключены {
                 строка(КошелёкText.т("points"), значок: "star.circle", цель: .баллы)

@@ -193,6 +193,8 @@ struct CabinetView: View {
     private var основа: some View {
         список
         .listStyle(.insetGrouped)
+        /* Ровный зазор 16 между шапкой, кошельком, «Историей операций» и разделами (владелец 29.09.2026). */
+        .listSectionSpacing(16)
         .navigationTitle(CabinetText.т("title"))
         .navigationBarTitleDisplayMode(.inline)
         .modifier(КабинетКакНаСайте(заголовок: CabinetText.т("title")))

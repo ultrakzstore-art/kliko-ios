@@ -44,8 +44,9 @@ struct КарточкаКошелька: View {
     private static let тьма = Color(red: 6 / 255, green: 10 / 255, blue: 14 / 255)
 
     var body: some View {
-        /* До 420pt (любой iPhone, кроме самых широких) пилюля «Пополнить | Вывести» — своей строкой под подписью. */
-        VStack(alignment: .leading, spacing: 2) {
+        /* Владелец 29.09.2026 («сверху резка»): подпись с глазом, баланс, строка под ним, внизу — пилюля
+        «Пополнить | Вывести» во всю ширину карточки. */
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "creditcard")
@@ -70,17 +71,17 @@ struct КарточкаКошелька: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel(т(кошелёк.скрыто ? "a11y_show" : "a11y_hide"))
             }
-            кнопки
-                .padding(.top, 8)
             баланс
-                .padding(.top, 4)
+                .padding(.top, 10)
             Text(строкаПод)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(Color.white.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
+            кнопки
+                .padding(.top, 16)
         }
-        .padding(20)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             ZStack {
