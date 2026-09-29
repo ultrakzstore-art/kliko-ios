@@ -700,6 +700,13 @@ struct CabinetView: View {
 
     private var разделОПриложении: some View {
         Section {
+            /* Упрощение для новичка: язык приложения — здесь, а не пилюлей в шапке главной; подвал сайта — «О компании». */
+            СтрокаЯзыкаПриложения()
+            NavigationLink {
+                ЭкранОКомпании(открыть: открыть)
+            } label: {
+                ПодписьСтрокиКабинета(HomeText.т("about_co"), значок: "building.2")
+            }
             LabeledContent(CabinetText.т("version"), value: Self.изПлиста("CFBundleShortVersionString"))
             LabeledContent(CabinetText.т("build"), value: Self.изПлиста("CFBundleVersion"))
             /* Этап 16: тот же список, что лист после обновления, — и для тех, кто его смахнул или поставил приложение
