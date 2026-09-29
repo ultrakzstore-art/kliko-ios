@@ -163,6 +163,11 @@ struct СделкаКратко: Identifiable, Equatable {
     var услуга: Bool = false
     var аренда: Bool = false
     var имяПокупателя: String = ""
+    /// Сделка закончилась — завершена, отменена, возвращена или истекла: в списке ниже незакрытых.
+    var закрыта: Bool {
+        ["done", "resolved", "released", "completed", "closed", "cancelled", "canceled", "expired", "refunded", "returned"]
+            .contains(статус.lowercased())
+    }
     var имяПродавца: String = ""
 
     init?(_ j: [String: Any]) {

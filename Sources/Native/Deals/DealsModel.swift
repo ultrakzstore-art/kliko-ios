@@ -114,10 +114,12 @@ final class СделкиМодель: ObservableObject {
                 return
             }
             let сырые: [Any] = (j["deals"] as? [Any]) ?? []
-            сделки = сырые.compactMap { з -> СделкаКратко? in
+            let все = сырые.compactMap { з -> СделкаКратко? in
                 guard let d = з as? [String: Any] else { return nil }
                 return СделкаКратко(d)
             }
+            /* Незакрытые — всегда сверху, завершённые и отменённые — ниже; внутри групп порядок сервера (новые первыми). */
+            сделки = все.filter { !$0.закрыта } + все.filter { $0.закрыта }
             загрузка = .готово
         } catch {
             guard моё == поколение else { return }

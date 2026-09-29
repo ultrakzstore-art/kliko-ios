@@ -59,16 +59,21 @@ struct ОткрытаяСделкаEDS: Identifiable, Equatable {
 /// Блок над сделками гаранта; пусто — ничего (и без отступа в списке).
 struct СекцияСделокEDS: View {
     let роль: РольСделок
+    /// true — только закончившиеся (идут в конце списка), false — только незакрытые (сверху).
+    let закрытые: Bool
     let открыть: (String) -> Void
     @ObservedObject private var список = СписокСделокEDS.shared
 
-    init(роль: РольСделок, открыть: @escaping (String) -> Void) {
+    init(роль: РольСделок, закрытые: Bool = false, открыть: @escaping (String) -> Void) {
         self.роль = роль
+        self.закрытые = закрытые
         self.открыть = открыть
     }
 
+    private var свои: [КраткоEDS] { список.сделки.filter { $0.закрыта == закрытые } }
+
     var body: some View {
-        if список.роль == роль && !список.сделки.isEmpty {
+        if список.роль == роль && !свои.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "signature")
@@ -80,7 +85,7 @@ struct СекцияСделокEDS: View {
                         .foregroundStyle(Theme.текст)
                 }
                 .accessibilityAddTraits(.isHeader)
-                ForEach(список.сделки) { сделка in
+                ForEach(свои) { сделка in
                     Button {
                         открыть(сделка.id)
                     } label: {

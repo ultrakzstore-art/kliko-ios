@@ -419,6 +419,9 @@ struct КраткоEDS: Identifiable, Equatable {
     var цена = 0
     var продавец = false
 
+    /// Сделка закончилась (завершена, отменена, истекла) — в списке ниже незакрытых.
+    var закрыта: Bool { ["completed", "cancelled", "canceled", "expired"].contains(статус.lowercased()) }
+
     init?(_ j: [String: Any]) {
         typealias Р = РазборEDS
         let номер = Р.строка(j["id"])
