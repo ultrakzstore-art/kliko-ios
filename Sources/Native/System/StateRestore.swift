@@ -642,8 +642,17 @@ private struct МестоВкладок: ViewModifier {
         let выбранная = $вкладка
         Task { @MainActor in
             if !чаты.загружено { await чаты.загрузить() }
-            guard выбранная.wrappedValue == .сообщения, путь.wrappedValue.isEmpty,
-                  let диалог = чаты.диалоги.first(where: { $0.id == номер }) else { return }
+            guard выбранная.wrappedValue == .сообщения, путь.wrappedValue.isEmpty else { return }
+            /* Этап 45: список — строки единого инбокса (их читает чаты.загрузить), диалогов dm.php в чаты.диалоги нет.
+               Переписка — той же целью, что нажатие строки (переписка, лид). */
+            if Config.нативныеСообщенияКабинета {
+                guard let строка = ИнбоксМодель.shared.строки.first(where: { $0.номер == номер && !$0.скрыт }) else {
+                    return
+                }
+                путь.wrappedValue.append(строка.цель)
+                return
+            }
+            guard let диалог = чаты.диалоги.first(where: { $0.id == номер }) else { return }
             путь.wrappedValue.append(ЧатЦель.диалог(диалог))
         }
     }

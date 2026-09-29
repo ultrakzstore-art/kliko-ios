@@ -116,6 +116,12 @@ final class NativeRouter: ObservableObject {
             }
             return своя
         }
+        /* Пуш и колокольчик «Выплата готова — осталось указать карту в кошельке» (inc/payout.php: /cabinet.php#wallet) —
+           экран кошелька, а не корень «Кабинета». */
+        if части.fragment == "wallet", АдресаКабинета.кабинет(части.path), (части.queryItems ?? []).isEmpty,
+           доступна(.кошелёк) {
+            return .кошелёк
+        }
         guard (части.fragment ?? "").isEmpty else { return nil }
 
         let параметры = (части.queryItems ?? []).filter { !$0.name.lowercased().hasPrefix("utm_") }

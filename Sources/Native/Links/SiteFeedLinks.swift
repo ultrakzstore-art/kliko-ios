@@ -48,10 +48,15 @@ enum СсылкиЛенты {
             let v = все.first(where: { $0.name == имя })?.value ?? ""
             return v.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let seo = разделSEO(путь)
+        let страницаКаталога = страницаSEO(путь)
+        let seo = страницаКаталога?.раздел
+        let намерение = страницаКаталога?.намерение ?? ""
+        /* /q/<запрос>/ — SEO-страница поиска (MK_SEO.q перекрывает q адреса). */
+        let запросSEO = seo == nil ? запросПоискаSEO(путь) : nil
         let работа = путь.range(of: путьРаботы, options: .regularExpression) != nil
-        let лента = seo == nil && !работа && путь.range(of: путьЛенты, options: .regularExpression) != nil
-        guard seo != nil || работа || лента else { return nil }
+        let лента = seo == nil && запросSEO == nil && !работа
+            && путь.range(of: путьЛенты, options: .regularExpression) != nil
+        guard seo != nil || запросSEO != nil || работа || лента else { return nil }
 
         let товар = значение("item")
         if лента {
@@ -70,17 +75,21 @@ enum СсылкиЛенты {
         }
 
         /* mkSt.q: slice(0, 80).toLowerCase(). */
-        let текст = String(значение("q").prefix(80)).lowercased()
+        let текст = String((запросSEO ?? значение("q")).prefix(80)).lowercased()
         /* MK_SEO.cat перекрывает cat адреса; набор ?vs= (MK_VSETS) — раздел выше обоих (_mhUrlSync: cat только без vs). */
         var раздел = seo ?? значение("cat")
         if значение("vs") == "goods" { раздел = "goods" }
 
-        if работа || раздел.lowercased() == "jobs" {
+        /* /rabota/<раздел>/ — вакансии (SEO_INTENTS: sections jobs). */
+        if работа || намерение == "rabota" || раздел.lowercased() == "jobs" {
             return .вакансии(номер: номерВакансии(части.fragment), запрос: текст)
         }
         if раздел.range(of: "^[A-Za-z0-9_-]{1,60}$", options: .regularExpression) == nil { раздел = "" }
 
-        let состояние = значение("cond")
+        /* MK_SEO.cond: /kupit-bu/ — б/у, /novye/ — новые (перекрывают cond адреса). */
+        var состояние = значение("cond")
+        if намерение == "kupit-bu" { состояние = "used" }
+        if намерение == "novye" { состояние = "new" }
         let искомое = ИскомоеЛенты(текст: текст, раздел: раздел, ценаОт: целое(значение("pmin")),
                                    ценаДо: целое(значение("pmax")), состояние: состояние)
         var добавка = ДобавкаЛенты()
@@ -97,6 +106,8 @@ enum СсылкиЛенты {
         добавка.модель = String(значение("models").prefix(80))
         добавка.коробка = список(значение("gear"))
         добавка.топливо = список(значение("fuel"))
+        /* MK_SEO.rent: /arenda/<раздел>/ — режим «Аренда» ленты с этим разделом. */
+        добавка.аренда = намерение == "arenda"
         return .найти(искомое, добавка: добавка.пустая ? nil : добавка)
     }
 
@@ -124,16 +135,45 @@ enum СсылкиЛенты {
         return ВитринаПродавцаAPI.годный(номер) ? номер : nil
     }
 
-    /// Раздел SEO-страницы: /kupit/<раздел>/ и /uslugi/<раздел>/ (с /kz/<язык> впереди или без); без раздела — "" (вся
-    /// лента); не SEO-страница — nil. Хвост после раздела (город, марка) не разбираем: его значения сайт не показывает.
+    /// Раздел SEO-страницы каталога (/kupit/<раздел>/, /uslugi/<раздел>/ и прочие намерения — страницаSEO); без раздела —
+    /// "" (вся лента); не SEO-страница — nil.
     static func разделSEO(_ путь: String) -> String? {
+        страницаSEO(путь)?.раздел
+    }
+
+    /// Намерения каталога сайта (SEO_INTENTS, inc/seo_catalog.php; правило .htaccess): kupit, kupit-bu (б/у), novye
+    /// (новые), arenda (аренда), uslugi (услуги), rabota (вакансии).
+    private static let намеренияSEO: Set<String> = ["kupit", "kupit-bu", "novye", "arenda", "uslugi", "rabota"]
+
+    /// Путь без языка впереди (/kz/<язык>/…) — сегментами.
+    private static func сегментыБезЯзыка(_ путь: String) -> [String] {
         var сегменты = путь.split(separator: "/").map(String.init)
         func язык(_ s: String) -> Bool { s.count == 2 && s.allSatisfy { $0.isASCII && $0.isLowercase } }
         if сегменты.count >= 2, язык(сегменты[0]), язык(сегменты[1]) { сегменты.removeFirst(2) }
-        guard let первый = сегменты.first, первый == "kupit" || первый == "uslugi" else { return nil }
-        guard сегменты.count >= 2 else { return "" }
+        return сегменты
+    }
+
+    /// SEO-страница каталога: /<намерение>/<раздел>/[<город>/[<район>/]] с /kz/<язык> впереди или без. Раздел негодный
+    /// или его нет — "" (вся лента). Город и район не разбираем: имени города по его адресу у приложения нет.
+    static func страницаSEO(_ путь: String) -> (намерение: String, раздел: String)? {
+        let сегменты = сегментыБезЯзыка(путь)
+        guard let первый = сегменты.first?.lowercased(), намеренияSEO.contains(первый) else { return nil }
+        guard сегменты.count >= 2 else { return (первый, "") }
         let раздел = сегменты[1].lowercased()
-        return раздел.range(of: "^[a-z0-9-]{1,60}$", options: .regularExpression) != nil ? раздел : ""
+        return (первый, раздел.range(of: "^[a-z0-9-]{1,60}$", options: .regularExpression) != nil ? раздел : "")
+    }
+
+    /// /q/<запрос>/ — SEO-страница поиска (seo_q_route сайта): «-», «_», «+» — пробелы, всё, кроме букв и цифр, — прочь,
+    /// строчными. Не она или запрос пустой — nil.
+    static func запросПоискаSEO(_ путь: String) -> String? {
+        let сегменты = сегментыБезЯзыка(путь)
+        guard сегменты.count == 2, сегменты[0] == "q" else { return nil }
+        let сырой = сегменты[1].removingPercentEncoding ?? сегменты[1]
+        let пробелы = сырой.replacingOccurrences(of: "[-_+]", with: " ", options: .regularExpression)
+        let буквы = пробелы.replacingOccurrences(of: "[^\\p{L}\\p{N} ]+", with: " ", options: .regularExpression)
+        let запрос = буквы.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        return запрос.isEmpty ? nil : запрос
     }
 
     /// #vac=<номер> — карточка вакансии; иначе nil (список).
@@ -186,12 +226,14 @@ struct ДобавкаЛенты: Hashable, Sendable {
     var коробка: [String] = []
     /// fuel — топливо (mkSt.fuel).
     var топливо: [String] = []
+    /// Режим «Аренда» ленты (MK_SEO.rent страницы /arenda/<раздел>/).
+    var аренда = false
 
     var пустая: Bool {
         let безМеста = город.isEmpty && регион.isEmpty
         let безФильтров = сортировка == nil && !проверенные && !сФото && годОт == nil && годДо == nil
         let безАвто = марки.isEmpty && модель.isEmpty && коробка.isEmpty && топливо.isEmpty
-        return безМеста && безФильтров && безАвто
+        return безМеста && безФильтров && безАвто && !аренда
     }
 
     /// Фильтры ленты с добавкой поверх: цену и состояние уже поставило искомое, остальное — отсюда.
