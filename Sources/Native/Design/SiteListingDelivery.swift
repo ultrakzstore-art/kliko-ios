@@ -21,11 +21,12 @@ import UIKit
      в аренду, если вы не в том же городе и регион не закрыт. Раскрывается и один раз грузит транспортные компании:
      GET chat.php?action=logistics_partners&pid=<id>[&to_city=<ваш город>]. Компания, выбранная продавцом
      (ship_carrier), — первой, с меткой «выбор продавца». Цена «от N ₸» и «+N ₸/кг» — только сведения.
-     «Оформить с доставкой» / «Собрать ставки от компаний» ведут в сделку с деньгами — только при Config.деньгиСделок
-     (сейчас false), и тогда открывают страницу объявления сайта.
+     «Оформить с доставкой» (без аукциона) — сделка с деньгами, только при Config.деньгиСделок и кнопке гаранта у
+     объявления: окно «Безопасная сделка» тем же путём, что «Купить безопасно с доставкой» (SiteListingLocation.swift).
+     «Собрать ставки от компаний» — mkLogiAuction: POST chat.php?action=logistics_create {pid}, итог строкой под кнопкой.
    · Расчёт доставки (mkShipQuote, GET api/ship_quote.php?item=&lat=&lon=) — в листе курьера, когда ваша точка
      определена: «Доставка ~ N ₸», кто платит и срок. Только сведения — оплаты здесь нет. У сайта offers — объект, его
-     первый ключ; JSONSerialization порядка ключей не хранит, поэтому здесь берётся самое дешёвое предложение.
+     первый ключ; JSONSerialization порядка ключей не хранит, поэтому порядок берётся из текста ответа.
  */
 
 private func тДост(_ ключ: String) -> String { ListingLocationText.т(ключ) }
@@ -190,6 +191,13 @@ enum ДоставкаТКAPI {
 
     @MainActor
     private static func получить(_ путь: String, _ пункты: [URLQueryItem]) async -> [String: Any]? {
+        await получитьСТекстом(путь, пункты)?.json
+    }
+
+    /// То же, но и текст ответа: по нему восстанавливается порядок ключей объекта (JSONSerialization его не хранит).
+    @MainActor
+    private static func получитьСТекстом(_ путь: String, _ пункты: [URLQueryItem]) async
+        -> (json: [String: Any], текст: String)? {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent(путь), resolvingAgainstBaseURL: false)
         ч?.queryItems = пункты
         guard let адрес = ч?.url else { return nil }
@@ -198,8 +206,25 @@ enum ДоставкаТКAPI {
         for (имя, значение) in await SiteSession.куки() {
             запрос.setValue(значение, forHTTPHeaderField: имя)
         }
-        guard let результат = try? await сессия.data(for: запрос) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: результат.0)) as? [String: Any]
+        guard let результат = try? await сессия.data(for: запрос),
+              let j = (try? JSONSerialization.jsonObject(with: результат.0)) as? [String: Any] else { return nil }
+        return (j, String(decoding: результат.0, as: UTF8.self))
+    }
+
+    /// Ключи объекта offers в порядке ответа сервера: по месту «"ключ"» в тексте после «"offers"». Не нашёлся — в конец.
+    static func вПорядкеОтвета(_ ключи: [String], текст: String) -> [String] {
+        let начало = текст.range(of: "\"offers\"")?.upperBound ?? текст.startIndex
+        let хвост = текст[начало...]
+        func место(_ ключ: String) -> Int {
+            guard let r = хвост.range(of: "\"" + ключ + "\"") else { return Int.max }
+            return хвост.distance(from: хвост.startIndex, to: r.lowerBound)
+        }
+        let места = Dictionary(uniqueKeysWithValues: ключи.map { ($0, место($0)) })
+        return ключи.sorted { а, б in
+            let ма = места[а] ?? Int.max
+            let мб = места[б] ?? Int.max
+            return ма == мб ? а < б : ма < мб
+        }
     }
 
     /// mkCourierLoadLogi: компании для объявления; ship_carrier продавца — первой.
@@ -242,20 +267,14 @@ enum ДоставкаТКAPI {
         let пункты = [URLQueryItem(name: "item", value: объявление),
                       URLQueryItem(name: "lat", value: МаршрутОбъявления.число(точка.latitude)),
                       URLQueryItem(name: "lon", value: МаршрутОбъявления.число(точка.longitude))]
-        guard let j = await получить("api/ship_quote.php", пункты), да(j["ok"]) else { return nil }
+        guard let ответ = await получитьСТекстом("api/ship_quote.php", пункты), да(ответ.json["ok"]) else { return nil }
+        let j = ответ.json
         if строка(j["mode"]) == "carriers" {
+            /* Как у сайта (for..in и break): первое предложение ответа. */
             let предложения = (j["offers"] as? [String: Any]) ?? [:]
-            var лучшее: [String: Any]?
-            var лучшаяЦена = Int.max
-            for ключ in предложения.keys.sorted() {
-                guard let п = предложения[ключ] as? [String: Any] else { continue }
-                let цена = число(п["price"]) ?? 0
-                if лучшее == nil || (цена > 0 && цена < лучшаяЦена) {
-                    лучшее = п
-                    лучшаяЦена = цена
-                }
-            }
-            guard let п = лучшее else { return nil }
+            let первый = вПорядкеОтвета(Array(предложения.keys), текст: ответ.текст)
+                .first { предложения[$0] is [String: Any] }
+            guard let ключ = первый, let п = предложения[ключ] as? [String: Any] else { return nil }
             return КотировкаДоставки(бесплатно: false, цена: число(п["price"]) ?? 0, имя: строка(п["name"]),
                                      днейОт: число(п["days_min"]), днейДо: число(п["days_max"]), минут: nil)
         }
@@ -298,6 +317,36 @@ enum ДоставкаТКAPI {
             return .сообщение(строка(j["msg"]) ?? "")
         }
         return .ошибка(строка(j["error"]) ?? тДост("error_short"))
+    }
+
+    enum ИтогСтавок: Equatable {
+        case отправлено
+        case войти
+        case ошибка
+        case сеть
+    }
+
+    /// mkLogiAuction: POST chat.php?action=logistics_create {pid} с куками веб-сессии — заявка компаниям, ставки
+    /// потом в кабинете («Мои доставки»). error "auth" — надо войти.
+    @MainActor
+    static func собратьСтавки(объявление: String) async -> ИтогСтавок {
+        var ч = URLComponents(url: Config.apiBase.appendingPathComponent("chat.php"), resolvingAgainstBaseURL: false)
+        ч?.queryItems = [URLQueryItem(name: "action", value: "logistics_create")]
+        guard let адрес = ч?.url else { return .сеть }
+        var запрос = URLRequest(url: адрес)
+        запрос.httpMethod = "POST"
+        запрос.httpShouldHandleCookies = false
+        запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (имя, значение) in await SiteSession.куки() {
+            запрос.setValue(значение, forHTTPHeaderField: имя)
+        }
+        запрос.httpBody = try? JSONSerialization.data(withJSONObject: ["pid": объявление])
+        guard let результат = try? await сессия.data(for: запрос),
+              let j = (try? JSONSerialization.jsonObject(with: результат.0)) as? [String: Any] else {
+            return .сеть
+        }
+        if да(j["ok"]) { return .отправлено }
+        return строка(j["error"]) == "auth" ? .войти : .ошибка
     }
 
     static func да(_ значение: Any?) -> Bool {
@@ -731,6 +780,14 @@ private struct КарточкаТКСайта: View {
     let ответ: ОтветЛогистики
     let оформить: (() -> Void)?
 
+    @State private var ставки: Ставки = .нет
+
+    /// «Собрать ставки от компаний»: кнопка, отправка, итог (тост сайта — строкой под кнопкой).
+    enum Ставки: Equatable {
+        case нет, идёт
+        case итог(String, Bool)
+    }
+
     private var маршрут: String? {
         guard let а = ответ.откуда, let б = ответ.куда else { return nil }
         return а + " → " + б
@@ -776,9 +833,7 @@ private struct КарточкаТКСайта: View {
                     СтрокаПартнёраТК(партнёр: п)
                 }
             }
-            if Config.деньгиСделок, let оформить {
-                кнопкаДальше(оформить)
-            }
+            кнопкаДальше
         }
         .padding(14)
         .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
@@ -788,12 +843,13 @@ private struct КарточкаТКСайта: View {
         }
     }
 
-    /// 🔴 Сделка с деньгами: без аукциона — «Оформить с доставкой» (если гарант не выключен), иначе — «Собрать ставки».
+    /// Без аукциона — 🔴 «Оформить с доставкой» (сделка с деньгами: окно «Безопасная сделка», если гарант у объявления
+    /// есть), иначе — «Собрать ставки» (mkLogiAuction: заявка компаниям, денег не трогает).
     @ViewBuilder
-    private func кнопкаДальше(_ действие: @escaping () -> Void) -> some View {
+    private var кнопкаДальше: some View {
         if ответ.безАукциона {
-            if !товар.безГаранта {
-                Button(action: действие) {
+            if !товар.безГаранта, let оформить {
+                Button(action: оформить) {
                     Text(тДост("logi_car_cta"))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
@@ -804,9 +860,15 @@ private struct КарточкаТКСайта: View {
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
                 .padding(.top, 4)
             }
+        } else if case .итог(let текст, let удачно) = ставки, удачно {
+            Label(текст, systemImage: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.зелёный2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
         } else {
-            Button(action: действие) {
-                Label(тДост("collect_bids"), systemImage: "bolt.fill")
+            Button { собратьСтавки() } label: {
+                Label(тДост(ставки == .идёт ? "bids_sending" : "collect_bids"), systemImage: "bolt.fill")
                     .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 46)
@@ -814,12 +876,38 @@ private struct КарточкаТКСайта: View {
                                 in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
+            .disabled(ставки == .идёт)
             .padding(.top, 4)
+            if case .итог(let текст, _) = ставки {
+                Text(текст)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.оранжевый)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
             Text(тДост("collect_bids_note"))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func собратьСтавки() {
+        guard ставки != .идёт else { return }
+        ставки = .идёт
+        let номер = товар.id
+        Task { @MainActor in
+            switch await ДоставкаТКAPI.собратьСтавки(объявление: номер) {
+            case .отправлено:
+                ставки = .итог(тДост("bids_sent"), true)
+            case .войти:
+                ставки = .итог(тДост("bids_auth"), false)
+            case .ошибка:
+                ставки = .итог(тДост("bids_fail"), false)
+            case .сеть:
+                ставки = .итог(тДост("net_error"), false)
+            }
         }
     }
 }
@@ -924,35 +1012,42 @@ struct КотировкаДоставкиСайта: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let к = котировка {
+                /* .mk-ship-quote: заголовок цветом текста на surf2. Порядок строк — как у сайта: у компаний «имя · срок»,
+                   потом кто платит; у курьера кто платит, потом «~N мин в пути». */
                 VStack(alignment: .leading, spacing: 3) {
                     if к.бесплатно {
                         Text(тДост("co_ship_free"))
                             .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(Theme.зелёный2)
+                            .foregroundStyle(Theme.текст)
                     } else {
                         Text(String(format: тДост("ship_quote"), ДоставкаОбъявления.сумма(к.цена) + "\u{00A0}₸"))
                             .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(Theme.зелёный2)
-                        if let строкаСрока = срок(к) {
-                            Text(строкаСрока)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.текстВторой)
+                            .foregroundStyle(Theme.текст)
+                        if к.минут == nil, let строкаСрока = срок(к) {
+                            строкаКотировки(строкаСрока)
                         }
-                        Text(тДост("ship_quote_who"))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.текстВторой)
+                        строкаКотировки(тДост("ship_quote_who"))
+                        if к.минут != nil, let строкаСрока = срок(к) {
+                            строкаКотировки(строкаСрока)
+                        }
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
             }
         }
         .task(id: ключ) {
             котировка = nil
             котировка = await ДоставкаТКAPI.котировка(объявление: товар.id, точка: точка)
         }
+    }
+
+    private func строкаКотировки(_ текст: String) -> some View {
+        Text(текст)
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.текстВторой)
     }
 
     /// «СДЭК · 2–4 дн.» у компаний, «~25 мин в пути» у курьера.

@@ -66,7 +66,10 @@ enum ListingLocationText {
             "agree_with_seller": "Согласовать с продавцом",
             "route_note": "Приложение откроется с маршрутом А→Б. Если адрес не введён — укажете в самом приложении.",
             "courier_addr_in_app": "Точный адрес укажете в приложении", "opening_yandex": "Открываем Яндекс Go…",
-            "courier_far": "Дальше 30 км — Яндекс Go возит только поблизости.",
+            "courier_far": "Дальше 30 км — Яндекс Go возит только поблизости. Оформите доставку транспортной компанией в блоке «Доставка в другой город».",
+            "geo_denied": "Доступ отклонён — впишите адрес вручную", "addr_fail_manual": "Не удалось определить — впишите вручную",
+            "bids_sending": "Отправляем…", "bids_sent": "Заявка отправлена компаниям! Ставки — в кабинете → «Мои доставки»",
+            "bids_auth": "Войдите, чтобы заказать доставку", "bids_fail": "Не удалось отправить",
             "copy_addr": "Скопировать адрес", "copied": "Скопировано",
             "open_map": "Открыть карту", "close": "Закрыть",
             "geo_ask_mine": "Моё местоположение", "geo_locating": "Определяю местоположение…",
@@ -117,7 +120,10 @@ enum ListingLocationText {
             "agree_with_seller": "Сатушымен келісу",
             "route_note": "Қосымша А→Б бағдарымен ашылады. Мекенжай енгізілмесе — қосымшаның өзінде көрсетесіз.",
             "courier_addr_in_app": "Нақты мекенжайды қосымшада көрсетесіз", "opening_yandex": "Яндекс Go ашылуда…",
-            "courier_far": "30 км-ден алыс — Яндекс Go тек жақын жерге апарады.",
+            "courier_far": "30 км-ден алыс — Яндекс Go тек жақын жерге апарады. Жеткізуді «Басқа қалаға жеткізу» блогында көлік компаниясы арқылы рәсімдеңіз.",
+            "geo_denied": "Рұқсат берілмеді — мекенжайды қолмен жазыңыз", "addr_fail_manual": "Анықтау мүмкін болмады — қолмен жазыңыз",
+            "bids_sending": "Жіберіп жатырмыз…", "bids_sent": "Өтінім компанияларға жіберілді! Ұсыныстар — кабинетте → «Менің жеткізулерім»",
+            "bids_auth": "Жеткізуге тапсырыс беру үшін кіріңіз", "bids_fail": "Жіберу мүмкін болмады",
             "copy_addr": "Мекенжайды көшіру", "copied": "Көшірілді",
             "open_map": "Картаны ашу", "close": "Жабу",
             "geo_ask_mine": "Менің орным", "geo_locating": "Орналасқан жерді анықтап жатырмын…",
@@ -168,7 +174,10 @@ enum ListingLocationText {
             "agree_with_seller": "Arrange with the seller",
             "route_note": "The app opens with an A→B route. If you haven't entered an address, set it in the app.",
             "courier_addr_in_app": "You'll set the exact address in the app", "opening_yandex": "Opening Yandex Go…",
-            "courier_far": "Over 30 km — Yandex Go only delivers nearby.",
+            "courier_far": "Over 30 km — Yandex Go only delivers nearby. Arrange shipping with a delivery company in the «Delivery to another city» block.",
+            "geo_denied": "Access denied — type the address manually", "addr_fail_manual": "Couldn't detect — type it manually",
+            "bids_sending": "Sending…", "bids_sent": "Request sent to companies! Bids are in your account → «My deliveries»",
+            "bids_auth": "Sign in to order delivery", "bids_fail": "Couldn't send",
             "copy_addr": "Copy address", "copied": "Copied",
             "open_map": "Open map", "close": "Close",
             "geo_ask_mine": "My location", "geo_locating": "Finding your location…",
@@ -219,7 +228,10 @@ enum ListingLocationText {
             "agree_with_seller": "الاتفاق مع البائع",
             "route_note": "سيُفتح التطبيق بمسار من أ إلى ب. إن لم تُدخل العنوان فحدده في التطبيق نفسه.",
             "courier_addr_in_app": "ستحدد العنوان الدقيق في التطبيق", "opening_yandex": "جارٍ فتح Yandex Go…",
-            "courier_far": "أبعد من 30 كم — Yandex Go يوصل إلى الأماكن القريبة فقط.",
+            "courier_far": "أبعد من 30 كم — Yandex Go يوصل إلى الأماكن القريبة فقط. اطلب التوصيل عبر شركة شحن في قسم «التوصيل إلى مدينة أخرى».",
+            "geo_denied": "تم رفض الوصول — اكتب العنوان يدويًا", "addr_fail_manual": "تعذّر التحديد — اكتبه يدويًا",
+            "bids_sending": "جارٍ الإرسال…", "bids_sent": "تم إرسال الطلب إلى الشركات! العروض في حسابك ← «توصيلاتي»",
+            "bids_auth": "سجّل الدخول لطلب التوصيل", "bids_fail": "تعذّر الإرسال",
             "copy_addr": "نسخ العنوان", "copied": "تم النسخ",
             "open_map": "فتح الخريطة", "close": "إغلاق",
             "geo_ask_mine": "موقعي", "geo_locating": "جارٍ تحديد الموقع…",
@@ -384,6 +396,9 @@ struct РасположениеСайта: View {
     @State private var картаНаВесьЭкран = false
     @State private var чатСПродавцом = false
     @State private var скопировано = false
+    /// «Как работает Безопасная сделка» (mkEscrowInfo) — гостю и непроверенному после «Купить безопасно с доставкой».
+    @State private var пояснениеГаранта: ЛистГарантаОбъявления?
+    @State private var послеПояснения: URL?
 
     init(товар: Listing, открыть: ((URL) -> Void)? = nil) {
         self.товар = товар
@@ -516,6 +531,11 @@ struct РасположениеСайта: View {
                 КартаОбъявленияНаВесьЭкран(товар: товар, точка: т, маршрут: !другойГород)
             }
         }
+        .sheet(item: $пояснениеГаранта, onDismiss: { открытьПослеПояснения() }) { какой in
+            if case .пояснение(let кнопка) = какой {
+                ЛистГарантСделки(кнопка: кнопка, открыть: { адрес in послеПояснения = адрес })
+            }
+        }
         .navigationDestination(isPresented: $чатСПродавцом) {
             экранЧата
         }
@@ -556,9 +576,9 @@ struct РасположениеСайта: View {
         return { согласовать() }
     }
 
+    /// У сайта кнопка есть всегда; страница сайта нужна только запасному пути без нативного чата.
     private var можноСогласовать: Bool {
-        guard открыть != nil else { return false }
-        return нативныйЧат || товар.адрес != nil
+        нативныйЧат || (открыть != nil && товар.адрес != nil)
     }
 
     private func согласовать() {
@@ -585,13 +605,43 @@ struct РасположениеСайта: View {
         }
     }
 
-    /// 🔴 «Купить безопасно с доставкой» — mkEscrowCheckout, сделка с деньгами: только при Config.деньгиСделок.
+    /**
+     🔴 «Купить безопасно с доставкой» / «Оформить с доставкой» — mkCourierClose() + mkEscrowCheckout(id) сайта: окно
+     «Безопасная сделка» с курьером, выбранным сразу (DealCreateShip ставит тариф "courier"). Путь — как у «Купить
+     безопасно» нижней панели (ПанельСвязиСайта.нажатьГарант): гость и непроверенный — пояснение, проверенный — своё
+     создание сделки. Только при Config.деньгиСделок и если у объявления есть кнопка гаранта (ГарантОбъявления.кнопка:
+     не ниже 20 000 ₸, не no_escrow, продавец проверен, не eds, гарант не на паузе).
+     */
     private var купитьБезопасно: (() -> Void)? {
-        guard Config.деньгиСделок, let адрес = товар.адрес, let открыть else { return nil }
-        return {
-            лист = nil
-            открыть(адрес)
+        guard Config.деньгиСделок, !товар.услуга, ГарантОбъявления.кнопка(товар) == .купить else { return nil }
+        return { начатьСделкуСДоставкой() }
+    }
+
+    private func начатьСделкуСДоставкой() {
+        let былЛист = лист != nil
+        лист = nil
+        Task { @MainActor in
+            /* Лист сначала уезжает, потом переход (как у «Согласовать») — иначе он теряется. */
+            if былЛист { try? await Task.sleep(nanoseconds: 450_000_000) }
+            let доступ = await ЛистГарантСделки.кнопкаСейчас()
+            guard доступ == .понятно else {
+                пояснениеГаранта = .пояснение(доступ)
+                return
+            }
+            if NativeRouter.доступна(.сделки) {
+                ЗаданияДенегСделок.shared.положить(.сделка(товар: товар.id, оплата: "", срок: 0))
+                NativeRouter.shared.цель = .сделки
+            } else if let адрес = ГарантОбъявления.страница("cabinet.php?start_deal=", товар.id), let открыть {
+                открыть(адрес)
+            }
         }
+    }
+
+    /// Пояснение закрылось — страница, которую оно попросило открыть (регистрация, верификация).
+    private func открытьПослеПояснения() {
+        guard let адрес = послеПояснения else { return }
+        послеПояснения = nil
+        открыть?(адрес)
     }
 }
 
@@ -978,12 +1028,14 @@ struct ЛистКурьераСайта: View {
         Binding(get: { куда }, set: { новое in
             куда = новое
             моя = nil
-            if состояние == .найден { состояние = .нет }
+            if состояние == .найден || состояние == .безАдреса { состояние = .нет }
         })
     }
 
     enum Состояние: Equatable {
-        case нет, ищем, найден, ошибка, далеко, вПриложении, открываем
+        /// отказ — доступ к геопозиции запрещён (geo_denied); безАдреса — точка есть, адрес по ней не нашёлся
+        /// (addr_fail_manual).
+        case нет, ищем, найден, ошибка, отказ, безАдреса, далеко, вПриложении, открываем
     }
 
     private var откуда: String {
@@ -1013,7 +1065,12 @@ struct ЛистКурьераСайта: View {
                 }
                 /* Гарант на паузе — без «Купить безопасно с доставкой» и его обещания. */
                 if let купитьБезопасно, !ПаузаГаранта.наПаузеСейчас {
-                    Button { купитьБезопасно() } label: {
+                    Button {
+                        запомнитьАдрес()
+                        АдресИзЛистаКурьера.положить(товар: товар.id, текст: куда,
+                                                    широта: моя?.latitude, долгота: моя?.longitude)
+                        купитьБезопасно()
+                    } label: {
                         Label(тМеста("courier_safe_t"), systemImage: "checkmark.shield.fill")
                             .font(.system(size: 15, weight: .heavy))
                             .foregroundStyle(.white)
@@ -1047,9 +1104,12 @@ struct ЛистКурьераСайта: View {
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
                 .padding(.top, 4)
+                /* .mk-courier-warn: цвет предупреждения, по центру. */
                 Text(тМеста("courier_ya_warn"))
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
+                    .foregroundStyle(Theme.звезда)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
                     .fixedSize(horizontal: false, vertical: true)
                 if let согласовать {
                     Button {
@@ -1069,9 +1129,12 @@ struct ЛистКурьераСайта: View {
                     }
                     .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
                 }
+                /* .mk-courier-note: последней, как у сайта, по центру. */
                 Text(тМеста("route_note"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 16)
@@ -1156,6 +1219,10 @@ struct ЛистКурьераСайта: View {
             текст = тМеста("addr_detected_call"); значок = "checkmark.circle.fill"; цвет = Theme.зелёный2
         case .ошибка:
             текст = тМеста("geo_fail"); значок = "exclamationmark.triangle.fill"; цвет = Theme.оранжевый
+        case .отказ:
+            текст = тМеста("geo_denied"); значок = "exclamationmark.triangle.fill"; цвет = Theme.оранжевый
+        case .безАдреса:
+            текст = тМеста("addr_fail_manual"); значок = "exclamationmark.triangle.fill"; цвет = Theme.оранжевый
         case .далеко:
             текст = тМеста("courier_far"); значок = "exclamationmark.triangle.fill"; цвет = Theme.оранжевый
         case .вПриложении:
@@ -1177,26 +1244,35 @@ struct ЛистКурьераСайта: View {
         UserDefaults.standard.set(адрес, forKey: Self.ключАдреса)
     }
 
-    /// mkCourierGeo: точка телефона и адрес по ней. Разрешение спрашивается здесь — по нажатию.
+    /// mkCourierGeo / mkGeoAddr: точка телефона и адрес по ней — «город, район, улица дом». Разрешение спрашивается
+    /// здесь — по нажатию. Доступ запрещён — geo_denied; адрес не нашёлся — addr_fail_manual, но точка остаётся для
+    /// маршрута и расчёта (у сайта её нет — своё, мягче).
     private func определить() {
         состояние = .ищем
         гео.узнать { координата in
             Task { @MainActor in
                 guard let координата else {
-                    состояние = .ошибка
+                    let статус = CLLocationManager().authorizationStatus
+                    состояние = (статус == .denied || статус == .restricted) ? .отказ : .ошибка
                     return
                 }
                 моя = координата
                 let место = CLLocation(latitude: координата.latitude, longitude: координата.longitude)
                 let найдено = try? await CLGeocoder().reverseGeocodeLocation(место)
+                var строка = ""
                 if let метка = найдено?.first {
                     let улица = [метка.thoroughfare, метка.subThoroughfare].compactMap { $0 }.joined(separator: " ")
-                    let строка = [метка.locality, улица.isEmpty ? nil : улица].compactMap { $0 }.joined(separator: ", ")
-                    if !строка.isEmpty { куда = строка }
-                } else if куда.isEmpty {
-                    куда = МаршрутОбъявления.число(координата.latitude) + ", "
-                        + МаршрутОбъявления.число(координата.longitude)
+                    var части: [String] = []
+                    if let город = метка.locality { части.append(город) }
+                    if let район = метка.subLocality, район != метка.locality { части.append(район) }
+                    if !улица.isEmpty { части.append(улица) }
+                    строка = части.joined(separator: ", ")
                 }
+                guard !строка.isEmpty else {
+                    состояние = .безАдреса
+                    return
+                }
+                куда = строка
                 состояние = .найден
                 запомнитьАдрес()
             }
@@ -1206,17 +1282,60 @@ struct ЛистКурьераСайта: View {
     /// mkCourierLaunch: откуда — точка объявления, куда — ваша точка; дальше 30 км — предупреждение.
     private func вызватьЯндекс() {
         запомнитьАдрес()
-        if let а = точка, let б = моя,
-           ГеометрияКарты.км(а.latitude, а.longitude, б.latitude, б.longitude) > МаршрутОбъявления.пределКурьераКм {
-            состояние = .далеко
+        if let б = моя {
+            if далеко(б) {
+                состояние = .далеко
+                return
+            }
+            состояние = .открываем
+            МаршрутОбъявления.открыть(МаршрутОбъявления.курьерЯндекса(от: точка, до: б))
             return
         }
-        if моя != nil {
-            состояние = .открываем
-        } else if !куда.trimmingCharacters(in: .whitespaces).isEmpty {
-            состояние = .вПриложении
+        let введено = куда.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !введено.isEmpty else {
+            МаршрутОбъявления.открыть(МаршрутОбъявления.курьерЯндекса(от: точка, до: nil))
+            return
         }
-        МаршрутОбъявления.открыть(МаршрутОбъявления.курьерЯндекса(от: точка, до: моя))
+        /* Адрес вписан руками: у сайта точка Б — центр города (_mkCityCoord по введённому, выбранному в ленте или
+           городу объявления); здесь — геокодер телефона: введённое (с городом объявления, если его нет в строке), потом
+           выбранный город и город объявления — первое найденное. */
+        let город = товар.city.isEmpty ? МаршрутОбъявления.мойГород : товар.city
+        var запросы: [String] = []
+        if !город.isEmpty && !введено.lowercased().contains(город.lowercased()) {
+            запросы.append(введено + ", " + город)
+        } else {
+            запросы.append(введено)
+        }
+        for запасной in [МаршрутОбъявления.мойГород, товар.city] where !запасной.isEmpty && !запросы.contains(запасной) {
+            запросы.append(запасной)
+        }
+        Task { @MainActor in
+            var найдено: CLLocationCoordinate2D? = nil
+            for запрос in запросы {
+                if let метка = try? await CLGeocoder().geocodeAddressString(запрос).first,
+                   let место = метка.location {
+                    найдено = место.coordinate
+                    break
+                }
+            }
+            guard let б = найдено else {
+                состояние = .вПриложении
+                МаршрутОбъявления.открыть(МаршрутОбъявления.курьерЯндекса(от: точка, до: nil))
+                return
+            }
+            if далеко(б) {
+                состояние = .далеко
+                return
+            }
+            состояние = .открываем
+            МаршрутОбъявления.открыть(МаршрутОбъявления.курьерЯндекса(от: точка, до: б))
+        }
+    }
+
+    /// Дальше MK_CITY_KM от точки объявления (без точки объявления проверять не с чем).
+    private func далеко(_ б: CLLocationCoordinate2D) -> Bool {
+        guard let а = точка else { return false }
+        return ГеометрияКарты.км(а.latitude, а.longitude, б.latitude, б.longitude) > МаршрутОбъявления.пределКурьераКм
     }
 }
 
