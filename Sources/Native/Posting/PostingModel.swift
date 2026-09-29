@@ -755,8 +755,27 @@ final class ПодачаМодель: ObservableObject {
         return nil
     }
 
+    /// Легковой (cars и его кузова): год выпуска и пробег обязательны — submit сервера (publish.php) без них не примет.
+    var легковой: Bool {
+        режим == .авто && справочники.внутри(форма.раздел, ["cars"])
+    }
+
     /// Обязательные поля схемы (марка у электроники, год и пробег у легковых) — как проверки submit на сервере.
     func ошибкаХарактеристик() -> (поле: String, текст: String)? {
+        if легковой && !правка {
+            /* Те же правила, что у submit сервера: год 1900…следующий, пробег — число (ноль можно, пусто — нет).
+               edit_item их не требует — правку старого объявления без пробега не держим. */
+            let год = форма.year.trimmingCharacters(in: .whitespaces)
+            let число = Double(год.replacingOccurrences(of: ",", with: ".")) ?? 0
+            if год.isEmpty || число <= 0 { return ("auto", т("need_year")) }
+            let предел = Calendar.current.component(.year, from: Date()) + 1
+            if число < 1900 || число > Double(предел) {
+                return ("auto", String(format: т("need_year_bad"), String(предел)))
+            }
+            let пробег = форма.ram.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: ".")
+            if пробег.isEmpty || Double(пробег) == nil { return ("auto", т("need_mileage")) }
+            return nil
+        }
         guard режим == .товар else { return nil }
         if брендОбязателен && форма.бренд.trimmingCharacters(in: .whitespaces).isEmpty {
             return ("brand", т("need_brand"))
