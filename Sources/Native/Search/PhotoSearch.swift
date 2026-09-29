@@ -71,8 +71,8 @@ enum ПоискПоФотоAPI {
         запрос.httpShouldHandleCookies = false
         запрос.setValue("multipart/form-data; boundary=" + граница, forHTTPHeaderField: "Content-Type")
         запрос.setValue("application/json", forHTTPHeaderField: "Accept")
-        /* Как fetch страницы: POST того же сайта несёт Origin сайта. */
-        запрос.setValue(Config.apiBase.absoluteString, forHTTPHeaderField: "Origin")
+        /* Origin не подставляем (владелец: без поддельных Origin/Referer): photo_search.php источник не проверяет —
+           ему нужны вошедшая сессия (куки) и токен страницы в теле. */
         let куки = await SiteSession.куки()
         for (имя, значение) in куки { запрос.setValue(значение, forHTTPHeaderField: имя) }
         запрос.httpBody = тело
@@ -281,7 +281,10 @@ final class ПоискПоФотоСайта: ObservableObject {
                     страница = шире
                 }
             }
-            товары = страница.items
+            /* ТОП, которых меньше, чем ТОП-мест, сервер ставит по кругу (rank_gold_layout), и одно объявление приходит
+               дважды — два одинаковых id в ForEach сетки похожих ломают её; оставляем первое. */
+            var были = Set<String>()
+            товары = страница.items.filter { были.insert($0.id).inserted }
             всего = страница.total
             шаг = .результаты
             let объявление = товары.isEmpty ? т("ps_empty") : String(format: т("ps_count"), всего ?? товары.count)

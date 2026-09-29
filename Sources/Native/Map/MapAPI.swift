@@ -28,15 +28,18 @@ struct УсловияКарты: Equatable, Sendable {
     var поиск = ""
     var где = ГдеИскать()
     var фильтры = ФильтрыЛенты()
+    /// Лента в режиме «Аренда» — и карта только сдаваемого: intent=rent, как _mkApiQS сайта (карта сайта берёт его же).
+    var аренда = false
 
     /**
-     Параметры — _mkApiQS сайта: cat, city или region, district, cond, verified, photo, pmin, pmax, sort, q, ymin, ymax,
-     rooms. Пустое не шлём, как и сайт (r() пропускает ""); sort сайт шлёт всегда — и мы.
+     Параметры — _mkApiQS сайта: cat, city или region, district, cond, intent, verified, photo, pmin, pmax, sort, q, ymin,
+     ymax, rooms. Пустое не шлём, как и сайт (r() пропускает ""); sort сайт шлёт всегда — и мы.
      */
     var параметры: [URLQueryItem] {
         var поля: [URLQueryItem] = []
         поля.append(contentsOf: ListingsAPI.параметрыРаздела(раздел))   // этап 49: «Товары» — cats=, как у ленты
         поля.append(contentsOf: где.параметры)
+        if аренда { поля.append(URLQueryItem(name: "intent", value: "rent")) }
         поля.append(contentsOf: фильтры.параметры)
         поля.append(URLQueryItem(name: "sort", value: фильтры.сортировка.параметр))
         let текст = поиск.trimmingCharacters(in: .whitespacesAndNewlines)

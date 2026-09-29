@@ -297,7 +297,7 @@ final class ПодборкиГлавной: ObservableObject {
             guard let страница = ответы[раздел.ключ] else { continue }
             if let всего = страница.total, всего > 0 { числа[раздел.ключ] = всего }
             if !страница.items.isEmpty {
-                новые.append(Ряд(раздел: раздел, товары: Array(страница.items.prefix(10)), вакансии: [],
+                новые.append(Ряд(раздел: раздел, товары: Array(Self.безПовторов(страница.items).prefix(10)), вакансии: [],
                                  всего: страница.total))
             }
         }
