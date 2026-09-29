@@ -116,6 +116,8 @@ struct СтраницаБизнеса: Equatable {
     var proАктивен = false
     var proПробный = false
     var proДо = ""
+    /// PRO_SRC: "apple" — PRO по подписке App Store (продлевает и отменяет Apple, не кошелёк сайта).
+    var proИсточник = ""
     var proДнейОсталось: Int? = nil
     var proЦена = 0
     var proБесплатно = false
@@ -221,6 +223,7 @@ struct СтраницаБизнеса: Equatable {
         с.proАктивен = найти(#"const PRO_ACTIVE\s*=\s*(true|false)"#, в: html) == "true"
         с.proПробный = найти(#"const PRO_IS_TRIAL\s*=\s*(true|false)"#, в: html) == "true"
         с.proДо = найти(#"const PRO_UNTIL\s*=\s*"([^"]*)""#, в: html) ?? ""
+        с.proИсточник = найти(#"const PRO_SRC\s*=\s*"([^"]*)""#, в: html) ?? ""
         с.proДнейОсталось = Int(найти(#"const PRO_DAYS_LEFT\s*=\s*(-?\d+)"#, в: html) ?? "")
         с.proЦена = Int(найти(#"const PRO_PRICE\s*=\s*(\d+)"#, в: html) ?? "") ?? 0
         с.proБесплатно = найти(#"const PRO_FREE\s*=\s*(true|false)"#, в: html) == "true"
@@ -387,6 +390,32 @@ struct КлубОснователей: Equatable {
     }
 }
 
+/// Оплачено в App Store, не применено (apple_credit_list → credits[]): продвижение или ТОП резюме, цель которых не подошла.
+struct КредитApple: Equatable, Identifiable {
+    /// id транзакции App Store.
+    let id: String
+    /// "promo" или "resume_top".
+    let услуга: String
+    let днейТоп: Int
+    let поднятий: Int
+    let дней: Int
+
+    init(_ j: [String: Any]) {
+        typealias A = МоиОбъявленияAPI
+        id = A.строка(j["tx"])
+        услуга = A.строка(j["service"])
+        днейТоп = A.целое(j["top_days"])
+        поднятий = A.целое(j["bumps"])
+        дней = A.целое(j["days"])
+    }
+}
+
+/// Куда можно применить кредит (apple_credit_list → targets.promo[] / targets.resume_top[]).
+struct ЦельКредитаApple: Equatable, Identifiable, Hashable {
+    let id: String
+    let название: String
+}
+
 /// Заказ B2B (b2b_orders_list → as_seller[] / as_buyer[], _b2bRow модуля business).
 struct ЗаказB2B: Equatable, Identifiable {
     let id: String
@@ -458,6 +487,9 @@ final class БизнесМодель: ObservableObject {
     @Published private(set) var клубЗагрузка: Загрузка = .нет
     @Published private(set) var заказыПродаю: [ЗаказB2B]? = nil
     @Published private(set) var заказыПокупаю: [ЗаказB2B]? = nil
+    /// Оплачено в App Store, не применено — и куда можно применить (ключ — услуга: promo / resume_top).
+    @Published private(set) var кредитыApple: [КредитApple] = []
+    @Published private(set) var целиКредитов: [String: [ЦельКредитаApple]] = [:]
     /// Короткое сообщение внизу экрана (toast сайта).
     @Published private(set) var плашка: String? = nil
 
@@ -517,6 +549,60 @@ final class БизнесМодель: ObservableObject {
            МоиОбъявленияAPI.да(j["ok"]) {
             guard моё == поколение else { return }
             запусков = МоиОбъявленияAPI.целое(j["credits"])
+        }
+        await загрузитьКредитыApple()
+    }
+
+    // MARK: Оплачено в App Store, не применено
+
+    /// apple_credit_list — только чтение. Сбой или сервер без функции — блока просто нет.
+    func загрузитьКредитыApple() async {
+        let моё = поколение
+        guard let j = try? await МоиОбъявленияAPI.получить("cabinet.php?action=apple_credit_list"),
+              МоиОбъявленияAPI.да(j["ok"]) else { return }
+        guard моё == поколение else { return }
+        let сырые: [Any] = (j["credits"] as? [Any]) ?? []
+        кредитыApple = сырые.compactMap { запись -> КредитApple? in
+            guard let к = запись as? [String: Any] else { return nil }
+            let кредит = КредитApple(к)
+            return кредит.id.isEmpty ? nil : кредит
+        }
+        let цели = (j["targets"] as? [String: Any]) ?? [:]
+        var итог: [String: [ЦельКредитаApple]] = [:]
+        for (услуга, список) in цели {
+            let строки: [Any] = (список as? [Any]) ?? []
+            итог[услуга] = строки.compactMap { запись -> ЦельКредитаApple? in
+                guard let ц = запись as? [String: Any] else { return nil }
+                let id = МоиОбъявленияAPI.строка(ц["id"])
+                guard !id.isEmpty else { return nil }
+                let название = МоиОбъявленияAPI.строка(ц["title"])
+                return ЦельКредитаApple(id: id, название: название.isEmpty ? id : название)
+            }
+        }
+        целиКредитов = итог
+    }
+
+    /**
+     apple_credit_apply {csrf, tx, target_id} — только по нажатию «Применить». Денег не трогает: покупка уже оплачена
+     в App Store, сайт выдаёт её один раз. nil — применено; иначе текст для человека.
+     */
+    func применитьКредитApple(_ кредит: КредитApple, цель: String) async -> String? {
+        do {
+            let j = try await МоиОбъявленияAPI.отправить("cabinet.php?action=apple_credit_apply",
+                                                        тело: ["tx": кредит.id, "target_id": цель])
+            typealias A = МоиОбъявленияAPI
+            if A.да(j["ok"]) {
+                показать(т("apl_cr_done"))
+                await загрузитьКредитыApple()
+                return nil
+            }
+            let ошибка = A.строка(j["error"])
+            if ошибка == "used" || ошибка == "revoked" || ошибка == "not_found" { await загрузитьКредитыApple() }
+            if ошибка == "target" { return т("apl_cr_target") }
+            if ошибка == "busy" { return т("apl_cr_busy") }
+            return т("apl_cr_err")
+        } catch {
+            return т("no_conn")
         }
     }
 
@@ -692,6 +778,8 @@ final class БизнесМодель: ObservableObject {
         клубЗагрузка = .нет
         заказыПродаю = nil
         заказыПокупаю = nil
+        кредитыApple = []
+        целиКредитов = [:]
     }
 
     /// ВыходНачисто: реквизиты, статус PRO, клуб и заказы ушедшего; ответ, пришедший после, не примется.

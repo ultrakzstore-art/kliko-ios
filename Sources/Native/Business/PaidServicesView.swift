@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /**
  «ПЛАТНЫЕ УСЛУГИ» — ЭТАП 48 (владелец 26.09.2026: «всё одно и то же, просто код разный»). Только показ.
@@ -70,6 +71,7 @@ struct ЭкранПлатныхУслуг: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 БлокПРО(с: с)
+                if !модель.кредитыApple.isEmpty { БлокКредитовApple() }
                 БлокПродвижения()
                 БлокСлотов(с: с, слоты: модель.слоты, открыть: открыть)
                 if !с.комбо.isEmpty { БлокКомбо(с: с) }
@@ -168,8 +170,11 @@ private struct БлокПРО: View {
                     }
                 }
             }
-            /* PRO бесплатный (PRO_FREE) — покупать нечего. */
-            if !(Config.цифровыеПокупки && с.proБесплатно) {
+            /* PRO по подписке App Store (PRO_SRC = "apple") — продлевает Apple: вместо покупки — управление подпиской.
+               PRO бесплатный (PRO_FREE) — покупать нечего. */
+            if с.proИсточник == "apple" {
+                ПодпискаAppStoreПРО()
+            } else if !(Config.цифровыеПокупки && с.proБесплатно) {
                 ЦифроваяПокупка(услуга: .про, подпись: т("cab_get_pro"))
             }
         }
@@ -202,6 +207,121 @@ private struct БлокПРО: View {
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// «Подписка App Store — управлять в настройках iPhone» и кнопка на страницу подписок Apple ID (как в кабинете сайта).
+private struct ПодпискаAppStoreПРО: View {
+    static let адрес = URL(string: "https://apps.apple.com/account/subscriptions")
+
+    private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(т("apl_pro_title"))
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+            ЗаметкаБизнеса(т("apl_pro_sub"), тон: .инфо, значок: "apple.logo")
+            КнопкаБизнеса(подпись: т("apl_pro_btn"), второстепенная: true) {
+                guard let адрес = ПодпискаAppStoreПРО.адрес else { return }
+                UIApplication.shared.open(адрес, options: [:], completionHandler: nil)
+            }
+        }
+    }
+}
+
+// MARK: - Оплачено в App Store, не применено
+
+/// Покупки продвижения / ТОПа резюме, цель которых не подошла: выбрать объявление (резюме) и «Применить» — один раз.
+private struct БлокКредитовApple: View {
+    @ObservedObject private var модель = БизнесМодель.shared
+    @State private var выбор: [String: String] = [:]
+    @State private var идёт: String? = nil
+    @State private var ошибка: [String: String] = [:]
+
+    private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
+
+    private func название(_ к: КредитApple) -> String {
+        if к.услуга == "resume_top" { return БизнесText.т("apl_cr_resume", ["d": String(к.дней)]) }
+        if к.днейТоп > 0 && к.поднятий > 0 {
+            return БизнесText.т("apl_cr_promo", ["d": String(к.днейТоп), "b": String(к.поднятий)])
+        }
+        if к.днейТоп > 0 { return БизнесText.т("apl_cr_top", ["d": String(к.днейТоп)]) }
+        return т("apl_cr_bump")
+    }
+
+    private func цели(_ к: КредитApple) -> [ЦельКредитаApple] {
+        модель.целиКредитов[к.услуга] ?? []
+    }
+
+    private func выбрано(_ к: КредитApple) -> String {
+        if let своё = выбор[к.id] { return своё }
+        let список = цели(к)
+        return список.count == 1 ? список[0].id : ""
+    }
+
+    var body: some View {
+        КарточкаБизнеса(т("apl_cr_title"), значок: "checkmark.seal") {
+            Text(т("apl_cr_sub"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(модель.кредитыApple) { к in
+                строка(к)
+            }
+        }
+    }
+
+    private func строка(_ к: КредитApple) -> some View {
+        let список = цели(к)
+        let подсказка = т(к.услуга == "resume_top" ? "apl_cr_pick_job" : "apl_cr_pick")
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(название(к))
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.текст)
+            if список.isEmpty {
+                Text(т("apl_cr_none"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+            } else {
+                Picker(подсказка, selection: Binding<String>(
+                    get: { выбрано(к) },
+                    set: { выбор[к.id] = $0 }
+                )) {
+                    Text(подсказка).tag("")
+                    ForEach(список) { ц in
+                        Text(ц.название).tag(ц.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Theme.акцент)
+                if let текст = ошибка[к.id] {
+                    ЗаметкаБизнеса(текст, тон: .предупреждение, значок: "exclamationmark.triangle")
+                }
+                КнопкаБизнеса(подпись: т("apl_cr_apply"), занято: идёт == к.id) {
+                    применить(к)
+                }
+                .disabled(идёт != nil)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+    }
+
+    private func применить(_ к: КредитApple) {
+        let цель = выбрано(к)
+        guard !цель.isEmpty else {
+            ошибка[к.id] = т(к.услуга == "resume_top" ? "apl_cr_pick_job" : "apl_cr_pick")
+            return
+        }
+        ошибка[к.id] = nil
+        идёт = к.id
+        Task { @MainActor in
+            let итог = await модель.применитьКредитApple(к, цель: цель)
+            идёт = nil
+            if let итог { ошибка[к.id] = итог }
         }
     }
 }
