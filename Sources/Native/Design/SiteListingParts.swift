@@ -412,7 +412,7 @@ private struct ПолоскиИсторииСайта: View {
     }
 }
 
-/// Один снимок: целиком по ширине, прижат к верху, на тёмной подложке .mk-gslide. Картинка своя, а не AsyncImage:
+/// Один снимок: целиком, по центру, поверх своей размытой копии (пустоты под коротким кадром нет). Картинка своя, а не AsyncImage:
 /// нужен её размер (пропорция галереи), а URLSession.shared кладёт её в общий кэш — оттуда её берёт «Поделиться» (этап 19).
 private struct СлайдФото: View {
     let адрес: URL
@@ -435,10 +435,20 @@ private struct СлайдФото: View {
         ZStack(alignment: .top) {
             Theme.подложкаФото
             if let снимок = картинка {
+                /* Снимки разной пропорции: высота галереи — по первому, поэтому под короткий кадр подкладываем
+                   его же размытую копию во всю площадь, а сам кадр ставим по центру — чёрной дыры снизу нет. */
+                Image(uiImage: снимок)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: ширина, height: высота)
+                    .clipped()
+                    .blur(radius: 28, opaque: true)
+                    .overlay(Color.black.opacity(0.22))
+                    .accessibilityHidden(true)
                 Image(uiImage: снимок)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: ширина, height: max(1, высота - верх), alignment: .top)
+                    .frame(width: ширина, height: max(1, высота - верх), alignment: .center)
                     .padding(.top, верх)
             } else if неудача {
                 /* .mk-imgretry: «Повторить» зелёным на поверхности 2. */
