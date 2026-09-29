@@ -49,7 +49,7 @@ enum БезСайта {
                 }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            UIApplication.shared.open(адрес)
+            UIApplication.shared.open(адрес, options: [:], completionHandler: nil)
         }
     }
 
