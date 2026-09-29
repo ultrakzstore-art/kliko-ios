@@ -372,10 +372,9 @@ struct NativeTabsView: View {
                 путьЛенты = NavigationPath()
             } else if !вид.главная {
                 найтиВЛенте = ИскомоеЛенты(текст: "", раздел: "")
-            } else {
-                /* TestFlight 1.10: на главной «Категории» — окно категорий, как mhCats сайта (карта, разделы, справка). */
-                листКатегорий = true
             }
+            /* Упрощение для новичка: на главной первая кнопка — тоже «Главная», и окна категорий она больше не
+               открывает (окно — «Все категории» под плитками главной и «Категории» полосы разделов). */
         case .избранное:
             if вкладка == .избранное { путьИзбранного = NavigationPath() } else { вкладка = .избранное }
         case .чат:
@@ -605,10 +604,10 @@ enum TabsText {
     }
 
     private static let тексты: [String: [String: String]] = [
-        "ru": ["feed": "Лента", "messages": "Сообщения", "post": "Разместить", "cabinet": "Кабинет"],
-        "kk": ["feed": "Лента", "messages": "Хабарламалар", "post": "Жариялау", "cabinet": "Кабинет"],
-        "en": ["feed": "Feed", "messages": "Messages", "post": "Sell", "cabinet": "Account"],
-        "ar": ["feed": "الإعلانات", "messages": "الرسائل", "post": "انشر", "cabinet": "الحساب"]
+        "ru": ["feed": "Лента", "messages": "Сообщения", "post": "Разместить", "cabinet": "Профиль"],
+        "kk": ["feed": "Лента", "messages": "Хабарламалар", "post": "Жариялау", "cabinet": "Профиль"],
+        "en": ["feed": "Feed", "messages": "Messages", "post": "Sell", "cabinet": "Profile"],
+        "ar": ["feed": "الإعلانات", "messages": "الرسائل", "post": "انشر", "cabinet": "الملف الشخصي"]
     ]
 }
 

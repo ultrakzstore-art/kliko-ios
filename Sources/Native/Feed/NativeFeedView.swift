@@ -689,6 +689,8 @@ struct NativeFeedView: View {
                       счёт: подборки.счёт, готово: подборки.числаГотовы,
                       выбрать: { раздел in выбратьРазделГлавной(раздел) }, открыть: открыть)
             .padding(.top, 6)
+        /* Первая кнопка панели на главной теперь «Главная» — окно всех категорий открывается отсюда. */
+        кнопкаВсехКатегорий
         if подборки.устарело {
             СтрокаУстаревшейГлавной { Task { await подборки.загрузить() } }
                 .padding(.horizontal, 16)
@@ -701,6 +703,25 @@ struct NativeFeedView: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
         содержимое
+    }
+
+    /// «Все категории ›» под плитками — окно категорий (прежде — «Категории» нижней панели на главной).
+    private var кнопкаВсехКатегорий: some View {
+        Button { открытьКатегории() } label: {
+            HStack(spacing: 4) {
+                Text(HomeText.т("all_cats"))
+                    .font(.system(.subheadline, weight: .bold))
+                Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .foregroundStyle(Theme.акцент)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal, 16)
     }
 
     /// Слайды баннера главной: «Безопасная сделка» — пока гарант не на паузе; перенос объявлений — только магазину.

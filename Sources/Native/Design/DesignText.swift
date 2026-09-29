@@ -136,7 +136,7 @@ enum DesignText {
             "sell_b": "Разместить объявление →",
             "f_about": "Маркетплейс с безопасными сделками: деньги у Kliko, пока вы не получите товар.", "f_about_np": "Маркетплейс Казахстана: покупайте и продавайте удобно.",
             "f_buyers": "Покупателям", "f_help": "Справочный центр", "f_safe": "Как работает Безопасная сделка", "f_pay": "Оплата и возврат",
-            "f_sellers": "Продавцам", "f_pro": "Возможности PRO", "f_tariffs": "Услуги и цены", "f_cabinet": "Кабинет",
+            "f_sellers": "Продавцам", "f_pro": "Возможности PRO", "f_tariffs": "Услуги и цены", "f_cabinet": "Профиль",
             "f_rules": "Что запрещено", "f_docs": "Документы", "f_agreement": "Соглашение", "f_offer": "Оферта",
             "f_privacy": "Конфиденциальность", "f_company": "ТОО «Клико.кз»", "f_bin": "БИН 260840012679",
             "f_address": "Казахстан, г. Астана, проспект Абай, дом 30", "f_hours": "Пн–Пт 10:00–18:00",
@@ -150,7 +150,7 @@ enum DesignText {
             "f_pay_open": "Откроет сайт платёжной организации", "f_app": "Kliko.kz для iOS · версия %@ (сборка %@)",
             "f_mail": "Написать в поддержку", "f_call": "Позвонить в поддержку",
             "nav": "Основная навигация", "categories": "Категории", "home": "Главная", "favorites": "Избранное",
-            "chat": "Чат", "cabinet": "Кабинет", "post": "Разместить", "unread": "Непрочитанных: %d"
+            "chat": "Чат", "cabinet": "Профиль", "post": "Разместить", "sell": "Продать", "unread": "Непрочитанных: %d"
         ],
         "kk": [
             "all_kz": "Бүкіл Қазақстан", "search": "Не іздедіңіз?", "photo": "Фото бойынша іздеу", "on_site": "Сайтта ашылады",
@@ -220,7 +220,7 @@ enum DesignText {
             "f_about": "Қауіпсіз мәмілелері бар маркетплейс: тауарды алғанша ақша Kliko-да тұрады.", "f_about_np": "Қазақстан маркетплейсі: ыңғайлы сатып алыңыз және сатыңыз.",
             "f_buyers": "Сатып алушыларға", "f_help": "Анықтама орталығы", "f_safe": "Қауіпсіз мәміле қалай жұмыс істейді",
             "f_pay": "Төлем және қайтару", "f_sellers": "Сатушыларға", "f_pro": "PRO мүмкіндіктері", "f_tariffs": "Қызметтер мен бағалар",
-            "f_cabinet": "Кабинет", "f_rules": "Не тыйым салынған", "f_docs": "Құжаттар", "f_agreement": "Келісім",
+            "f_cabinet": "Профиль", "f_rules": "Не тыйым салынған", "f_docs": "Құжаттар", "f_agreement": "Келісім",
             "f_offer": "Оферта", "f_privacy": "Құпиялылық", "f_company": "«Клико.кз» ЖШС", "f_bin": "БСН 260840012679",
             "f_address": "Қазақстан, Астана қ., Абай даңғылы, 30-үй", "f_hours": "Дс–Жм 10:00–18:00",
             "f_copy": "© 2026 Kliko.kz · Қазақстан. Барлық құқықтар қорғалған. Сайтты пайдалану келісуді білдіреді:",
@@ -233,7 +233,7 @@ enum DesignText {
             "f_pay_open": "Төлем ұйымының сайтын ашады", "f_app": "Kliko.kz iOS үшін · нұсқа %@ (жинақ %@)",
             "f_mail": "Қолдауға жазу", "f_call": "Қолдауға қоңырау шалу",
             "nav": "Негізгі навигация", "categories": "Санаттар", "home": "Басты бет", "favorites": "Таңдаулылар",
-            "chat": "Чат", "cabinet": "Кабинет", "post": "Жариялау", "unread": "Оқылмаған: %d"
+            "chat": "Чат", "cabinet": "Профиль", "post": "Жариялау", "sell": "Сату", "unread": "Оқылмаған: %d"
         ],
         "en": [
             "all_kz": "All of Kazakhstan", "search": "What are you looking for?", "photo": "Search by photo",
@@ -302,7 +302,7 @@ enum DesignText {
             "sell_b": "Post a listing →",
             "f_about": "A marketplace with safe deals: Kliko holds the money until you receive the item.", "f_about_np": "Kazakhstan's marketplace: buy and sell with ease.",
             "f_buyers": "For buyers", "f_help": "Help center", "f_safe": "How the Safe deal works", "f_pay": "Payment and refunds",
-            "f_sellers": "For sellers", "f_pro": "PRO features", "f_tariffs": "Services and prices", "f_cabinet": "Account",
+            "f_sellers": "For sellers", "f_pro": "PRO features", "f_tariffs": "Services and prices", "f_cabinet": "Profile",
             "f_rules": "What is prohibited", "f_docs": "Documents", "f_agreement": "User agreement", "f_offer": "Public offer",
             "f_privacy": "Privacy", "f_company": "Kliko.kz LLP", "f_bin": "BIN 260840012679",
             "f_address": "30 Abay Avenue, Astana, Kazakhstan", "f_hours": "Mon–Fri 10:00–18:00",
@@ -316,7 +316,7 @@ enum DesignText {
             "f_pay_open": "Opens the payment provider's website", "f_app": "Kliko.kz for iOS · version %@ (build %@)",
             "f_mail": "Email support", "f_call": "Call support",
             "nav": "Main navigation", "categories": "Categories", "home": "Home", "favorites": "Favorites",
-            "chat": "Chat", "cabinet": "Account", "post": "Post a listing", "unread": "Unread: %d"
+            "chat": "Chat", "cabinet": "Profile", "post": "Post a listing", "sell": "Sell", "unread": "Unread: %d"
         ],
         "ar": [
             "all_kz": "كل كازاخستان", "search": "عمّ تبحث؟", "photo": "البحث بالصورة", "on_site": "يُفتح في الموقع",
@@ -385,7 +385,7 @@ enum DesignText {
             "sell_b": "انشر إعلانًا →",
             "f_about": "سوق بصفقات آمنة: يحتفظ Kliko بالمال حتى تستلم السلعة.", "f_about_np": "سوق كازاخستان: اشترِ وبِع بسهولة.",
             "f_buyers": "للمشترين", "f_help": "مركز المساعدة", "f_safe": "كيف تعمل الصفقة الآمنة", "f_pay": "الدفع والاسترداد",
-            "f_sellers": "للبائعين", "f_pro": "مزايا PRO", "f_tariffs": "الخدمات والأسعار", "f_cabinet": "الحساب",
+            "f_sellers": "للبائعين", "f_pro": "مزايا PRO", "f_tariffs": "الخدمات والأسعار", "f_cabinet": "الملف الشخصي",
             "f_rules": "ما هو محظور", "f_docs": "المستندات", "f_agreement": "اتفاقية الاستخدام", "f_offer": "العرض العام",
             "f_privacy": "الخصوصية", "f_company": "شركة Kliko.kz", "f_bin": "BIN 260840012679",
             "f_address": "كازاخستان، أستانا، شارع أباي، 30", "f_hours": "الاثنين–الجمعة 10:00–18:00",
@@ -399,7 +399,7 @@ enum DesignText {
             "f_pay_open": "يفتح موقع مزوّد الدفع", "f_app": "Kliko.kz لنظام iOS · الإصدار %@ (البناء %@)",
             "f_mail": "راسل الدعم", "f_call": "اتصل بالدعم",
             "nav": "التنقل الرئيسي", "categories": "الفئات", "home": "الرئيسية", "favorites": "المفضلة",
-            "chat": "الدردشة", "cabinet": "الحساب", "post": "انشر إعلانًا", "unread": "غير مقروءة: %d"
+            "chat": "الدردشة", "cabinet": "الملف الشخصي", "post": "انشر إعلانًا", "sell": "بيع", "unread": "غير مقروءة: %d"
         ]
     ]
 }

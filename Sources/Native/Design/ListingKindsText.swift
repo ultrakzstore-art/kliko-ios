@@ -20,7 +20,7 @@ enum ListingKindsText {
         "ru": [
             "rent_available": "Доступна аренда", "rent_per_day": "За сутки", "rent_per_month": "За месяц",
             "rent_deposit": "Залог", "rent_min_term": "Мин. срок", "rent_kit": "В комплекте",
-            "rent_own": "Это ваш товар — управление арендами в кабинете.",
+            "rent_own": "Это ваш товар — управление арендами в профиле.",
             "rent_sent": "Запрос отправлен! Продавец получил уведомление.",
             "rent_unver": "Аренда доступна только верифицированным пользователям.", "rent_verify_go": "Пройти верификацию →",
             "rent_guest": "Войдите в аккаунт чтобы арендовать.", "rent_login_go": "Войти →",
@@ -87,7 +87,7 @@ enum ListingKindsText {
         "kk": [
             "rent_available": "Жалға алуға болады", "rent_per_day": "Тәулігіне", "rent_per_month": "Айына",
             "rent_deposit": "Кепіл", "rent_min_term": "Ең аз мерзім", "rent_kit": "Жиынтықта",
-            "rent_own": "Бұл сіздің тауарыңыз — жалға беруді кабинетте басқарыңыз.",
+            "rent_own": "Бұл сіздің тауарыңыз — жалға беруді профильде басқарыңыз.",
             "rent_sent": "Сұрау жіберілді! Сатушы хабарлама алды.",
             "rent_unver": "Жалға алу тек верификациядан өткен пайдаланушыларға қолжетімді.",
             "rent_verify_go": "Верификациядан өту →",
@@ -156,7 +156,7 @@ enum ListingKindsText {
         "en": [
             "rent_available": "Available for rent", "rent_per_day": "Per day", "rent_per_month": "Per month",
             "rent_deposit": "Deposit", "rent_min_term": "Min. term", "rent_kit": "Included",
-            "rent_own": "This is your item — manage rentals in your account.",
+            "rent_own": "This is your item — manage rentals in your profile.",
             "rent_sent": "Request sent! The seller has been notified.",
             "rent_unver": "Renting is available to verified users only.", "rent_verify_go": "Get verified →",
             "rent_guest": "Sign in to rent.", "rent_login_go": "Sign in →",
@@ -223,7 +223,7 @@ enum ListingKindsText {
         "ar": [
             "rent_available": "متاح للإيجار", "rent_per_day": "لليوم", "rent_per_month": "للشهر",
             "rent_deposit": "التأمين", "rent_min_term": "أدنى مدة", "rent_kit": "مرفق",
-            "rent_own": "هذا منتجك — أدِر الإيجارات من حسابك.",
+            "rent_own": "هذا منتجك — أدِر الإيجارات من ملفك الشخصي.",
             "rent_sent": "تم إرسال الطلب! تلقى البائع إشعارًا.",
             "rent_unver": "الإيجار متاح للمستخدمين الموثّقين فقط.", "rent_verify_go": "إجراء التوثيق ←",
             "rent_guest": "سجّل الدخول للاستئجار.", "rent_login_go": "تسجيل الدخول ←",

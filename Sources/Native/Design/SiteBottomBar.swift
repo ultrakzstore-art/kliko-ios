@@ -11,6 +11,7 @@ import UIKit
  «пилюля» #e0245e у значка «Чата», как .ulx-bb-badge.
 
  Первая кнопка — как у сайта: на главной «Категории», в разделе или поиске — «Главная» с домиком, и ведёт на главную.
+ Упрощение для новичка (владелец): первая кнопка всегда «Главная», камера подписана «Продать», «Кабинет» — «Профиль».
  Камера — страница подачи (a.ulx-bb-add: /kz/<язык>/cabinet?go=add). Значки — ближайшие SF Symbols к SVG сайта.
 
  TestFlight 1.10 (владелец: «снизу боттом бар более современный — как на iOS 26+»): панель — плавающая капсула с
@@ -101,8 +102,8 @@ struct НижняяПанельСайта: View {
 
     private var ряд: some View {
         HStack(alignment: .center, spacing: 2) {
-            пункт(.категории, значок: главная && !назад ? "square.grid.2x2" : "house",
-                  подпись: DesignText.т(главная && !назад ? "categories" : "home"))
+            /* Упрощение для новичка: первая кнопка всегда «Главная» с домиком (не «Категории» на главной). */
+            пункт(.категории, значок: "house", подпись: DesignText.т("home"))
             if показатьИзбранное {
                 пункт(.избранное, значок: "heart", подпись: DesignText.т("favorites"), счёт: избранных)
             }
@@ -187,11 +188,20 @@ struct НижняяПанельСайта: View {
             нажатий += 1
             действие()
         } label: {
-            КругКамеры()
+            /* Упрощение для новичка: под камерой подпись «Продать», как у остальных пунктов. */
+            VStack(spacing: 2) {
+                КругКамеры()
+                Text(DesignText.т("sell"))
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(Theme.акцент)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .frame(height: Self.высотаКапсулы - 6)
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.9))
-        .frame(width: 58)
-        .accessibilityLabel(DesignText.т("post"))
+        .frame(width: 62)
+        .accessibilityLabel(DesignText.т("sell"))
         .accessibilityHint(Config.нативнаяПодача ? "" : DesignText.т("on_site"))
     }
 
@@ -256,10 +266,11 @@ private struct ПилюляВыбора: View {
 /// Круг камеры 46 pt: на iOS 26 — зелёное «жидкое стекло» с откликом на касание, раньше — градиент с бликом и тенью.
 private struct КругКамеры: View {
     var body: some View {
+        /* 36 pt вместо 46: под кругом теперь подпись «Продать». */
         let значок = Image(systemName: "camera.fill")
-            .font(.system(size: 19, weight: .semibold))
+            .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(Color.white)
-            .frame(width: 46, height: 46)
+            .frame(width: 36, height: 36)
         if #available(iOS 26.0, *) {
             значок
                 .glassEffect(.regular.tint(Theme.кнопкаКамерыНачало).interactive(), in: Circle())

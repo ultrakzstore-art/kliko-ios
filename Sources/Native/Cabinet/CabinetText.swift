@@ -9,7 +9,7 @@ enum CabinetText {
     }
 
     private static let тексты: [String: [String: String]] = [
-        "ru": ["title": "Кабинет",
+        "ru": ["title": "Профиль",
                "signed_in": "Вы вошли",
                "signed_in_sub": "Объявления, сделки, кошелёк и настройки — ниже.",
                "signed_out": "Вы не вошли",
@@ -41,7 +41,7 @@ enum CabinetText {
                "about": "О приложении", "version": "Версия", "build": "Сборка",
                "logout_row": "Выйти из аккаунта",
                "logout_footer": "Выход — в кабинете на сайте: так сервер закроет сессию и перестанет присылать уведомления на этот телефон, а приложение сотрёт данные аккаунта."],
-        "kk": ["title": "Кабинет",
+        "kk": ["title": "Профиль",
                "signed_in": "Сіз кірдіңіз",
                "signed_in_sub": "Хабарландырулар, мәмілелер, әмиян және баптаулар — төменде.",
                "signed_out": "Сіз кірмегенсіз",
@@ -73,7 +73,7 @@ enum CabinetText {
                "about": "Қосымша туралы", "version": "Нұсқа", "build": "Жинақ",
                "logout_row": "Аккаунттан шығу",
                "logout_footer": "Шығу — сайттағы кабинетте: сонда сервер сессияны жабады және осы телефонға хабарландыру жіберуді тоқтатады, ал қосымша аккаунт деректерін өшіреді."],
-        "en": ["title": "Account",
+        "en": ["title": "Profile",
                "signed_in": "You're signed in",
                "signed_in_sub": "Listings, deals, wallet and settings are below.",
                "signed_out": "You're not signed in",
@@ -105,7 +105,7 @@ enum CabinetText {
                "about": "About", "version": "Version", "build": "Build",
                "logout_row": "Sign out",
                "logout_footer": "Sign out in your account on the website: the server then closes the session and stops sending notifications to this phone, and the app erases the account's data."],
-        "ar": ["title": "الحساب",
+        "ar": ["title": "الملف الشخصي",
                "signed_in": "أنت مسجّل الدخول",
                "signed_in_sub": "الإعلانات والصفقات والمحفظة والإعدادات — أدناه.",
                "signed_out": "لم تسجّل الدخول",
