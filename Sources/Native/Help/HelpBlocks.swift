@@ -17,7 +17,7 @@ struct КарточкаСтатьи: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(блоки.enumerated()), id: \.element.id) { номер, блок in
-                БлокСтатьиВид(блок: блок, раскрытые: $раскрытые)
+                БлокСтатьиВид(блок: блок, раскрытые: $раскрытые, маркерРяда: ОтступСтатьи.маркерРяда(блоки, номер))
                     .padding(.top, номер == 0 ? 0 : ОтступСтатьи.сверху(блок, после: блоки[номер - 1]))
                     .id(блок.id)
             }
@@ -50,12 +50,44 @@ enum ОтступСтатьи {
             return 12
         }
     }
+
+    /**
+     Маркер пункта, под текстом которого стоит продолжение (второй абзац пункта, <dd>): продолжение под «10.» — вровень
+     с текстом «10.», а не с текстом «•». У самого пункта с маркером — пусто.
+     */
+    static func маркерРяда(_ блоки: [БлокСтатьи], _ номер: Int) -> String {
+        guard блоки.indices.contains(номер), case .пункт(let свой, let уровень) = блоки[номер].вид, свой.isEmpty else {
+            return ""
+        }
+        var место = номер - 1
+        while место >= 0 {
+            guard case .пункт(let маркер, let его) = блоки[место].вид else { return "" }
+            if его == уровень, !маркер.isEmpty { return маркер }
+            if его < уровень { return "" }
+            место -= 1
+        }
+        return ""
+    }
+
+    /**
+     Ширина места под маркер: у всех пунктов одного вида одна, текст пунктов — ровной колонкой, перенос строки — под
+     текстом, а не под номером. «•» — узко; «1.»…«99.», «а)», «IV.» — одна ширина; «4.2.», «4.12.1.» — шире.
+     */
+    static func ширинаМаркера(_ маркер: String, размер: CGFloat) -> CGFloat {
+        let знаков = маркер.count
+        if знаков == 0 || маркер == "•" || маркер == "◦" { return размер * 1.2 }
+        if знаков <= 3 { return размер * 1.9 }
+        if знаков <= 6 { return размер * 3.0 }
+        return размер * 0.62 * CGFloat(знаков)
+    }
 }
 
 /// Один блок статьи.
 struct БлокСтатьиВид: View {
     let блок: БлокСтатьи
     @Binding var раскрытые: Set<Int>
+    /// Маркер пункта, которого этот блок — продолжение (ОтступСтатьи.маркерРяда): для ровного отступа.
+    var маркерРяда: String = ""
 
     @ScaledMetric(relativeTo: .body) private var размер: CGFloat = 15
 
@@ -70,7 +102,10 @@ struct БлокСтатьиВид: View {
                 Text(маркер)
                     .font(.system(size: размер, weight: .bold))
                     .foregroundStyle(Theme.акцент)
-                    .frame(minWidth: размер * 1.2, alignment: .trailing)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(minWidth: ОтступСтатьи.ширинаМаркера(маркер.isEmpty ? маркерРяда : маркер, размер: размер),
+                           alignment: .trailing)
                     .accessibilityHidden(маркер == "•" || маркер == "◦" || маркер.isEmpty)
                 ТекстСтатьи(текст: блок.текст, размер: размер)
             }
@@ -128,13 +163,15 @@ struct ЗаголовокСтатьи: View {
     var body: some View {
         if let номер = РазборСтатьи.номерЗаголовка(блок.простой) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
+                /* «1» — кружок, «4.2», «IV» — пилюля той же высоты. */
                 Text(номер.номер)
                     .font(.system(size: размер * 0.62, weight: .heavy))
                     .foregroundStyle(Theme.поверхность)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(width: размер * 1.35, height: размер * 1.35)
-                    .background(Theme.акцент, in: Circle())
+                    .fixedSize()
+                    .padding(.horizontal, номер.номер.count > 2 ? размер * 0.3 : 0)
+                    .frame(minWidth: размер * 1.35, minHeight: размер * 1.35)
+                    .background(Theme.акцент, in: Capsule())
                     .accessibilityHidden(true)
                 Text(номер.название)
                     .font(.system(size: размер, weight: жирность))
@@ -283,8 +320,17 @@ struct ТекстСтатьи: View {
         текст.runs.contains(where: { $0.link != nil })
     }
 
+    /// <u>/<ins> разбора (ПодчёркнутоСтатьи) — подчёркиванием SwiftUI.
+    private var показ: AttributedString {
+        var итог = текст
+        for кусок in текст.runs where кусок[ПодчёркнутоСтатьи.self] == true {
+            итог[кусок.range][AttributeScopes.SwiftUIAttributes.UnderlineStyleAttribute.self] = .single
+        }
+        return итог
+    }
+
     var body: some View {
-        Text(текст)
+        Text(показ)
             .font(.system(size: размер))
             .lineSpacing(размер * 0.25)
             .foregroundStyle(краска)
@@ -349,7 +395,8 @@ struct ВопросСтатьи: View {
             if открыт {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(ответ.enumerated()), id: \.element.id) { номер, часть in
-                        БлокСтатьиВид(блок: часть, раскрытые: $раскрытые)
+                        БлокСтатьиВид(блок: часть, раскрытые: $раскрытые,
+                                      маркерРяда: ОтступСтатьи.маркерРяда(ответ, номер))
                             .padding(.top, номер == 0 ? 0 : ОтступСтатьи.сверху(часть, после: ответ[номер - 1]))
                     }
                 }
