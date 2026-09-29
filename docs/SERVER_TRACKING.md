@@ -79,7 +79,7 @@
 
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
-| `role` | string | нет | `seller` / `buyer` — роль спрашивающего (от неё подписи сроков и кода). |
+| `role` | string | нет | `seller` / `buyer` / `recipient` (получатель подарка: видит только доставку, без цены и данных покупателя) — роль спрашивающего (от неё подписи сроков и кода). |
 | `track.carrier` | string | да | `yandex`, `indrive`, `cdek`, `kazpost`, `dhl`, `exline`, `avis`, `ups`, `fedex`, `other`. |
 | `track.carrier_name` | string | нет | Имя для показа, если хотите своё («СДЭК», «Exline»). |
 | `track.track_no` | string | нет | Трек-номер (показывается и копируется). |
