@@ -11,7 +11,9 @@ import Foundation
  af_photo_only, чипы «Проверенные продавцы» и «С фото» — verified_sellers и af_photo, «Сбросить», «Показать», «Сбросить
  всё», «Закрыть» — f_reset, f_show, reset_all, close; «×» на чипе читается «Сбросить: …», как aria-label сайта.
  «Коробка» и «Топливо» — af_gear и af_fuel мастера авто, их значения («Автомат», «Бензин», …) — fac_auto … fac_electric
- (MKF_TR сайта).
+ (MKF_TR сайта). Марка и модель — af_brand, af_model, af_brand_for, af_model_for, af_any_f, af_brand_find,
+ af_model_find, af_brand_none, af_model_none, af_pt_miss, af_model_first, af_model_many, af_model_load, af_pt_loading,
+ af_popular, af_all_brands мастера авто сайта.
  */
 enum FilterText {
     static func т(_ ключ: String) -> String {
@@ -35,7 +37,14 @@ enum FilterText {
                "gear": "Коробка", "fuel": "Топливо",
                "fac_auto": "Автомат", "fac_manual": "Механика", "fac_robot": "Робот", "fac_cvt": "Вариатор",
                "fac_petrol": "Бензин", "fac_diesel": "Дизель", "fac_gas": "Газ", "fac_hybrid": "Гибрид",
-               "fac_electric": "Электро"],
+               "fac_electric": "Электро",
+               "brand": "Марка", "model": "Модель", "brand_for": "Для какой марки", "model_for": "Для какой модели",
+               "any_f": "Любая", "brand_find": "Найти марку", "model_find": "Найти модель",
+               "brand_none": "Марка не найдена", "model_none": "Моделей нет", "nothing_found": "Не нашли — уточните запрос",
+               "model_first": "Сначала марка", "model_many": "Выберите одну марку — тогда появятся её модели",
+               "model_load": "Загружаем модели…", "brand_load": "Загружаем каталог…", "popular": "Популярные",
+               "all_brands": "Все марки", "brands_fail": "Не удалось загрузить марки", "retry": "Повторить",
+               "done": "Готово"],
         "kk": ["filters": "Сүзгілер", "sort_title": "Алдымен көрсету",
                "sort_reco": "Ұсынылатындар", "sort_new": "Жаңалары", "sort_old": "Ескілері", "sort_rating": "Рейтинг бойынша", "sort_cheap": "Арзанырақ", "sort_expensive": "Қымбатырақ",
                "price": "Бағасы, ₸", "from": "бастап", "to": "дейін", "from_x": "%@ бастап", "to_x": "%@ дейін",
@@ -50,7 +59,14 @@ enum FilterText {
                "gear": "Беріліс қорабы", "fuel": "Отын",
                "fac_auto": "Автомат", "fac_manual": "Механика", "fac_robot": "Робот", "fac_cvt": "Вариатор",
                "fac_petrol": "Бензин", "fac_diesel": "Дизель", "fac_gas": "Газ", "fac_hybrid": "Гибрид",
-               "fac_electric": "Электр"],
+               "fac_electric": "Электр",
+               "brand": "Маркасы", "model": "Моделі", "brand_for": "Қай маркаға", "model_for": "Қай модельге",
+               "any_f": "Кез келген", "brand_find": "Марканы табу", "model_find": "Модельді табу",
+               "brand_none": "Марка табылмады", "model_none": "Модельдер жоқ", "nothing_found": "Табылмады — сұрауды нақтылаңыз",
+               "model_first": "Алдымен марка", "model_many": "Бір марканы таңдаңыз — сонда оның модельдері шығады",
+               "model_load": "Модельдерді жүктеп жатырмыз…", "brand_load": "Каталогты жүктеп жатырмыз…", "popular": "Танымал",
+               "all_brands": "Барлық маркалар", "brands_fail": "Маркаларды жүктеу мүмкін болмады", "retry": "Қайталау",
+               "done": "Дайын"],
         "en": ["filters": "Filters", "sort_title": "Show first",
                "sort_reco": "Recommended", "sort_new": "Newest", "sort_old": "Oldest", "sort_rating": "By rating", "sort_cheap": "Cheapest", "sort_expensive": "Most expensive",
                "price": "Price, ₸", "from": "from", "to": "to", "from_x": "from %@", "to_x": "up to %@",
@@ -65,7 +81,14 @@ enum FilterText {
                "gear": "Gearbox", "fuel": "Fuel",
                "fac_auto": "Automatic", "fac_manual": "Manual", "fac_robot": "Robotic", "fac_cvt": "CVT",
                "fac_petrol": "Petrol", "fac_diesel": "Diesel", "fac_gas": "Gas", "fac_hybrid": "Hybrid",
-               "fac_electric": "Electric"],
+               "fac_electric": "Electric",
+               "brand": "Make", "model": "Model", "brand_for": "For which make", "model_for": "For which model",
+               "any_f": "Any", "brand_find": "Find a make", "model_find": "Find a model",
+               "brand_none": "Make not found", "model_none": "No models", "nothing_found": "Nothing found — refine your search",
+               "model_first": "Choose a make first", "model_many": "Choose one make to see its models",
+               "model_load": "Loading models…", "brand_load": "Loading catalog…", "popular": "Popular",
+               "all_brands": "All makes", "brands_fail": "Couldn't load makes", "retry": "Retry",
+               "done": "Done"],
         "ar": ["filters": "عوامل التصفية", "sort_title": "اعرض أولًا",
                "sort_reco": "المقترحة", "sort_new": "الأحدث", "sort_old": "الأقدم", "sort_rating": "حسب التقييم", "sort_cheap": "الأرخص", "sort_expensive": "الأغلى",
                "price": "السعر، ₸", "from": "من", "to": "إلى", "from_x": "من %@", "to_x": "حتى %@",
@@ -80,6 +103,13 @@ enum FilterText {
                "gear": "ناقل الحركة", "fuel": "الوقود",
                "fac_auto": "أوتوماتيك", "fac_manual": "يدوي", "fac_robot": "روبوتي", "fac_cvt": "CVT",
                "fac_petrol": "بنزين", "fac_diesel": "ديزل", "fac_gas": "غاز", "fac_hybrid": "هجين",
-               "fac_electric": "كهربائي"]
+               "fac_electric": "كهربائي",
+               "brand": "الماركة", "model": "الطراز", "brand_for": "لأي ماركة", "model_for": "لأي طراز",
+               "any_f": "أي", "brand_find": "ابحث عن ماركة", "model_find": "ابحث عن طراز",
+               "brand_none": "لم يتم العثور على الماركة", "model_none": "لا توجد طرازات", "nothing_found": "لم نجد شيئًا — دقّق طلبك",
+               "model_first": "اختر الماركة أولًا", "model_many": "اختر ماركة واحدة لتظهر طرازاتها",
+               "model_load": "جارٍ تحميل الطرازات…", "brand_load": "جارٍ تحميل الدليل…", "popular": "الشائعة",
+               "all_brands": "كل الماركات", "brands_fail": "تعذّر تحميل الماركات", "retry": "أعد المحاولة",
+               "done": "تم"]
     ]
 }

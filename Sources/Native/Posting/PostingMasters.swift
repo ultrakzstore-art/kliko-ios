@@ -475,10 +475,11 @@ struct МастерАвтоВид: View {
     /// AW_GEAR и AW_FUEL сайта — слова фильтра витрины, уходят по-русски на любом языке.
     private static let коробки = ["Автомат", "Механика", "Робот", "Вариатор"]
     private static let топлива = ["Бензин", "Дизель", "Газ", "Гибрид", "Электро"]
-    /// Самые частые марки Казахстана — наверху сетки (только те, что есть в справочнике сайта).
-    private static let популярные = ["Toyota", "Hyundai", "Kia", "Chevrolet", "Lada", "Volkswagen", "Lexus",
-                                     "Mercedes-Benz", "BMW", "Nissan", "Mitsubishi", "Audi", "Honda", "Mazda",
-                                     "Chery", "Haval", "Geely", "Skoda", "Renault", "Subaru"]
+    /// Самые частые марки Казахстана — наверху сетки (только те, что есть в справочнике сайта); их же «Популярные» в
+    /// выборе марки листа «Фильтры» (Filters/FilterViews.swift).
+    static let популярные = ["Toyota", "Hyundai", "Kia", "Chevrolet", "Lada", "Volkswagen", "Lexus",
+                             "Mercedes-Benz", "BMW", "Nissan", "Mitsubishi", "Audi", "Honda", "Mazda",
+                             "Chery", "Haval", "Geely", "Skoda", "Renault", "Subaru"]
 
     private let колонки = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 

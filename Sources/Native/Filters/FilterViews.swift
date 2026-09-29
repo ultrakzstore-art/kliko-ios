@@ -372,6 +372,21 @@ struct ПереносЧипов<Содержимое: View>: View {
 
 // MARK: - Лист «Фильтры» (.mk-drawer)
 
+/// Что выбирают в листе поверх «Фильтров»: марку или модель.
+private enum ВыборАвтоФильтра: String, Identifiable {
+    case марка
+    case модель
+
+    var id: String { rawValue }
+}
+
+/// Справочник марок и моделей — тот же загрузчик, что у мастера авто подачи (ПодачаМодель.загрузитьМарки и
+/// моделиМарки, /api/auto_models.php): один на приложение, чтобы марки и модели не спрашивать при каждом открытии листа.
+@MainActor
+private enum СправочникМарокФильтров {
+    static let общий = ПодачаМодель(цель: .новое)
+}
+
 /// Какое поле с числом в фокусе.
 private enum ПолеФильтра: Hashable {
     case ценаОт
@@ -390,6 +405,8 @@ struct ЛистФильтров: View {
     @State private var годОт: String
     @State private var годДо: String
     @FocusState private var поле: ПолеФильтра?
+    /// Открыт выбор марки или модели (лист поверх листа).
+    @State private var выборАвто: ВыборАвтоФильтра?
 
     /// `начальные` — фильтры ленты на момент открытия: поля цены и года начинаются с них.
     init(модель: FeedModel, начальные: ФильтрыЛенты) {
@@ -425,6 +442,9 @@ struct ЛистФильтров: View {
         }
         /* Закрыли смахиванием, пока пауза не вышла, — набранное всё равно в ленту. */
         .onDisappear { применитьНабранное() }
+        .sheet(item: $выборАвто) { что in
+            ЛистМаркиМодели(лента: модель, что: что)
+        }
     }
 
     /// .mk-dhead: «Фильтры» и квадратная «×».
@@ -455,12 +475,13 @@ struct ЛистФильтров: View {
         }
     }
 
-    /// Группы .mk-dfg: порядок, цена, год (транспорт), комнаты (жильё), коробка и топливо (транспорт), состояние,
-    /// продавец, фото.
+    /// Группы .mk-dfg: порядок, марка и модель (транспорт), цена, год (транспорт), комнаты (жильё), коробка и топливо
+    /// (транспорт), состояние, продавец, фото.
     @ViewBuilder
     private var группы: some View {
         VStack(alignment: .leading, spacing: 0) {
             группаСортировки
+            if ФильтрыЛенты.маркаДоступна(модель.раздел) { группыМаркиИМодели }
             группаЦены
             if ФильтрыЛенты.годДоступен(модель.раздел) { группаГода }
             if ФильтрыЛенты.комнатыДоступны(модель.раздел) { группаКомнат }
@@ -479,6 +500,35 @@ struct ЛистФильтров: View {
                                    выбран: модель.фильтры.сортировка.пунктМеню == вариант) {
                         применить { ф in ф.сортировка = вариант }
                     }
+                }
+            }
+        }
+    }
+
+    /// «Марка» и «Модель» — первые шаги мастера авто сайта (_AF_STEP_KEY: brand, model): поле-список, по нажатию —
+    /// выбор с поиском. Марок несколько, модель — одна и только у одной марки: без марки поле модели закрыто
+    /// («Сначала марка»), марок больше одной — тоже (af_model_many).
+    private var группыМаркиИМодели: some View {
+        let запчасти = ФильтрыЛенты.маркаДляЗапчастей(модель.раздел)
+        let марки = модель.фильтры.марки
+        let выбраннаяМодель = модель.фильтры.модель
+        let заголовокМарки = FilterText.т(запчасти ? "brand_for" : "brand")
+        let заголовокМодели = FilterText.т(запчасти ? "model_for" : "model")
+        let подсказкаМодели: String? = марки.isEmpty ? FilterText.т("model_first")
+            : (марки.count > 1 ? FilterText.т("model_many") : nil)
+        return VStack(alignment: .leading, spacing: 0) {
+            ГруппаФильтра(заголовокМарки) {
+                ПолеВыбораФильтра(подпись: заголовокМарки,
+                                  значение: марки.isEmpty ? nil : марки.joined(separator: ", "),
+                                  подсказка: nil, доступно: true) {
+                    открытьВыбор(.марка)
+                }
+            }
+            ГруппаФильтра(заголовокМодели) {
+                ПолеВыбораФильтра(подпись: заголовокМодели,
+                                  значение: выбраннаяМодель.isEmpty ? nil : выбраннаяМодель,
+                                  подсказка: подсказкаМодели, доступно: марки.count == 1) {
+                    открытьВыбор(.модель)
                 }
             }
         }
@@ -661,6 +711,13 @@ struct ЛистФильтров: View {
         модель.сброситьФильтры()
     }
 
+    /// Выбор марки или модели: набранное — сначала в ленту, клавиатура прячется.
+    private func открытьВыбор(_ что: ВыборАвтоФильтра) {
+        поле = nil
+        применитьНабранное()
+        выборАвто = что
+    }
+
     /// «Показать» и «×»: набранное — в ленту, лист — закрыть.
     private func готово() {
         поле = nil
@@ -742,6 +799,348 @@ private struct ВариантФильтра: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(выбран ? .isSelected : [])
+    }
+}
+
+/// Поле-список марки или модели (.mk-pinp с «⌄»): выбранное или «Любая»; закрытое — бледнее, с подсказкой под ним.
+private struct ПолеВыбораФильтра: View {
+    let подпись: String
+    let значение: String?
+    let подсказка: String?
+    let доступно: Bool
+    let действие: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: действие) {
+                HStack(spacing: 8) {
+                    Text(значение ?? FilterText.т("any_f"))
+                        .font(.system(size: 16, weight: значение == nil ? .regular : .semibold))
+                        .foregroundStyle(значение == nil ? Theme.текстВторой : Theme.текст)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(значение == nil ? Theme.поверхность2 : Theme.мята,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(значение == nil ? Theme.линия : Theme.зелёный2, lineWidth: значение == nil ? 1.5 : 2)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(!доступно)
+            .opacity(доступно ? 1 : 0.55)
+            .accessibilityLabel(подпись)
+            .accessibilityValue(значение ?? FilterText.т("any_f"))
+            if let подсказка {
+                Text(подсказка)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/**
+ Выбор марки или модели — лист поверх «Фильтров» в их же виде: шапка с «×», поиск («Найти марку», «Найти модель»),
+ строки .mk-dopt во всю ширину. Как у сайта, выбор сразу уходит в ленту (FeedModel.применитьФильтры).
+   · Марка — несколько сразу, повторное нажатие снимает; «Любая», «Популярные» и «Все марки» по алфавиту (af_popular,
+     af_all_brands). Внизу «Готово».
+   · Модель — одна: нажатие выбирает и закрывает лист; «Любая» снимает. Модели — только выбранной марки.
+ Справочник — /api/auto_models.php через загрузчик подачи (СправочникМарокФильтров).
+ */
+private struct ЛистМаркиМодели: View {
+    @ObservedObject private var лента: FeedModel
+    @ObservedObject private var справочник: ПодачаМодель
+    private let что: ВыборАвтоФильтра
+    @Environment(\.dismiss) private var закрыть
+    @State private var поиск = ""
+    /// Модели выбранной марки; nil — ещё грузятся.
+    @State private var модели: [МодельАвто]? = nil
+
+    init(лента: FeedModel, что: ВыборАвтоФильтра) {
+        _лента = ObservedObject(wrappedValue: лента)
+        _справочник = ObservedObject(wrappedValue: СправочникМарокФильтров.общий)
+        self.что = что
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            шапка
+            ПоискМастераПодачи(FilterText.т(что == .марка ? "brand_find" : "model_find"), текст: $поиск)
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    список
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            if что == .марка { низ }
+        }
+        .background(Theme.поверхность)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Theme.поверхность)
+        .presentationCornerRadius(Theme.Радиус.xl)
+        .task { await загрузить() }
+    }
+
+    private var заголовок: String {
+        let запчасти = ФильтрыЛенты.маркаДляЗапчастей(лента.раздел)
+        switch что {
+        case .марка:  return FilterText.т(запчасти ? "brand_for" : "brand")
+        case .модель: return FilterText.т(запчасти ? "model_for" : "model")
+        }
+    }
+
+    /// Шапка как у «Фильтров»: название 19 pt и квадратная «×».
+    private var шапка: some View {
+        HStack(spacing: 12) {
+            Text(заголовок)
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            Button { закрыть() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.поверхность2,
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(FilterText.т("close"))
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 12)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.линия).frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var список: some View {
+        switch что {
+        case .марка:  списокМарок
+        case .модель: списокМоделей
+        }
+    }
+
+    // MARK: Марки
+
+    @ViewBuilder
+    private var списокМарок: some View {
+        if справочник.маркиАвто.isEmpty && справочник.маркиНеДоступны {
+            заметка(FilterText.т("brands_fail"))
+            Button {
+                Task { await справочник.загрузитьМарки() }
+            } label: {
+                Text(FilterText.т("retry"))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.акцент)
+                    .frame(minHeight: 40)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if справочник.маркиАвто.isEmpty {
+            загрузка(FilterText.т("brand_load"))
+        } else if !чистыйПоиск.isEmpty {
+            let найденные = справочник.маркиАвто.filter { $0.lowercased().contains(чистыйПоиск) }
+            if найденные.isEmpty { заметка(FilterText.т("brand_none")) }
+            ForEach(найденные, id: \.self) { марка in строкаМарки(марка) }
+        } else {
+            строка(FilterText.т("any_f"), выбрана: лента.фильтры.марки.isEmpty) {
+                изменить { ф in
+                    ф.марки = []
+                    ф.модель = ""
+                }
+            }
+            let популярные = популярныеМарки
+            if популярные.count >= 4 {
+                подписьГруппы(FilterText.т("popular"))
+                ForEach(популярные, id: \.self) { марка in строкаМарки(марка) }
+            }
+            подписьГруппы(FilterText.т("all_brands"))
+            ForEach(маркиПоАлфавиту, id: \.self) { марка in строкаМарки(марка) }
+        }
+    }
+
+    /// «Популярные» — те же частые марки Казахстана, что наверху сетки мастера авто подачи, если они есть в справочнике.
+    private var популярныеМарки: [String] {
+        var поНижнему: [String: String] = [:]
+        for м in справочник.маркиАвто where поНижнему[м.lowercased()] == nil { поНижнему[м.lowercased()] = м }
+        return МастерАвтоВид.популярные.compactMap { поНижнему[$0.lowercased()] }
+    }
+
+    private var маркиПоАлфавиту: [String] {
+        справочник.маркиАвто.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func строкаМарки(_ марка: String) -> some View {
+        строка(марка, выбрана: лента.фильтры.марки.contains(марка)) {
+            изменить { ф in ФильтрыЛенты.переключитьМарку(марка, в: &ф) }
+        }
+    }
+
+    // MARK: Модели
+
+    @ViewBuilder
+    private var списокМоделей: some View {
+        if let модели {
+            if модели.isEmpty {
+                заметка(FilterText.т("model_none"))
+            } else {
+                let найденные = чистыйПоиск.isEmpty ? модели
+                    : модели.filter { $0.имя.lowercased().contains(чистыйПоиск) }
+                if чистыйПоиск.isEmpty {
+                    строка(FilterText.т("any_f"), выбрана: лента.фильтры.модель.isEmpty) {
+                        выбратьМодель("")
+                    }
+                }
+                if найденные.isEmpty { заметка(FilterText.т("nothing_found")) }
+                ForEach(найденные) { м in
+                    строка(м.имя, выбрана: лента.фильтры.модель == м.имя) { выбратьМодель(м.имя) }
+                }
+            }
+        } else {
+            загрузка(FilterText.т("model_load"))
+        }
+    }
+
+    private func выбратьМодель(_ имя: String) {
+        изменить { ф in ф.модель = имя }
+        закрыть()
+    }
+
+    // MARK: Части
+
+    /// .mk-dfoot с одной зелёной «Готово» — у марок, где выбирают несколько.
+    private var низ: some View {
+        Button { закрыть() } label: {
+            Text(FilterText.т("done"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 45)
+                .background(LinearGradient(colors: [Theme.зелёный2, Theme.зелёный],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+        .background(Theme.поверхность.shadow(.drop(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -4)))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.линия).frame(height: 1)
+        }
+    }
+
+    /// Строка .mk-dopt во всю ширину: выбранная — мятная, рамка 2 pt акцентом и галочка справа.
+    private func строка(_ текст: String, выбрана: Bool, действие: @escaping () -> Void) -> some View {
+        Button(action: действие) {
+            HStack(spacing: 10) {
+                Text(текст)
+                    .font(.system(size: 16, weight: выбрана ? .bold : .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if выбрана {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .heavy))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundStyle(выбрана ? КраскиФильтров.выбрано : Theme.текст)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(выбрана ? Theme.мята : Theme.поверхность2,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(выбрана ? Theme.зелёный2 : Theme.линия, lineWidth: выбрана ? 2 : 1.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(выбрана ? .isSelected : [])
+    }
+
+    /// Заголовок группы — как у .mk-dfg: заглавными серым с золотой чертой.
+    private func подписьГруппы(_ текст: String) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(Theme.золото)
+                .frame(width: 14, height: 2)
+            Text(текст)
+                .font(.system(size: 12, weight: .bold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Theme.текстВторой)
+        }
+        .padding(.top, 10)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func заметка(_ текст: String) -> some View {
+        Text(текст)
+            .font(.system(size: 14))
+            .foregroundStyle(Theme.текстВторой)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 8)
+    }
+
+    private func загрузка(_ текст: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text(текст)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.текстВторой)
+        }
+        .padding(.vertical, 8)
+    }
+
+    // MARK: Действия
+
+    private var чистыйПоиск: String { поиск.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    /// Выбор — сразу в ленту, как у сайта: каждое нажатие мастера перерисовывает выдачу.
+    private func изменить(_ правка: (inout ФильтрыЛенты) -> Void) {
+        var новые = лента.фильтры
+        правка(&новые)
+        лента.применитьФильтры(новые)
+    }
+
+    /// Марки — из общего справочника (второй раз не спрашиваются); модели — только одной выбранной марки.
+    private func загрузить() async {
+        switch что {
+        case .марка:
+            await справочник.загрузитьМарки()
+        case .модель:
+            let марки = лента.фильтры.марки
+            guard марки.count == 1, let марка = марки.first else {
+                модели = []
+                return
+            }
+            модели = await справочник.моделиМарки(марка)
+        }
     }
 }
 
