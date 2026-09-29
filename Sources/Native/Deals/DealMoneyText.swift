@@ -29,8 +29,8 @@ enum ДеньгиСделкиText {
     private static let ru: [String: String] = [
         // Оплата (dealPay, dealPayCard, showPointsModal, escrowProgress)
         "dp_no_sum": "Не удалось получить сумму сделки",
-        "fz_t": "Заморозить средства?",
-        "fz_m": "Заморозим <b>{n}</b> на платформе — деньги удержатся до подтверждения получения товара.",
+        "fz_t": "Оплатить безопасно?",
+        "fz_m": "<b>{n}</b> будут у Kliko, пока вы не подтвердите получение товара. Продавец получит деньги только после этого.",
         "pt_t": "Применить баллы?",
         "pt_m": "У вас {p} баллов · можно применить до {n}",
         "pt_sum": "Сумма к оплате",
@@ -282,8 +282,8 @@ enum ДеньгиСделкиText {
 
     private static let kk: [String: String] = [
         "dp_no_sum": "Мәміле сомасын алу мүмкін болмады",
-        "fz_t": "Қаражатты тоңазытамыз ба?",
-        "fz_m": "<b>{n}</b> платформада тоңазытылады — ақша тауарды алғаныңыз расталғанша ұсталып тұрады.",
+        "fz_t": "Қауіпсіз төлейміз бе?",
+        "fz_m": "<b>{n}</b> тауарды алғаныңызды растағанша Kliko-да болады. Сатушы ақшаны тек содан кейін алады.",
         "pt_t": "Ұпайларды қолданамыз ба?",
         "pt_m": "Сізде {p} ұпай · {n} дейін қолдануға болады",
         "pt_sum": "Төленетін сома",
@@ -523,8 +523,8 @@ enum ДеньгиСделкиText {
 
     private static let en: [String: String] = [
         "dp_no_sum": "Couldn't get the deal amount",
-        "fz_t": "Freeze the funds?",
-        "fz_m": "We'll freeze <b>{n}</b> on the platform — the money is held until you confirm you received the item.",
+        "fz_t": "Pay safely?",
+        "fz_m": "<b>{n}</b> stays with Kliko until you confirm you received the item. The seller gets paid only after that.",
         "pt_t": "Use points?",
         "pt_m": "You have {p} points · up to {n} can be applied",
         "pt_sum": "Amount to pay",
@@ -764,8 +764,8 @@ enum ДеньгиСделкиText {
 
     private static let ar: [String: String] = [
         "dp_no_sum": "تعذّر الحصول على مبلغ الصفقة",
-        "fz_t": "تجميد المبلغ؟",
-        "fz_m": "سنجمّد <b>{n}</b> على المنصة — يبقى المال محجوزًا حتى تؤكد استلام السلعة.",
+        "fz_t": "الدفع بأمان؟",
+        "fz_m": "يبقى <b>{n}</b> لدى Kliko حتى تؤكد استلام السلعة. يحصل البائع على المال بعد ذلك فقط.",
         "pt_t": "استخدام النقاط؟",
         "pt_m": "لديك {p} نقطة · يمكن استخدام حتى {n}",
         "pt_sum": "المبلغ المستحق",
