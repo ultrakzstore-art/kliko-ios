@@ -24,9 +24,11 @@ import WebKit
  несёт gs — «снимок» первой страницы из её ответа (window._mkGoldSnap сайта), чтобы выдача не перетасовывалась между
  страницами. По умолчанию фильтров нет и sort=reco — запрос прежний.
 
- Порядок «Новые» (владелец 26.09.2026, по умолчанию, как <option value="date" selected> сайта): сервер его не знает —
- _mkApiQS шлёт для него sort=reco (СортировкаЛенты.параметр), а «новые + 3 ТОП через 10» лента ставит у себя
- (ЗолотойРитм, FeedRhythm.swift). Ссылка ?sort=new — date_desc сайта, «новые подряд» без ТОП: sort=new.
+ Порядок «Новые» (владелец 26.09.2026, по умолчанию, как <option value="date" selected> сайта): _mkApiQS шлёт для него
+ sort=reco (СортировкаЛенты.параметр). Правка сервера 91 (29.09.2026): «новые + 3 ТОП через 10» (авто и недвижимость
+ 1 через 5, на главной — разделы по кругу) расставляет сервер, карточки приходят со slot; ТОП перемешан посевом seed.
+ Старый сервер без slot — лента ставит ритм у себя (ЗолотойРитм, FeedRhythm.swift). Ссылка ?sort=new — date_desc сайта,
+ «новые подряд» без ТОП: sort=new.
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -48,6 +50,9 @@ enum ListingsAPI {
         var gs: Int?
         /// Режим «Аренда» (mkVertical('rent') сайта): intent=rent — _mkApiQS шлёт его, только если это rent или sale.
         var аренда = false
+        /// Посев порядка платных (правка сервера 91): новый на каждое открытие и «потянуть вниз», тот же у следующих
+        /// страниц — ТОП вперемешку при каждом обновлении, но без скачков при листании. nil — не шлём.
+        var seed: Int?
 
         /// Ленту по умолчанию кладём на диск; поиск, разделы и фильтры — нет, они быстро устаревают и нужны реже.
         var поУмолчанию: Bool { page == 1 && cat.isEmpty && q.isEmpty && фильтры == ФильтрыЛенты() && !аренда }
@@ -78,6 +83,7 @@ enum ListingsAPI {
                                                           // gear, fuel, ymin, ymax, rooms
         if з.аренда { поля.append(URLQueryItem(name: "intent", value: "rent")) }     // «Аренда», как _mkApiQS
         if з.page > 1, let gs = з.gs, gs > 0 { поля.append(URLQueryItem(name: "gs", value: String(gs))) }
+        if let seed = з.seed, seed > 0 { поля.append(URLQueryItem(name: "seed", value: String(seed))) }   // на всех страницах
         ч.queryItems = поля
 
         var запрос = URLRequest(url: ч.url!)
