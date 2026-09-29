@@ -67,7 +67,10 @@ enum ВертикальВитрины: Hashable {
     /// Заявления продавца (trust), которые у этой вертикали — факт карточки, в порядке важности.
     var заявленияФактов: [String] {
         switch self {
-        case .авто, .транспорт: return ["not_crashed", "vin_clean", "one_owner", "service_book", "docs_ok"]
+        /* «VIN чистый» — только когда проверки по базам включены (Config.проверкиПоБазам): до подключения API не обещаем. */
+        case .авто, .транспорт:
+            return Config.проверкиПоБазам ? ["not_crashed", "vin_clean", "one_owner", "service_book", "docs_ok"]
+                                          : ["not_crashed", "one_owner", "service_book", "docs_ok"]
         case .запчасти: return ["original", "working"]
         case .жильё: return ["docs_ok", "no_liens", "lawyer_checked"]
         case .техника: return ["receipt", "complete", "working"]
