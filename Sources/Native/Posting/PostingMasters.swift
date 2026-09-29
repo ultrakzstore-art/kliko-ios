@@ -231,16 +231,19 @@ struct ПлиткаМастераПодачи: View {
     let значок: String?
     let буква: String?
     let счётчик: String
+    /// Марка — знак с сайта (img/brands) вместо буквы; нет знака или не загрузился — буква.
+    let логотипМарки: String?
     let выбрана: Bool
     let действие: () -> Void
 
     init(_ подпись: String, пояснение: String = "", значок: String? = nil, буква: String? = nil, счётчик: String = "",
-         выбрана: Bool, действие: @escaping () -> Void) {
+         логотипМарки: String? = nil, выбрана: Bool, действие: @escaping () -> Void) {
         self.подпись = подпись
         self.пояснение = пояснение
         self.значок = значок
         self.буква = буква
         self.счётчик = счётчик
+        self.логотипМарки = логотипМарки
         self.выбрана = выбрана
         self.действие = действие
     }
@@ -297,14 +300,22 @@ struct ПлиткаМастераПодачи: View {
                 .frame(width: 30, height: 30)
                 .background(КраскаПодачи.поле, in: Circle())
                 .accessibilityHidden(true)
+        } else if let марка = логотипМарки {
+            ЗнакМаркиСайта(марка, размер: 30) {
+                кругБуквы(буква ?? String(марка.prefix(1)).uppercased())
+            }
         } else if let буква {
-            Text(буква)
-                .font(.system(size: 14, weight: .heavy))
-                .foregroundStyle(КраскаПодачи.хорошоТекст)
-                .frame(width: 30, height: 30)
-                .background(КраскаПодачи.хорошоФон, in: Circle())
-                .accessibilityHidden(true)
+            кругБуквы(буква)
         }
+    }
+
+    private func кругБуквы(_ буква: String) -> some View {
+        Text(буква)
+            .font(.system(size: 14, weight: .heavy))
+            .foregroundStyle(КраскаПодачи.хорошоТекст)
+            .frame(width: 30, height: 30)
+            .background(КраскаПодачи.хорошоФон, in: Circle())
+            .accessibilityHidden(true)
     }
 }
 
@@ -627,7 +638,7 @@ struct МастерАвтоВид: View {
     private func сеткаМарок(_ марки: [String]) -> some View {
         LazyVGrid(columns: колонки, spacing: 8) {
             ForEach(марки, id: \.self) { м in
-                ПлиткаМастераПодачи(м, буква: String(м.prefix(1)).uppercased(), выбрана: марка == м) {
+                ПлиткаМастераПодачи(м, буква: String(м.prefix(1)).uppercased(), логотипМарки: м, выбрана: марка == м) {
                     выбратьМарку(м)
                 }
             }
@@ -670,10 +681,11 @@ struct МастерАвтоВид: View {
                 if найденныеМодели.isEmpty {
                     ПодсказкаПоля(т("aw_nothing"))
                 } else {
-                    LazyVGrid(columns: колонки, spacing: 8) {
+                    /* Одним списком во всю ширину и без картинок (владелец: «без SVG… в один список, без разделения
+                       на два»): название модели и годы выпуска под ним, по порядку справочника сайта. */
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(найденныеМодели) { м in
-                            ПлиткаМастераПодачи(м.имя, значок: "car.side",
-                                                счётчик: м.поколения.isEmpty ? "" : String(м.поколения.count),
+                            ПлиткаМастераПодачи(м.имя, пояснение: м.годыВыпуска(сейчас: т("aw_now")),
                                                 выбрана: модельАвто == м.имя) {
                                 выбратьМодель(м.имя)
                             }

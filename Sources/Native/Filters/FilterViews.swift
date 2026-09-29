@@ -994,7 +994,7 @@ private struct ЛистМаркиМодели: View {
     }
 
     private func строкаМарки(_ марка: String) -> some View {
-        строка(марка, выбрана: лента.фильтры.марки.contains(марка)) {
+        строка(марка, марка: марка, выбрана: лента.фильтры.марки.contains(марка)) {
             изменить { ф in ФильтрыЛенты.переключитьМарку(марка, в: &ф) }
         }
     }
@@ -1016,7 +1016,8 @@ private struct ЛистМаркиМодели: View {
                 }
                 if найденные.isEmpty { заметка(FilterText.т("nothing_found")) }
                 ForEach(найденные) { м in
-                    строка(м.имя, выбрана: лента.фильтры.модель == м.имя) { выбратьМодель(м.имя) }
+                    строка(м.имя, пояснение: м.годыВыпуска(сейчас: МастерПодачиText.т("aw_now")),
+                           выбрана: лента.фильтры.модель == м.имя) { выбратьМодель(м.имя) }
                 }
             }
         } else {
@@ -1053,13 +1054,33 @@ private struct ЛистМаркиМодели: View {
         }
     }
 
-    /// Строка .mk-dopt во всю ширину: выбранная — мятная, рамка 2 pt акцентом и галочка справа.
-    private func строка(_ текст: String, выбрана: Bool, действие: @escaping () -> Void) -> some View {
+    /// Строка .mk-dopt во всю ширину: выбранная — мятная, рамка 2 pt акцентом и галочка справа. У марки слева — её
+    /// знак с сайта (.afx-logo, 30 pt у всех строк марок; нет знака — две буквы), у модели под названием — годы выпуска.
+    private func строка(_ текст: String, марка: String? = nil, пояснение: String = "", выбрана: Bool,
+                        действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
             HStack(spacing: 10) {
-                Text(текст)
-                    .font(.system(size: 16, weight: выбрана ? .bold : .medium))
-                    .lineLimit(1)
+                if let марка {
+                    ЗнакМаркиСайта(марка, размер: 30) {
+                        Text(ЛоготипыМарокСайта.буквы(марка))
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(Color(red: 0x5f / 255, green: 0x6c / 255, blue: 0x63 / 255))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white, in: Circle())
+                            .overlay { Circle().strokeBorder(Theme.линия, lineWidth: 1) }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(текст)
+                        .font(.system(size: 16, weight: выбрана ? .bold : .medium))
+                        .lineLimit(1)
+                    if !пояснение.isEmpty {
+                        Text(пояснение)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer(minLength: 8)
                 if выбрана {
                     Image(systemName: "checkmark")
