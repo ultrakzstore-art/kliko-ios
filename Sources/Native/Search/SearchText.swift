@@ -6,6 +6,7 @@ import Foundation
 
  Русские слова — из словаря витрины js/i18n-marketplace-ru.js: sov_* (строки поиска), ps_* (поиск по фото),
  gate_account_title, reg_photo_search, reg_have_account, gate_go (окно регистрации mkRegGate), login_toast, err_no_conn;
+ ps_cam_hint … ps_photo, sign_in — свой экран камеры поиска по фото (владелец 29.09.2026), переведены сами.
  подсказка поля — placeholder #mk-sov-inp («Поиск по объявлениям»). Словарей kk/en/ar сайта в снимке нет — переведено
  тем же тоном, что прежние тексты приложения. Популярные запросы (MK_TRENDS) — запасные, если страница сайта их не дала.
  */
@@ -47,7 +48,18 @@ enum ПоискСайтаText {
             "shoot": "Снять", "pick": "Выбрать из фото", "cancel": "Отмена", "close": "Закрыть",
             "login_toast": "Войдите в кабинет", "err_no_conn": "Нет соединения",
             "gate_account_title": "Нужен аккаунт", "reg_photo_search": "Зарегистрируйтесь, чтобы искать по фото",
-            "gate_go": "Регистрация через eGov", "reg_have_account": "Уже есть аккаунт — войти", "later": "Позже"
+            "gate_go": "Регистрация через eGov", "reg_have_account": "Уже есть аккаунт — войти", "later": "Позже",
+            "ps_cam_hint": "Наведите на вещь — найдём похожие на Kliko", "ps_searching": "Ищем похожие…",
+            "ps_searching_sub": "Kliko AI рассматривает фото", "ps_results": "Похожие на ваше фото", "ps_ai_saw": "Kliko AI: %@",
+            "ps_again": "Снять ещё", "ps_in_feed": "Все в ленте", "ps_empty": "Похожих пока нет",
+            "ps_empty_hint": "Попробуйте другой ракурс или снимите вещь крупнее", "ps_retry_btn": "Повторить",
+            "ps_shutter": "Сделать снимок", "ps_torch_on": "Включить фонарик", "ps_torch_off": "Выключить фонарик",
+            "ps_gallery": "Выбрать из галереи", "ps_denied": "Нет доступа к камере",
+            "ps_denied_hint": "Разрешите доступ к камере в Настройках или выберите фото из галереи",
+            "ps_no_cam": "Камера недоступна", "ps_no_cam_hint": "Выберите фото из галереи — Kliko AI найдёт похожие",
+            "ps_settings": "Открыть Настройки", "ps_gate_title": "Войдите, чтобы искать по фото",
+            "ps_gate_text": "Сфотографируйте вещь — Kliko AI найдёт похожие объявления. Для этого нужен аккаунт Kliko.",
+            "sign_in": "Войти", "ps_count": "Найдено: %d", "ps_cancel_search": "Отменить", "ps_photo": "Ваше фото"
         ],
         "kk": [
             "placeholder": "Хабарландырулар бойынша іздеу", "back": "Жабу", "clear_field": "Тазалау",
@@ -64,7 +76,18 @@ enum ПоискСайтаText {
             "shoot": "Түсіру", "pick": "Фотодан таңдау", "cancel": "Бас тарту", "close": "Жабу",
             "login_toast": "Кабинетке кіріңіз", "err_no_conn": "Байланыс жоқ",
             "gate_account_title": "Аккаунт қажет", "reg_photo_search": "Фото бойынша іздеу үшін тіркеліңіз",
-            "gate_go": "eGov арқылы тіркелу", "reg_have_account": "Аккаунтым бар — кіру", "later": "Кейінірек"
+            "gate_go": "eGov арқылы тіркелу", "reg_have_account": "Аккаунтым бар — кіру", "later": "Кейінірек",
+            "ps_cam_hint": "Затқа бағыттаңыз — Kliko-дан ұқсастарын табамыз", "ps_searching": "Ұқсастарын іздеп жатырмыз…",
+            "ps_searching_sub": "Kliko AI фотоны қарап жатыр", "ps_results": "Сіздің фотоңызға ұқсас", "ps_ai_saw": "Kliko AI: %@",
+            "ps_again": "Тағы түсіру", "ps_in_feed": "Барлығы лентада", "ps_empty": "Әзірге ұқсастары жоқ",
+            "ps_empty_hint": "Басқа қырынан көріңіз немесе затты жақынырақ түсіріңіз", "ps_retry_btn": "Қайталау",
+            "ps_shutter": "Суретке түсіру", "ps_torch_on": "Шамды қосу", "ps_torch_off": "Шамды өшіру",
+            "ps_gallery": "Галереядан таңдау", "ps_denied": "Камераға рұқсат жоқ",
+            "ps_denied_hint": "Баптауларда камераға рұқсат беріңіз немесе галереядан фото таңдаңыз",
+            "ps_no_cam": "Камера қолжетімсіз", "ps_no_cam_hint": "Галереядан фото таңдаңыз — Kliko AI ұқсастарын табады",
+            "ps_settings": "Баптауларды ашу", "ps_gate_title": "Фото бойынша іздеу үшін кіріңіз",
+            "ps_gate_text": "Затты суретке түсіріңіз — Kliko AI ұқсас хабарландыруларды табады. Ол үшін Kliko аккаунты қажет.",
+            "sign_in": "Кіру", "ps_count": "Табылды: %d", "ps_cancel_search": "Тоқтату", "ps_photo": "Сіздің фотоңыз"
         ],
         "en": [
             "placeholder": "Search listings", "back": "Close", "clear_field": "Clear",
@@ -81,7 +104,18 @@ enum ПоискСайтаText {
             "shoot": "Take photo", "pick": "Choose from photos", "cancel": "Cancel", "close": "Close",
             "login_toast": "Sign in to your account", "err_no_conn": "No connection",
             "gate_account_title": "Account required", "reg_photo_search": "Sign up to search by photo",
-            "gate_go": "Sign up with eGov", "reg_have_account": "I already have an account — sign in", "later": "Later"
+            "gate_go": "Sign up with eGov", "reg_have_account": "I already have an account — sign in", "later": "Later",
+            "ps_cam_hint": "Point at an item — we'll find similar ones on Kliko", "ps_searching": "Finding similar…",
+            "ps_searching_sub": "Kliko AI is looking at the photo", "ps_results": "Similar to your photo", "ps_ai_saw": "Kliko AI: %@",
+            "ps_again": "Take another", "ps_in_feed": "All in feed", "ps_empty": "Nothing similar yet",
+            "ps_empty_hint": "Try another angle or take the item closer up", "ps_retry_btn": "Retry",
+            "ps_shutter": "Take photo", "ps_torch_on": "Turn on flashlight", "ps_torch_off": "Turn off flashlight",
+            "ps_gallery": "Choose from gallery", "ps_denied": "No camera access",
+            "ps_denied_hint": "Allow camera access in Settings or choose a photo from your gallery",
+            "ps_no_cam": "Camera unavailable", "ps_no_cam_hint": "Choose a photo from your gallery — Kliko AI will find similar ones",
+            "ps_settings": "Open Settings", "ps_gate_title": "Sign in to search by photo",
+            "ps_gate_text": "Take a photo of an item — Kliko AI will find similar listings. You just need a Kliko account.",
+            "sign_in": "Sign in", "ps_count": "Found: %d", "ps_cancel_search": "Stop", "ps_photo": "Your photo"
         ],
         "ar": [
             "placeholder": "ابحث في الإعلانات", "back": "إغلاق", "clear_field": "مسح",
@@ -98,7 +132,18 @@ enum ПоискСайтаText {
             "shoot": "التقاط صورة", "pick": "اختيار من الصور", "cancel": "إلغاء", "close": "إغلاق",
             "login_toast": "سجّل الدخول إلى حسابك", "err_no_conn": "لا يوجد اتصال",
             "gate_account_title": "يلزم حساب", "reg_photo_search": "سجّل للبحث بالصورة",
-            "gate_go": "التسجيل عبر eGov", "reg_have_account": "لدي حساب — تسجيل الدخول", "later": "لاحقًا"
+            "gate_go": "التسجيل عبر eGov", "reg_have_account": "لدي حساب — تسجيل الدخول", "later": "لاحقًا",
+            "ps_cam_hint": "وجّه الكاميرا إلى الغرض — سنجد ما يشبهه على Kliko", "ps_searching": "نبحث عن مشابه…",
+            "ps_searching_sub": "يفحص Kliko AI الصورة", "ps_results": "مشابه لصورتك", "ps_ai_saw": "Kliko AI: %@",
+            "ps_again": "التقاط أخرى", "ps_in_feed": "الكل في الخلاصة", "ps_empty": "لا يوجد مشابه بعد",
+            "ps_empty_hint": "جرّب زاوية أخرى أو صوّر الغرض عن قرب", "ps_retry_btn": "إعادة المحاولة",
+            "ps_shutter": "التقاط صورة", "ps_torch_on": "تشغيل المصباح", "ps_torch_off": "إطفاء المصباح",
+            "ps_gallery": "اختيار من المعرض", "ps_denied": "لا يوجد وصول إلى الكاميرا",
+            "ps_denied_hint": "اسمح بالوصول إلى الكاميرا من الإعدادات أو اختر صورة من المعرض",
+            "ps_no_cam": "الكاميرا غير متاحة", "ps_no_cam_hint": "اختر صورة من المعرض — سيجد Kliko AI ما يشبهها",
+            "ps_settings": "فتح الإعدادات", "ps_gate_title": "سجّل الدخول للبحث بالصورة",
+            "ps_gate_text": "صوّر الغرض — سيجد Kliko AI إعلانات مشابهة. يلزم فقط حساب Kliko.",
+            "sign_in": "تسجيل الدخول", "ps_count": "تم العثور على: %d", "ps_cancel_search": "إيقاف", "ps_photo": "صورتك"
         ]
     ]
 }

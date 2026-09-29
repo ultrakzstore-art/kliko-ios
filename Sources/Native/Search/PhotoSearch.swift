@@ -3,21 +3,24 @@ import PhotosUI
 import UIKit
 
 /**
- ПОИСК ПО ФОТО КАК НА САЙТЕ (владелец 26.09.2026, TestFlight 1.10: «камера распознавания не работает»).
+ ПОИСК ПО ФОТО — СВОЙ ЭКРАН КАМЕРЫ (владелец 29.09.2026: «И поиск по фото тоже дизайн камеры»).
 
- 🔴 ПОЧЕМУ НЕ РАБОТАЛО. Камера в поле шапки (ШапкаСайта.поискПоФото) с этапа 25 не искала по фото: она открывала ленту
- сайта без главной (Config.лентаСайта, /kz/<язык>/?all=1) — считалось, что человек нажмёт там камеру ещё раз. На
- телефоне это выглядело как «нажал камеру — открылась та же лента, ничего не распозналось». Своего поиска по фото у
- приложения не было вовсе. Теперь — свой, тем же запросом, что mkPhotoSearch сайта (js/marketplace.min.js):
-
- • гость (getMkMe() пустой) — окно «Нужен аккаунт» с «Зарегистрируйтесь, чтобы искать по фото» (mkRegGate);
- • «Снять» (системная камера, КамераПодачи) или «Выбрать из фото» (PhotosPicker); камеры нет — сразу галерея;
+ Запрос к сайту прежний — тот же, что mkPhotoSearch сайта (js/marketplace.min.js), см. ПоискПоФотоAPI ниже:
  • снимок — как _mkPhotoPicked: большая сторона не больше 1024, JPEG 0,82, dataURL;
  • POST /api/photo_search.php, multipart, поле imgb64 (и csrf страницы), с куками веб-сессии (SiteSession);
- • пока ждём — окно «Распознаём фото…» с превью и бегущей полосой (_mkPhotoProgress);
- • ответ ok + query — окно закрывается, запрос встаёт в поле, раздел category (если есть) выбирается, плашка «Ищем: …»;
- • need/error «auth» — снова окно входа; иначе — ошибка сайта (error или «Не удалось распознать фото»), сети нет —
-   «Нет соединения»; в окне ошибки — «Другое фото».
+ • ответ ok + query (+ category) — что распознано; need/error «auth» — нужен вход. Области снимка (обрезки) API не
+   принимает — только весь кадр, поэтому своей рамки-обрезки нет: рамка на камере — подсказка, куда навести.
+
+ Что видит человек (PhotoSearchCamera.swift, PhotoSearchResults.swift):
+ • гость (сеанс сайта «не вошёл») — до камеры нативный лист «Войдите, чтобы искать по фото»: «Войти» (ВходПоверх),
+   «Регистрация через eGov», «Позже»; вошёл — сразу камера;
+ • тёмный экран живой камеры (AVFoundation): ✕, фонарик, большой затвор, галерея с миниатюрой последнего фото,
+   подсказка «Наведите на вещь…», рамка с уголками (без движения при «Уменьшении движения»); камеры нет или доступ
+   запрещён — заглушка с «Выбрать из галереи» (и «Открыть Настройки»), без камеры галерея открывается сама;
+ • снимок — «Ищем похожие…» (Kliko AI) поверх фото; затем сетка карточек ленты (ListingCard) «Похожие на ваше фото»
+   по распознанному запросу и разделу (api/listings.php, как лента; в разделе пусто — без раздела), «Снять ещё» и
+   «Все в ленте» (прежнее поведение: запрос встаёт в поле ленты, плашка «Ищем: …»);
+ • ошибка распознавания или сети — «Повторить», «Снять ещё», «Выбрать из галереи»; сайт просит вход — лист входа.
  */
 enum ПоискПоФотоAPI {
     enum Итог: Equatable {
@@ -127,80 +130,84 @@ final class ПоискПоФотоСайта: ObservableObject {
     enum Шаг: Equatable {
         case камера
         case идёт
+        case результаты
         case ошибка(String)
-        case вход
-        case формаВхода
     }
 
-    /// Выбор «Снять» / «Выбрать из фото».
-    @Published var выбор = false
-    /// Системная галерея (PhotosPicker).
+    /// Гостю — лист «Войдите, чтобы искать по фото» до камеры.
+    @Published var ворота = false
+    /// Экран поиска по фото поверх всего: камера, «Ищем похожие…», похожие, ошибка.
+    @Published var окно = false
+    /// Системная галерея (PhotosPicker) — из экрана камеры.
     @Published var галерея = false
     @Published var элемент: PhotosPickerItem? = nil
-    /// Окно поверх всего: камера, «Распознаём фото…», ошибка, вход.
-    @Published var окно = false
-    @Published private(set) var шаг: Шаг = .идёт
+    @Published private(set) var шаг: Шаг = .камера
     @Published private(set) var превью: UIImage? = nil
-    /// Распознали — лента подставляет запрос и раздел.
+    /// Последний снимок этой камеры — миниатюра у кнопки галереи, если доступа к фото нет.
+    @Published private(set) var последний: UIImage? = nil
+    /// Что распознал Kliko AI и в каком разделе искали.
+    @Published private(set) var запрос = ""
+    @Published private(set) var раздел = ""
+    @Published private(set) var товары: [Listing] = []
+    @Published private(set) var всего: Int? = nil
+    /// «Все в ленте» — лента подставляет запрос и раздел.
     @Published private(set) var итог: ИтогПоискаПоФото? = nil
     /// Плашка «Ищем: …» (toast сайта).
     @Published private(set) var плашка: String? = nil
 
+    private var адресФото: String? = nil
     private var задача: Task<Void, Never>? = nil
     private var поколение = 0
 
     private init() {}
 
-    static var естьКамера: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
-
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
-    /// Камера в поле поиска (mkPhotoSearch): гость — окно входа, иначе выбор источника.
+    /// Камера в поле поиска: гость — лист входа, иначе сразу камера.
     func начать() {
         Task { @MainActor in
             let состояние = await SiteSession.состояние()
             if состояние.вошёл == false {
-                показатьВход()
+                ворота = true
             } else {
-                предложить()
+                открытьКамеру()
             }
         }
     }
 
-    /// «Снять» или «Выбрать из фото»; камеры нет — сразу галерея (у сайта без getUserMedia — окно с «Загрузить фото»).
-    func предложить() {
-        if Self.естьКамера {
-            выбор = true
-        } else {
-            галерея = true
-        }
+    func открытьКамеру() {
+        сбросить()
+        шаг = .камера
+        окно = true
     }
 
-    func снять() {
-        Task { @MainActor in
-            /* Лист выбора ещё уходит с экрана — окно камеры поверх него iOS не покажет. */
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            шаг = .камера
-            превью = nil
-            окно = true
-        }
+    /// «Снять ещё» — обратно к камере в том же окне.
+    func снятьЕщё() {
+        сбросить()
+        шаг = .камера
     }
 
-    func выбратьИзФото() {
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            галерея = true
-        }
+    /// «Выбрать из галереи» с экрана ошибки или заглушки.
+    func открытьГалерею() {
+        галерея = true
+    }
+
+    private func сбросить() {
+        поколение += 1
+        задача?.cancel()
+        задача = nil
+        превью = nil
+        адресФото = nil
+        запрос = ""
+        раздел = ""
+        товары = []
+        всего = nil
     }
 
     /// Снимок с камеры.
     func снято(_ снимок: UIImage) {
+        последний = снимок
         обработать(снимок)
-    }
-
-    /// Камеру закрыли «Отменить» — окно уходит; сняли — окно уже показывает распознавание.
-    func камераЗакрыта() {
-        if шаг == .камера { окно = false }
     }
 
     /// Выбрали в галерее.
@@ -212,11 +219,8 @@ final class ПоискПоФотоСайта: ObservableObject {
         Task { @MainActor in
             let данные = try? await выбранный.loadTransferable(type: Data.self)
             guard номер == поколение else { return }
-            /* Галерея ещё закрывается — окно поверх неё покажем чуть позже. */
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard номер == поколение else { return }
             guard let данные, let снимок = UIImage(data: данные) else {
-                показатьОшибку(т("ps_bad_img"))
+                шаг = .ошибка(т("ps_bad_img"))
                 return
             }
             обработать(снимок)
@@ -224,26 +228,34 @@ final class ПоискПоФотоСайта: ObservableObject {
     }
 
     private func обработать(_ снимок: UIImage) {
+        сбросить()
         превью = снимок
         шаг = .идёт
-        окно = true
-        поколение += 1
-        let номер = поколение
-        задача?.cancel()
         guard let адрес = ПоискПоФотоAPI.сжать(снимок) else {
-            показатьОшибку(т("ps_fail"))
+            шаг = .ошибка(т("ps_fail"))
             return
         }
+        адресФото = адрес
+        распознать(адрес)
+    }
+
+    /// Фото — на сайт (тот же запрос, что mkPhotoSearch), распознанное — в выдачу похожих.
+    private func распознать(_ адрес: String) {
+        let номер = поколение
+        шаг = .идёт
+        задача?.cancel()
         задача = Task { @MainActor in
             let ответ = await ПоискПоФотоAPI.отправить(адрес)
             guard номер == поколение, !Task.isCancelled else { return }
             switch ответ {
-            case .найдено(let запрос, let раздел):
-                окно = false
-                итог = ИтогПоискаПоФото(запрос: запрос, раздел: раздел)
-                показатьПлашку(String(format: т("ps_found"), запрос))
+            case .найдено(let найдено, let ключ):
+                запрос = найдено
+                раздел = ключ
+                await найтиПохожие(номер)
             case .нуженВход:
-                шаг = .вход
+                закрыть()
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                ворота = true
             case .отказ(let текст):
                 шаг = .ошибка(текст)
             case .сеть:
@@ -252,41 +264,81 @@ final class ПоискПоФотоСайта: ObservableObject {
         }
     }
 
-    private func показатьОшибку(_ текст: String) {
-        шаг = .ошибка(текст)
-        окно = true
+    /// Объявления по распознанному запросу — как лента (api/listings.php); в разделе пусто — ещё раз без раздела.
+    private func найтиПохожие(_ номер: Int) async {
+        var з = ListingsAPI.Запрос()
+        з.q = запрос
+        з.cat = раздел
+        do {
+            var страница = try await ListingsAPI.загрузить(з).страница
+            guard номер == поколение, !Task.isCancelled else { return }
+            if страница.items.isEmpty && !з.cat.isEmpty {
+                з.cat = ""
+                let шире = try await ListingsAPI.загрузить(з).страница
+                guard номер == поколение, !Task.isCancelled else { return }
+                if !шире.items.isEmpty {
+                    раздел = ""
+                    страница = шире
+                }
+            }
+            товары = страница.items
+            всего = страница.total
+            шаг = .результаты
+            let объявление = товары.isEmpty ? т("ps_empty") : String(format: т("ps_count"), всего ?? товары.count)
+            UIAccessibility.post(notification: .announcement, argument: объявление)
+        } catch {
+            guard номер == поколение, !Task.isCancelled else { return }
+            шаг = .ошибка(т("err_no_conn"))
+        }
     }
 
-    private func показатьВход() {
-        шаг = .вход
-        превью = nil
-        окно = true
-    }
-
-    /// «Уже есть аккаунт — войти»: форма входа в том же окне (или свой экран входа поверх всего).
-    func войти() {
-        if Config.нативныйВход {
-            шаг = .формаВхода
+    /// «Повторить»: распознано — снова выдача, нет — снова то же фото на сайт; фото нет — к камере.
+    func повторить() {
+        if !запрос.isEmpty {
+            поколение += 1
+            let номер = поколение
+            шаг = .идёт
+            задача?.cancel()
+            задача = Task { @MainActor in await найтиПохожие(номер) }
+        } else if let адрес = адресФото {
+            поколение += 1
+            распознать(адрес)
         } else {
-            закрыть()
-            ВходПоверх.показать()
+            снятьЕщё()
         }
     }
 
-    /// Вошли — «…и продолжить»: снова выбор источника фото.
-    func вошли() {
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            предложить()
-        }
-    }
-
-    /// «Другое фото» в окне ошибки — _mkPhotoError сайта снова открывает выбор файла.
-    func другоеФото() {
+    /// «Все в ленте»: окно закрывается, запрос встаёт в поле ленты, раздел выбирается, плашка «Ищем: …».
+    func вЛенту() {
+        guard !запрос.isEmpty else { return }
+        let найдено = запрос
+        let ключ = раздел
         закрыть()
+        итог = ИтогПоискаПоФото(запрос: найдено, раздел: ключ)
+        показатьПлашку(String(format: т("ps_found"), найдено))
+    }
+
+    /// «Войти» в листе гостя: свой экран входа поверх всего; вошли — камера.
+    func войтиИзВорот() {
+        ворота = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 450_000_000)
-            предложить()
+            ВходПоверх.показать(готово: { [weak self] in
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                    self?.открытьКамеру()
+                }
+            })
+        }
+    }
+
+    /// «Регистрация через eGov» в листе гостя.
+    func eGovИзВорот(_ открыть: @escaping (URL) -> Void) {
+        ворота = false
+        guard let адрес = Config.страницаСайта("cabinet?egov=1") else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            открыть(адрес)
         }
     }
 
@@ -307,28 +359,18 @@ final class ПоискПоФотоСайта: ObservableObject {
     }
 }
 
-// MARK: - Виды
+// MARK: - Слой и окно
 
-/// Выбор источника, галерея и окно поиска по фото — слой под лентой, чтобы его листы не спорили с листами ленты.
+/// Лист гостя и окно поиска по фото — слой под лентой, чтобы его листы не спорили с листами ленты.
 struct СлойПоискаПоФото: View {
     @ObservedObject var модель: ПоискПоФотоСайта
     let открыть: (URL) -> Void
 
-    private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
-
     var body: some View {
         Color.clear
             .allowsHitTesting(false)
-            .confirmationDialog(т("ps_title"), isPresented: $модель.выбор, titleVisibility: .visible) {
-                Button(т("shoot")) { модель.снять() }
-                Button(т("pick")) { модель.выбратьИзФото() }
-                Button(т("cancel"), role: .cancel) {}
-            } message: {
-                Text(т("ps_hint"))
-            }
-            .photosPicker(isPresented: $модель.галерея, selection: $модель.элемент, matching: .images)
-            .onChange(of: модель.элемент) { _, новый in
-                модель.принять(новый)
+            .sheet(isPresented: $модель.ворота) {
+                ЛистВходаПоискаФото(модель: модель, открыть: открыть)
             }
             .fullScreenCover(isPresented: $модель.окно) {
                 ОкноПоискаПоФото(модель: модель, открыть: открыть)
@@ -336,276 +378,181 @@ struct СлойПоискаПоФото: View {
     }
 }
 
-/// Окно поверх всего: камера, «Распознаём фото…», ошибка или вход — .mk-psheet сайта на затемнении.
+/// Окно поверх всего: камера → «Ищем похожие…» → похожие (карточки открываются в том же стеке) или ошибка.
 struct ОкноПоискаПоФото: View {
     @ObservedObject var модель: ПоискПоФотоСайта
     let открыть: (URL) -> Void
-
-    private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
+    /// Камера живёт, пока открыто окно: «Снять ещё» не собирает её заново.
+    @StateObject private var камера = КамераПоиска()
 
     var body: some View {
-        Group {
-            switch модель.шаг {
-            case .камера:
-                КамераПодачи(снято: { снимок in модель.снято(снимок) }, закрыть: { модель.камераЗакрыта() })
-                    .ignoresSafeArea()
-            case .формаВхода:
-                ЭкранВхода(eGovВключён: true, открыть: { адрес in
-                    модель.закрыть()
-                    открыть(адрес)
-                }, вошли: {
-                    модель.вошли()
-                })
-            default:
-                затемнение
-            }
+        NavigationStack {
+            содержимое
+                .navigationDestination(for: Listing.self) { товар in
+                    ListingDetailView(товар: товар, открыть: { адрес in
+                        модель.закрыть()
+                        открыть(адрес)
+                    })
+                }
         }
-        .presentationBackground(фон)
+        .tint(Theme.зелёный2)
+        .preferredColorScheme(модель.шаг == .результаты ? nil : .dark)
+        .photosPicker(isPresented: $модель.галерея, selection: $модель.элемент, matching: .images)
+        .onChange(of: модель.элемент) { _, новый in
+            модель.принять(новый)
+        }
+        .onDisappear { камера.остановить() }
     }
 
-    private var фон: Color {
+    @ViewBuilder
+    private var содержимое: some View {
         switch модель.шаг {
-        case .камера: return Color.black
-        case .формаВхода: return Theme.фонСтраницы
-        default: return Color.clear
-        }
-    }
-
-    /// Затемнение rgba(15,23,42,.55) и карточка по центру; нажатие мимо карточки закрывает, как у сайта.
-    private var затемнение: some View {
-        ZStack {
-            Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255).opacity(0.55)
-                .ignoresSafeArea()
-                .onTapGesture { модель.закрыть() }
-                .accessibilityHidden(true)
-            КарточкаПоискаПоФото(модель: модель, открыть: открыть)
-                .padding(20)
+        case .камера:
+            ЭкранКамерыПоиска(модель: модель, камера: камера)
+                .toolbar(.hidden, for: .navigationBar)
+        case .идёт:
+            ЭкранРаспознаванияФото(модель: модель)
+                .toolbar(.hidden, for: .navigationBar)
+        case .результаты:
+            ЭкранПохожихПоФото(модель: модель)
+        case .ошибка(let текст):
+            ЭкранОшибкиПоискаФото(модель: модель, текст: текст)
+                .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
 
-/// .mk-psheet: белая карточка до 380 pt, скругление 20, отступы 24, текст по центру.
-private struct КарточкаПоискаПоФото: View {
+/// Лист гостя до камеры (mkRegGate сайта, нативно): зачем вход, «Войти», «Регистрация через eGov», «Позже».
+private struct ЛистВходаПоискаФото: View {
     @ObservedObject var модель: ПоискПоФотоСайта
     let открыть: (URL) -> Void
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch модель.шаг {
-            case .ошибка(let текст):
-                ошибка(текст)
-            case .вход:
-                вход
-            default:
-                ИдётРаспознавание(превью: модель.превью)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: 380)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
-        .overlay(alignment: .topTrailing) {
-            if модель.шаг != .идёт {
-                Button { модель.закрыть() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
+        ScrollView {
+            VStack(spacing: 0) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный2)
+                    .frame(width: 72, height: 72)
+                    .background(Theme.мята, in: Circle())
+                    .padding(.bottom, 16)
+                    .accessibilityHidden(true)
+                Text(т("ps_gate_title"))
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(Theme.текст)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 8)
+                Text(т("ps_gate_text"))
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.текстВторой)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 22)
+                ЗелёнаяКнопкаФото(заголовок: т("sign_in"), значок: "person.crop.circle") { модель.войтиИзВорот() }
+                    .padding(.bottom, 10)
+                ЗелёнаяКнопкаФото(заголовок: т("gate_go"), значок: "checkmark.shield", контурная: true) {
+                    модель.eGovИзВорот(открыть)
+                }
+                .padding(.bottom, 6)
+                Button { модель.ворота = false } label: {
+                    Text(т("later"))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.текстВторой)
-                        .frame(width: 36, height: 36)
+                        .frame(minHeight: 44)
+                        .padding(.horizontal, 16)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(6)
-                .accessibilityLabel(т("close"))
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 28)
+            .padding(.bottom, 16)
+            .frame(maxWidth: 460)
+            .frame(maxWidth: .infinity)
         }
-        .shadow(color: Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255).opacity(0.4), radius: 30, x: 0, y: 24)
-    }
-
-    /// _mkPhotoError: красный значок, текст ошибки, «Попробуйте фото чётче…», «Другое фото».
-    private func ошибка(_ текст: String) -> some View {
-        VStack(spacing: 0) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(Theme.ценаСкидка)
-                .frame(width: 66, height: 66)
-                .background(Theme.скидкаФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
-                .padding(.bottom, 16)
-                .accessibilityHidden(true)
-            Text(текст)
-                .font(.system(size: 19, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 8)
-            Text(т("ps_retry_hint"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 20)
-            КнопкаЛистаФото(заголовок: т("ps_retry"), значок: "square.and.arrow.up") { модель.другоеФото() }
-        }
-    }
-
-    /// mkRegGate: «Нужен аккаунт», «Зарегистрируйтесь, чтобы искать по фото», eGov, «Уже есть аккаунт — войти».
-    private var вход: some View {
-        VStack(spacing: 0) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(Theme.зелёный)
-                .frame(width: 66, height: 66)
-                .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous))
-                .padding(.bottom, 16)
-                .accessibilityHidden(true)
-            Text(т("gate_account_title"))
-                .font(.system(size: 19, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 8)
-            Text(т("reg_photo_search"))
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.текстВторой)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 20)
-            КнопкаЛистаФото(заголовок: т("gate_go"), значок: "checkmark.shield") {
-                модель.закрыть()
-                if let адрес = Config.страницаСайта("cabinet?egov=1") { открыть(адрес) }
-            }
-            .padding(.bottom, 10)
-            Button { модель.войти() } label: {
-                Text(т("reg_have_account"))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.зелёный2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            Button { модель.закрыть() } label: {
-                Text(т("later"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
+        .background(Theme.поверхность.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
-/// .mk-psheet-up: зелёная кнопка во всю ширину, 15 pt жирным, скругление 12.
-private struct КнопкаЛистаФото: View {
+/// Кнопка во всю ширину, как у экранов подачи: зелёная заливка или зелёный контур, скругление 14, Dynamic Type.
+struct ЗелёнаяКнопкаФото: View {
     let заголовок: String
     let значок: String
+    var контурная = false
+    var наТёмном = false
     let действие: () -> Void
+
+    init(заголовок: String, значок: String, контурная: Bool = false, наТёмном: Bool = false,
+         действие: @escaping () -> Void) {
+        self.заголовок = заголовок
+        self.значок = значок
+        self.контурная = контурная
+        self.наТёмном = наТёмном
+        self.действие = действие
+    }
+
+    private var цветТекста: Color {
+        if !контурная { return Color.white }
+        return наТёмном ? Color.white : Theme.зелёный2
+    }
 
     var body: some View {
         Button(action: действие) {
             HStack(spacing: 10) {
                 Image(systemName: значок)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body.weight(.semibold))
+                    .accessibilityHidden(true)
                 Text(заголовок)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.body.weight(.bold))
+                    .multilineTextAlignment(.center)
             }
-            .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity)
-            .padding(14)
-            .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .foregroundStyle(цветТекста)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .padding(.horizontal, 16)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .fill(контурная ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Theme.зелёный2))
+            }
+            .overlay {
+                if контурная {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(наТёмном ? Color.white.opacity(0.55) : Theme.зелёный2, lineWidth: 1.5)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(НажатиеКнопкиФото())
     }
 }
 
-/// _mkPhotoProgress: превью 192 × 192 с бегущей полосой и уголками, «Распознаём фото…», полоса загрузки.
-private struct ИдётРаспознавание: View {
-    let превью: UIImage?
-    @State private var бег = false
+/// Лёгкое сжатие под пальцем (как .mh-c:active сайта) — остаётся и при «Уменьшении движения».
+struct НажатиеКнопкиФото: ButtonStyle {
+    var сжатие: CGFloat = 0.97
 
-    init(превью: UIImage?) {
-        self.превью = превью
-    }
-
-    private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            картинка
-                .padding(.top, 2)
-                .padding(.bottom, 20)
-            Text(т("ps_recognizing"))
-                .font(.system(size: 16, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 6)
-            Text(т("ps_recognizing_sub"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 16)
-            полоса
-        }
-        .onAppear { бег = true }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var картинка: some View {
-        ZStack {
-            if let превью {
-                Image(uiImage: превью)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                LinearGradient(colors: [Theme.мята, Theme.поверхность2], startPoint: .topLeading,
-                               endPoint: .bottomTrailing)
-            }
-            LinearGradient(stops: [Gradient.Stop(color: Color(red: 29 / 255, green: 158 / 255, blue: 94 / 255).opacity(0), location: 0),
-                                   Gradient.Stop(color: Color(red: 29 / 255, green: 158 / 255, blue: 94 / 255).opacity(0.45), location: 0.25),
-                                   Gradient.Stop(color: Color.white.opacity(0.5), location: 0.5),
-                                   Gradient.Stop(color: Color(red: 29 / 255, green: 158 / 255, blue: 94 / 255).opacity(0.45), location: 0.75),
-                                   Gradient.Stop(color: Color(red: 29 / 255, green: 158 / 255, blue: 94 / 255).opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 56)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .offset(y: бег ? 192 : -56)
-                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)), value: бег)
-            УголкиРамки()
-                .padding(10)
-                .opacity(бег ? 0.65 : 1)
-                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)), value: бег)
-        }
-        .frame(width: 192, height: 192)
-        .background(Theme.поверхность2)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
-        .accessibilityHidden(true)
-    }
-
-    /// .mk-pprog-bar: 6 pt, бегущий отрезок 40 % ширины от ярко-зелёного к зелёному.
-    private var полоса: some View {
-        GeometryReader { место in
-            Capsule()
-                .fill(LinearGradient(colors: [Theme.зелёныйЯркий, Theme.зелёный2], startPoint: .leading,
-                                     endPoint: .trailing))
-                .frame(width: место.size.width * 0.4)
-                .offset(x: бег ? место.size.width : -место.size.width * 0.4)
-                .animation(ДвижениеСайта.мягко(.easeInOut(duration: 1.15).repeatForever(autoreverses: false)), value: бег)
-        }
-        .frame(height: 6)
-        .background(Theme.поверхность2)
-        .clipShape(Capsule())
-        .accessibilityHidden(true)
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? сжатие : 1)
+            .animation(ДвижениеСайта.нажатие, value: configuration.isPressed)
     }
 }
 
-/// Четыре белых уголка 24 × 24 рамки распознавания (.mk-pc).
-private struct УголкиРамки: View {
+/// Четыре уголка рамки распознавания (.mk-pc сайта): длина, цвет и толщина — для камеры и превью.
+struct УголкиПоискаФото: View {
+    var длина: CGFloat = 24
+    var цвет: Color = Color.white.opacity(0.92)
+    var толщина: CGFloat = 2.5
+
     var body: some View {
         Canvas { контекст, размер in
-            let д: CGFloat = 24
-            let р: CGFloat = 6
+            let д = длина
+            let р: CGFloat = min(10, длина / 3)
+            let ш = размер.width
+            let в = размер.height
             var путь = Path()
             /* левый верхний */
             путь.move(to: CGPoint(x: 0, y: д))
@@ -613,24 +560,24 @@ private struct УголкиРамки: View {
             путь.addQuadCurve(to: CGPoint(x: р, y: 0), control: CGPoint(x: 0, y: 0))
             путь.addLine(to: CGPoint(x: д, y: 0))
             /* правый верхний */
-            путь.move(to: CGPoint(x: размер.width - д, y: 0))
-            путь.addLine(to: CGPoint(x: размер.width - р, y: 0))
-            путь.addQuadCurve(to: CGPoint(x: размер.width, y: р), control: CGPoint(x: размер.width, y: 0))
-            путь.addLine(to: CGPoint(x: размер.width, y: д))
+            путь.move(to: CGPoint(x: ш - д, y: 0))
+            путь.addLine(to: CGPoint(x: ш - р, y: 0))
+            путь.addQuadCurve(to: CGPoint(x: ш, y: р), control: CGPoint(x: ш, y: 0))
+            путь.addLine(to: CGPoint(x: ш, y: д))
             /* левый нижний */
-            путь.move(to: CGPoint(x: 0, y: размер.height - д))
-            путь.addLine(to: CGPoint(x: 0, y: размер.height - р))
-            путь.addQuadCurve(to: CGPoint(x: р, y: размер.height), control: CGPoint(x: 0, y: размер.height))
-            путь.addLine(to: CGPoint(x: д, y: размер.height))
+            путь.move(to: CGPoint(x: 0, y: в - д))
+            путь.addLine(to: CGPoint(x: 0, y: в - р))
+            путь.addQuadCurve(to: CGPoint(x: р, y: в), control: CGPoint(x: 0, y: в))
+            путь.addLine(to: CGPoint(x: д, y: в))
             /* правый нижний */
-            путь.move(to: CGPoint(x: размер.width - д, y: размер.height))
-            путь.addLine(to: CGPoint(x: размер.width - р, y: размер.height))
-            путь.addQuadCurve(to: CGPoint(x: размер.width, y: размер.height - р),
-                              control: CGPoint(x: размер.width, y: размер.height))
-            путь.addLine(to: CGPoint(x: размер.width, y: размер.height - д))
-            контекст.stroke(путь, with: .color(Color.white.opacity(0.92)),
-                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            путь.move(to: CGPoint(x: ш - д, y: в))
+            путь.addLine(to: CGPoint(x: ш - р, y: в))
+            путь.addQuadCurve(to: CGPoint(x: ш, y: в - р), control: CGPoint(x: ш, y: в))
+            путь.addLine(to: CGPoint(x: ш, y: в - д))
+            контекст.stroke(путь, with: .color(цвет),
+                            style: StrokeStyle(lineWidth: толщина, lineCap: .round, lineJoin: .round))
         }
-        .shadow(color: Color.black.opacity(0.4), radius: 1)
+        .shadow(color: Color.black.opacity(0.35), radius: 2)
+        .accessibilityHidden(true)
     }
 }
