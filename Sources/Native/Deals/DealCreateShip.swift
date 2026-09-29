@@ -7,7 +7,7 @@ import CoreLocation
  Образец — окно _mkEcoGo сайта (js/marketplace.min.js): блок «Как получить» (mkEcoShipOptsHtml) и «Куда привезти».
    · Адрес по умолчанию — GET escrow.php?action=recv_default → addr, lat, lon, door{flat,porch,floor,code,out};
      «Изменить адрес» — своё окно карты (ЛистТочкиСделки без сделки).
-   · Цена — GET api/ship_quote.php?item=<pid>&lat=&lon=[&dd=out][&a=<адрес ≤200>] (mkEcoShipQuote):
+   · Цена — GET /api/ship_quote.php?item=<pid>&lat=&lon=[&dd=out][&a=<адрес ≤200>] (mkEcoShipQuote, от корня):
        reason "off" — блока нет; mode "carriers" + offers — межгород: транспортные компании (СДЭК…) «до пункта
        выдачи» / «до двери», срок, цена, пункт выдачи (points); пусто или reason "intercity" — «Дальше 30 км
        доставляем только СДЭК…»; бесплатная доставка продавца — только free + courier; иначе курьер Яндекса: tariff
@@ -54,6 +54,8 @@ enum ДоставкаСделкиText {
         "co_ship_none": "Доставку для этого объявления не посчитать — заберите сами или договоритесь с продавцом",
         "co_ship_retry2": "Не удалось посчитать доставку — нажмите, чтобы повторить",
         "co_ship_na": "сюда курьер не возит",
+        "co_ship_why": "Ответ службы доставки: {r}",
+        "co_ship_same": "Транспортные компании (СДЭК…) — только в другой город, дальше 30 км. В своём городе — курьер Яндекса или «Заберу сам».",
         "co_ship_intercity": "Дальше 30 км доставляем только СДЭК, а для этого товара и адреса он сейчас недоступен — оформить с доставкой не получится. Напишите продавцу.",
         "co_ship_region": "Продавец не отправляет в ваш регион — можно договориться о встрече или забрать самому.",
         "co_ship_free": "Доставка за счёт продавца",
@@ -94,6 +96,8 @@ enum ДоставкаСделкиText {
         "co_ship_none": "Бұл хабарландыруға жеткізуді есептеу мүмкін емес — өзіңіз алыңыз немесе сатушымен келісіңіз",
         "co_ship_retry2": "Жеткізуді есептеу мүмкін болмады — қайталау үшін басыңыз",
         "co_ship_na": "мұнда курьер апармайды",
+        "co_ship_why": "Жеткізу қызметінің жауабы: {r}",
+        "co_ship_same": "Көлік компаниялары (СДЭК…) — тек басқа қалаға, 30 км-ден алыс. Өз қалаңызда — Яндекс курьері немесе «Өзім аламын».",
         "co_ship_intercity": "30 км-ден алыс тек СДЭК жеткізеді, ал бұл тауар мен мекенжай үшін ол қазір қолжетімсіз — жеткізумен рәсімдеу мүмкін емес. Сатушыға жазыңыз.",
         "co_ship_region": "Сатушы сіздің өңіріңізге жібермейді — кездесуге келісуге немесе өзіңіз алып кетуге болады.",
         "co_ship_free": "Жеткізу сатушының есебінен",
@@ -134,6 +138,8 @@ enum ДоставкаСделкиText {
         "co_ship_none": "Delivery can't be calculated for this listing — pick it up or agree with the seller",
         "co_ship_retry2": "Couldn't calculate delivery — tap to retry",
         "co_ship_na": "couriers don't deliver here",
+        "co_ship_why": "Delivery service reply: {r}",
+        "co_ship_same": "Shipping companies (CDEK…) are only for another city, farther than 30 km. Within your city — Yandex courier or pickup.",
         "co_ship_intercity": "Beyond 30 km only CDEK delivers, and it isn't available for this item and address right now — delivery can't be arranged. Message the seller.",
         "co_ship_region": "The seller doesn't ship to your region — you can arrange a meeting or pick it up yourself.",
         "co_ship_free": "Delivery paid by the seller",
@@ -174,6 +180,8 @@ enum ДоставкаСделкиText {
         "co_ship_none": "لا يمكن حساب التوصيل لهذا الإعلان — استلمه بنفسك أو اتفق مع البائع",
         "co_ship_retry2": "تعذّر حساب التوصيل — اضغط للمحاولة مجددًا",
         "co_ship_na": "المندوب لا يوصل إلى هنا",
+        "co_ship_why": "رد خدمة التوصيل: {r}",
+        "co_ship_same": "شركات الشحن (CDEK…) للمدن الأخرى فقط، أبعد من 30 كم. داخل مدينتك — مندوب Yandex أو الاستلام بنفسك.",
         "co_ship_intercity": "لأبعد من 30 كم يوصل CDEK فقط، وهو غير متاح الآن لهذه السلعة وهذا العنوان — لا يمكن الطلب مع التوصيل. راسل البائع.",
         "co_ship_region": "البائع لا يشحن إلى منطقتك — يمكنكما الاتفاق على لقاء أو الاستلام بنفسك.",
         "co_ship_free": "التوصيل على حساب البائع",
@@ -226,8 +234,8 @@ enum РасчётДоставкиСделки: Equatable {
     case нужнаТочка
     /// slow_down / net / unavailable — «нажмите, чтобы повторить».
     case сбой
-    /// Прочий отказ: причина сервера (no_courier, no…).
-    case нельзя(String)
+    /// Прочий отказ: код причины сервера (no_courier, no…) и его пояснение для человека (пусто — нечего показать).
+    case нельзя(String, String)
     case межгородНельзя
     case регион
     case курьер([ВариантДоставкиСделки])
@@ -268,6 +276,8 @@ final class ДоставкаНовойСделки: ObservableObject {
     func начать(товар: String, бесплатная: Bool) async {
         self.товар = товар
         self.бесплатная = бесплатная
+        /* _mkEcoTariff = "courier" сайта: из двух тарифов сначала отмечен пеший. */
+        тариф = "courier"
         скрыт = бесплатная
         включена = true
         guard let j = try? await ДеньгиСделкиAPI.получить("escrow.php?action=recv_default"),
@@ -365,14 +375,15 @@ final class ДоставкаНовойСделки: ObservableObject {
         номерРасчёта += 1
         let мой = номерРасчёта
         расчёт = .считаем
-        var хвост = "api/ship_quote.php?item=" + СделкиAPI.вАдрес(товар)
+        /* Как mkEcoShipQuote сайта: _MKB + "api/ship_quote.php" — от корня (_ULX_BASE = ""), не /kz/<язык>/. */
+        var хвост = "/api/ship_quote.php?item=" + Self.вАдрес(товар)
         хвост += "&lat=" + String(точка.широта) + "&lon=" + String(точка.долгота)
         if а.уПодъезда { хвост += "&dd=out" }
-        let кратко = String(а.текст.prefix(200))
-        if !кратко.isEmpty { хвост += "&a=" + СделкиAPI.вАдрес(кратко) }
+        let кратко = String(а.текст.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        if !кратко.isEmpty { хвост += "&a=" + Self.вАдрес(кратко) }
         let запрос = хвост
         Task { @MainActor [weak self] in
-            let ответ = try? await ДеньгиСделкиAPI.получить(запрос)
+            let ответ = try? await СделкиAPI.получить(запрос, отКорня: true)
             guard let self, мой == self.номерРасчёта else { return }
             guard let j = ответ else {
                 self.расчёт = .сбой
@@ -462,8 +473,32 @@ final class ДоставкаНовойСделки: ObservableObject {
         } else if код == "need_pt" {
             расчёт = .нужнаТочка
         } else {
-            расчёт = .нельзя(код)
+            расчёт = .нельзя(код, Self.пояснение(j))
         }
+    }
+
+    /**
+     Что именно ответил сервер: текст message / msg / error, если он для человека, иначе сам код причины. Сайт на любой
+     незнакомый код пишет только «сюда курьер не возит» — натив добавляет строку с ответом, чтобы было видно почему.
+     */
+    private static func пояснение(_ j: [String: Any]) -> String {
+        typealias A = СделкиAPI
+        for ключ in ["message", "msg", "error_text", "text", "error"] {
+            let текст = A.строка(j[ключ]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !текст.isEmpty, !КабинетСайта.машинныйКод(текст) { return String(текст.prefix(200)) }
+        }
+        let причина = A.строка(j["reason"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !причина.isEmpty { return String(причина.prefix(200)) }
+        let ошибка = A.строка(j["error"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(ошибка.prefix(60))
+    }
+
+    /// encodeURIComponent сайта: всё, кроме A-Z a-z 0-9 - _ . ! ~ * ' ( ), — в %XX (кириллица тоже).
+    private static let символыАдреса = CharacterSet(charactersIn:
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+
+    private static func вАдрес(_ значение: String) -> String {
+        значение.addingPercentEncoding(withAllowedCharacters: символыАдреса) ?? ""
     }
 
     private static func разобратьПункты(_ сырое: Any?) -> [String: [ПунктВыдачиСделки]] {
@@ -592,13 +627,17 @@ struct БлокДоставкиНовойСделки: View {
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
             строкаСам
-        case .нельзя(let причина):
+        case .нельзя(let причина, let пояснение):
             if ["no_from", "no_item", "bad_args"].contains(причина) {
                 подсказка(т("co_ship_none"))
             } else {
                 строкаЯндексаБезЦены(т(причина == "no_courier" ? "co_ship_bulky" : "co_ship_na"))
             }
+            if !пояснение.isEmpty {
+                подсказка(т("co_ship_why").replacingOccurrences(of: "{r}", with: пояснение))
+            }
             строкаСам
+            ПодписьСделки(т("co_ship_same"))
         case .межгородНельзя:
             ЗаметкаСделки(Text(т("co_ship_intercity")), вид: .предупреждение, символ: "shippingbox")
         case .регион:
