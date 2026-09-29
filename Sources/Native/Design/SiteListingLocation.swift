@@ -97,7 +97,7 @@ enum ListingLocationText {
             "cancel": "Отмена", "need_session": "Не удалось отправить, попробуйте ещё раз",
             "ship_quote": "Доставка ~ %@", "ship_quote_who": "платит покупатель, сверх суммы сделки",
             "ship_eta": "~%@ мин в пути", "eta_days": "%1$@–%2$@ дн.",
-            "eta_days_one": "%@ дн.", "co_ship_free": "Доставка за счёт продавца"
+            "eta_days_one": "%@ дн.", "co_ship_free": "Доставка бесплатно — оплачивает продавец"
         ],
         "kk": [
             "route_go_t": "Бағдар құру", "route_go_s": "Яндекс, inDrive немесе 2ГИС",
@@ -151,7 +151,7 @@ enum ListingLocationText {
             "cancel": "Бас тарту", "need_session": "Жіберу мүмкін болмады, қайта көріңіз",
             "ship_quote": "Жеткізу ~ %@", "ship_quote_who": "сатып алушы төлейді, мәміле сомасынан бөлек",
             "ship_eta": "жолда ~%@ мин", "eta_days": "%1$@–%2$@ күн",
-            "eta_days_one": "%@ күн", "co_ship_free": "Жеткізуді сатушы төлейді"
+            "eta_days_one": "%@ күн", "co_ship_free": "Жеткізу тегін — сатушы төлейді"
         ],
         "en": [
             "route_go_t": "Get directions", "route_go_s": "Yandex, inDrive or 2GIS",
@@ -205,7 +205,7 @@ enum ListingLocationText {
             "cancel": "Cancel", "need_session": "Couldn't send, please try again",
             "ship_quote": "Delivery ~ %@", "ship_quote_who": "paid by the buyer, on top of the deal amount",
             "ship_eta": "~%@ min on the way", "eta_days": "%1$@–%2$@ days",
-            "eta_days_one": "%@ days", "co_ship_free": "Delivery paid by the seller"
+            "eta_days_one": "%@ days", "co_ship_free": "Free delivery — paid by the seller"
         ],
         "ar": [
             "route_go_t": "إنشاء مسار", "route_go_s": "Yandex أو inDrive أو 2GIS",
@@ -259,7 +259,7 @@ enum ListingLocationText {
             "cancel": "إلغاء", "need_session": "تعذّر الإرسال، حاول مرة أخرى",
             "ship_quote": "التوصيل ~ %@", "ship_quote_who": "يدفعه المشتري، إضافة إلى مبلغ الصفقة",
             "ship_eta": "~%@ دقيقة في الطريق", "eta_days": "%1$@–%2$@ أيام",
-            "eta_days_one": "%@ أيام", "co_ship_free": "التوصيل على نفقة البائع"
+            "eta_days_one": "%@ أيام", "co_ship_free": "التوصيل مجاني — يدفعه البائع"
         ]
     ]
 }

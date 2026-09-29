@@ -785,7 +785,8 @@ final class ДеньгиСделкиМодель: ObservableObject {
     /// _shpQuoteErr сайта.
     private func ошибкаЦены(_ j: [String: Any], сделка с: Сделка) -> String {
         let причина = СделкиAPI.строка(j["reason"])
-        if причина == "intercity" {
+        /* Цены перевозчиков (mode carriers) — тоже другой город: курьера Яндекса туда нет. */
+        if причина == "intercity" || СделкиAPI.строка(j["mode"]) == "carriers" {
             /* Товар в другом городе: выбор способа дальше — только транспортная компания. */
             карточка?.межгородУзнали = true
             if с.видДоставки == "carrier" {
@@ -795,7 +796,15 @@ final class ДеньгиСделкиМодель: ObservableObject {
         }
         if причина == "no_courier" { return т("co_ship_bulky") }
         if причина == "slow_down" { return т("co_ship_retry") }
-        if СделкиAPI.да(j["ok"]) && СделкиAPI.да(j["free"]) && !СделкиAPI.да(j["courier"]) { return т("shp_e_free_self") }
+        if СделкиAPI.да(j["ok"]) && СделкиAPI.да(j["free"]) && !СделкиAPI.да(j["courier"]) {
+            /* Бесплатная доставка продавца без курьера — точная причина (why сервера, патч 46). */
+            switch СделкиAPI.строка(j["why"]) {
+            case "no_from": return т("shp_e_free_no_from")
+            case "free_costly": return т("shp_e_free_costly")
+            default: return т("shp_e_free_self")
+            }
+        }
+        if причина == "free_costly" { return т("shp_e_free_costly") }
         /* Свои причины вместо общего «сюда не возит»: человек должен понять, что делать дальше. */
         switch причина {
         case "no_from":
@@ -847,6 +856,11 @@ final class ДеньгиСделкиМодель: ObservableObject {
                 } else {
                     self.вопрос = .картойЗаКурьера(недостача: недостача, цена)
                 }
+                return
+            }
+            /* Бесплатная доставка: курьер дороже выплаты продавцу (ship_add, reason free_costly). */
+            if СделкиAPI.строка(j["reason"]) == "free_costly" {
+                self.показать(self.т("shp_e_free_costly"))
                 return
             }
             self.показать(self.текстОтвета(j, запасной: self.т("err_failed")))

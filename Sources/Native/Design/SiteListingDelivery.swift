@@ -171,6 +171,8 @@ struct КотировкаДоставки: Equatable {
     var днейОт: Int?
     var днейДо: Int?
     var минут: Int?
+    /// Бесплатная без курьера — причина сервера (why: no_from, free_costly); nil — нет.
+    var почему: String? = nil
 }
 
 enum ДоставкаТКAPI {
@@ -279,11 +281,15 @@ enum ДоставкаТКAPI {
             let первый = вПорядкеОтвета(Array(предложения.keys), текст: ответ.текст)
                 .first { предложения[$0] is [String: Any] }
             guard let ключ = первый, let п = предложения[ключ] as? [String: Any] else { return nil }
-            return КотировкаДоставки(бесплатно: false, цена: число(п["price"]) ?? 0, имя: строка(п["name"]),
+            /* Бесплатная доставка продавца (патч 46 сервера): price 0 и free — «Доставка бесплатно». */
+            let бесплатноТут = да(j["free"]) || да(п["free"])
+            return КотировкаДоставки(бесплатно: бесплатноТут, цена: бесплатноТут ? 0 : (число(п["price"]) ?? 0), имя: строка(п["name"]),
                                      днейОт: число(п["days_min"]), днейДо: число(п["days_max"]), минут: nil)
         }
         if да(j["free"]) {
-            return КотировкаДоставки(бесплатно: true, цена: 0, имя: nil, днейОт: nil, днейДо: nil, минут: nil)
+            let почему = да(j["courier"]) ? nil : строка(j["why"])
+            return КотировкаДоставки(бесплатно: true, цена: 0, имя: nil, днейОт: nil, днейДо: nil, минут: nil,
+                                     почему: почему)
         }
         let минут = число(j["eta"]) ?? 0
         return КотировкаДоставки(бесплатно: false, цена: число(j["price"]) ?? 0, имя: nil, днейОт: nil, днейДо: nil,
@@ -1104,6 +1110,11 @@ struct КотировкаДоставкиСайта: View {
                         Text(тДост("co_ship_free"))
                             .font(.system(size: 14, weight: .heavy))
                             .foregroundStyle(Theme.текст)
+                        /* Без курьера — точная причина (продавец не отметил точку забора, доставка дороже его выплаты). */
+                        if let почему = к.почему, !почему.isEmpty {
+                            строкаКотировки(ДоставкаСделкиText.т(почему == "free_costly" ? "co_ship_free_costly"
+                                                                                       : (почему == "no_from" ? "co_ship_free_no_from" : "co_ship_free_self")))
+                        }
                     } else {
                         Text(String(format: тДост("ship_quote"), ДоставкаОбъявления.сумма(к.цена) + "\u{00A0}₸"))
                             .font(.system(size: 14, weight: .heavy))
