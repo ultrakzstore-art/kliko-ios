@@ -605,11 +605,12 @@ struct ЦенаСайта: View {
                 .foregroundStyle(Theme.текстВторой)
                 .lineLimit(1)
         } else if товар.negotiable && (товар.price ?? 0) <= 0 {
+            /* Владелец: «Договорная» огромная — меньше числовой цены (20–22 pt), прямым шрифтом, цветом текста. */
             Text(ListingPageText.т("negotiable"))
-                .font(.system(size: 0.9 * р, weight: .heavy))
-                .italic()
-                .foregroundStyle(Theme.зелёный2)
+                .font(.system(size: max(20, min(22, 0.75 * р)), weight: .semibold))
+                .foregroundStyle(Theme.текст)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         } else {
             Text(ListingCard.цена(товар))
                 .font(.system(size: р, weight: .heavy))
