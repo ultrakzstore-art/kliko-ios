@@ -142,7 +142,7 @@ struct МоиОбъявленияЭкран: View {
                 строкаПоиска
                 if !модель.работа.isEmpty { блокРаботы }
                 карточки
-                кнопкаДобавить
+                if !первоеОбъявление { кнопкаДобавить }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -192,7 +192,7 @@ struct МоиОбъявленияЭкран: View {
                                        занято: модель.занято.contains(товар.id), проверяем: модель.проверяем,
                                        действие: { д in нажато(д, товар) },
                                        скопироватьID: { скопировать(товар.id) },
-                                       режимВыбора: выбор)
+                                       режимВыбора: выбор, бизнес: бизнес)
             .allowsHitTesting(!выбор)
             .accessibilityHidden(выбор)
             .overlay {
@@ -252,8 +252,8 @@ struct МоиОбъявленияЭкран: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
-                if модель.вкладка == .published && модель.товары.isEmpty {
-                    блокПереноса
+                if первоеОбъявление {
+                    блокПервойВещи
                         .padding(.top, 20)
                 }
             }
@@ -263,40 +263,47 @@ struct МоиОбъявленияЭкран: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// .imp-empty: по центру, серая подложка с пунктирной рамкой, кнопка #16a34a во всю ширину.
-    private var блокПереноса: some View {
-        VStack(spacing: 0) {
-            Text(т("imp_t"))
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(Theme.текст)
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 6)
-            Text(т("imp_s"))
+    /// PRO или компания (IS_PRO / IS_SHOP страницы кабинета): #номер, «Скопировать ID» и перенос с других сайтов.
+    private var бизнес: Bool {
+        модель.массовые.про || (модель.кабинет?.магазин ?? false)
+    }
+
+    /// Ни одного объявления, пустые «Опубликованные» без поиска — зовём сфотографировать первую вещь.
+    private var первоеОбъявление: Bool {
+        модель.вкладка == .published && модель.товары.isEmpty
+            && модель.запрос.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Прохождение новичка: вместо рассказа о переносе с других площадок — большая кнопка «Сфотографируйте первую
+    /// вещь» (мастер подачи открывается на шаге фото). Перенос по ссылке — маленькой ссылкой и только бизнесу.
+    private var блокПервойВещи: some View {
+        VStack(spacing: 12) {
+            Button { добавить() } label: {
+                Label(т("empty_first"), systemImage: "camera.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .padding(.horizontal, 16)
+                    .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .leading,
+                                               endPoint: .trailing),
+                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            Text(т("empty_first_s"))
                 .font(.system(size: 13))
-                .lineSpacing(4)
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 14)
-            Button { страница("cabinet.php?go=import") } label: {
-                Text(т("imp_b"))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(КраскаОбъявлений.зелёнаяКнопка,
-                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            if бизнес {
+                Button(т("imp_link")) { страница("cabinet.php?go=import") }
+                    .font(.system(size: 13, weight: .semibold))
+                    .tint(Theme.акцент)
+                    .padding(.top, 4)
             }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
         }
-        .padding(20)
         .frame(maxWidth: 420)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(Theme.линия, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-        }
     }
 
     /// «+ Добавить объявление» — мастер подачи (этап 42); рубильник выключен — страница подачи сайта.

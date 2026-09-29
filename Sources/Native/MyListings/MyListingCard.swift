@@ -129,52 +129,49 @@ struct ЗначокОбъявления: Equatable {
     /// Рамка 1.5 — у сайта не у всех значков (у «Удалено» и «На паузе» её нет).
     var кромка: Bool = true
 
-    /// Первое подходящее условие — в том же порядке, что у сайта (карта §3.1.3).
+    /// Первое подходящее условие — в том же порядке, что у сайта (карта §3.1.3). Слова — одной человеческой фразой
+    /// (прохождение новичка): без «слотов», «попыток» и внутренних терминов. одобрено (ADV_STATUS_LABEL) больше не
+    /// показывается — у всех «Опубликовано»; параметр оставлен для вызывающих.
     static func для(_ т: МоёОбъявление, вкладка: ВкладкаОбъявлений, сейчас: Double, одобрено: String) -> ЗначокОбъявления {
         let с = МоиОбъявленияText.т
-        if т.ждётВерификации { return ЗначокОбъявления(текст: с("held_verify_badge"), вид: .предупреждение, символ: nil, подсказка: nil) }
+        if т.ждётВерификации { return ЗначокОбъявления(текст: с("st_verify"), вид: .предупреждение, символ: "eye.slash", подсказка: nil) }
         if т.статус == "approved" && !т.автоПродление && т.конецСрока > 0 && т.конецСрока <= сейчас {
-            return ЗначокОбъявления(текст: с("exp_badge"), вид: .плохо, символ: nil, подсказка: nil)
+            return ЗначокОбъявления(текст: с("st_expired"), вид: .плохо, символ: "clock", подсказка: nil)
         }
-        if т.статус == "pending_manual" {
-            let почему = т.причинаРучной.isEmpty ? с("chip_manual_why") : т.причинаРучной
-            return ЗначокОбъявления(текст: с("chip_manual_review"), вид: .предупреждение, символ: "doc.text.magnifyingglass",
-                                    подсказка: почему)
-        }
-        if (т.статус == "pending" || т.статус == "ai_check") && т.скрываемНомера {
-            return ЗначокОбъявления(текст: с("chip_redacting"), вид: .инфо, символ: "checkmark.shield", подсказка: nil)
-        }
-        if т.статус == "pending" || т.статус == "ai_check" {
-            return ЗначокОбъявления(текст: с("chip_ai_check"), вид: .инфо, символ: "hourglass", подсказка: nil)
+        if т.статус == "pending_manual" || т.статус == "pending" || т.статус == "ai_check" {
+            return ЗначокОбъявления(текст: с("st_review"), вид: .инфо, символ: "hourglass", подсказка: nil)
         }
         if т.статус == "sold" {
             let услуга = РазделыСайта.услуга(т.раздел)
-            return ЗначокОбъявления(текст: с(услуга ? "chip_sold_off" : "chip_sold_out"), вид: .плохо, символ: "house",
-                                    подсказка: nil)
+            return ЗначокОбъявления(текст: с(услуга ? "st_off" : "st_sold"), вид: .плохо, символ: nil, подсказка: nil)
         }
         if т.статус == "inactive" && т.черновикИмпорта {
-            return ЗначокОбъявления(текст: с("chip_draft_import"), вид: .индиго, символ: "square.and.arrow.down", подсказка: nil)
+            return ЗначокОбъявления(текст: с("st_draft"), вид: .индиго, символ: "square.and.arrow.down", подсказка: nil)
         }
         switch вкладка {
         case .inactive:
+            if т.статус == "rejected" {
+                let причина = т.причина.trimmingCharacters(in: .whitespacesAndNewlines)
+                let текст = причина.isEmpty ? с("st_rejected") : String(format: с("st_rejected_why"), причина)
+                return ЗначокОбъявления(текст: текст, вид: .плохо, символ: "xmark.circle", подсказка: nil)
+            }
             if т.вОчереди > 0 {
-                let текст = т.ждётСлот ? с("pq_chip_wait") : String(format: с("pq_chip"), Self.когда(т.вОчереди, сейчас: сейчас))
-                return ЗначокОбъявления(текст: текст, вид: .инфо, символ: т.ждётСлот ? "hourglass" : "clock", подсказка: nil)
+                if т.ждётСлот { return ЗначокОбъявления(текст: с("st_limit"), вид: .инфо, символ: "hourglass", подсказка: nil) }
+                let текст = String(format: с("st_queue"), Self.когда(т.вОчереди, сейчас: сейчас))
+                return ЗначокОбъявления(текст: текст, вид: .инфо, символ: "clock", подсказка: nil)
             }
             if т.сверхЛимита {
-                return ЗначокОбъявления(текст: с(т.сверхЛимитаСамо ? "chip_held_auto" : "chip_held_slot"), вид: .инфо,
-                                        символ: "clock", подсказка: nil)
+                return ЗначокОбъявления(текст: с("st_limit"), вид: .инфо, символ: "eye.slash", подсказка: nil)
             }
-            if т.проданоСлот { return ЗначокОбъявления(текст: с("chip_sold_slot"), вид: .хорошо, символ: nil, подсказка: nil) }
+            if т.проданоСлот { return ЗначокОбъявления(текст: с("st_sold"), вид: .хорошо, символ: nil, подсказка: nil) }
             if т.пауза {
-                return ЗначокОбъявления(текст: с("chip_paused_slot"), вид: .пауза, символ: nil, подсказка: nil, кромка: false)
+                return ЗначокОбъявления(текст: с("st_off"), вид: .пауза, символ: nil, подсказка: nil, кромка: false)
             }
-            return ЗначокОбъявления(текст: с("chip_inactive"), вид: .серый, символ: nil, подсказка: nil)
+            return ЗначокОбъявления(текст: с("st_off"), вид: .серый, символ: nil, подсказка: nil)
         case .deleted:
             return ЗначокОбъявления(текст: с("chip_deleted"), вид: .плохо, символ: nil, подсказка: nil, кромка: false)
         case .published:
-            let подпись = одобрено.isEmpty ? с("approved") : одобрено
-            return ЗначокОбъявления(текст: подпись, вид: .одобрено, символ: "checkmark.circle", подсказка: nil)
+            return ЗначокОбъявления(текст: с("st_pub"), вид: .одобрено, символ: "checkmark.circle", подсказка: nil)
         }
     }
 
@@ -251,6 +248,8 @@ struct КарточкаМоегоОбъявления: View {
     let скопироватьID: () -> Void
     /// Режим «Выбрать»: ряда кнопок нет (.advsel-mode .adv-acts{display:none} сайта).
     let режимВыбора: Bool
+    /// PRO или компания (IS_PRO / IS_SHOP страницы кабинета): только им — #номер и «Скопировать ID».
+    let бизнес: Bool
 
     /// Открытый список «кто» (like / msg / call / share) — как #adv-who-<id> сайта.
     @State private var кто: String? = nil
@@ -258,7 +257,7 @@ struct КарточкаМоегоОбъявления: View {
     /// Свой init: с @State private поэлементный init стал бы private.
     init(товар: МоёОбъявление, вкладка: ВкладкаОбъявлений, магазин: Bool, подписьОдобрено: String, занято: Bool,
          проверяем: Bool, действие: @escaping (ДействиеКарточки) -> Void, скопироватьID: @escaping () -> Void,
-         режимВыбора: Bool = false) {
+         режимВыбора: Bool = false, бизнес: Bool = false) {
         self.товар = товар
         self.вкладка = вкладка
         self.магазин = магазин
@@ -268,6 +267,7 @@ struct КарточкаМоегоОбъявления: View {
         self.действие = действие
         self.скопироватьID = скопироватьID
         self.режимВыбора = режимВыбора
+        self.бизнес = бизнес
     }
 
     private var сейчас: Double { Date().timeIntervalSince1970 }
@@ -396,24 +396,28 @@ struct КарточкаМоегоОбъявления: View {
         }
     }
 
-    /// Дата как её прислал сервер и #номер с копированием (advCopyId).
+    /// Дата как её прислал сервер; #номер с копированием (advCopyId) — только бизнесу.
     private var мета: some View {
         HStack(spacing: 6) {
             Text(товар.создано)
                 .lineLimit(1)
-            Button(action: скопироватьID) {
-                HStack(spacing: 3) {
-                    Text("#" + товар.id)
-                        .lineLimit(1)
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10))
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(т("adv_id_copy") + ", #" + товар.id)
+            if бизнес { номерОбъявления }
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.текстВторой)
+    }
+
+    private var номерОбъявления: some View {
+        Button(action: скопироватьID) {
+            HStack(spacing: 3) {
+                Text("#" + товар.id)
+                    .lineLimit(1)
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 10))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(т("adv_id_copy") + ", #" + товар.id)
     }
 
     private var значок: some View {
@@ -425,11 +429,7 @@ struct КарточкаМоегоОбъявления: View {
     private var низ: some View {
         VStack(alignment: .leading, spacing: 8) {
             if товар.ждётВерификации { блокВерификации }
-            if товар.статус == "pending_manual" {
-                БлокКарточки(текст: т("manual_body"), символ: "doc.text.magnifyingglass",
-                             фон: КраскаОбъявлений.предупреждениеФон, цвет: КраскаОбъявлений.предупреждениеТекст)
-            }
-            if товар.статус == "rejected" && !товар.причина.isEmpty { блокПричины }
+            /* «На проверке — до 24 ч» и «Отклонено — причина» уже сказаны значком: отдельных блоков нет. */
             if товар.статус == "deleted_permanent" {
                 БлокКарточки(текст: т("blocked_body"), символ: "nosign",
                              фон: КраскаОбъявлений.плохоФон, цвет: КраскаОбъявлений.плохоТекст)
@@ -454,47 +454,20 @@ struct КарточкаМоегоОбъявления: View {
         }
     }
 
+    /// Действие к значку «Не видно покупателям — подтвердите личность через eGov»: одна кнопка.
     private var блокВерификации: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "checkmark.shield")
-                .font(.system(size: 14))
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(т("held_verify_t")).bold()
-                Text(т("held_verify_s"))
-            }
-            .font(.system(size: 12))
-            .lineSpacing(4)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Button { действие(.верификация) } label: {
-                Text(т("held_verify_go"))
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(КраскаОбъявлений.предупреждениеТекст,
-                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-            .fixedSize()
-            .frame(maxHeight: .infinity)
+        Button { действие(.верификация) } label: {
+            Label(т("verify_go"), systemImage: "checkmark.shield")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .padding(.horizontal, 12)
+                .background(КраскаОбъявлений.предупреждениеТекст,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
         }
-        .foregroundStyle(КраскаОбъявлений.предупреждениеТекст)
-        .padding(12)
-        .background(КраскаОбъявлений.предупреждениеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(КраскаОбъявлений.предупреждениеКромка, lineWidth: 1.5)
-        }
-    }
-
-    private var блокПричины: some View {
-        var текст = String(format: т("reason"), товар.причина)
-        if товар.отклонений > 1 { текст += " " + String(format: т("attempt"), товар.отклонений) }
-        return БлокКарточки(текст: текст, символ: "xmark.circle", фон: КраскаОбъявлений.плохоФон,
-                            цвет: КраскаОбъявлений.красный)
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
     }
 
     /// «В ТОПе до YYYY-MM-DD» — top_until.slice(0,10), как у сайта. Только сведения: продлевают ТОП на сайте.
@@ -509,11 +482,10 @@ struct КарточкаМоегоОбъявления: View {
         .foregroundStyle(Theme.цвет(0xA9791A, 0xD8B658))
     }
 
-    /// «Бесплатные авто-поднятия (день 7·14·21) — включены · следующее через N дн.» — сведения из окна продвижения сайта
-    /// (сам ТОП и платные поднятия в приложении не продаются).
+    /// «Бесплатно поднимем через N дн.» — сведения о бесплатном поднятии (next_free_bump); без внутренних «дней 7·14·21».
     private var поднятия: some View {
-        let дней = max(0, Int(((товар.следующееПоднятие - сейчас) / 86_400).rounded(.up)))
-        return Text(т("promo_free_bumps") + " · " + String(format: т("promo_next_in"), дней))
+        let дней = max(1, Int(((товар.следующееПоднятие - сейчас) / 86_400).rounded(.up)))
+        return Text(String(format: т("bump_in"), дней))
             .font(.system(size: 12))
             .foregroundStyle(Theme.текстВторой)
             .fixedSize(horizontal: false, vertical: true)
@@ -529,19 +501,69 @@ struct КарточкаМоегоОбъявления: View {
         return true
     }
 
+    /// Две кнопки (прохождение новичка): главная — «Изменить» (нет её в наборе — первая из набора) и «Ещё» — меню
+    /// со всем остальным набором сайта (Смотреть, Поделиться, Снять / Активировать, Удалить…) и «Скопировать ID» бизнесу.
     private var кнопки: some View {
         let набор = КнопкаОбъявления.набор(товар, вкладка: вкладка)
-        // .adv-acts: всегда две равные колонки, зазор 6; margin-top 10 = 8 от стопки + 2.
-        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)],
-                         alignment: .leading, spacing: 6) {
-            ForEach(набор, id: \.self) { кнопка in
-                КнопкаКарточки(подпись: кнопка.подпись(топ: товар.топ), значок: кнопка.значок, вид: вид(кнопка)) {
-                    действие(.кнопка(кнопка))
+        let главная: КнопкаОбъявления? = набор.contains(.изменить) ? .изменить : набор.first
+        let остальные = набор.filter { $0 != главная }
+        return HStack(spacing: 6) {
+            if let главная {
+                КнопкаКарточки(подпись: главная.подпись(топ: товар.топ), значок: главная.значок, вид: вид(главная)) {
+                    действие(.кнопка(главная))
                 }
-                .disabled(занято || (кнопка == .проверить && проверяем))
+                .disabled(занято || (главная == .проверить && проверяем))
+            }
+            if !остальные.isEmpty || бизнес {
+                меню(остальные)
             }
         }
         .padding(.top, 2)
+    }
+
+    private func меню(_ остальные: [КнопкаОбъявления]) -> some View {
+        Menu {
+            ForEach(остальные, id: \.self) { кнопка in
+                Button(role: роль(кнопка)) {
+                    действие(.кнопка(кнопка))
+                } label: {
+                    Label(кнопка.подпись(топ: товар.топ), systemImage: кнопка.значок)
+                }
+                .disabled(кнопка == .проверить && проверяем)
+            }
+            if бизнес {
+                Button(action: скопироватьID) {
+                    Label(т("adv_id_copy") + " #" + товар.id, systemImage: "doc.on.doc")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(т("btn_more"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .foregroundStyle(Theme.текст)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .padding(.horizontal, 10)
+            .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .menuOrder(.fixed)
+        .disabled(занято)
+    }
+
+    /// Удаление в меню «Ещё» — красным.
+    private func роль(_ кнопка: КнопкаОбъявления) -> ButtonRole? {
+        if кнопка == .удалить || кнопка == .удалитьНавсегда { return .destructive }
+        return nil
     }
 
     private func вид(_ кнопка: КнопкаОбъявления) -> КнопкаКарточки.Вид {
@@ -592,7 +614,8 @@ struct ЯрлыкСтатуса: View {
             Text(значок.текст)
                 .font(.system(size: 11, weight: .bold))
                 .tracking(одобрено ? 0.22 : 0)
-                .lineLimit(2)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(цвет)
         .padding(.horizontal, одобрено ? 12 : 8)
