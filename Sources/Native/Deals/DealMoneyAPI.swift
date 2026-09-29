@@ -77,6 +77,11 @@ struct ДанныеДенегСделки: Equatable {
     var обратнаяДоставка: Int = 0
     /// to_door.out — «Встречу у подъезда» (ship_quote &dd=out).
     var уПодъезда: Bool = false
+    /// Итог возврата (refunded): кто оплатил доставку туда и обратно — ship_payer ("seller", "platform", иначе
+    /// покупатель) и сколько списали — ship_seller_charge / ship_buyer_charge.
+    var платилДоставку: String = ""
+    var доставкаСПродавца: Int = 0
+    var доставкаСПокупателя: Int = 0
 
     init() {}
 
@@ -90,6 +95,9 @@ struct ДанныеДенегСделки: Equatable {
         заявкаСорвалась = A.да(j["ship_claim_failed"])
         обратнаяДоставка = A.целое(j["ship_return_fee"])
         if let дверь = j["to_door"] as? [String: Any] { уПодъезда = A.да(дверь["out"]) }
+        платилДоставку = A.строка(j["ship_payer"])
+        доставкаСПродавца = A.целое(j["ship_seller_charge"])
+        доставкаСПокупателя = A.целое(j["ship_buyer_charge"])
         if let блок = j["clocal"] as? [String: Any], let д = блок["delivery"] as? [String: Any] {
             причинаВозврата = A.строка(д["return_reason"])
             винаВозврата = A.строка(д["return_fault"])

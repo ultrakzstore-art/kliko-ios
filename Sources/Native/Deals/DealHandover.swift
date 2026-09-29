@@ -2,25 +2,29 @@ import SwiftUI
 import UIKit
 
 /**
- КАРТОЧКА СДЕЛКИ — ПЕРЕДАЧА (#dm-clocal, этап 43; clocalRender сайта, карта §4.9).
+ КАРТОЧКА СДЕЛКИ — ПЕРЕДАЧА (#dm-clocal, этап 43; clocalRender сайта, карта §4.9, §9).
 
  Показывается для товара и услуги в held / shipped / delivered. Что рисовать — в том же порядке, что у сайта:
    1. перевозчик (ship_mode=carrier и доставка оплачена) — СДЭК / Exline / Avis: трек, этап, пункт приёма, «Оформить
       отправку» (car_points → car_order: отправку уже оплатил покупатель, запрос денег не двигает);
-   2. посылка с кодом в коробке, 3. встреча с QR — коды подтверждают получение и отпускают деньги (этап 44): заголовок
-      сайта и страница сделки;
+   2. посылка с кодом в коробке — свой БлокПосылки (DealParcel.swift): этапы, листок с QR для коробки (печать и
+      «Отправить»), ввод кода, претензия, «Посылка потерялась», адрес — окно карты с parcel_from / parcel_addr;
+   3. встреча с QR — свой БлокВстречи (DealMeet.swift): живой QR с таймером у продавца, «Сканировать код» у покупателя;
    4. способ не выбран (held) — «Как передадите товар?» / «Как хотите получить товар?»: ТК, «Заберу сам» / «Покупатель
       заберёт сам» → «Отвезу сам / Поеду сам» и «Передам курьеру / Отправлю курьера» (set_handover); платный курьер
-      Яндекса и отмена оплаченного курьера — деньги, страница сайта;
+      Яндекса и отмена оплаченного курьера — окна денег; вызов оплаченного курьера (clocal_start) — окно подтверждения
+      или окно адреса (ПередачаСделкиМодель.вызватьОплаченного);
       способ выбран — «Из рук в руки» / «Доставка курьером» / «Отправка транспортной компанией»: что делать сейчас,
       «Откуда» / «Куда» с копированием, «Построить маршрут» (Яндекс Go и 2ГИС), «Вызвать курьера» (Яндекс Go — курьер,
       2ГИС — такси; нажатие отмечает courier_called), ссылка отслеживания (set_track, только Яндекс Go и inDrive),
-      «Изменить способ…» (set_handover "");
-   5. курьер по городу (clocal.delivery) — этапы «Оплачено · Забрал · Вручил · Готово», статус Яндекса, коды для курьера,
-      «Отследить курьера на карте»; вызов, готовность, отказ и возврат — деньги и коды (этап 44), страница сайта.
+      «Изменить способ…» (set_handover "" или handover_cancel);
+   5. курьер по городу (clocal.delivery) — БлокКурьераПоГороду (DealCityCourier.swift): этапы, адреса, готовность
+      продавца, заказ курьера Яндекса, коды, сроки, звонок курьеру, ссылка курьеру, отказ от товара;
+      возврат — у продавца БлокВозвратаПродавцу (деньги), у покупателя и итог обеим сторонам — БлокВозвратаПокупателю
+      (DealReturnBuyer.swift).
  Правка адресов (карта, «Указать точку», «Указать адрес» отправки) — своё окно ЛистТочкиСделки (DealPickupMap.swift,
  set_pickup сайта). «Отправить другому человеку — подарок» — своё окно «Кому передать» (СтрокаПолучателя,
- CabinetPlus/DealRecipient.swift, set_recipient сайта).
+ CabinetPlus/DealRecipient.swift, set_recipient сайта). Окна и вопросы передачи — СлойПередачиСделки (ниже).
  */
 struct БлокПередачи: View {
     let сделка: Сделка
@@ -45,31 +49,24 @@ struct БлокПередачи: View {
     var body: some View {
         if сделка.черезПеревозчика {
             БлокПеревозчика(сделка: сделка, модель: модель, действие: действие)
-        } else if сделка.естьПосылка {
-            сводка(заголовок: т(сделка.посылкаЧерезТК ? "prc_h_tk" : "prc_h_cr"), символ: "shippingbox")
-        } else if сделка.естьВстреча {
-            сводка(заголовок: т("meet_t"), символ: "person.2")
+        } else if let посылка = сделка.посылка {
+            БлокПосылки(сделка: сделка, посылка: посылка, передача: модель.передача, действие: действие)
+        } else if let встреча = сделка.встреча {
+            БлокВстречи(сделка: сделка, встреча: встреча, передача: модель.передача, действие: действие)
         } else if let курьер = сделка.курьер {
-            if Config.деньгиСделок && сделка.продавец && ["returning", "returned_to_seller"].contains(курьер.статус) {
-                /* Этап 44: продавец подтверждает возврат сам (cancel {accept_fault} + clocal_return_confirm). */
+            if сделка.продавец && ["returning", "returned_to_seller"].contains(курьер.статус) {
+                /* Продавец подтверждает возврат сам (cancel {accept_fault} + clocal_return_confirm). */
                 БлокВозвратаПродавцу(сделка: сделка, статус: курьер.статус, действие: действие)
             } else if ["returning", "returned_to_seller", "refunded"].contains(курьер.статус) {
-                сводка(заголовок: т("ret_h"), символ: "arrow.uturn.backward")
+                БлокВозвратаПокупателю(сделка: сделка, курьер: курьер, передача: модель.передача, действие: действие)
             } else {
-                блокКурьера(курьер)
+                БлокКурьераПоГороду(сделка: сделка, курьер: курьер, модель: модель, передача: модель.передача,
+                                    действие: действие)
             }
         } else if сделка.статус == "held" {
             if сделка.способПередачи.isEmpty { выборСпособа } else { блокСпособа }
         } else if !сделка.способПередачи.isEmpty && (сделка.статус == "shipped" || сделка.статус == "delivered") {
             блокСпособа
-        }
-    }
-
-    /// Встреча, посылка, возврат: заголовок сайта и «Помощь с этим шагом» — своё окно с поддержкой (не страница сделки на сайте).
-    private func сводка(заголовок: String, символ: String) -> some View {
-        БлокСделки {
-            ЗаголовокБлокаСделки(текст: заголовок, символ: символ)
-            КнопкаСделки(т("site_deal"), вид: .вторая, символ: "questionmark.circle") { действие(.наСайт) }
         }
     }
 
@@ -135,27 +132,28 @@ struct БлокПередачи: View {
         } else {
             вариант(т("hnd_self_b"), т("hnd_self_bs"), символ: "figure.walk") { модель.самовывозОткрыт.toggle() }
         }
-        /* Курьер Яндекса: добавить (ship_add — оплата с баланса) или вызвать оплаченного (clocal_start — своего экрана
-           ещё нет: окно с поддержкой, не сайт). */
+        /* Курьер Яндекса: добавить (ship_add — оплата с баланса) или вызвать оплаченного (clocal_start — окно
+           подтверждения или окно адреса доставки, ПередачаСделкиМодель.вызватьОплаченного). */
         if сделка.курьерДоступен && сделка.яндексДоступен && !сделка.услуга && !межгород && !оплаченКурьер && !я {
             вариант(т("hnd_ya_b"), т("shp_ya_add_s"), символ: "car", наСайт: ДеньгиКнопок.наСайте) {
                 действие(.деньги(.курьерЯндекса))
             }
         }
         if сделка.курьерДоступен && !сделка.услуга && !межгород && оплаченКурьер {
-            let подпись = подписьОплаченногоКурьера
-            вариант(т(я ? "hnd_ya_s" : "hnd_ya_b"), подпись, символ: "car") { действие(.наСайт) }
+            вариант(т(я ? "hnd_ya_s" : "hnd_ya_b"), Self.подписьОплаченногоКурьера(сделка), символ: "car") {
+                модель.передача.вызватьОплаченного()
+            }
         }
     }
 
     /// Подпись «Курьер Яндекса», когда доставка уже оплачена: бесплатная (за счёт продавца) или оплаченная покупателем.
-    private var подписьОплаченногоКурьера: String {
-        let я = сделка.продавец
-        if сделка.доставкаЗаСчётПродавца > 0 {
-            return я ? String(format: т("hnd_ya_ss_free"), СделкиФормат.тенге(сделка.доставкаЗаСчётПродавца))
-                     : т("hnd_ya_bs_free")
+    static func подписьОплаченногоКурьера(_ с: Сделка) -> String {
+        let т = СделкиText.т
+        if с.доставкаЗаСчётПродавца > 0 {
+            return с.продавец ? String(format: т("hnd_ya_ss_free"), СделкиФормат.тенге(с.доставкаЗаСчётПродавца))
+                              : т("hnd_ya_bs_free")
         }
-        return т(я ? "hnd_ya_ss" : "hnd_ya_bs")
+        return т(с.продавец ? "hnd_ya_ss" : "hnd_ya_bs")
     }
 
     private func вариант(_ заголовок: String, _ подпись: String, символ: String, наСайт: Bool = false,
@@ -238,13 +236,8 @@ struct БлокПередачи: View {
             строкиАдресов
             маршрутИКурьер
             if сделка.кодыВключены {
-                if Config.деньгиСделок {
-                    /* Этап 44: код продавца и «Я получил вещь» (pin_enter) — своим блоком. */
-                    БлокКодаПродавца(сделка: сделка, модель: модель, действие: действие)
-                } else {
-                    /* Код продавца и его ввод покупателем подтверждают получение (pin_enter — деньги, этап 44). */
-                    КнопкаСделки(т("site_deal"), вид: .вторая, символ: "number", наСайт: true) { действие(.наСайт) }
-                }
+                /* Код продавца и «Я получил вещь» (pin_enter) — своим блоком. */
+                БлокКодаПродавца(сделка: сделка, модель: модель, действие: действие)
             }
             отслеживание
             сменаСпособа
@@ -428,48 +421,6 @@ struct БлокПередачи: View {
         }
     }
 
-    // MARK: - Курьер по городу (clocal.delivery) — показ
-
-    private func блокКурьера(_ к: КурьерСделки) -> some View {
-        let этапы: [String: Int] = ["awaiting_courier": 1, "picked_up": 2, "delivered": 3, "returned": 1]
-        let этап: Int = этапы[к.статус] ?? 0
-        let код: (подпись: String, значение: String)? = {
-            if сделка.продавец && к.статус == "awaiting_courier" && !к.кодЗабора.isEmpty { return (т("clc_code_s"), к.кодЗабора) }
-            if !сделка.продавец && к.статус == "picked_up" && !к.пин.isEmpty { return (т("clc_pin_b"), к.пин) }
-            return nil
-        }()
-        return БлокСделки {
-            ЗаголовокБлокаСделки(текст: к.яндекс ? т("clc_ya_h") : т("md_courier"), символ: "car")
-            ЭтапыКурьера(этап: этап)
-            if к.яндекс && !к.статусЯндекса.isEmpty {
-                Text(СтатусЯндекса.текст(к.статусЯндекса))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-            }
-            if let код {
-                VStack(spacing: 4) {
-                    Text(код.подпись)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.center)
-                    Text(код.значение)
-                        .font(.system(size: 28, weight: .heavy, design: .monospaced))
-                        .foregroundStyle(Theme.текст)
-                        .textSelection(.enabled)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(10)
-                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                .accessibilityElement(children: .combine)
-            }
-            СтрокаПолучателя(сделка: сделка, модель: модель)
-            if к.ссылкаСлежения.hasPrefix("https://") || (к.яндекс && !к.статусЯндекса.isEmpty) {
-                КнопкаСделки(т("yac_track"), вид: .вторая, символ: "map") { действие(.отслеживание) }
-            }
-            КнопкаСделки(т("site_deal"), вид: .вторая, символ: "questionmark.circle") { действие(.наСайт) }
-        }
-    }
-
     private func адресСДверью(_ адрес: String, _ дверь: ДверьСделки?) -> String {
         let д = дверь?.текст ?? ""
         if адрес.isEmpty { return "" }
@@ -482,8 +433,17 @@ struct ЭтапыКурьера: View {
     let этап: Int
 
     var body: some View {
-        let подписи = [СделкиText.т("cstep_paid"), СделкиText.т("cstep_picked"), СделкиText.т("cstep_handed"),
-                       СделкиText.т("cstep_done")]
+        ЭтапыПередачи(подписи: [СделкиText.т("cstep_paid"), СделкиText.т("cstep_picked"), СделкиText.т("cstep_handed"),
+                                СделкиText.т("cstep_done")], этап: этап)
+    }
+}
+
+/// clocalBar / hovBar сайта: кружки этапов — пройденные с ✓, текущий акцентом, дальше серые.
+struct ЭтапыПередачи: View {
+    let подписи: [String]
+    let этап: Int
+
+    var body: some View {
         HStack(alignment: .top, spacing: 4) {
             ForEach(0..<подписи.count, id: \.self) { i in
                 VStack(spacing: 4) {
@@ -495,14 +455,15 @@ struct ЭтапыКурьера: View {
                     Text(подписи[i])
                         .font(.system(size: 11, weight: i == этап ? .bold : .regular))
                         .foregroundStyle(i == этап ? Theme.текст : Theme.текстВторой)
-                        .lineLimit(1)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
                         .minimumScaleFactor(0.7)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(подписи.indices.contains(этап) ? подписи[этап] : "")
+        .accessibilityLabel(подписи.indices.contains(этап) ? подписи[этап] : (подписи.last ?? ""))
     }
 }
 
@@ -746,5 +707,286 @@ enum СтадияПеревозчика {
         ]
         guard let ключ = ключи[этап] else { return "" }
         return СделкиText.т(ключ)
+    }
+}
+
+// MARK: - Общие детали блоков передачи (посылка, встреча, возврат, курьер)
+
+/// .clc-code / .hov-code сайта: подпись и код крупно; код выделяется для копирования и всегда слева направо.
+struct ПлашкаКодаПередачи: View {
+    let подпись: String
+    let код: String
+    /// clocalCodeBox — подпись сверху; hovCodeBox — код сверху, подпись под ним.
+    var подписьСверху = true
+
+    var body: some View {
+        VStack(spacing: 4) {
+            if подписьСверху { подписьВид }
+            Text(код)
+                .font(.system(size: 28, weight: .heavy, design: .monospaced))
+                .tracking(3)
+                .foregroundStyle(Theme.текст)
+                .textSelection(.enabled)
+                .environment(\.layoutDirection, .leftToRight)
+            if !подписьСверху { подписьВид }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(10)
+        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var подписьВид: some View {
+        Text(подпись)
+            .font(.system(size: 13))
+            .foregroundStyle(Theme.текстВторой)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// hovInput сайта: четыре цифры, цифровая клавиатура (любые цифры клавиатуры становятся 0–9).
+struct ПолеКодаПередачи: View {
+    let подпись: String
+    @Binding var текст: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(подпись)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.текстВторой)
+            TextField("0000", text: Binding(get: { текст }, set: { текст = ПередачаСделкиМодель.цифры($0) }))
+                .keyboardType(.numberPad)
+                .font(.system(size: 22, weight: .heavy, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .environment(\.layoutDirection, .leftToRight)
+                .modifier(ПолеДенегСделки())
+                .accessibilityLabel(подпись)
+        }
+    }
+}
+
+/// .hov-link сайта: тихая ссылка под блоком («Посылка потерялась или разбита», «Получил, но кода не было»).
+struct СсылкаПередачи: View {
+    let текст: String
+    var доступна = true
+    let действие: () -> Void
+
+    init(_ текст: String, доступна: Bool = true, действие: @escaping () -> Void) {
+        self.текст = текст
+        self.доступна = доступна
+        self.действие = действие
+    }
+
+    var body: some View {
+        Button(action: действие) {
+            Text(текст)
+                .font(.system(size: 13, weight: .semibold))
+                .underline()
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!доступна)
+        .opacity(доступна ? 1 : 0.55)
+    }
+}
+
+/**
+ hovSwitchBtn сайта: можно — «Изменить способ передачи / получения» (hovSwitch → вопрос карточки → handover_cancel);
+ нельзя, но способ ещё не начат — та же кнопка с замком (hovSwitchLocked: «Условия выбрал покупатель»); иначе ничего.
+ */
+struct КнопкаСменыСпособа: View {
+    let продавец: Bool
+    let можно: Bool
+    let показатьЗамок: Bool
+    let действие: (НажатиеСделки) -> Void
+
+    var body: some View {
+        if можно || показатьЗамок {
+            КнопкаСделки(СделкиText.т(продавец ? "hnd_switch" : "hnd_switch_b"), вид: .вторая,
+                         символ: можно ? "arrow.triangle.2.circlepath" : "lock") {
+                действие(можно ? .сменитьСпособ : .способЗаперт)
+            }
+            .opacity(можно ? 1 : 0.72)
+        }
+    }
+
+    /// hovCanSwitch: покупатель — всегда; продавец — только если способ выбрал он сам (по умолчанию выбирает покупатель).
+    static func разрешено(роль: String, выбрал: String) -> Bool {
+        роль == "buyer" || (выбрал.isEmpty ? "buyer" : выбрал) == "seller"
+    }
+}
+
+/// hovWhoChose: покупателю — «Способ выбрал продавец. Решаете вы…», пока способ ещё не начат.
+struct КтоВыбралСпособ: View {
+    let роль: String
+    let выбрал: String
+    let вНачале: Bool
+
+    var body: some View {
+        if роль == "buyer" && !выбрал.isEmpty && выбрал != "buyer" && вНачале {
+            ЗаметкаСделки(Text(ПередачаText.т("hnd_by_seller")), вид: .предупреждение)
+        }
+    }
+}
+
+// MARK: - Окна передачи поверх карточки
+
+/**
+ Окна передачи (посылка, встреча, возврат, курьер): лист по высоте для претензии, отказа, адреса и звонка, камера для
+ QR, окно карты для адреса посылки, вопрос перед действием. Всё из ПередачаСделкиМодель — окно живёт, даже если блок
+ карточки перерисовался после опроса.
+ */
+struct СлойПередачиСделки: ViewModifier {
+    @ObservedObject var передача: ПередачаСделкиМодель
+    @ObservedObject var карточка: КарточкаСделкиМодель
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                Color.clear
+                    .sheet(item: $передача.лист) { лист in
+                        листПередачи(лист)
+                    }
+            }
+            .background {
+                Color.clear
+                    .sheet(item: $передача.вопрос) { в in
+                        ОкноВопросаПередачи(слова: передача.слова(в), подтвердить: { подтвердитьПозже(в) },
+                                            отмена: { передача.вопрос = nil })
+                    }
+            }
+    }
+
+    @ViewBuilder
+    private func листПередачи(_ лист: ЛистПередачи) -> some View {
+        switch лист {
+        case .претензия:
+            ОкноПретензииПосылки(передача: передача)
+        case .отказ:
+            ОкноОтказаОтТовара(передача: передача)
+        case .адрес(let вид):
+            ОкноАдресаКурьера(вид: вид, сделка: карточка.сделка, передача: передача,
+                              наКарте: { картаКуда() })
+        case .звонок(let звонок):
+            ОкноЗвонкаКурьеру(звонок: звонок, закрыть: { передача.лист = nil })
+        case .сканер(let встреча):
+            СканерКодаСделки(встреча: встреча, передача: передача)
+        case .адресПосылки(let откуда):
+            if let с = карточка.сделка {
+                ЛистТочкиСделки(цель: ТочкаНаКартеСделки.посылки(с, откуда: откуда), модель: карточка)
+            }
+        }
+    }
+
+    /// Лист вопроса сперва уезжает, потом — действие: следом может открыться окно eGov.
+    @MainActor
+    private func подтвердитьПозже(_ в: ВопросПередачи) {
+        let м = передача
+        м.вопрос = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            м.подтвердить(в)
+        }
+    }
+
+    /// «Указать на карте» окна «Куда привезти товар?» (hovAddrEdit): окно уезжает, открывается карта точки доставки
+    /// (set_pickup) — её показывает экран карточки по просьбеТочкиКуда.
+    @MainActor
+    private func картаКуда() {
+        передача.лист = nil
+        let к = карточка
+        Task { @MainActor in
+            /* Лист уезжает — потом карта, иначе второй лист не покажется. */
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            к.просьбаТочкиКуда += 1
+        }
+    }
+}
+
+/// boostConfirm сайта своим листом: значок, заголовок, текст, главная кнопка и «Отмена».
+struct ОкноВопросаПередачи: View {
+    let слова: СловаВопросаПередачи
+    let подтвердить: () -> Void
+    let отмена: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: слова.символ)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(слова.опасная ? КраскаСделокКабинета.плохоТекст : КраскаСделокКабинета.хорошоТекст)
+                        .frame(width: 40, height: 40)
+                        .background(слова.опасная ? КраскаСделокКабинета.плохоФон : КраскаСделокКабинета.хорошоФон,
+                                    in: Circle())
+                        .accessibilityHidden(true)
+                    Text(слова.заголовок)
+                        .font(.system(size: 20, weight: .heavy))
+                        .foregroundStyle(Theme.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                if !слова.текст.isEmpty {
+                    Text(слова.текст)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.текстВторой)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(spacing: 8) {
+                    КнопкаСделки(слова.кнопка, вид: слова.опасная ? .опасная : .главная) { подтвердить() }
+                    КнопкаСделки(СделкиText.т("btn_cancel"), вид: .вторая) { отмена() }
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .мерилоЛиста()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Theme.фонСтраницы.ignoresSafeArea())
+        .листПоВысоте()
+    }
+}
+
+/// Шапка небольшого окна передачи: заголовок и крестик (.clc-mh сайта).
+struct ШапкаОкнаПередачи: View {
+    let заголовок: String
+    let закрыть: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(заголовок)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 4)
+            Button(action: закрыть) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .frame(width: 32, height: 32)
+                    .background(Theme.поверхность2, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(СделкиText.т("close"))
+        }
+    }
+}
+
+/// Ошибка внутри окна передачи (плашка карточки была бы под листом).
+struct ОшибкаОкнаПередачи: View {
+    let текст: String?
+
+    var body: some View {
+        if let текст, !текст.isEmpty {
+            ЗаметкаСделки(Text(текст), вид: .плохо, символ: "exclamationmark.circle")
+        }
     }
 }

@@ -19,8 +19,8 @@ import UIKit
    · update_review {deal_id, side, rating, review} · /escrow.php?action=warranty_ask {id} (путь от корня, как у сайта)
    · set_handover {deal_id, mode} · set_track {deal_id, url} · courier_called {deal_id} · car_order {deal_id, point}
    · cabinet.php?action=mark_notif_read_section {section:"deals"} — сайт шлёт его, когда человек открывает «Мои сделки».
- 🔴 ДЕНЬГИ — НЕТ. pay, pay_card, cancel, buyer_confirm, seller_confirm, pin_enter, meet_scan, parcel_*, ship_add, ship_drop,
- clocal_* — этап 44 (Config.деньгиСделок = false): их кнопки открывают страницу сделки сайта, запрос не уходит никогда.
+ 🔴 ДЕНЬГИ — НЕ ЗДЕСЬ. pay, pay_card, cancel, buyer_confirm, seller_confirm, pin_enter, ship_add, ship_drop — этап 44
+ (ДеньгиСделкиМодель); meet_*, parcel_*, clocal_*, handover_cancel — передача своими блоками (ПередачаСделкиМодель).
  */
 @MainActor
 enum СделкиAPI {
@@ -76,6 +76,28 @@ enum СделкиAPI {
     nonisolated static func явноНет(_ з: Any?) -> Bool {
         guard let n = з as? NSNumber else { return false }
         return n.intValue == 0
+    }
+
+    /// !!x сайта: число не 0, непустая строка (кроме "0" и "false"), объект и массив — да; null и нет ключа — нет.
+    nonisolated static func истина(_ з: Any?) -> Bool {
+        if let n = з as? NSNumber { return n.doubleValue != 0 }
+        if let s = з as? String {
+            let t = s.trimmingCharacters(in: .whitespaces)
+            return !t.isEmpty && t != "0" && t != "false"
+        }
+        return з is [String: Any] || з is [Any]
+    }
+
+    /// Точка {lat, lon} (или lng) либо [lat, lon] — pickup_geo, dropoff_geo, place_geo; мусор и нули — nil.
+    nonisolated static func гео(_ з: Any?) -> ТочкаСделки? {
+        if let d = з as? [String: Any] {
+            let долгота: Any? = d["lon"] ?? d["lng"]
+            return ТочкаСделки(координата(d["lat"]), координата(долгота))
+        }
+        if let a = з as? [Any], a.count >= 2 {
+            return ТочкаСделки(координата(a[0]), координата(a[1]))
+        }
+        return nil
     }
 }
 
@@ -282,15 +304,163 @@ struct МежгородСделки: Equatable {
     var трек: String = ""
 }
 
-/// Доставка курьером по городу (clocal.delivery) — то, что показывается без действий.
+/// Доставка курьером по городу (clocal.delivery): всё, что читают clocalRender, clocalYandexPanel и clocalManual сайта.
 struct КурьерСделки: Equatable {
+    var номер: String = ""
+    /// awaiting_courier / picked_up / delivered / returned / returning / returned_to_seller / refunded.
     var статус: String = ""
     var яндекс: Bool = false
     var статусЯндекса: String = ""
     var кодЗабора: String = ""
     var пин: String = ""
     var ссылкаСлежения: String = ""
+    /// arranger — кто организует доставку: buyer / seller.
     var организатор: String = ""
+    /// pickup_ready — продавец на месте с товаром; ready_deadline — до какого времени (unix) он должен это подтвердить.
+    var готов: Bool = false
+    var срокГотовности: Double = 0
+    var адресЗабора: String = ""
+    var точкаЗабора: ТочкаСделки? = nil
+    var адресДоставки: String = ""
+    var точкаДоставки: ТочкаСделки? = nil
+    var контактОтправителя: String = ""
+    var контактПолучателя: String = ""
+    var товар: String = ""
+    /// courier_token — ссылка курьеру /courier.php?t=<token>.
+    var токенКурьера: String = ""
+    var причинаВозврата: String = ""
+    var винаВозврата: String = ""
+    /// yandex_failed — Яндекс не нашёл курьера, заявку отменили или курьер не довёз.
+    var сбойЯндекса: Bool = false
+    /// yandex_code (для return — код возврата), попыток ввода, код придёт в SMS.
+    var кодЯндекса: String = ""
+    var кодДля: String = ""
+    var кодПопыток: Int = 0
+    var кодВСМС: Bool = false
+    var имяКурьера: String = ""
+    var машина: String = ""
+    var цветМашины: String = ""
+    /// yandex_call — можно позвонить курьеру через подменный номер (clocal_courier_phone).
+    var звонок: Bool = false
+    var ценаЯндекса: Double = 0
+    var валютаЯндекса: String = ""
+    /// yandex_eta_a (у продавца), yandex_eta_b (у покупателя), yandex_eta_r (возврат) — unix.
+    var срокУПродавца: Double = 0
+    var срокУПокупателя: Double = 0
+    var срокВозврата: Double = 0
+
+    init() {}
+
+    init(_ д: [String: Any]) {
+        typealias A = СделкиAPI
+        номер = A.строка(д["deal_id"])
+        статус = A.строка(д["status"])
+        яндекс = A.истина(д["yandex_on"])
+        статусЯндекса = A.строка(д["yandex_status"]).lowercased()
+        кодЗабора = A.строка(д["pickup_code"])
+        пин = A.строка(д["delivery_pin"])
+        ссылкаСлежения = A.строка(д["yandex_share_url"])
+        организатор = A.строка(д["arranger"])
+        готов = A.истина(д["pickup_ready"])
+        срокГотовности = A.число(д["ready_deadline"])
+        адресЗабора = A.строка(д["pickup_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        точкаЗабора = A.гео(д["pickup_geo"])
+        адресДоставки = A.строка(д["dropoff_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        точкаДоставки = A.гео(д["dropoff_geo"])
+        контактОтправителя = A.строка(д["sender_contact"])
+        контактПолучателя = A.строка(д["recipient_contact"])
+        товар = A.строка(д["product"])
+        токенКурьера = A.строка(д["courier_token"])
+        причинаВозврата = A.строка(д["return_reason"])
+        винаВозврата = A.строка(д["return_fault"])
+        сбойЯндекса = A.истина(д["yandex_failed"])
+        кодЯндекса = A.строка(д["yandex_code"]).trimmingCharacters(in: .whitespaces)
+        кодДля = A.строка(д["yandex_code_for"])
+        кодПопыток = A.целое(д["yandex_code_left"])
+        кодВСМС = A.истина(д["yandex_code_sms"])
+        имяКурьера = A.строка(д["yandex_courier"]).trimmingCharacters(in: .whitespaces)
+        машина = A.строка(д["yandex_courier_car"]).trimmingCharacters(in: .whitespaces)
+        цветМашины = A.строка(д["yandex_car_color"]).trimmingCharacters(in: .whitespaces)
+        звонок = A.истина(д["yandex_call"])
+        ценаЯндекса = A.число(д["yandex_price"])
+        валютаЯндекса = A.строка(д["yandex_currency"])
+        срокУПродавца = A.число(д["yandex_eta_a"])
+        срокУПокупателя = A.число(д["yandex_eta_b"])
+        срокВозврата = A.число(д["yandex_eta_r"])
+    }
+}
+
+/// Посылка с кодом в коробке (clocal.parcel, hovParcelPanel сайта).
+struct ПосылкаСделки: Equatable {
+    /// packing / sent / opened / claim / done / lost.
+    var статус: String = ""
+    /// role — моя роль в посылке: seller / buyer.
+    var роль: String = ""
+    /// my_code — у продавца код в коробку, у покупателя его код для продавца (после вскрытия).
+    var мойКод: String = ""
+    /// open_token — QR листка: /cabinet.php?parcel=<open_token>.
+    var токен: String = ""
+    var номер: String = ""
+    var адресОткуда: String = ""
+    var адресКуда: String = ""
+    var точкаОткуда: ТочкаСделки? = nil
+    var точкаКуда: ТочкаСделки? = nil
+    /// arranger — кто выбрал посылку; claim_side — кто подаёт претензию службе; fails — неверных вводов (из 6).
+    var организатор: String = ""
+    var ктоПретензия: String = ""
+    var ошибок: Int = 0
+
+    init?(_ з: Any?) {
+        guard let d = з as? [String: Any] else { return nil }
+        typealias A = СделкиAPI
+        статус = A.строка(d["status"])
+        роль = A.строка(d["role"])
+        мойКод = A.строка(d["my_code"]).trimmingCharacters(in: .whitespaces)
+        токен = A.строка(d["open_token"]).trimmingCharacters(in: .whitespaces)
+        номер = A.строка(d["deal_id"])
+        адресОткуда = A.строка(d["from_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        адресКуда = A.строка(d["to_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        точкаОткуда = ТочкаСделки(A.координата(d["from_lat"]), A.координата(d["from_lon"]))
+        точкаКуда = ТочкаСделки(A.координата(d["to_lat"]), A.координата(d["to_lon"]))
+        организатор = A.строка(d["arranger"])
+        ктоПретензия = A.строка(d["claim_side"])
+        ошибок = max(0, A.целое(d["fails"]))
+    }
+}
+
+/// Личная встреча с QR (clocal.meet, hovMeetPanel сайта).
+struct ВстречаСделки: Equatable {
+    /// done — передача подтверждена.
+    var статус: String = ""
+    /// qr_on — продавец открыл код; qr — сам код (у продавца), qr_left — сколько секунд он живёт.
+    var кодОткрыт: Bool = false
+    var код: String = ""
+    var кодСек: Int = 0
+    /// shown_at — код уже показывали (тогда способ не меняется).
+    var показывали: Bool = false
+    var роль: String = ""
+    /// started_by — кто выбрал встречу; locked — слишком много неверных сканов.
+    var начал: String = ""
+    var заперта: Bool = false
+    var адресМеста: String = ""
+    var точкаМеста: ТочкаСделки? = nil
+    var номер: String = ""
+
+    init?(_ з: Any?) {
+        guard let d = з as? [String: Any] else { return nil }
+        typealias A = СделкиAPI
+        статус = A.строка(d["status"])
+        кодОткрыт = A.истина(d["qr_on"])
+        код = A.строка(d["qr"]).trimmingCharacters(in: .whitespaces)
+        кодСек = max(0, A.целое(d["qr_left"]))
+        показывали = A.истина(d["shown_at"])
+        роль = A.строка(d["role"])
+        начал = A.строка(d["started_by"])
+        заперта = A.истина(d["locked"])
+        адресМеста = A.строка(d["place_addr"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        точкаМеста = A.гео(d["place_geo"])
+        номер = A.строка(d["deal_id"])
+    }
 }
 
 /// Одна гарант-сделка (deal ответа escrow.php?action=deal) — поля, которые читает карточка сайта (карта §4.3.3).
@@ -382,10 +552,17 @@ struct Сделка: Equatable, Identifiable {
     /// clocal.yandex_avail / courier_avail — как window.__YADEL / __CRDEL страницы (на ней оба true); нет поля — true.
     var яндексДоступен: Bool = true
     var курьерДоступен: Bool = true
-    var естьВстреча: Bool = false
-    var естьПосылка: Bool = false
+    /// clocal.meet и clocal.parcel — встреча с QR и посылка с кодом (свои блоки передачи).
+    var встреча: ВстречаСделки? = nil
+    var посылка: ПосылкаСделки? = nil
     var посылкаЧерезТК: Bool = false
     var курьер: КурьерСделки? = nil
+    /// to_point_ok — точка доставки покупателя задана (продавцу можно вызывать оплаченного курьера сразу).
+    var точкаКудаГотова: Bool = false
+    /// recipient.gift — получает другой человек (подарок): у курьера свои слова для кода и сроков.
+    var подарок: Bool = false
+    /// srv_now − часы телефона, секунды (clcSrvNow сайта): ready_deadline и сроки Яндекса считаются по часам сервера.
+    var сдвигЧасов: Double = 0
 
     var талонПодписан: Bool = false
     /// deal.live — данные Live Activity от сервера (§4.16); nil — считаем сами, как сайт.
@@ -469,6 +646,8 @@ struct Сделка: Equatable, Identifiable {
         часовНаПроверку = часы > 0 ? часы : 72
         срокУслуги = A.строка(j["deadline"])
         чтоСделать = A.строка(j["scope"])
+        let сервер = A.число(j["srv_now"])
+        if сервер > 0 { сдвигЧасов = (сервер - Date().timeIntervalSince1970).rounded() }
     }
 
     private mutating func разобратьСтороны(_ j: [String: Any]) {
@@ -540,6 +719,8 @@ struct Сделка: Equatable, Identifiable {
         имяПолучателя = A.строка(получатель["name"]).trimmingCharacters(in: .whitespacesAndNewlines)
         телефонПолучателя = A.строка(получатель["phone"]).trimmingCharacters(in: .whitespacesAndNewlines)
         получательМеняется = A.да(j["recipient_editable"])
+        подарок = A.истина(получатель["gift"])
+        точкаКудаГотова = A.истина(j["to_point_ok"])
         if let сырое = j["live"] as? [String: Any] {
             var словарь: [String: String] = [:]
             for (ключ, значение) in сырое { словарь[ключ] = A.строка(значение) }
@@ -576,19 +757,11 @@ struct Сделка: Equatable, Identifiable {
         let блок = (j["clocal"] as? [String: Any]) ?? [:]
         if блок["yandex_avail"] != nil { яндексДоступен = A.да(блок["yandex_avail"]) }
         if блок["courier_avail"] != nil { курьерДоступен = A.да(блок["courier_avail"]) }
-        естьВстреча = блок["meet"] is [String: Any]
-        естьПосылка = блок["parcel"] is [String: Any]
+        встреча = ВстречаСделки(блок["meet"])
+        посылка = ПосылкаСделки(блок["parcel"])
         посылкаЧерезТК = межгород
         if let д = блок["delivery"] as? [String: Any] {
-            var к = КурьерСделки()
-            к.статус = A.строка(д["status"])
-            к.яндекс = A.да(д["yandex_on"])
-            к.статусЯндекса = A.строка(д["yandex_status"]).lowercased()
-            к.кодЗабора = A.строка(д["pickup_code"])
-            к.пин = A.строка(д["delivery_pin"])
-            к.ссылкаСлежения = A.строка(д["yandex_share_url"])
-            к.организатор = A.строка(д["arranger"])
-            курьер = к
+            курьер = КурьерСделки(д)
         }
     }
 
@@ -601,6 +774,13 @@ struct Сделка: Equatable, Identifiable {
     var конечная: Bool {
         статус == "confirmed" || статус == "cancelled" || статус == "resolved" || статус == "expired"
     }
+
+    /// Встреча с QR и посылка с кодом (clocalRender: _hovMeet / _hovParcel).
+    var естьВстреча: Bool { встреча != nil }
+    var естьПосылка: Bool { посылка != nil }
+
+    /// clcSrvNow сайта: «сейчас» по часам сервера, unix-секунды.
+    var сейчасНаСервере: Double { Date().timeIntervalSince1970 + сдвигЧасов }
 
     /// Задаток и аренда.
     var задаток: Bool { режим == "deposit" }
