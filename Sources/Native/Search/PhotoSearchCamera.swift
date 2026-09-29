@@ -110,8 +110,8 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
 
     /// Ушли с экрана камеры: фонарик гаснет, сессия останавливается.
     func остановить() {
-        очередь.async { [weak self] in
-            guard let self else { return }
+        /* Сильная ссылка: экран с @StateObject уже закрыт — сессия и фонарик всё равно гаснут, а не ждут освобождения. */
+        очередь.async {
             if let у = self.устройство, у.hasTorch, у.torchMode == .on, (try? у.lockForConfiguration()) != nil {
                 у.torchMode = .off
                 у.unlockForConfiguration()
@@ -178,12 +178,13 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
         self.готово = готово
         очередь.async { [weak self] in
             guard let self else { return }
-            guard self.сессия.isRunning else {
+            /* Без живой видеосвязи (прерывание, неудачная смена камеры) capturePhoto бросает исключение — не снимаем. */
+            guard self.сессия.isRunning, let связь = self.выход.connection(with: .video),
+                  связь.isActive, связь.isEnabled else {
                 self.наГлавной { self.снимаем = false }
                 return
             }
-            if let связь = self.выход.connection(with: .video),
-               связь.isVideoRotationAngleSupported(self.уголПоворота) {
+            if связь.isVideoRotationAngleSupported(self.уголПоворота) {
                 связь.videoRotationAngle = self.уголПоворота
             }
             self.выход.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
