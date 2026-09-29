@@ -70,7 +70,17 @@ enum ДоставкаСделкиText {
         "co_car_pvz_need": "Выберите пункт выдачи",
         "co_car_pvz_bad": "Этот пункт выдачи не подходит к цене — выбрали другой. Проверьте пункт и нажмите ещё раз.",
         "co_ship_changed": "Цену доставки пересчитали — проверьте сумму и нажмите ещё раз",
-        "co_car_track": "Трек-номер выдаст транспортная компания, когда продавец сдаст посылку, — он появится в сделке."
+        "co_car_track": "Трек-номер выдаст транспортная компания, когда продавец сдаст посылку, — он появится в сделке.",
+        "ship_estimating": "Оцениваем стоимость доставки…",
+        "ship_estimating_ya": "Оцениваем стоимость курьера…",
+        "ship_est_cdek": "СДЭК: цена, срок и пункты выдачи",
+        "ship_est_ya": "Курьер Яндекса: цена и время в пути",
+        "ship_est_any": "Подбираем способ доставки по вашему адресу",
+        "co_ship_house_btn": "Уточнить дом на карте",
+        "co_ship_house_why": "Без точного дома доставку не посчитать — поставьте точку на карте, и цена появится сразу.",
+        "car_calc_h": "Сколько стоит доставка до вас",
+        "car_go_hint": "Выбранный вариант СДЭК и пункт выдачи перейдут в сделку",
+        "ship_other_city": "Это другой город — туда возит только СДЭК: посчитайте в блоке «Доставка в другой город»."
     ]
 
     private static let kk: [String: String] = [
@@ -112,7 +122,17 @@ enum ДоставкаСделкиText {
         "co_car_pvz_need": "Беру пунктін таңдаңыз",
         "co_car_pvz_bad": "Бұл беру пункті бағаға сай емес — басқасын таңдадық. Пунктті тексеріп, қайта басыңыз.",
         "co_ship_changed": "Жеткізу бағасы қайта есептелді — соманы тексеріп, қайта басыңыз",
-        "co_car_track": "Трек-нөмірді сатушы сәлемдемені тапсырғанда көлік компаниясы береді — ол мәміледе шығады."
+        "co_car_track": "Трек-нөмірді сатушы сәлемдемені тапсырғанда көлік компаниясы береді — ол мәміледе шығады.",
+        "ship_estimating": "Жеткізу құнын бағалап жатырмыз…",
+        "ship_estimating_ya": "Курьер құнын бағалап жатырмыз…",
+        "ship_est_cdek": "СДЭК: баға, мерзім және беру пункттері",
+        "ship_est_ya": "Яндекс курьері: баға және жолдағы уақыт",
+        "ship_est_any": "Мекенжайыңыз бойынша жеткізу тәсілін таңдап жатырмыз",
+        "co_ship_house_btn": "Үйді картада нақтылау",
+        "co_ship_house_why": "Нақты үйсіз жеткізуді есептеу мүмкін емес — картада нүкте қойыңыз, баға бірден шығады.",
+        "car_calc_h": "Сізге дейін жеткізу қанша тұрады",
+        "car_go_hint": "Таңдалған СДЭК нұсқасы мен беру пункті мәмілеге өтеді",
+        "ship_other_city": "Бұл басқа қала — онда тек СДЭК жеткізеді: «Басқа қалаға жеткізу» блогында есептеңіз."
     ]
 
     private static let en: [String: String] = [
@@ -154,7 +174,17 @@ enum ДоставкаСделкиText {
         "co_car_pvz_need": "Choose a pickup point",
         "co_car_pvz_bad": "That pickup point doesn't match the price — we picked another. Check it and tap again.",
         "co_ship_changed": "The delivery price was recalculated — check the total and tap again",
-        "co_car_track": "The shipping company issues the tracking number when the seller drops off the parcel — it will appear in the deal."
+        "co_car_track": "The shipping company issues the tracking number when the seller drops off the parcel — it will appear in the deal.",
+        "ship_estimating": "Estimating the delivery cost…",
+        "ship_estimating_ya": "Estimating the courier cost…",
+        "ship_est_cdek": "CDEK: price, time and pickup points",
+        "ship_est_ya": "Yandex courier: price and travel time",
+        "ship_est_any": "Choosing the delivery option for your address",
+        "co_ship_house_btn": "Pin the building on the map",
+        "co_ship_house_why": "Delivery can't be priced without the exact building — drop a pin on the map and the price appears right away.",
+        "car_calc_h": "Delivery cost to you",
+        "car_go_hint": "The chosen CDEK option and pickup point go into the deal",
+        "ship_other_city": "That's another city — only CDEK delivers there: calculate it in the «Delivery to another city» block."
     ]
 
     private static let ar: [String: String] = [
@@ -196,7 +226,17 @@ enum ДоставкаСделкиText {
         "co_car_pvz_need": "اختر نقطة الاستلام",
         "co_car_pvz_bad": "نقطة الاستلام هذه لا تناسب السعر — اخترنا غيرها. تحقّق واضغط مجددًا.",
         "co_ship_changed": "أُعيد حساب سعر التوصيل — تحقّق من المبلغ واضغط مجددًا",
-        "co_car_track": "رقم التتبع تصدره شركة النقل عندما يسلّم البائع الطرد — وسيظهر في الصفقة."
+        "co_car_track": "رقم التتبع تصدره شركة النقل عندما يسلّم البائع الطرد — وسيظهر في الصفقة.",
+        "ship_estimating": "نقدّر تكلفة التوصيل…",
+        "ship_estimating_ya": "نقدّر تكلفة المندوب…",
+        "ship_est_cdek": "CDEK: السعر والمدة ونقاط الاستلام",
+        "ship_est_ya": "مندوب ياندكس: السعر ووقت الطريق",
+        "ship_est_any": "نختار طريقة التوصيل حسب عنوانك",
+        "co_ship_house_btn": "حدّد المبنى على الخريطة",
+        "co_ship_house_why": "لا يمكن حساب التوصيل دون المبنى بالضبط — ضع نقطة على الخريطة وسيظهر السعر فورًا.",
+        "car_calc_h": "تكلفة التوصيل إليك",
+        "car_go_hint": "سينتقل خيار CDEK ونقطة الاستلام المختاران إلى الصفقة",
+        "ship_other_city": "هذه مدينة أخرى — يوصل إليها CDEK فقط: احسبها في قسم «التوصيل إلى مدينة أخرى»."
     ]
 }
 
@@ -242,6 +282,22 @@ enum РасчётДоставкиСделки: Equatable {
     case перевозчики([ВариантДоставкиСделки], [String: [ПунктВыдачиСделки]])
 }
 
+// MARK: - Правило владельца: свой город — курьер Яндекса, другой город — только СДЭК
+
+enum ПравилоДоставкиСДЭК {
+    /// Предложение или компания — СДЭК: по коду (cdek) или названию.
+    static func этоСДЭК(код: String, имя: String) -> Bool {
+        let к = код.lowercased()
+        let и = имя.lowercased()
+        return к.contains("cdek") || к.contains("sdek") || и.contains("сдэк") || и.contains("сдек") || и.contains("cdek")
+    }
+}
+
+/// Чей расчёт идёт: значок полосы прогресса.
+enum ВидПеревозчикаРасчёта: Equatable {
+    case любой, яндекс, сдэк
+}
+
 // MARK: - Адрес из листа «Курьер по городу»
 
 /**
@@ -256,17 +312,26 @@ enum АдресИзЛистаКурьера {
         let текст: String
         let точка: ТочкаСделки?
         let когда: Date
+        /// Выбранное в окне объявления («Доставка в другой город»): ключ предложения, код перевозчика, пункт выдачи.
+        var тариф: String = ""
+        var перевозчик: String = ""
+        var пункт: String = ""
+        var дверь: [String: Any] = [:]
+        var уПодъезда = false
     }
 
     private static var запись: Запись? = nil
 
-    static func положить(товар: String, текст: String, широта: Double?, долгота: Double?) {
+    static func положить(товар: String, текст: String, широта: Double?, долгота: Double?,
+                         тариф: String = "", перевозчик: String = "", пункт: String = "",
+                         дверь: [String: Any] = [:], уПодъезда: Bool = false) {
         let чистый = текст.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !чистый.isEmpty else {
             запись = nil
             return
         }
-        запись = Запись(товар: товар, текст: чистый, точка: ТочкаСделки(широта, долгота), когда: Date())
+        запись = Запись(товар: товар, текст: чистый, точка: ТочкаСделки(широта, долгота), когда: Date(),
+                        тариф: тариф, перевозчик: перевозчик, пункт: пункт, дверь: дверь, уПодъезда: уПодъезда)
     }
 
     static func забрать(товар: String) -> Запись? {
@@ -301,6 +366,8 @@ final class ДоставкаНовойСделки: ObservableObject {
     @Published private(set) var пункты: [String: String] = [:]
     /// Блок включён (товар, не задаток и не аренда).
     @Published private(set) var включена = false
+    /// Чей расчёт ждём — значок в полосе «Оцениваем стоимость доставки…».
+    @Published private(set) var видРасчёта: ВидПеревозчикаРасчёта = .любой
 
     private var товар = ""
     private var номерРасчёта = 0
@@ -317,7 +384,14 @@ final class ДоставкаНовойСделки: ObservableObject {
         включена = true
         /* «Купить безопасно с доставкой» из листа курьера: адрес оттуда — вместо адреса по умолчанию. */
         if let изЛиста = АдресИзЛистаКурьера.забрать(товар: товар) {
-            применить(Адрес(текст: изЛиста.текст, точка: изЛиста.точка, дверь: [:], уПодъезда: false))
+            /* Из «Доставка в другой город»: выбранное там предложение СДЭК и пункт выдачи — сразу отмечены. */
+            if !изЛиста.тариф.isEmpty { тариф = изЛиста.тариф }
+            if !изЛиста.перевозчик.isEmpty {
+                видРасчёта = .сдэк
+                if !изЛиста.пункт.isEmpty { пункты[изЛиста.перевозчик] = изЛиста.пункт }
+            }
+            применить(Адрес(текст: изЛиста.текст, точка: изЛиста.точка, дверь: изЛиста.дверь,
+                            уПодъезда: изЛиста.уПодъезда))
             return
         }
         guard let j = try? await ДеньгиСделкиAPI.получить("escrow.php?action=recv_default"),
@@ -345,14 +419,50 @@ final class ДоставкаНовойСделки: ObservableObject {
         применить(Адрес(текст: а.адрес, точка: точка, дверь: а.дверь, уПодъезда: а.уПодъезда))
     }
 
+    /**
+     Адрес без точки (recv_default без lat/lon — «проспект Абая, 30, Астана» у владельца): как _mkEcoGeo сайта — строку
+     ≥ 8 знаков ищем геокодером, и только найденный дом даёт точку и расчёт; иначе «уточните дом на карте» с кнопкой карты.
+     */
     private func применить(_ а: Адрес) {
         адрес = а
         if а.точка != nil {
             посчитать()
-        } else {
-            номерРасчёта += 1
-            расчёт = .нужнаТочка
+            return
         }
+        номерРасчёта += 1
+        let мой = номерРасчёта
+        let текст = а.текст.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard текст.count >= 8 else {
+            расчёт = .нужнаТочка
+            return
+        }
+        расчёт = .считаем
+        Task { @MainActor [weak self] in
+            let найдено = await ДоставкаНовойСделки.точкаДома(текст)
+            guard let self, мой == self.номерРасчёта, var текущий = self.адрес else { return }
+            guard let найдено else {
+                self.расчёт = .нужнаТочка
+                return
+            }
+            текущий.точка = найдено
+            self.адрес = текущий
+            self.посчитать()
+        }
+    }
+
+    /// Точка дома по строке адреса: геокодер телефона, только Казахстан и только с номером дома (house у сайта).
+    private static func точкаДома(_ текст: String) async -> ТочкаСделки? {
+        let метки = try? await CLGeocoder().geocodeAddressString(текст, in: nil,
+                                                                 preferredLocale: Locale(identifier: "ru_KZ"))
+        guard let метка = метки?.first, let место = метка.location else { return nil }
+        if let страна = метка.isoCountryCode, !страна.isEmpty, страна != "KZ" { return nil }
+        guard let дом = метка.subThoroughfare, !дом.isEmpty else { return nil }
+        return ТочкаСделки(место.coordinate.latitude, место.coordinate.longitude)
+    }
+
+    /// Какой перевозчик ожидается, пока идёт расчёт (значок в полосе прогресса).
+    func ожидать(_ вид: ВидПеревозчикаРасчёта) {
+        видРасчёта = вид
     }
 
     /// Выбор строки: nil — «Заберу сам» (mkEcoShipPick).
@@ -363,8 +473,13 @@ final class ДоставкаНовойСделки: ObservableObject {
         }
         самЗаберу = false
         тариф = вариант.id
-        if вариант.доПВЗ, (пункты[вариант.перевозчик] ?? "").isEmpty, let первый = списокПунктов(вариант).first {
-            пункты[вариант.перевозчик] = первый.id
+        if вариант.доПВЗ {
+            /* Как у сайта: выбранный раньше пункт, если он есть в списке, иначе первый. */
+            let список = списокПунктов(вариант)
+            let текущий = пункты[вариант.перевозчик] ?? ""
+            if !список.contains(where: { $0.id == текущий }), let первый = список.first {
+                пункты[вариант.перевозчик] = первый.id
+            }
         }
     }
 
@@ -441,16 +556,33 @@ final class ДоставкаНовойСделки: ObservableObject {
             расчёт = .нетАдреса
             return
         }
-        if A.да(j["ok"]), A.строка(j["mode"]) == "carriers", let предложения = j["offers"] as? [String: Any] {
+        if A.да(j["ok"]), A.строка(j["mode"]) == "carriers", j["offers"] is [String: Any] || j["offers"] is [Any] {
             скрыт = false
+            видРасчёта = .сдэк
+            /* offers — объект по ключам (у сайта) или, бывает, массив: разбираем оба, чтобы СДЭК не терялся. */
+            var сырые: [(String, [String: Any])] = []
+            if let словарь = j["offers"] as? [String: Any] {
+                for ключ in словарь.keys.sorted() {
+                    if let п = словарь[ключ] as? [String: Any] { сырые.append((ключ, п)) }
+                }
+            } else if let массив = j["offers"] as? [Any] {
+                for (номер, значение) in массив.enumerated() {
+                    guard let п = значение as? [String: Any] else { continue }
+                    let свой = A.строка(п["key"])
+                    сырые.append((свой.isEmpty ? "o" + String(номер) : свой, п))
+                }
+            }
             var список: [ВариантДоставкиСделки] = []
-            for ключ in предложения.keys.sorted() {
-                guard let п = предложения[ключ] as? [String: Any] else { continue }
+            for (ключ, п) in сырые {
                 let q = A.строка(п["q"])
                 let цена = A.целое(п["price"])
                 guard !q.isEmpty, цена > 0 else { continue }
+                let перевозчик = A.строка(п["carrier"])
+                let имя = A.строка(п["name"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                /* Правило владельца: в другой город — только СДЭК, других компаний не показываем. */
+                guard ПравилоДоставкиСДЭК.этоСДЭК(код: перевозчик, имя: имя) else { continue }
                 список.append(ВариантДоставкиСделки(id: ключ, цена: цена, минут: 0, q: q, бесплатно: false,
-                                                    перевозчик: A.строка(п["carrier"]), имя: A.строка(п["name"]),
+                                                    перевозчик: перевозчик, имя: имя.isEmpty ? "СДЭК" : имя,
                                                     доПВЗ: A.строка(п["kind"]) == "pvz",
                                                     днейОт: A.целое(п["days_min"]), днейДо: A.целое(п["days_max"])))
             }
@@ -491,6 +623,7 @@ final class ДоставкаНовойСделки: ObservableObject {
         }
         скрыт = false
         if A.да(j["ok"]), !A.да(j["free"]), !A.строка(j["q"]).isEmpty, A.целое(j["price"]) > 0 {
+            видРасчёта = .яндекс
             let основнойТариф = A.строка(j["tariff"]).isEmpty ? "express" : A.строка(j["tariff"])
             var список = [ВариантДоставкиСделки(id: основнойТариф, цена: A.целое(j["price"]), минут: A.целое(j["eta"]),
                                                 q: A.строка(j["q"]), бесплатно: false, перевозчик: "", имя: "",
@@ -609,10 +742,13 @@ final class ДоставкаНовойСделки: ObservableObject {
 struct БлокДоставкиНовойСделки: View {
     @ObservedObject var доставка: ДоставкаНовойСделки
     let изменитьАдрес: () -> Void
+    /// Окно объявления («Доставка в другой город»): без строки «Заберу сам» — там только расчёт.
+    let безСамовывоза: Bool
 
-    init(доставка: ДоставкаНовойСделки, изменитьАдрес: @escaping () -> Void) {
+    init(доставка: ДоставкаНовойСделки, изменитьАдрес: @escaping () -> Void, безСамовывоза: Bool = false) {
         self.доставка = доставка
         self.изменитьАдрес = изменитьАдрес
+        self.безСамовывоза = безСамовывоза
     }
 
     private func т(_ ключ: String) -> String { ДоставкаСделкиText.т(ключ) }
@@ -643,15 +779,19 @@ struct БлокДоставкиНовойСделки: View {
             подсказка(т("co_ship_addr_first"))
             строкаСам
         case .считаем:
-            HStack(spacing: 8) {
-                SiteSpinner.мелкий
-                Text(т("co_ship_calc2"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-            }
-            строкаСам
+            /* Адрес определён — полоса «Оцениваем стоимость доставки…», потом плавно результат. */
+            ПрогрессРасчётаДоставки(вид: доставка.видРасчёта, заголовок: т("ship_estimating"))
         case .нужнаТочка:
-            подсказка(т("co_ship_house"))
+            /* need_pt: адрес без дома — просим точку на карте; после неё расчёт идёт сам (выбран → посчитать). */
+            ЗаметкаСделки(Text(т("co_ship_house_why")), вид: .инфо, символ: "mappin.and.ellipse")
+            Button(action: изменитьАдрес) {
+                Label(т("co_ship_house_btn"), systemImage: "map")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(Theme.зелёный2, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
             строкаСам
         case .сбой:
             Button { доставка.повторить() } label: {
@@ -746,7 +886,14 @@ struct БлокДоставкиНовойСделки: View {
                              пунктир: false, доступна: false) {}
     }
 
+    @ViewBuilder
     private var строкаСам: some View {
+        if !безСамовывоза {
+            строкаСамСама
+        }
+    }
+
+    private var строкаСамСама: some View {
         let выбрана = доставка.самОтмечено
         return СтрокаВыбораДоставки(заголовок: т("co_ship_self2"), подпись: т("co_ship_self2_s"),
                                     цена: СделкиФормат.тенге(0), выбрана: выбрана, пунктир: true, доступна: true) {
@@ -951,5 +1098,130 @@ struct МеткиГарантииСделки: View {
         }
         /* Высота ряда — по самой высокой плашке, остальные тянутся до неё. */
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: - «Оцениваем стоимость доставки…» — полоса прогресса расчёта
+
+/**
+ Пока ship_quote считает цену (адрес уже определён): значок перевозчика (Яндекс — красный круг «Я», СДЭК — зелёный
+ квадрат «С», неизвестно — коробка), заголовок, подпись и полоса с бегущим зелёным бликом. «Уменьшение движения» —
+ полоса стоит. Цвета — темы (светлая и тёмная).
+ */
+struct ПрогрессРасчётаДоставки: View {
+    let вид: ВидПеревозчикаРасчёта
+    let заголовок: String
+
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
+
+    init(вид: ВидПеревозчикаРасчёта, заголовок: String) {
+        self.вид = вид
+        self.заголовок = заголовок
+    }
+
+    private var подпись: String {
+        switch вид {
+        case .яндекс: return ДоставкаСделкиText.т("ship_est_ya")
+        case .сдэк: return ДоставкаСделкиText.т("ship_est_cdek")
+        case .любой: return ДоставкаСделкиText.т("ship_est_any")
+        }
+    }
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return HStack(alignment: .center, spacing: 12) {
+            ЗначокПеревозчикаРасчёта(вид: вид, дышит: !безДвижения)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(заголовок)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(подпись)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                ПолосаРасчётаДоставки(стоит: безДвижения)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.поверхность2, in: форма)
+        .overlay { форма.strokeBorder(Theme.линия, lineWidth: 1) }
+        .transition(.opacity)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// Значок перевозчика 36 pt; «дышит» (лёгкое увеличение) — только без «Уменьшения движения».
+private struct ЗначокПеревозчикаРасчёта: View {
+    let вид: ВидПеревозчикаРасчёта
+    let дышит: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !дышит)) { шкала in
+            let t = шкала.date.timeIntervalSinceReferenceDate
+            let масштаб: CGFloat = дышит ? 1 + 0.05 * CGFloat(sin(t * 2 * Double.pi / 1.6)) : 1
+            значок
+                .scaleEffect(масштаб)
+        }
+        .frame(width: 40, height: 40)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var значок: some View {
+        switch вид {
+        case .яндекс:
+            Text("Я")
+                .font(.system(size: 17, weight: .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Color(red: 0.988, green: 0.247, blue: 0.114), in: Circle())
+        case .сдэк:
+            Text("С")
+                .font(.system(size: 17, weight: .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Color(red: 0.0, green: 0.667, blue: 0.294),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        case .любой:
+            Image(systemName: "shippingbox.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Theme.зелёный2, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+    }
+}
+
+/// Полоса 6 pt: дорожка цвета линии и бегущий зелёный отрезок с бликом; стоит — отрезок на 60 % без движения.
+private struct ПолосаРасчётаДоставки: View {
+    let стоит: Bool
+
+    var body: some View {
+        GeometryReader { рамка in
+            let ширина = рамка.size.width
+            TimelineView(.animation(minimumInterval: nil, paused: стоит)) { шкала in
+                let t = шкала.date.timeIntervalSinceReferenceDate
+                let фаза = CGFloat(t.truncatingRemainder(dividingBy: 1.3) / 1.3)
+                let длина = ширина * 0.42
+                let сдвиг = стоит ? 0 : (ширина + длина) * фаза - длина
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Theme.линия)
+                    Capsule()
+                        .fill(LinearGradient(colors: [Theme.зелёный2.opacity(0.25), Theme.зелёныйЯркий,
+                                                      Theme.зелёный2.opacity(0.25)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: стоит ? ширина * 0.6 : длина)
+                        .offset(x: сдвиг)
+                }
+                .clipShape(Capsule())
+            }
+        }
+        .frame(height: 6)
+        .accessibilityHidden(true)
     }
 }
