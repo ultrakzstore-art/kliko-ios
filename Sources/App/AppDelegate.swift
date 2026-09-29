@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         /* Список «Чата» и число непрочитанных — заново сразу: пуш о сообщении пришёл раньше, чем опрос (12 с) его увидит. */
         NotificationCenter.default.post(name: .klikoПушПришёл, object: nil)
+        сделкаИзПуша(notification.request.content.userInfo)
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -66,6 +67,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
+        сделкаИзПуша(info)
         // Этап 12: своё локальное уведомление о новых по сохранённому поиску узнаём по метке в userInfo и ведём в
         // ленту с этим поиском. У пушей сайта метки нет — они, как раньше, идут по "url".
         if let искомое = ПроверкаПоисков.искомое(из: info) {
@@ -79,6 +81,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             handlePayload(info)
         }
         completionHandler()
+    }
+
+    /// Пуш о сделке — сделка могла закрыться: её объявление перечитают экраны (DealListingBack.swift).
+    private func сделкаИзПуша(_ info: [AnyHashable: Any]) {
+        let тип = (info["type"] as? String) ?? ""
+        let сделка = info["deal_id"].map { "\($0)" } ?? ""
+        let сделкаEDS = info["eds_id"].map { "\($0)" } ?? ""
+        guard !сделка.isEmpty || !сделкаEDS.isEmpty else { return }
+        Task { @MainActor in ОбъявлениеПослеСделки.пуш(тип: тип, сделка: сделка, сделкаEDS: сделкаEDS) }
     }
 
     /// payload: {"aps":{...}, "url":"/cabinet.php?s=messages"} (или полный https-URL).

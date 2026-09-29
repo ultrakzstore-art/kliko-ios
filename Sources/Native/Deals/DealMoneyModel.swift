@@ -501,6 +501,12 @@ final class ДеньгиСделкиМодель: ObservableObject {
             await заново()
             return nil
         }
+        /* Патч сервера 74: объявление сняли после оформления — деньги не тронуты, сделку остаётся отменить. */
+        if A.строка(j["code"]) == "listing_gone" {
+            показать(т("pay_listing_gone"))
+            await заново()
+            return nil
+        }
         let e = A.строка(j["error"])
         if !e.isEmpty {
             let m = A.строка(j["message"])
@@ -525,6 +531,10 @@ final class ДеньгиСделкиМодель: ObservableObject {
                 return nil
             }
             if СделкиAPI.да(j["already_enough"]) { return .оплатить }
+            if СделкиAPI.строка(j["code"]) == "listing_gone" {
+                показать(т("pay_listing_gone"))
+                return nil
+            }
             if МоиОбъявленияAPI.нетСессии(j) {
                 карточка?.сессияПропала()
                 return nil
