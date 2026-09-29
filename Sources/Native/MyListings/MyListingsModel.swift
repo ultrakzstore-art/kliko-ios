@@ -180,6 +180,11 @@ final class МоиОбъявленияМодель: ObservableObject {
         }
     }
 
+    /// Мастер «Работы» сохранил резюме или вакансию — блок «Работа» заново (jobsMineLoad(true) сайта).
+    func обновитьРаботу() async {
+        await загрузитьРаботу(поколение)
+    }
+
     /// Блок «Работа» (jobsMineLoad): не пришло — блока нет, как у сайта.
     private func загрузитьРаботу(_ моё: Int) async {
         let ответ = try? await МоиОбъявленияAPI.получить("/api/jobs.php?action=mine", отКорня: true)

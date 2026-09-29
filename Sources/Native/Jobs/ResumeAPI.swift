@@ -176,7 +176,11 @@ enum РезюмеAPI {
         let действие = номер == nil ? "create" : "update"
         do {
             let j = try await A.отправить("/api/jobs.php?action=" + действие, тело: тело, отКорня: true)
-            if A.да(j["ok"]) { return .готово }
+            if A.да(j["ok"]) {
+                /* jobsMineLoad(true) сайта: списки «Работы» в профиле перечитываются, а не ждут потягивания вниз. */
+                NotificationCenter.default.post(name: .klikoРаботаСохранена, object: nil)
+                return .готово
+            }
             if A.нетСессии(j) { return .нуженВход }
             let сообщение = A.строка(j["msg"])
             switch A.строка(j["error"]) {
@@ -264,4 +268,10 @@ struct ШаблонРезюме: Identifiable, Equatable {
     static func по(_ id: String) -> ШаблонРезюме {
         все.first(where: { $0.id == id }) ?? все[0]
     }
+}
+
+extension Notification.Name {
+    /// Мастер сохранил резюме или вакансию (create / update) — «Работа» профиля и блок «Работа» в «Моих объявлениях»
+    /// перечитывают /api/jobs.php?action=mine.
+    static let klikoРаботаСохранена = Notification.Name("kliko.jobs.saved")
 }

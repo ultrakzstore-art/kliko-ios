@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- Тексты покупок через App Store (платные услуги за Config.цифровыеПокупки). Языки: kk/ru/en; прочие — русский.
+ Тексты покупок через App Store (платные услуги за Config.цифровыеПокупки). Языки: kk/ru/en/ar; прочие — русский.
  Ни цен сайта, ни ссылок и слов об оплате на сайте здесь нет (правила 3.1.1 и 3.1.3).
 
  Слова сайта о самих услугах (пакеты, тарифы, «Слоты объявлений», «Пакеты Kliko AI», «Kliko PRO · Магазин») берутся
@@ -16,6 +16,7 @@ enum ПокупкиAppleText {
         switch язык {
         case "kk": словарь = kk
         case "en": словарь = en
+        case "ar": словарь = ar
         default: словарь = ru
         }
         return словарь[ключ] ?? ru[ключ] ?? ключ
@@ -219,5 +220,65 @@ enum ПокупкиAppleText {
         "promote_now": "Promote the listing",
         "close": "Close",
         "pending_banner": "Some paid purchases are not applied yet. They will be applied automatically.",
+    ]
+
+    private static let ar: [String: String] = [
+        "buy": "شراء",
+        "buy_for": "شراء مقابل {p}",
+        "subscribe_for": "اشتراك مقابل {p}",
+        "price_loading": "جارٍ تحميل السعر…",
+        "not_in_store": "هذه الخدمة غير معروضة للبيع في App Store بعد.",
+        "store_unavailable": "متجر App Store غير متاح الآن. يرجى المحاولة لاحقًا.",
+        "store_error": "لم تتم عملية الشراء. لم يُخصم منك أي مبلغ.",
+        "unverified": "لم يؤكد App Store عملية الشراء. إذا خُصم المبلغ، اضغط «استعادة المشتريات».",
+        "done": "تم — الخدمة مفعّلة.",
+        "saved_later": "تم حفظ عملية الشراء وستُطبَّق لاحقًا.",
+        "saved_later_sub": "تم الدفع، لكن خادم Kliko لم يرد بعد. سيحاول التطبيق مجددًا عند التشغيل التالي — لن يضيع شيء.",
+        "ask_to_buy": "عملية الشراء بانتظار الموافقة. سنطبّقها فور تأكيد App Store.",
+        "need_login": "سجّل الدخول إلى حسابك للشراء: الخدمة مرتبطة بحسابك في Kliko.",
+        "login": "تسجيل الدخول",
+        "restore": "استعادة المشتريات",
+        "restore_done": "تم التحقق من المشتريات. طُبِّق كل ما دُفع.",
+        "restore_pending": "مشتريات ما زالت بانتظار تأكيد خادم Kliko: {n}. ستُطبَّق لاحقًا.",
+        "restore_fail": "تعذّر الاتصال بـ App Store. يرجى المحاولة لاحقًا.",
+        "pay_note": "الدفع عبر App Store: السعر بعملة App Store لديك ويُخصم من Apple ID.",
+        "sub_terms": "يتجدد الاشتراك تلقائيًا كل شهر ما لم يُلغَ قبل 24 ساعة على الأقل من نهاية الفترة. يُخصم المبلغ من Apple ID عند تأكيد الشراء وعند كل تجديد. يمكنك إدارته أو إلغاؤه في إعدادات Apple ID.",
+        "manage_subs": "إدارة الاشتراك",
+        "offer": "العرض العام",
+        "store_card": "مشتريات App Store",
+        "cancelled": "أُلغيت عملية الشراء. لم يُخصم منك أي مبلغ.",
+        "not_allowed": "المشتريات غير مسموح بها على هذا الجهاز (مدة استخدام الجهاز ← القيود).",
+        "one_time": "شراء لمرة واحدة",
+        "sub_period": "اشتراك · {n} · يتجدد تلقائيًا",
+        "unit_day": "يوم",
+        "unit_week": "أسبوع",
+        "unit_month": "شهر",
+        "unit_year": "سنة",
+        "ai_pack_btn": "باقة Kliko AI",
+        "cta_promo": "ترويج",
+        "cta_pro": "الحصول على PRO",
+        "cta_slots": "اختيار باقة الخانات",
+        "cta_combo": "اختيار باقة كومبو",
+        "cta_ai": "اختيار باقة Kliko AI",
+        "cta_resume": "السيرة الذاتية إلى TOP",
+        "terms": "شروط الخدمة",
+        "privacy": "سياسة الخصوصية",
+        "apple_eula": "شروط الاستخدام (EULA)",
+        "pick_listing": "أي إعلان تريد ترويجه",
+        "pick_listing_none": "لا توجد إعلانات منشورة — يمكن ترويج المنشورة فقط.",
+        "pick_listing_first": "اختر إعلانًا أولًا.",
+        "promo_detail": "TOP {d} يوم · رفع: {b}",
+        "promo_detail_top": "TOP {d} يوم",
+        "bump_title": "رفع",
+        "bump_detail": "يرفع الإعلان إلى أعلى النتائج مرة واحدة",
+        "resume_top_title": "السيرة الذاتية إلى TOP",
+        "resume_top_detail": "السيرة الذاتية في TOP لمدة 7 أيام",
+        "pro_month": "{n} · شهريًا",
+        "slots_row": "{n} إعلان",
+        "slots_row_sub": "+{n} إلى المجانية · باقة لمدة 30 يومًا",
+        "ai_row_sub": "كل ميزات Kliko AI لمدة {d} يوم",
+        "promote_now": "ترويج الإعلان",
+        "close": "إغلاق",
+        "pending_banner": "بعض المشتريات المدفوعة لم تُطبَّق بعد. ستُطبَّق تلقائيًا.",
     ]
 }

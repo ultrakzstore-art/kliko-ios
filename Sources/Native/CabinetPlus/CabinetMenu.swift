@@ -222,6 +222,10 @@ struct ЭкранРаботыКабинета: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await загрузить() }
         .task { await загрузить() }
+        /* «+ Резюме», «+ Вакансия» и «Изменить» — мастер поверх экрана: сохранил — список заново, а не «Пока нет». */
+        .onReceive(NotificationCenter.default.publisher(for: .klikoРаботаСохранена)) { _ in
+            Task { await загрузить() }
+        }
         .overlay(alignment: .bottom) {
             if let плашка { ПлашкаКошелька(текст: плашка) }
         }

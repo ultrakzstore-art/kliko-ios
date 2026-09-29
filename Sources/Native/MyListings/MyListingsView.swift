@@ -58,6 +58,10 @@ struct МоиОбъявленияЭкран: View {
             .onReceive(NotificationCenter.default.publisher(for: .klikoОбъявлениеСделкиИзменилось)) { _ in
                 Task { await модель.загрузить(страницу: false) }
             }
+            /* Мастер «Работы» (поверх экрана) сохранил резюме или вакансию — блок «Работа» заново. */
+            .onReceive(NotificationCenter.default.publisher(for: .klikoРаботаСохранена)) { _ in
+                Task { await модель.обновитьРаботу() }
+            }
             .alert(вопрос?.заголовок ?? "", isPresented: вопросНаЭкране, presenting: вопрос) { в in
                 Button(в.кнопка, role: .destructive) { в.действие() }
                 Button(т("cancel"), role: .cancel) {}

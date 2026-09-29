@@ -8,7 +8,7 @@ import Foundation
 
  Своих фраз четыре, и каждая объясняет то, чего на сайте нет, потому что там это делается на месте: «точка на карте
  ставится на сайте» (pg_map_note), «выключить eGov-вход можно только с eGov — на сайте» (sec_egov_off_site), «язык
- приложения — как у iPhone» (lang_note) и «удаление — на сайте» (del_footer); плюс подписи для VoiceOver (a11y_*).
+ приложения и сайта, выбор — в аккаунте» (lang_note) и «удаление — на сайте» (del_footer); плюс подписи для VoiceOver (a11y_*).
  */
 enum НастройкиText {
     static func т(_ ключ: String) -> String {
@@ -162,7 +162,7 @@ enum НастройкиText {
         "sec_egov_off_site": "Выключить подтверждение входа можно только с проверкой eGov — это делается в кабинете на сайте: «Настройки» → «Устройства и входы».",
         "open_site": "Открыть кабинет на сайте",
         // Язык
-        "lang_note": "Выбор сохранён в аккаунте. Экраны приложения показываются на языке iPhone.",
+        "lang_note": "Язык приложения и сайта. Выбор сохраняется в аккаунте.",
         // Оформление и мастер «Начало работы»
         "cabwiz_theme_t": "Оформление", "cabwiz_theme_hint": "Меняется сразу. «{auto}» — как настроено на телефоне.",
         "ap_auto": "Как в системе", "ap_light": "Светлая", "ap_dark": "Тёмная", "cabwiz_ready": "Готово",
@@ -298,7 +298,7 @@ enum НастройкиText {
         "sec_via_legacy": "жаңартуға дейінгі кіру", "sec_via_dev": "әзірлеу", "sec_egov_on_btn": "Қосу",
         "sec_egov_off_site": "Кіруді растауды тек eGov тексеруімен өшіруге болады — бұл сайттағы кабинетте жасалады: «Баптаулар» → «Құрылғылар мен кірулер».",
         "open_site": "Сайттағы кабинетті ашу",
-        "lang_note": "Таңдау аккаунтта сақталды. Қосымша экрандары iPhone тілінде көрсетіледі.",
+        "lang_note": "Қосымша мен сайттың тілі. Таңдау аккаунтта сақталады.",
         "cabwiz_theme_t": "Безендіру", "cabwiz_theme_hint": "Бірден өзгереді. «{auto}» — телефондағы баптау бойынша.",
         "ap_auto": "Жүйедегідей", "ap_light": "Ашық", "ap_dark": "Қараңғы", "cabwiz_ready": "Дайын",
         "ap_save_fail": "Аккаунтқа сақталмады — осы құрылғыда көрінеді",
@@ -432,7 +432,7 @@ enum НастройкиText {
         "sec_via_legacy": "sign-in before the update", "sec_via_dev": "development", "sec_egov_on_btn": "Turn on",
         "sec_egov_off_site": "Sign-in confirmation can only be turned off with an eGov check — this is done in your account on the website: “Settings” → “Devices and sign-ins”.",
         "open_site": "Open the account on the website",
-        "lang_note": "The choice is saved in your account. The app's screens use the iPhone's language.",
+        "lang_note": "Language of the app and the website. Your choice is saved to your account.",
         "cabwiz_theme_t": "Appearance", "cabwiz_theme_hint": "Changes right away. “{auto}” — as set on the phone.",
         "ap_auto": "As in system", "ap_light": "Light", "ap_dark": "Dark", "cabwiz_ready": "Done",
         "ap_save_fail": "Not saved to the account — visible on this device",
@@ -566,7 +566,7 @@ enum НастройкиText {
         "sec_via_legacy": "دخول قبل التحديث", "sec_via_dev": "التطوير", "sec_egov_on_btn": "تفعيل",
         "sec_egov_off_site": "لا يمكن إيقاف تأكيد الدخول إلا بفحص eGov — ويتم ذلك من حسابك على الموقع: «الإعدادات» ← «الأجهزة وعمليات الدخول».",
         "open_site": "فتح الحساب على الموقع",
-        "lang_note": "تم حفظ الاختيار في الحساب. شاشات التطبيق تظهر بلغة iPhone.",
+        "lang_note": "لغة التطبيق والموقع. يُحفظ اختيارك في الحساب.",
         "cabwiz_theme_t": "المظهر", "cabwiz_theme_hint": "يتغيّر فورًا. «{auto}» — كما هو مضبوط في الهاتف.",
         "ap_auto": "كما في النظام", "ap_light": "فاتح", "ap_dark": "داكن", "cabwiz_ready": "تم",
         "ap_save_fail": "لم يُحفظ في الحساب — ظاهر على هذا الجهاز",
