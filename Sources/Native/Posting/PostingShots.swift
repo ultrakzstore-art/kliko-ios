@@ -3,7 +3,7 @@ import SwiftUI
 /**
  ПЛАН СЪЁМКИ ПОД ФОТО (#realty-shots / _rsh* сайта): «Снимите по плану · Автомобили», совет, что снять, и список кадров —
  AUTO_SHOTS (транспорт по группе раздела), GOODS_SHOTS (товар по GOODS_SHOT_BY_CAT или чипу старта; «Сдать вещь» —
- rent), REALTY_SHOTS (вид объекта и сделка). Кадры, которые уже есть (по числу фото), отмечены галочкой. Подписи и
+ rent), REALTY_SHOTS (вид объекта и сделка). Кадры, у которых есть фото на их месте плана, отмечены галочкой. Подписи и
  советы — слово в слово с сайта (js/cabinet.min.js), переводы — kk/en/ar. У товара без вида — общий совет «other».
  У недвижимости из совета убрано «Схему помещения приложите отдельно — блок ниже»: блока схемы в приложении нет.
  */
@@ -13,6 +13,12 @@ enum ПланСъёмки {
         let заголовок: String
         let совет: String
         let кадры: [String]
+        /// Ключи кадров сайта (g_front, dash, living…) в том же порядке: место кадра в плане, оно же shot_slots.
+        var ключи: [String] = []
+        /// Подписи кадров по-русски — для shot_read (сервер спрашивает Kliko AI по-русски, как сайт).
+        var кадрыRu: [String] = []
+        /// Ключ плана (_rshPlanKey): группа транспорта, вид товара или «realty» — от него пропорция рамки камеры.
+        var группа: String = ""
     }
 
     private static var язык: String { String((Locale.preferredLanguages.first ?? "ru").prefix(2)) }
@@ -85,6 +91,53 @@ enum ПланСъёмки {
         "land|rent": ["Общий вид участка", "Границы", "Подъездная дорога"],
         "land|sale": ["Общий вид участка", "Границы", "Подъездная дорога", "Коммуникации", "Окрестности"]
     ]
+
+    /// Ключи кадров AUTO_SHOTS сайта (k) — в том же порядке, что подписи выше.
+    static let ключиАвто: [String: [String]] = [
+        "cars": ["front34", "rear34", "side", "cabin", "back", "dash", "engine", "trunk"],
+        "motorcycles": ["side", "front34", "rear34", "dash", "engine", "tires"],
+        "trucks-special": ["front34", "side", "cabin", "body", "dash", "engine", "tires"],
+        "auto-parts": ["part", "marking", "wear", "set", "fit"],
+        "water-transport": ["side", "cabin", "engine", "hull", "trailer"],
+        "bicycles": ["side", "frame", "drive", "brakes", "tires"]
+    ]
+
+    /// Ключи кадров GOODS_SHOTS сайта.
+    static let ключиТоваров: [String: [String]] = [
+        "birds": ["bd_full", "bd_head", "bd_ring", "bd_cage"],
+        "fish": ["fs_fish", "fs_tank", "fs_gear", "fs_size"],
+        "reptiles": ["rp_full", "rp_head", "rp_terr", "rp_docs"],
+        "petgoods": ["pg_pack", "pg_label", "pg_date", "pg_set"],
+        "livestock": ["l_side", "l_head", "l_docs", "l_keep"],
+        "rent": ["r_full", "r_kit", "r_wear", "r_work", "r_serial"],
+        "animals": ["a_full", "a_face", "a_docs", "a_where"],
+        "building": ["b_stack", "b_close", "b_mark", "b_defect"],
+        "phone": ["g_front", "g_back", "g_sysinfo", "g_box", "g_defect"],
+        "laptop": ["g_front", "g_sysinfo", "g_keys", "g_ports", "g_defect"],
+        "clothes": ["g_front", "g_tag", "g_material", "g_detail", "g_defect"],
+        "shoes": ["g_front", "g_sole", "g_tag", "g_detail", "g_defect"],
+        "furniture": ["g_front", "g_angle", "g_material", "g_size", "g_defect"],
+        "appliance": ["g_front", "g_on", "g_tag", "g_box", "g_defect"],
+        "other": ["g_front", "g_angle", "g_tag", "g_box", "g_defect"]
+    ]
+
+    /// Ключи кадров REALTY_SHOTS сайта: вид объекта + «|» + сделка.
+    static let ключиЖилья: [String: [String]] = [
+        "apartment|rent": ["living", "kitchen", "bedroom", "bath", "window", "entrance"],
+        "apartment|sale": ["living", "kitchen", "bedroom", "bath", "window", "entrance"],
+        "house|rent": ["facade", "living", "kitchen", "bath", "yard", "street"],
+        "house|sale": ["facade", "living", "kitchen", "bath", "yard", "utils"],
+        "commercial|rent": ["entrance", "hall", "rooms", "bath", "parking"],
+        "commercial|sale": ["facade", "entrance", "hall", "bath", "parking"],
+        "land|rent": ["plot", "bounds", "road"],
+        "land|sale": ["plot", "bounds", "road", "utils", "around"]
+    ]
+
+    /// Ключи плана; не совпали по длине с подписями — свои «s1…», чтобы шаги не съехали.
+    static func ключи(_ список: [String]?, _ сколько: Int) -> [String] {
+        if let список, список.count == сколько { return список }
+        return (0..<max(0, сколько)).map { "s" + String($0 + 1) }
+    }
 
     /// GOODS_SHOT_BY_CAT сайта: раздел (или предок) → вид товара.
     static let видПоРазделу: [String: String] = [
@@ -546,7 +599,9 @@ extension ПодачаМодель {
             let кадры = ПланСъёмки.жильё[вид + "|" + сделка] ?? []
             let заголовок = т("rsh_h") + " · " + т("rk_" + вид) + (сдаю ? т("rsh_rent_tail") : "")
             return ПланСъёмки.План(заголовок: заголовок, совет: ПланСъёмки.совет("realty_" + вид + "_" + сделка),
-                                   кадры: кадры.map { ПланСъёмки.кадр($0) })
+                                   кадры: кадры.map { ПланСъёмки.кадр($0) },
+                                   ключи: ПланСъёмки.ключи(ПланСъёмки.ключиЖилья[вид + "|" + сделка], кадры.count),
+                                   кадрыRu: кадры, группа: "realty")
         }
         var узел: String? = форма.раздел.isEmpty ? nil : форма.раздел
         var шаги = 0
@@ -555,7 +610,9 @@ extension ПодачаМодель {
                 let имя = справочники.имя(к)
                 let заголовок = т("rsh_h") + (имя.isEmpty ? "" : " · " + имя)
                 return ПланСъёмки.План(заголовок: заголовок, совет: ПланСъёмки.совет("auto_" + к),
-                                       кадры: кадры.map { ПланСъёмки.кадр($0) })
+                                       кадры: кадры.map { ПланСъёмки.кадр($0) },
+                                       ключи: ПланСъёмки.ключи(ПланСъёмки.ключиАвто[к], кадры.count),
+                                       кадрыRu: кадры, группа: к)
             }
             узел = справочники.разделы[к]?.родитель
             шаги += 1
@@ -584,19 +641,36 @@ extension ПодачаМодель {
         }
         let заголовок = т("rsh_h") + (имя.isEmpty ? "" : " · " + имя)
         return ПланСъёмки.План(заголовок: заголовок, совет: ПланСъёмки.совет("goods_" + вид),
-                               кадры: кадры.map { ПланСъёмки.кадр($0) })
+                               кадры: кадры.map { ПланСъёмки.кадр($0) },
+                               ключи: ПланСъёмки.ключи(ПланСъёмки.ключиТоваров[вид], кадры.count),
+                               кадрыRu: кадры, группа: вид)
     }
 }
 
-/// Карточка плана под фото: значок, «Снимите по плану · …», совет и кадры чипами; снятые (по числу фото) — с галочкой.
+/**
+ Карточка плана под фото: значок, «Снимите по плану · …», совет и кадры чипами. Кадр снят, когда у фото есть его место
+ плана (слот сайта: съёмка по плану, выбор из галереи в камере, первое фото — «общий вид»); снятые — с галочкой.
+ Неснятый чип открывает свою камеру сразу на этом кадре (realtyShotPick сайта), «Снять по шагам» — с первого неснятого
+ (rshStepStart).
+ */
 struct ПланСъёмкиВид: View {
     let план: ПланСъёмки.План
-    let снято: Int
+    /// Места плана, у которых уже есть кадр.
+    let снятые: Set<String>
+    /// Тап по неснятому кадру; nil — чипы не нажимаются.
+    let снять: ((String) -> Void)?
+    /// «Снять по шагам»; nil — кнопки нет (план закрыт, места под фото нет, камеры нет).
+    let поШагам: (() -> Void)?
 
-    init(план: ПланСъёмки.План, снято: Int) {
+    init(план: ПланСъёмки.План, снятые: Set<String>, снять: ((String) -> Void)? = nil,
+         поШагам: (() -> Void)? = nil) {
         self.план = план
-        self.снято = снято
+        self.снятые = снятые
+        self.снять = снять
+        self.поШагам = поШагам
     }
+
+    private var снято: Int { план.ключи.filter { снятые.contains($0) }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -629,6 +703,9 @@ struct ПланСъёмкиВид: View {
             Text(String(format: МастерПодачиText.т("rsh_count"), min(снято, план.кадры.count), план.кадры.count))
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(Theme.текстВторой)
+            if let действие = поШагам {
+                кнопкаПоШагам(действие)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -639,9 +716,25 @@ struct ПланСъёмкиВид: View {
         }
     }
 
+    /// Неснятый кадр при заданном действии — кнопка (камера на этом кадре), остальное — просто метка.
+    @ViewBuilder
     private func чип(_ номер: Int, _ кадр: String) -> some View {
-        let есть = номер < снято
-        return HStack(spacing: 5) {
+        let ключ = номер < план.ключи.count ? план.ключи[номер] : ""
+        let есть = !ключ.isEmpty && снятые.contains(ключ)
+        let действие = снять
+        if !есть, !ключ.isEmpty, let действие {
+            Button { действие(ключ) } label: {
+                ярлыкЧипа(номер, кадр, есть: false)
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
+            .accessibilityHint(СъёмкаПоПлануText.т("chip_hint"))
+        } else {
+            ярлыкЧипа(номер, кадр, есть: есть)
+        }
+    }
+
+    private func ярлыкЧипа(_ номер: Int, _ кадр: String, есть: Bool) -> some View {
+        HStack(spacing: 5) {
             if есть {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .heavy))
@@ -660,7 +753,46 @@ struct ПланСъёмкиВид: View {
         .padding(.vertical, 6)
         .background(есть ? КраскаПодачи.хорошоФон : КраскаПодачи.карточка, in: Capsule())
         .overlay { Capsule().strokeBorder(есть ? Color.clear : КраскаПодачи.линия, lineWidth: 1) }
+        .contentShape(Capsule())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(есть ? .isSelected : [])
+    }
+
+    /// .rsh-stepon сайта: «Снять по шагам» — камера подскажет каждый кадр.
+    private func кнопкаПоШагам(_ действие: @escaping () -> Void) -> some View {
+        Button(action: действие) {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(СъёмкаПоПлануText.т("step_btn"))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(КраскаПодачи.текст)
+                    Text(СъёмкаПоПлануText.т("step_btn_s"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.хорошоТекст)
+                    .accessibilityHidden(true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(КраскаПодачи.хорошоТекст.opacity(0.35), lineWidth: 1.5)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .accessibilityElement(children: .combine)
     }
 }

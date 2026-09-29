@@ -25,12 +25,16 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
     @Published private(set) var фонарикЕсть = false
     @Published private(set) var фонарик = false
     @Published private(set) var снимаем = false
+    /// Есть и передняя камера — съёмка по плану подачи показывает «Другая камера».
+    @Published private(set) var естьПередняя = false
 
     let сессия = AVCaptureSession()
     private let очередь = DispatchQueue(label: "kz.kliko.photosearch.camera")
     private let выход = AVCapturePhotoOutput()
     private var устройство: AVCaptureDevice? = nil
     private var настроена = false
+    /// Какая камера снимает сейчас — только на очереди камеры.
+    private var сторона: AVCaptureDevice.Position = .back
     /// Поворот кадра — как у интерфейса (на iPhone всегда портрет, 90°).
     private var уголПоворота: CGFloat = 90
     private var готово: (@MainActor (UIImage) -> Void)? = nil
@@ -76,10 +80,12 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
             }
             if !self.сессия.isRunning { self.сессия.startRunning() }
             let фонарь = self.устройство?.hasTorch ?? false
+            let передняя = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) != nil
             self.наГлавной {
                 self.доступ = .есть
                 self.готова = true
                 self.фонарикЕсть = фонарь
+                self.естьПередняя = передняя
             }
         }
     }
@@ -115,6 +121,36 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
                 self.готова = false
                 self.фонарик = false
                 self.снимаем = false
+            }
+        }
+    }
+
+    /// «Другая камера» (съёмка по плану подачи): задняя ↔ передняя; вход сменить не вышло — остаётся прежняя.
+    func переключитьКамеру() {
+        очередь.async { [weak self] in
+            guard let self, self.настроена else { return }
+            let нужна: AVCaptureDevice.Position = self.сторона == .back ? .front : .back
+            guard let новая = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: нужна),
+                  let вход = try? AVCaptureDeviceInput(device: новая) else { return }
+            if let у = self.устройство, у.hasTorch, у.torchMode == .on, (try? у.lockForConfiguration()) != nil {
+                у.torchMode = .off
+                у.unlockForConfiguration()
+            }
+            let прежние = self.сессия.inputs
+            self.сессия.beginConfiguration()
+            for старый in прежние { self.сессия.removeInput(старый) }
+            if self.сессия.canAddInput(вход) {
+                self.сессия.addInput(вход)
+                self.устройство = новая
+                self.сторона = нужна
+            } else {
+                for старый in прежние where self.сессия.canAddInput(старый) { self.сессия.addInput(старый) }
+            }
+            self.сессия.commitConfiguration()
+            let фонарь = self.устройство?.hasTorch ?? false
+            self.наГлавной {
+                self.фонарикЕсть = фонарь
+                self.фонарик = false
             }
         }
     }
