@@ -54,6 +54,10 @@ struct МоиОбъявленияЭкран: View {
                 }
             }
             .task { await модель.загрузить(страницу: true) }
+            /* Сделка закрылась — объявление снова активно (метка «Резерв» ушла) или продано (DealListingBack.swift). */
+            .onReceive(NotificationCenter.default.publisher(for: .klikoОбъявлениеСделкиИзменилось)) { _ in
+                Task { await модель.загрузить(страницу: false) }
+            }
             .alert(вопрос?.заголовок ?? "", isPresented: вопросНаЭкране, presenting: вопрос) { в in
                 Button(в.кнопка, role: .destructive) { в.действие() }
                 Button(т("cancel"), role: .cancel) {}

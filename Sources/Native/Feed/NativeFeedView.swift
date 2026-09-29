@@ -491,6 +491,12 @@ struct NativeFeedView: View {
         .onReceive(WebBridge.shared.$лентаВидна.removeDuplicates()) { видна in
             if видна { Task { await обновитьГород() } }
         }
+        /* Сделка закрылась — объявление снова на витрине (или продано): лента заново, как «потянуть» без нового
+           посева (DealListingBack.swift). Пустая лента ещё не грузилась — ей и так придёт свежее. */
+        .onReceive(NotificationCenter.default.publisher(for: .klikoОбъявлениеСделкиИзменилось)) { _ in
+            guard !модель.items.isEmpty, !модель.грузим else { return }
+            Task { await модель.обновить() }
+        }
     }
 
     private var шапкаСайта: some View {

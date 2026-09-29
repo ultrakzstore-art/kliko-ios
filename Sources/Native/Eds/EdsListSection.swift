@@ -34,10 +34,17 @@ final class СписокСделокEDS: ObservableObject {
                 return
             }
             let сырые: [Any] = (j["deals"] as? [Any]) ?? []
-            сделки = сырые.compactMap { з -> КраткоEDS? in
+            let новые = сырые.compactMap { з -> КраткоEDS? in
                 guard let d = з as? [String: Any] else { return nil }
                 return КраткоEDS(d)
             }
+            /* Сделка закрылась с прошлой загрузки — её объявление перечитывают экраны (DealListingBack.swift). */
+            var прежние: [String: String] = [:]
+            for с in сделки { прежние[с.id] = с.статус }
+            for с in новые {
+                ОбъявлениеПослеСделки.сверить(сделка: с.id, товар: с.товарИд, было: прежние[с.id], стало: с.статус)
+            }
+            сделки = новые
         } catch {
             /* Нет связи — прежний список этой вкладки остаётся. */
         }

@@ -169,6 +169,8 @@ struct СделкаКратко: Identifiable, Equatable {
             .contains(статус.lowercased())
     }
     var имяПродавца: String = ""
+    /// Объявление сделки (product_id) — закрылась сделка, его перечитывают экраны (DealListingBack.swift).
+    var товар: String = ""
 
     init?(_ j: [String: Any]) {
         typealias A = СделкиAPI
@@ -176,6 +178,7 @@ struct СделкаКратко: Identifiable, Equatable {
         guard !номер.isEmpty else { return nil }
         id = номер
         статус = A.строка(j["status"])
+        товар = A.строка(j["product_id"])
         возврат = A.да(j["return_hold"])
         сумма = A.целое(j["amount"])
         сборПродавца = A.целое(j["seller_fee"])
