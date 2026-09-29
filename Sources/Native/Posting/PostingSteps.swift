@@ -42,11 +42,16 @@ struct ШагиПодачи: View {
                         .frame(height: 0)
                         .id("верх")
                     ГеройПодачи(правка: модель.правка, закрыть: закрыть)
-                    if модель.страница.нуженEgov && !модель.правка { плашкаEgov }
-                    if !модель.правка { полосаТипа }
+                    /* Плашка eGov («без верификации не выйдет на витрину») — не на шагах, а после публикации
+                       (окно итога: «eGov — 1 минута»), владелец, обход новичком. */
+                    if !модель.правка && !модель.быстрый { полосаТипа }
                     полоса
                         .padding(.top, 2)
-                    шаг
+                    if модель.быстрый && !модель.правка {
+                        ПроверкаКамерыПодачи(модель: модель, фокус: $фокус, открытьСайт: открытьСайт)
+                    } else {
+                        шаг
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -160,79 +165,6 @@ struct ШагиПодачи: View {
         .accessibilityValue(изменён ? т("edited") : "")
     }
 
-    /// #add-ver-bar (.avb-in): без верификации объявление ждёт в кабинете. «Пройти eGov» — сама проверка,
-    /// «Что это даёт» — окно «Стать продавцом» (verPromo).
-    private var плашкаEgov: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "checkmark.shield")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(КраскаПодачи.вниманиеТекст)
-                    .padding(.top, 1)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(т("ver_bar_t"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(КраскаПодачи.текст)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(т("ver_bar_s"))
-                        .font(.system(size: 13))
-                        .lineSpacing(3)
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 6) {
-                Button {
-                    пройтиEgov()
-                } label: {
-                    Text(т("ver_bar_go"))
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(КраскаПодачи.вниманиеТекст,
-                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-                }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-                Button {
-                    ВерификацияПоверх.показать()
-                } label: {
-                    Text(т("ver_bar_why"))
-                        .font(.system(size: 13, weight: .bold))
-                        .underline()
-                        .foregroundStyle(КраскаПодачи.вниманиеТекст)
-                        .lineLimit(1)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(КраскаПодачи.вниманиеФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(КраскаПодачи.вниманиеКромка, lineWidth: 1)
-        }
-    }
-
-    /// requestVerification сайта: eGov листом поверх мастера (черновик остаётся); выключен — окно «Стать продавцом».
-    @MainActor
-    private func пройтиEgov() {
-        if ОкноEgov.включено {
-            ОкноEgov.открыть(Config.страницаСайта("cabinet.php?go=verify"))
-        } else {
-            ВерификацияПоверх.показать()
-        }
-    }
-
     /// Полоса выбранного типа #aft-bar: значок, тип и подпись плитки, «Изменить» — на всех шагах.
     private var полосаТипа: some View {
         HStack(spacing: 12) {
@@ -320,8 +252,9 @@ struct ШагиПодачи: View {
 
     @ViewBuilder
     private var кнопкиШагов: some View {
-        let первый = модель.видимыеШаги.first == модель.шаг
-        let последний = модель.шаг == .проверка
+        let быстро = модель.быстрый && !модель.правка
+        let первый = модель.видимыеШаги.first == модель.шаг && !быстро
+        let последний = модель.шаг == .проверка || быстро
         if !модель.правка && последний {
             /* #submit-btn во всю ширину, «Назад» — под ним. */
             VStack(spacing: 10) {
@@ -349,6 +282,9 @@ struct ШагиПодачи: View {
 
     private var кнопкаОтправки: String {
         if модель.отправляем { return т("sending") }
+        let аренда = модель.форма.аренда && !модель.форма.тожеПродаю
+        /* Короткий путь с камеры: «Опубликовать». */
+        if модель.быстрый && !аренда { return т("pc_publish") + " →" }
         return т(модель.форма.аренда && !модель.форма.тожеПродаю ? "form_submit_rent" : "form_submit") + " →"
     }
 
@@ -399,6 +335,12 @@ struct ШагиПодачи: View {
     private var порядокПолей: [String] {
         let ф = модель.форма
         var п: [String] = []
+        if модель.быстрый && !модель.правка {
+            /* «Проверьте»: название, цена, описание, город и адрес — что из них на экране. */
+            if модель.режим != .авто { п.append("title") }
+            п.append(contentsOf: ["price", "desc", "city", "address"])
+            return п
+        }
         switch модель.шаг {
         case .данные:
             if модель.режим != .авто { п.append("title") }

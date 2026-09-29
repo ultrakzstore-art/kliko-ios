@@ -287,7 +287,7 @@ struct СтартПодачи: View {
 
     private var шапка: some View {
         HStack(spacing: 12) {
-            if модель.старт == .корень {
+            if модель.старт == .корень && модель.правка {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color.white)
@@ -633,6 +633,9 @@ struct СтартПодачи: View {
         switch модель.старт {
         case .видНедвижимости:
             модель.старт = .сделка
+        case .корень:
+            /* Новое объявление начинается с камеры: «Назад» с «Что размещаете?» — обратно к фото. */
+            модель.кКамере()
         default:
             модель.старт = .корень
         }
