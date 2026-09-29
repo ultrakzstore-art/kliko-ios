@@ -41,6 +41,16 @@ extension ПодачаМодель {
         if ф.город != было.город { снять.append("city") }
         if ф.работает != было.работает || ф.состояние != было.состояние { снять.append("works") }
         if ф.бренд != было.бренд || ф.модель != было.модель { снять.append("auto") }
+        /* Обязательные поля схемы сайта: марка и характеристики (sp_<слот>). */
+        if ф.бренд != было.бренд { снять.append("brand") }
+        if ф.cpu != было.cpu { снять.append("sp_cpu") }
+        if ф.gpu != было.gpu { снять.append("sp_gpu") }
+        if ф.ram != было.ram { снять.append("sp_ram") }
+        if ф.storage != было.storage { снять.append("sp_storage") }
+        if ф.year != было.year { снять.append("sp_year") }
+        if ф.раздел != было.раздел {
+            снять.append(contentsOf: ["brand", "sp_cpu", "sp_gpu", "sp_ram", "sp_storage", "sp_year"])
+        }
         guard снять.contains(where: { ошибкиПолей[$0] != nil }) else { return }
         withAnimation(ДвижениеСайта.выбор) {
             for ключ in снять { ошибкиПолей.removeValue(forKey: ключ) }

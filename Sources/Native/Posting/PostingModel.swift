@@ -345,6 +345,8 @@ final class ПодачаМодель: ObservableObject {
         didSet { запланироватьЧерновик() }
     }
     @Published var справочники = СправочникиПодачи()
+    /// Схема формы с сайта (api/app_post_schema.php): есть — поля и правила разделов берутся из неё; нет — встроенные.
+    @Published var схема: СхемаПодачи? = nil
     @Published var страница = СтраницаПодачи()
     @Published var плашка: String? = nil
     @Published var вопрос: ВопросПодачи? = nil
@@ -469,15 +471,41 @@ final class ПодачаМодель: ObservableObject {
         return справочники.вверх(форма.раздел, справочники.бренды) ?? []
     }
 
+    /// Раздел формы по схеме сайта или nil (схемы нет, раздел ей незнаком — старый слаг правки): тогда правила встроенные.
+    var разделСхемы: РазделСхемыПодачи? {
+        guard !форма.раздел.isEmpty else { return nil }
+        return схема?.разделы[форма.раздел]
+    }
+
     /// specsFor: у услуг и работы характеристик нет; у недвижимости, авто и запчастей — свои мастера.
+    /// Схема сайта — главнее (CAT_SPECS и E_SPECS с подписями на языке телефона); нет её — E_SPECS из cab-refs.js.
     var характеристики: [ПолеХарактеристики] {
         guard режим == .товар, !форма.раздел.isEmpty else { return [] }
+        if let схема, let поля = схема.характеристики(форма.раздел) { return поля }
         return справочники.вверх(форма.раздел, справочники.характеристики) ?? []
     }
 
+    /// cat_needs_brand сайта: у электроники марка обязательна (сервер без неё не примет). Только по схеме.
+    var брендОбязателен: Bool {
+        брендВиден && (разделСхемы?.маркаОбязательна ?? false)
+    }
+
     var vinРазрешён: Bool {
+        if let р = разделСхемы { return р.vin }
         guard корень == "transport" else { return false }
         return !справочники.внутри(форма.раздел, ["e-scooters", "auto-parts", "water-transport"])
+    }
+
+    /// Аренда в разделе (isRentableCategory): по схеме, иначе NO_RENT_ROOTS.
+    func арендаВРазделе(_ ключ: String) -> Bool {
+        if let р = схема?.разделы[ключ] { return р.аренда }
+        return !["food-farm", "beauty", "services", "jobs", "animals"].contains(справочники.корень(ключ))
+    }
+
+    /// Обмен в разделе (updateExchangeBlock): по схеме, иначе всё, кроме животных.
+    func обменВРазделе(_ ключ: String) -> Bool {
+        if let р = схема?.разделы[ключ] { return р.обмен }
+        return справочники.корень(ключ) != "animals"
     }
 
     /// _pwKindFor: вид запчасти по разделу.
@@ -503,10 +531,10 @@ final class ПодачаМодель: ObservableObject {
     var арендаДоступна: Bool {
         if форма.тип == "rentgood" { return true }
         guard !форма.раздел.isEmpty else { return false }
-        return !["food-farm", "beauty", "services", "jobs", "animals"].contains(корень)
+        return арендаВРазделе(форма.раздел)
     }
 
-    var обменВиден: Bool { корень != "animals" && !форма.раздел.isEmpty }
+    var обменВиден: Bool { !форма.раздел.isEmpty && обменВРазделе(форма.раздел) }
 
     /// updateCondUI: у услуг и работы блока нет, у сдаваемой недвижимости тоже.
     var состояниеВидно: Bool {
@@ -526,6 +554,8 @@ final class ПодачаМодель: ObservableObject {
     /// catAsksWorks + б/у: «Вещь работает?» (worksNeeded).
     var нужнаИсправность: Bool {
         guard состояниеВидно, форма.состояние == "used", !форма.раздел.isEmpty else { return false }
+        /* Страница кабинета не дала CAT_WORKS_JS — ответ схемы сайта (cat_asks_works). */
+        if страница.работаетВ.isEmpty, let р = разделСхемы { return р.работает }
         var текущий: String? = форма.раздел
         var шаги = 0
         while let узел = текущий, шаги < 25 {
@@ -586,6 +616,7 @@ final class ПодачаМодель: ObservableObject {
     var лимитФото: Int {
         if правка && топВПравке { return 30 }
         if !правка && форма.топ != nil { return 30 }
+        if let р = разделСхемы { return р.фото }
         var к = корень
         if к.isEmpty { к = форма.тип == "realty" ? "realty" : "" }
         return (к == "realty" || к == "transport") ? 10 : 5
@@ -597,6 +628,7 @@ final class ПодачаМодель: ObservableObject {
     /// renderCfgRows: строки «Дополнительно» по корню раздела.
     var строкиДополнительно: [String] {
         guard !форма.раздел.isEmpty else { return [] }
+        if let р = разделСхемы { return р.дополнительно.filter { ["pay", "del", "trust"].contains($0) } }
         let к = корень
         var строки: [String] = []
         if !["animals", "services", "jobs"].contains(к) { строки.append("pay") }
@@ -664,6 +696,11 @@ final class ПодачаМодель: ObservableObject {
                 пометить(ошибка.поле, ошибка.текст)
                 return
             }
+        case .характеристики:
+            if let ошибка = ошибкаХарактеристик() {
+                пометить(ошибка.поле, ошибка.текст)
+                return
+            }
         case .цена:
             if let ошибка = ошибкаЦены() {
                 пометить("price", ошибка)
@@ -714,6 +751,32 @@ final class ПодачаМодель: ObservableObject {
         return nil
     }
 
+    /// Обязательные поля схемы (марка у электроники, год и пробег у легковых) — как проверки submit на сервере.
+    func ошибкаХарактеристик() -> (поле: String, текст: String)? {
+        guard режим == .товар else { return nil }
+        if брендОбязателен && форма.бренд.trimmingCharacters(in: .whitespaces).isEmpty {
+            return ("brand", т("need_brand"))
+        }
+        for поле in характеристики where поле.обязательно {
+            if значениеХарактеристики(поле.поле).trimmingCharacters(in: .whitespaces).isEmpty {
+                return ("sp_" + поле.поле, String(format: т("need_spec"), поле.подпись))
+            }
+        }
+        return nil
+    }
+
+    /// Значение слота формы по имени поля submit.
+    func значениеХарактеристики(_ поле: String) -> String {
+        switch поле {
+        case "cpu": return форма.cpu
+        case "gpu": return форма.gpu
+        case "ram": return форма.ram
+        case "storage": return форма.storage
+        case "year": return форма.year
+        default: return ""
+        }
+    }
+
     func ошибкаЦены() -> String? {
         if услугаИлиРабота || форма.торг || ценаЧислом > 0 || (форма.аренда && ставкаЧислом > 0) { return nil }
         return форма.аренда ? т("need_rent") : т("need_price")
@@ -734,10 +797,10 @@ final class ПодачаМодель: ObservableObject {
         var ф = форма
         ф.раздел = ключ
         let новыйКорень = ключ.isEmpty ? "" : справочники.корень(ключ)
-        if ["food-farm", "beauty", "services", "jobs", "animals"].contains(новыйКорень) && ф.тип != "rentgood" {
+        if !ключ.isEmpty && !арендаВРазделе(ключ) && ф.тип != "rentgood" {
             ф.аренда = false
         }
-        if новыйКорень == "animals" { ф.обмен = false }
+        if !ключ.isEmpty && !обменВРазделе(ключ) { ф.обмен = false }
         if новыйКорень != "realty" {
             ф.сделка = ""
             ф.вид = ""
@@ -920,6 +983,9 @@ final class ПодачаМодель: ObservableObject {
             МоиОбъявленияAPI.запомнитьТокен(состояние.csrf)
             страница = СтраницаПодачи.разобрать(html, состояние: состояние)
             справочники = try await ЗагрузкаСправочников.загрузить(страница)
+            /* Схема формы: сразу — сохранённая, следом — свежая с сайта (ETag; 304 — без изменений). */
+            if схема == nil { схема = await ЗагрузкаСхемыПодачи.изКэша() }
+            обновитьСхему()
             if правка {
                 try await загрузитьПравку()
             } else {
@@ -929,6 +995,14 @@ final class ПодачаМодель: ObservableObject {
         } catch {
             let сеть = (error as? КабинетСайта.Сбой) == .сеть
             экран = .ошибка(т(сеть ? "no_conn" : "load_err"))
+        }
+    }
+
+    /// Свежая схема с сайта в фоне: пришла другая версия — форма перестраивается сама; нет сети — остаётся прежняя.
+    func обновитьСхему() {
+        Task { @MainActor [weak self] in
+            guard let свежая = await ЗагрузкаСхемыПодачи.загрузить(), let модель = self else { return }
+            if модель.схема?.версия != свежая.версия || модель.схема?.язык != свежая.язык { модель.схема = свежая }
         }
     }
 
