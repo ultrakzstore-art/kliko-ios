@@ -29,6 +29,7 @@ enum ДеньгиСделкиText {
     private static let ru: [String: String] = [
         // Оплата (dealPay, dealPayCard, showPointsModal, escrowProgress)
         "dp_no_sum": "Не удалось получить сумму сделки",
+        "esc_paused_t": "Гарант-сделка временно недоступна",
         "fz_t": "Оплатить безопасно?",
         "fz_m": "<b>{n}</b> будут у Kliko, пока вы не подтвердите получение товара. Продавец получит деньги только после этого.",
         "pt_t": "Применить баллы?",
@@ -290,6 +291,7 @@ enum ДеньгиСделкиText {
 
     private static let kk: [String: String] = [
         "dp_no_sum": "Мәміле сомасын алу мүмкін болмады",
+        "esc_paused_t": "Кепілдік мәміле уақытша қолжетімсіз",
         "fz_t": "Қауіпсіз төлейміз бе?",
         "fz_m": "<b>{n}</b> тауарды алғаныңызды растағанша Kliko-да болады. Сатушы ақшаны тек содан кейін алады.",
         "pt_t": "Ұпайларды қолданамыз ба?",
@@ -539,6 +541,7 @@ enum ДеньгиСделкиText {
 
     private static let en: [String: String] = [
         "dp_no_sum": "Couldn't get the deal amount",
+        "esc_paused_t": "Escrow deals are temporarily unavailable",
         "fz_t": "Pay safely?",
         "fz_m": "<b>{n}</b> stays with Kliko until you confirm you received the item. The seller gets paid only after that.",
         "pt_t": "Use points?",
@@ -788,6 +791,7 @@ enum ДеньгиСделкиText {
 
     private static let ar: [String: String] = [
         "dp_no_sum": "تعذّر الحصول على مبلغ الصفقة",
+        "esc_paused_t": "صفقة الضمان غير متاحة مؤقتًا",
         "fz_t": "الدفع بأمان؟",
         "fz_m": "يبقى <b>{n}</b> لدى Kliko حتى تؤكد استلام السلعة. يحصل البائع على المال بعد ذلك فقط.",
         "pt_t": "استخدام النقاط؟",
