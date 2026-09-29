@@ -398,7 +398,7 @@ struct ОкноБезопаснойСделки: View {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                     Text(т("co_pay"))
-                    Image(systemName: "arrow.up.right")
+                    Image(systemName: "chevron.forward")
                         .font(.system(size: 13, weight: .bold))
                 }
                 .font(.system(size: 16, weight: .bold))

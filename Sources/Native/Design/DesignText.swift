@@ -70,7 +70,7 @@ enum DesignText {
 
     private static let тексты: [String: [String: String]] = [
         "ru": [
-            "all_kz": "По всей стране", "search": "Что искали?", "photo": "Поиск по фото", "on_site": "Откроется на сайте",
+            "all_kz": "По всей стране", "search": "Что искали?", "photo": "Поиск по фото", "on_site": "Откроется в приложении",
             "city": "Город", "theme": "Тема оформления", "clear": "Очистить", "lang": "Язык",
             "ph_1": "Что искали?", "ph_2": "Что ищете?", "ph_3": "Поиск…", "ph_4": "Поиск по объявлениям",
             "ph_5": "Введите ключевое слово", "ph_6": "Найти объявление…",
@@ -153,7 +153,7 @@ enum DesignText {
             "chat": "Чат", "cabinet": "Профиль", "post": "Разместить", "sell": "Продать", "unread": "Непрочитанных: %d"
         ],
         "kk": [
-            "all_kz": "Бүкіл Қазақстан", "search": "Не іздедіңіз?", "photo": "Фото бойынша іздеу", "on_site": "Сайтта ашылады",
+            "all_kz": "Бүкіл Қазақстан", "search": "Не іздедіңіз?", "photo": "Фото бойынша іздеу", "on_site": "Қолданбада ашылады",
             "city": "Қала", "theme": "Безендіру тақырыбы", "clear": "Тазалау", "lang": "Тіл",
             "ph_1": "Не іздедіңіз?", "ph_2": "Не іздеп жүрсіз?", "ph_3": "Іздеу…", "ph_4": "Хабарландырулардан іздеу",
             "ph_5": "Кілт сөзді енгізіңіз", "ph_6": "Хабарландыру табу…",
@@ -237,7 +237,7 @@ enum DesignText {
         ],
         "en": [
             "all_kz": "All of Kazakhstan", "search": "What are you looking for?", "photo": "Search by photo",
-            "on_site": "Opens on the website", "city": "City", "theme": "Appearance", "clear": "Clear", "lang": "Language",
+            "on_site": "Opens in the app", "city": "City", "theme": "Appearance", "clear": "Clear", "lang": "Language",
             "ph_1": "What are you looking for?", "ph_2": "Looking for something?", "ph_3": "Search…", "ph_4": "Search listings",
             "ph_5": "Enter a keyword", "ph_6": "Find a listing…",
             "reco": "Recommended", "row_all": "All", "see_all": "See all",
@@ -319,7 +319,7 @@ enum DesignText {
             "chat": "Chat", "cabinet": "Profile", "post": "Post a listing", "sell": "Sell", "unread": "Unread: %d"
         ],
         "ar": [
-            "all_kz": "كل كازاخستان", "search": "عمّ تبحث؟", "photo": "البحث بالصورة", "on_site": "يُفتح في الموقع",
+            "all_kz": "كل كازاخستان", "search": "عمّ تبحث؟", "photo": "البحث بالصورة", "on_site": "يُفتح في التطبيق",
             "city": "المدينة", "theme": "المظهر", "clear": "مسح", "lang": "اللغة",
             "ph_1": "عمّ تبحث؟", "ph_2": "ماذا تبحث؟", "ph_3": "بحث…", "ph_4": "البحث في الإعلانات",
             "ph_5": "أدخل كلمة مفتاحية", "ph_6": "ابحث عن إعلان…",

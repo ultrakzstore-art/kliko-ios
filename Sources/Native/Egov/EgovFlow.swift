@@ -153,7 +153,7 @@ enum ПотокEgov {
         case .верификация(let сделка):
             if сделка.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil,
                let адрес = Config.url("/marketplace.php?item=" + сделка) {
-                WebBridge.shared.pendingURL = адрес
+                WebBridge.shared.перейти(адрес)   // своя карточка объявления, не сайт
             } else {
                 let uid = (try? await КабинетСайта.состояние())?.uid ?? ""
                 await КабинетСайта.послеВхода(uid: uid)

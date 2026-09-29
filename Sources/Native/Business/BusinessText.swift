@@ -256,7 +256,7 @@ enum БизнесText {
         "biz_analytics": "Аналитика",
         "biz_integrations": "Интеграции",
         // VoiceOver
-        "a11y_site": "Открывает сайт",
+        "a11y_site": "Откроется в приложении",
         "a11y_done": "выполнено",
         "a11y_step": "Шаг {n} из 3"
     ]
@@ -470,7 +470,7 @@ enum БизнесText {
         "biz_kp": "Коммерциялық ұсыныстар",
         "biz_analytics": "Аналитика",
         "biz_integrations": "Интеграциялар",
-        "a11y_site": "Сайтты ашады",
+        "a11y_site": "Қолданбада ашылады",
         "a11y_done": "орындалды",
         "a11y_step": "{n}-қадам, барлығы 3"
     ]
@@ -684,7 +684,7 @@ enum БизнесText {
         "biz_kp": "Commercial offers",
         "biz_analytics": "Analytics",
         "biz_integrations": "Integrations",
-        "a11y_site": "Opens the website",
+        "a11y_site": "Opens in the app",
         "a11y_done": "done",
         "a11y_step": "Step {n} of 3"
     ]
@@ -898,7 +898,7 @@ enum БизнесText {
         "biz_kp": "العروض التجارية",
         "biz_analytics": "التحليلات",
         "biz_integrations": "التكاملات",
-        "a11y_site": "يفتح الموقع",
+        "a11y_site": "يُفتح في التطبيق",
         "a11y_done": "مكتمل",
         "a11y_step": "الخطوة {n} من 3"
     ]

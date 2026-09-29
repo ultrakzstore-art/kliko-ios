@@ -112,7 +112,8 @@ enum ОкноEgov {
                 }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            WebBridge.shared.pendingURL = адрес
+            /* Показать лист некуда — не страница сайта (и не снова перехват eGov по кругу): своё окно «недоступно». */
+            БезСайта.недоступна(адрес)
         }
     }
 
@@ -207,7 +208,8 @@ enum ОкноEgov {
             }
         case .ушли(let адрес):
             NotificationCenter.default.post(name: завершено, object: nil)
-            WebBridge.shared.pendingURL = адрес
+            /* Сайт увёл с кабинета (объявление сделки и т. п.) — туда своим экраном (WebBridge.перейти), не сайтом. */
+            WebBridge.shared.перейти(адрес)
         }
     }
 

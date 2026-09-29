@@ -985,7 +985,13 @@ enum ТекстСогласия {
     @MainActor
     static var открыватель: OpenURLAction {
         OpenURLAction { адрес in
-            let своё = MainActor.assumeIsolated { () -> Bool in НативныеОкна.перехватить(адрес) }
+            /* Соглашение и политика — своим окном; прочий адрес нашего домена — WebBridge.перейти (не Safari). */
+            let своё = MainActor.assumeIsolated { () -> Bool in
+                if НативныеОкна.перехватить(адрес) { return true }
+                guard Config.deepLink(адрес.absoluteURL) != nil else { return false }
+                WebBridge.shared.перейти(адрес)
+                return true
+            }
             return своё ? .handled : .systemAction
         }
     }

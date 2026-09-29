@@ -218,7 +218,7 @@ struct ЦифроваяПокупка: View {
     }
 }
 
-/// Кнопка, которая открывает страницу сайта: со стрелкой «наружу», как строки сайта во вкладке «Кабинет».
+/// Кнопка перехода (верификация eGov — своим окном в приложении; сайт не открывается).
 struct КнопкаСайтаБизнеса: View {
     let подпись: String
     let главная: Bool
@@ -229,7 +229,7 @@ struct КнопкаСайтаБизнеса: View {
             HStack(spacing: 6) {
                 Text(подпись)
                     .font(.system(size: 15, weight: .bold))
-                Image(systemName: "arrow.up.right.square")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 13))
                     .accessibilityHidden(true)
             }

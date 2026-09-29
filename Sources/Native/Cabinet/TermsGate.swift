@@ -58,11 +58,9 @@ struct ОкноСоглашения: View {
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                 список
-                /* Соглашение — своим окном поверх (НативныеОкна → страница сайта своими блоками); не вышло — система. */
+                /* Соглашение — своим окном поверх (НативныеОкна → страница сайта своими блоками), не Safari. */
                 Button(т("terms_renew_link")) {
-                    if let адрес = Config.url("/soglashenie.php"), !НативныеОкна.перехватить(адрес) {
-                        UIApplication.shared.open(адрес, options: [:], completionHandler: nil)
-                    }
+                    НативныеОкна.показать(.страница(СтраницаСайта(слаг: "soglashenie", якорь: nil)))
                 }
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.зелёный2)
