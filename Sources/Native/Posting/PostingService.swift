@@ -9,7 +9,9 @@ import UIKit
  плюсы?», «Цена от, ₸», «Город» и «Собрать объявление» — POST cabinet.php?action=ai_service {do, includes, price, city,
  dir}: Kliko AI подбирает раздел, пишет заголовок и описание (svcWizardRun модуля compose). Дальше — те же шаги:
  «Данные», «Цена» (необязательна, «Договорная»), «Адрес» (режим работы обязателен), «Дополнительно», «Проверка».
- Своё фото — по кнопке «Добавить своё фото». Постер-обложку (canvas сайта) приложение не рисует.
+ Своё фото — по кнопке «Добавить своё фото». Постер-обложка (#svc-poster-panel, svcPosterGenerateCover) — ниже:
+ рисует ПостерУслугиСайта (Design/SiteServicePoster.swift), при публикации без своих фото он становится первым фото.
+ Ответы мастера и обложка пишутся в черновик.
  */
 
 /// Ответы мастера услуги — живут в модели, пока идёт подача (шаги туда-обратно их не теряют).
@@ -21,6 +23,52 @@ struct ЗаготовкаУслуги: Equatable {
     var город: String = ""
     /// «Собрать объявление» уже сработал — название и описание в форме.
     var собрано = false
+    /// _svcPosterOptIn: постер станет обложкой при публикации (выключается «Убрать обложку» или удалением плитки).
+    var постер = true
+    /// _svcPosterCoverUrl: урл загруженной обложки — по нему старая заменяется новой.
+    var обложка: String = ""
+    /// Из чего нарисована обложка (название, цена, город, продавец) — не изменилось, заново не грузим.
+    var обложкаКлюч: String = ""
+}
+
+/// Черновик: ответы мастера услуги. Ключи читаются мягко — старый черновик без них не ломается.
+extension ЗаготовкаУслуги: Codable {
+    private enum Ключ: String, CodingKey {
+        case направление, что, плюсы, цена, город, собрано, постер, обложка, обложкаКлюч
+    }
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        let к = try decoder.container(keyedBy: Ключ.self)
+        направление = (try? к.decodeIfPresent(String.self, forKey: .направление)) ?? ""
+        что = (try? к.decodeIfPresent(String.self, forKey: .что)) ?? ""
+        плюсы = (try? к.decodeIfPresent(String.self, forKey: .плюсы)) ?? ""
+        цена = (try? к.decodeIfPresent(String.self, forKey: .цена)) ?? ""
+        город = (try? к.decodeIfPresent(String.self, forKey: .город)) ?? ""
+        собрано = (try? к.decodeIfPresent(Bool.self, forKey: .собрано)) ?? false
+        постер = (try? к.decodeIfPresent(Bool.self, forKey: .постер)) ?? true
+        обложка = (try? к.decodeIfPresent(String.self, forKey: .обложка)) ?? ""
+        обложкаКлюч = (try? к.decodeIfPresent(String.self, forKey: .обложкаКлюч)) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var к = encoder.container(keyedBy: Ключ.self)
+        try к.encode(направление, forKey: .направление)
+        try к.encode(что, forKey: .что)
+        try к.encode(плюсы, forKey: .плюсы)
+        try к.encode(цена, forKey: .цена)
+        try к.encode(город, forKey: .город)
+        try к.encode(собрано, forKey: .собрано)
+        try к.encode(постер, forKey: .постер)
+        try к.encode(обложка, forKey: .обложка)
+        try к.encode(обложкаКлюч, forKey: .обложкаКлюч)
+    }
+
+    /// Есть что сохранить в черновик: хоть один ответ мастера.
+    var естьОтветы: Bool {
+        !что.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !плюсы.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !цена.isEmpty
+    }
 }
 
 extension ПодачаМодель {
@@ -337,5 +385,231 @@ struct МастерУслугиВид: View {
             }
             .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         }
+    }
+}
+
+// MARK: - Постер-обложка услуги (svcPosterGenerateCover сайта)
+
+extension ПодачаМодель {
+    /// _svcPosterOpts сайта: название, цена, город формы и имя продавца (CAB_USER.name); тема — по названию.
+    var данныеПостера: ДанныеОтправкиСайта {
+        let ф = форма
+        let у = ДанныеУслугиПостера(продавец: страница.состояние?.имя ?? "", рейтинг: 0, проверен: false,
+                                    город: ф.город.trimmingCharacters(in: .whitespacesAndNewlines), раздел: "")
+        return ДанныеОтправкиСайта(id: "", название: ф.название.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   цена: Double(ценаЧислом), состояние: nil, фото: nil, услуга: у)
+    }
+
+    /// Из чего рисуется постер — сменилось, значит старую обложку надо заменить.
+    var ключПостера: String {
+        let д = данныеПостера
+        let части: [String] = [д.название, String(ценаЧислом), д.услуга?.город ?? "", д.услуга?.продавец ?? ""]
+        return части.joined(separator: "|")
+    }
+
+    /// Портрет 4:5 (1080 × 1350), как aspect «portrait» сайта; лица нет — первая буква продавца.
+    func нарисоватьПостер() -> UIImage {
+        let д = данныеПостера
+        return ПостерУслугиСайта.нарисовать(д, услуга: д.услуга ?? ДанныеУслугиПостера(), фото: nil, qr: nil,
+                                           высота: 1350)
+    }
+
+    func этоОбложка(_ плитка: ПлиткаФото) -> Bool {
+        if let id = обложкаПлитка, плитка.id == id { return true }
+        return !услуга.обложка.isEmpty && плитка.url == услуга.обложка
+    }
+
+    /// Фото, которые человек добавил сам (без постера).
+    var своиФото: [ПлиткаФото] { плитки.filter { !этоОбложка($0) } }
+
+    var естьОбложка: Bool { плитки.contains { этоОбложка($0) } }
+
+    /// Перед окном проверки: услуга, постер не выключен, своих фото нет, название есть.
+    var нужнаОбложкаУслуги: Bool {
+        режим == .услуга && !правка && услуга.постер && своиФото.isEmpty
+            && !форма.название.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Урл и плитку обложки больше не помним; `выключить` — и при публикации не рисовать.
+    func забытьОбложку(выключить: Bool) {
+        обложкаПлитка = nil
+        var у = услуга
+        у.обложка = ""
+        у.обложкаКлюч = ""
+        if выключить { у.постер = false }
+        услуга = у
+    }
+
+    /// «Убрать обложку»: плитка постера уходит, при публикации он не рисуется.
+    func убратьОбложку() {
+        плитки.removeAll { этоОбложка($0) }
+        забытьОбложку(выключить: true)
+    }
+
+    /**
+     svcPosterGenerateCover: рисуем постер, старую обложку (по урлу) убираем, новую ставим первым фото и грузим
+     тем же upload_photo. Сам (перед публикацией) — только без своих фото; «Сделать обложкой» — всегда первым.
+     */
+    @discardableResult
+    func сделатьОбложкуУслуги(вручную: Bool = false) async -> Bool {
+        guard режим == .услуга, !правка else { return false }
+        guard !форма.название.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            if вручную { показать(МастерПодачиText.т("svc_poster_need")) }
+            return false
+        }
+        guard вручную || (услуга.постер && своиФото.isEmpty) else { return false }
+        if плитки.contains(where: { этоОбложка($0) && $0.грузится }) { return false }
+        let ключ = ключПостера
+        if let старая = плитки.first(where: { этоОбложка($0) }), старая.готова, услуга.обложкаКлюч == ключ,
+           плитки.first?.id == старая.id {
+            return true
+        }
+        плитки.removeAll { этоОбложка($0) }
+        guard местоФото > 0 else {
+            забытьОбложку(выключить: false)
+            показать(String(format: т("photo_cap_full"), лимитФото))
+            return false
+        }
+        guard let png = нарисоватьПостер().pngData() else { return false }
+        let id = UUID()
+        обложкаПлитка = id
+        var у = услуга
+        у.постер = true
+        у.обложка = ""
+        у.обложкаКлюч = ключ
+        услуга = у
+        плитки.insert(ПлиткаФото(id: id, url: "", превью: nil, картинка: nil, миниатюра: nil, грузится: true,
+                                 ошибка: nil), at: 0)
+        let готово: ГотовоеФото? = await Task.detached(priority: .userInitiated) { () -> ГотовоеФото? in
+            ОбработкаФото.подготовить(png)
+        }.value
+        guard let место = плитки.firstIndex(where: { $0.id == id }) else { return false }
+        guard let готово else {
+            плитки.remove(at: место)
+            забытьОбложку(выключить: false)
+            return false
+        }
+        плитки[место].картинка = готово.картинка
+        плитки[место].миниатюра = готово.миниатюра
+        плитки[место].превью = UIImage(data: готово.миниатюра) ?? UIImage(data: готово.картинка)
+        await загрузить(id)
+        guard let итог = плитки.first(where: { $0.id == id }), итог.готова else { return false }
+        услуга.обложка = итог.url
+        return true
+    }
+}
+
+/// #svc-poster-panel: превью постера, «Сделать обложкой» / «Обновить», «Убрать обложку» и переключатель.
+@MainActor
+struct ПостерУслугиПодачиВид: View {
+    @ObservedObject var модель: ПодачаМодель
+    @State private var превью: UIImage? = nil
+    @State private var делаем = false
+
+    init(модель: ПодачаМодель) {
+        self.модель = модель
+    }
+
+    private func т(_ ключ: String) -> String { МастерПодачиText.т(ключ) }
+
+    var body: some View {
+        КарточкаПодачи(т("svc_poster_title"), подпись: т("svc_poster_sub"), значок: "photo.artframe") {
+            HStack(alignment: .top, spacing: 14) {
+                картинка
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle(isOn: включено) {
+                        Text(т("svc_poster_opt"))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(КраскаПодачи.текст)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .tint(Theme.зелёный)
+                    кнопкаСделать
+                    if модель.естьОбложка {
+                        Button {
+                            ОткликСайта.выбор()
+                            модель.убратьОбложку()
+                        } label: {
+                            Label(т("svc_poster_remove"), systemImage: "trash")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Theme.ценаСкидка)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text(т("svc_poster_note"))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .task(id: модель.ключПостера) {
+            /* svcPosterRenderSoon: перерисовка через 350 мс после правки полей. */
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            превью = модель.нарисоватьПостер()
+        }
+    }
+
+    private var картинка: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .fill(КраскаПодачи.поле)
+            if let превью {
+                Image(uiImage: превью)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            } else {
+                SiteSpinner()
+            }
+        }
+        .frame(width: 120, height: 150)
+        .accessibilityHidden(true)
+    }
+
+    private var включено: Binding<Bool> {
+        let м = модель
+        return Binding(get: { м.услуга.постер }, set: { новое in
+            if новое {
+                м.услуга.постер = true
+            } else {
+                м.убратьОбложку()
+            }
+        })
+    }
+
+    private var кнопкаСделать: some View {
+        Button {
+            guard !делаем else { return }
+            делаем = true
+            ОткликСайта.выбор()
+            let м = модель
+            Task { @MainActor in
+                let вышло = await м.сделатьОбложкуУслуги(вручную: true)
+                делаем = false
+                if вышло { м.показать(МастерПодачиText.т("svc_poster_added")) }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if делаем {
+                    SiteSpinner()
+                } else {
+                    Image(systemName: модель.естьОбложка ? "arrow.triangle.2.circlepath" : "photo.badge.plus")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                Text(т(модель.естьОбложка ? "svc_poster_redo" : "svc_poster_make"))
+                    .font(.system(size: 14, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(КраскаПодачи.хорошоТекст)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 38)
+            .background(КраскаПодачи.хорошоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(делаем)
     }
 }
