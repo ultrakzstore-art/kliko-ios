@@ -252,7 +252,7 @@ extension Listing: Decodable {
                     value = nil
                 }
                 образец = !(((try? к.decode([String].self, forKey: Ключ("swatch"))) ?? []).isEmpty)
-                значок = (try? к.decode(String.self, forKey: Ключ("emoji"))).flatMap { Listing.значокХарактеристики($0) }
+                значок = (try? к.decode(String.self, forKey: Ключ("emoji"))).flatMap { Listing.значокФактаПоSVG($0) }
             }
         }
         if let пункты = try? c.decode([ПунктХарактеристик].self, forKey: Ключ("specs")) {

@@ -141,7 +141,7 @@ extension Listing {
     var вертикаль: ВертикальВитрины { ВертикальВитрины(self) }
 
     /// Значок SF Symbols по SVG-значку характеристики сайта (emoji у specs): по кусочку пути, который есть только у него.
-    static func значокХарактеристики(_ svg: String) -> String? {
+    static func значокФактаПоSVG(_ svg: String) -> String? {
         for (след, значок) in следыЗначков where svg.contains(след) { return значок }
         return nil
     }
