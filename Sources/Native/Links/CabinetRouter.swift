@@ -46,7 +46,10 @@ import Foundation
                                                                 ссылки сюда ведут к счетам и документам (их действия и
                                                                 печать живут на странице), — строка «Счета» во
                                                                 вкладке «Кабинет» открывает свой экран;
-   · ?egov=1, ?egov_confirm=1, ?after=, ?return=, ?bye=1      — только экран гостя (eGov живёт на странице);
+   · ?egov=1, ?egov_confirm=1, ?return=, ?bye=1               — только экран гостя (eGov — окно ОкноEgov);
+   · ?after=import|add|deals (и с ?egov=1)                    — вход или регистрация, затем перенос, подача или сделки
+                                                                (.входЗатем, ВходПоСсылке);
+   · ?add=1                                                   — баннер «Продавайте на Kliko»: по роли (.продажа);
    · ?share=, ?social=, ?logout=                              — страница сайта (приём файлов, соцсети, выход с токеном).
  Адрес без параметров — тоже сайт: вошедшему нужен полный кабинет (объявления, сделки, кошелёк), а его нативного ещё нет.
 
@@ -69,6 +72,8 @@ enum АдресаКабинета {
         if let услуги = цельПлатныхУслуг(параметры) { return услуги }
         /* «Кабинет полностью SwiftUI»: адрес кабинета без параметров — корень вкладки «Кабинет», а не кабинет сайта. */
         if параметры.isEmpty { return Config.нативныйКабинет ? .кабинет : nil }
+        /* ?after=import|add|deals (и с ?egov=1) — экран гостя: после входа туда (ВходПоСсылке.войтиЗатем). */
+        if let после = цельПослеВхода(параметры) { return после }
         guard параметры.count == 1, let п = параметры.first else { return nil }
         let значение = (п.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         switch п.name {
@@ -90,6 +95,12 @@ enum АдресаКабинета {
             /* Разделы меню кабинета сайта (cabRoute), у которых теперь свои экраны в стеке вкладки «Кабинет». */
             if let раздел = разделМеню(значение, имя: п.name) { return раздел }
             return nil
+        case "add":
+            /* Баннер главной «Продавайте на Kliko» (a.mh-bn-s data-k="sell" href="/cabinet?add=1"): по роли, как кнопка
+               продажи главной — мастер подачи, верификация или регистрация продавца через eGov. ?add=jobs — мастер
+               «Работы» (НативныеОкна, раньше этого разбора). */
+            guard значение == "1", Config.нативнаяПодача else { return nil }
+            return .продажа
         case "open":
             /* Этап 46: ?open=password — openChangePassword сайта: окно пароля поверх кабинета. */
             guard значение == "password", Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
@@ -116,6 +127,35 @@ enum АдресаКабинета {
         default:
             return nil
         }
+    }
+
+    /**
+     Экран гостя с ?after= (карта кабинета §1.1, _AFTER_OK сайта: { import: 'cabinet?go=import', add: 'cabinet?go=add',
+     deals: 'cabinet?go=deals' }): после входа или регистрации — перенос объявлений, мастер подачи или «Мои сделки».
+     Рядом бывает ?egov=1 — окно регистрации ленты (mkRegGate: /cabinet?egov=1&after=…): тогда сначала eGov. Прочие
+     значения after сайт не знает — nil, адрес идёт своим путём.
+     */
+    static func цельПослеВхода(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
+        let имена = Set(параметры.map { $0.name })
+        guard имена.contains("after"), имена.isSubset(of: ["after", "egov", "bye"]),
+              Config.нативныйВход && Config.нативныйКабинет else { return nil }
+        func знач(_ имя: String) -> String {
+            (параметры.first(where: { $0.name == имя })?.value ?? "").trimmingCharacters(in: .whitespaces)
+        }
+        let хвосты = ["import": "cabinet?go=import", "add": "cabinet?go=add", "deals": "cabinet?go=deals"]
+        guard let хвост = хвосты[знач("after").lowercased()], let адрес = Config.страницаСайта(хвост) else { return nil }
+        return .входЗатем(адрес: адрес, egov: знач("egov") == "1")
+    }
+
+    /// Адрес кабинета с ?after= — для WebBridge.перейти раньше окна eGov (?egov=1&after= иначе забрал бы ОкноEgov без
+    /// перехода после регистрации).
+    static func цельПослеВхода(адреса адрес: URL) -> NativeRouter.Цель? {
+        let полный = адрес.absoluteURL
+        guard Config.deepLink(полный) != nil,
+              let части = URLComponents(url: полный, resolvingAgainstBaseURL: false),
+              кабинет(части.path) else { return nil }
+        let параметры = (части.queryItems ?? []).filter { !$0.name.lowercased().hasPrefix("utm_") }
+        return цельПослеВхода(параметры)
     }
 
     /**
