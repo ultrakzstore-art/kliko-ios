@@ -1785,6 +1785,12 @@ struct ListingCard: View {
 
     private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
 
+    /// Голос карточки: товар и знак доверия («Безопасно», «Подпись eGov»), если он есть.
+    private var голосКарточки: String {
+        guard let знак = товар.знакДоверияЛенты else { return товар.голос }
+        return товар.голос + ", " + знак.текст
+    }
+
     /**
      Карточка ленты как у сайта (этап 49) — mkVitCardHTML, скин «vitrina» (по умолчанию у сайта): фото 4:3 на мятной
      подложке; слева сверху состояние (mkCond: «Б/У», «Новое», «С пробегом», «Новостройка») и «Резерв» под ним; «★ ТОП»
@@ -1828,7 +1834,7 @@ struct ListingCard: View {
         .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(товар.голос)
+        .accessibilityLabel(голосКарточки)
         .onAppear { ОценкиПути.shared.нужна(товар.id) }
     }
 
@@ -2045,9 +2051,9 @@ struct ListingCard: View {
         }
     }
 
-    /// Щит «Гаранта» или галочка знака доверия (mkVitTrust).
+    /// Щит «Гаранта», значок подписи «Подпись eGov» (режим сделок eds) или галочка знака доверия (mkVitTrust).
     private func значокДоверия(_ знак: ЗнакДоверияКарточки) -> some View {
-        Image(systemName: знак.щит ? "checkmark.shield" : "checkmark")
+        Image(systemName: знак.подписьEGov ? "signature" : (знак.щит ? "checkmark.shield" : "checkmark"))
             .font(.system(size: кегль(11), weight: .bold))
     }
 
