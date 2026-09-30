@@ -85,8 +85,7 @@ enum ВходApple {
         запрос.httpShouldHandleCookies = false
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
         запрос.setValue("application/json", forHTTPHeaderField: "Accept")
-        запрос.setValue("https://kliko.kz", forHTTPHeaderField: "Origin")
-        запрос.setValue("https://kliko.kz/", forHTTPHeaderField: "Referer")
+        /* Без Origin/Referer (владелец: без поддельных источников) — apple_auth.php источник не проверяет. */
         let куки = await SiteSession.куки()
         for (имя, значение) in куки {
             запрос.setValue(значение, forHTTPHeaderField: имя)
