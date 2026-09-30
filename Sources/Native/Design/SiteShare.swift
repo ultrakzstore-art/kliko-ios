@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import Photos
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
@@ -23,9 +22,10 @@ import CoreImage.CIFilterBuiltins
  Услуги и вакансии (mkIsService): «Фото-карточка» и «Для сторис» — постер услуги (_mkServicePoster сайта: тема по
  названию, круг фото, «от <цена> ₸», «Записаться на Kliko.kz  →» и QR) — SiteServicePoster.swift.
 
- Сверх сайта (владелец): сразу в приложение WhatsApp и Telegram по их схемам с запасом на веб, SMS, Почта, QR с
- «Сохранить» в Фото и «Поделиться», «Для сторис» — та же карточка 1080 × 1920, Instagram Stories напрямую, если в
- Info.plist есть FacebookAppID (без него Instagram с 2023 года сторис от чужого приложения не принимает) — иначе как сайт.
+ Сверх сайта (владелец): сразу в приложение WhatsApp и Telegram по их схемам с запасом на веб, SMS, Почта, «QR-код» —
+ своё окно (ЛистQRОбъявления, ShareCard/ListingQR.swift: крупный код для показа с экрана и карточка для печати через
+ системный лист), «Для сторис» — та же карточка 1080 × 1920, Instagram Stories напрямую, если в Info.plist есть
+ FacebookAppID (без него Instagram с 2023 года сторис от чужого приложения не принимает) — иначе как сайт.
 
  Показ: ЛистПоделитьсяСайта.показать(товар) — одной строкой из любого места: лист UIKit поверх верхнего экрана,
  высотой по содержимому (свой detent), тема — от окна. Внутри .sheet — сам вид с .листПоВысоте().
@@ -118,8 +118,7 @@ struct ЛистПоделитьсяСайта: View {
     @State private var тост: String? = nil
     @State private var задачаТоста: Task<Void, Never>? = nil
     @State private var скопировано = false
-    @State private var показQR = false
-    @State private var qr: UIImage? = nil
+    @State private var окноQR = false
     @State private var занято = false
 
     init(данные: ДанныеОтправкиСайта, закрыть: (() -> Void)? = nil, высота: ((CGFloat) -> Void)? = nil) {
@@ -144,11 +143,6 @@ struct ЛистПоделитьсяСайта: View {
                 строкаСсылки
                     .padding(.bottom, 14)
                 сетка
-                if показQR {
-                    панельQR
-                        .padding(.top, 14)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
                 Button(т("later")) { закрыть() }
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.текстВторой)
@@ -174,6 +168,9 @@ struct ЛистПоделитьсяСайта: View {
         }
         .onAppear {
             if !данные.id.isEmpty { КонтактыПродавца.отметить("share", объявление: данные.id) }
+        }
+        .sheet(isPresented: $окноQR) {
+            ЛистQRОбъявления(данные: данные)
         }
     }
 
@@ -277,7 +274,7 @@ struct ЛистПоделитьсяСайта: View {
             кнопка(т("story"), действие: { картинка(1920) }) {
                 символ("rectangle.portrait", цвет: Theme.зелёный)
             }
-            кнопка("QR", активна: показQR, действие: { переключитьQR() }) {
+            кнопка(т("qr"), действие: { окноQR = true }) {
                 символ("qrcode", цвет: Theme.зелёный)
             }
             кнопка(скопировано ? т("copied") : т("link"), активна: скопировано, действие: { скопировать() }) {
@@ -323,52 +320,6 @@ struct ЛистПоделитьсяСайта: View {
         Image(systemName: имя)
             .font(.system(size: 24, weight: .semibold))
             .foregroundStyle(цвет)
-    }
-
-    /// QR ссылки: крупно, чёткими квадратами; «Сохранить» в Фото и «Поделиться».
-    private var панельQR: some View {
-        VStack(spacing: 12) {
-            if let qr {
-                Image(uiImage: qr)
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 196, height: 196)
-                    .padding(14)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                    .accessibilityLabel(т("qr_label"))
-            }
-            Text(т("qr_hint"))
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.текстВторой)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Button { Task { await сохранитьQR() } } label: {
-                    Label(т("save"), systemImage: "square.and.arrow.down")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Theme.акцент, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-                Button { поделитьсяQR() } label: {
-                    Label(т("share"), systemImage: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.акцент)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                                .strokeBorder(Theme.акцент, lineWidth: 1.5)
-                        }
-                }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
     }
 
     @ViewBuilder
@@ -444,11 +395,6 @@ struct ЛистПоделитьсяСайта: View {
         ПоделитьсяСайта.системныйЛист([данные.сообщение, адрес])
     }
 
-    private func переключитьQR() {
-        if qr == nil { qr = ПоделитьсяСайта.qr(данные.адрес.absoluteString, модуль: 8) }
-        withAnimation(.easeOut(duration: 0.22)) { показQR.toggle() }
-    }
-
     /// Фото, если ещё не пришло, — дождаться; затем нарисовать карточку.
     private func готовоеФото() async -> UIImage? {
         if let фото { return фото }
@@ -490,18 +436,6 @@ struct ЛистПоделитьсяСайта: View {
             try? await Task.sleep(nanoseconds: 700_000_000)
             ПоделитьсяСайта.системныйЛист([карточка])
         }
-    }
-
-    private func сохранитьQR() async {
-        guard let картинка = ПоделитьсяСайта.картинкаQR(данные) else { показатьТост(т("failed")); return }
-        let сохранено = await ПоделитьсяСайта.вФото(картинка)
-        if сохранено { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-        показатьТост(сохранено ? т("saved") : т("save_denied"), секунд: сохранено ? 1.8 : 3)
-    }
-
-    private func поделитьсяQR() {
-        guard let картинка = ПоделитьсяСайта.картинкаQR(данные) else { показатьТост(т("failed")); return }
-        ПоделитьсяСайта.системныйЛист([картинка, данные.адрес])
     }
 }
 
@@ -736,30 +670,6 @@ enum ПоделитьсяСайта {
         return рисовальщик.uiImage
     }
 
-    /// QR для сохранения: белая карточка 1080 × 1280 — код, название, цена и «Kliko.kz».
-    @MainActor
-    static func картинкаQR(_ данные: ДанныеОтправкиСайта) -> UIImage? {
-        guard let код = qr(данные.адрес.absoluteString, модуль: 16) else { return nil }
-        let рисовальщик = ImageRenderer(content: КартинкаQRСайта(данные: данные, qr: код))
-        рисовальщик.scale = 1
-        рисовальщик.isOpaque = true
-        return рисовальщик.uiImage
-    }
-
-    /// В Фото — только добавление (NSPhotoLibraryAddUsageDescription). false — доступа нет или не сохранилось.
-    static func вФото(_ картинка: UIImage) async -> Bool {
-        let доступ = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard доступ == .authorized || доступ == .limited else { return false }
-        do {
-            try await PHPhotoLibrary.shared().performChanges {
-                _ = PHAssetChangeRequest.creationRequestForAsset(from: картинка)
-            }
-            return true
-        } catch {
-            return false
-        }
-    }
-
     /// Системный лист поверх верхнего экрана; на iPad — всплывающий у низа экрана (без привязки UIKit роняет приложение).
     @MainActor
     static func системныйЛист(_ предметы: [Any]) {
@@ -934,46 +844,10 @@ struct ПостерОбъявленияСайта: View {
     }
 }
 
-/// QR для Фото: белая карточка 1080 × 1280, код 760, название, цена и «Kliko.kz».
-struct КартинкаQRСайта: View {
-    let данные: ДанныеОтправкиСайта
-    let qr: UIImage
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text("Kliko.kz")
-                .font(.system(size: 56, weight: .black))
-                .foregroundStyle(Color(uiColor: Theme.hex(0x0B6B3C)))
-                .padding(.bottom, 40)
-            Image(uiImage: qr)
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 760, height: 760)
-            Text(данные.название)
-                .font(.system(size: 44, weight: .heavy))
-                .foregroundStyle(Color(uiColor: Theme.hex(0x14312A)))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .padding(.top, 40)
-            Text(данные.строкаЦены)
-                .font(.system(size: 52, weight: .black))
-                .foregroundStyle(Color(uiColor: Theme.hex(0x0B6B3C)))
-                .lineLimit(1)
-                .padding(.top, 12)
-        }
-        .padding(.horizontal, 80)
-        .frame(width: 1080, height: 1280)
-        .background(Color.white)
-        .environment(\.colorScheme, .light)
-        .dynamicTypeSize(.large)
-    }
-}
-
 // MARK: - Тексты
 
 /// Тексты листа (i18n сайта: sh_title, copy_word, copied_excl, sh_link, sh_photo, sh_more, sh_making, sh_insta_hint,
-/// img_saved, later) на языке телефона — kk/ru/en/ar.
+/// later) на языке телефона — kk/ru/en/ar. Тексты окна «QR-код» — ListingQRText (ShareCard/ListingQR.swift).
 enum SiteShareText {
     static func т(_ ключ: String) -> String {
         let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
@@ -988,9 +862,7 @@ enum SiteShareText {
             "email": "Почта", "photo": "Фото-карточка", "story": "Для сторис", "more": "Ещё", "later": "Позже",
             "making": "Готовлю фото…", "failed": "Не получилось, попробуйте ещё раз",
             "insta_hint": "Ссылка скопирована — вставьте в Instagram. Сохраняю фото для поста…",
-            "save": "Сохранить", "share": "Поделиться", "saved": "Картинка сохранена",
-            "save_denied": "Нет доступа к Фото — разрешите в Настройках",
-            "qr_label": "QR-код ссылки на объявление", "qr_hint": "Наведите камеру телефона — откроется объявление",
+            "qr": "QR-код",
             "poster_item": "Объявление", "poster_guarantee": "Безопасная сделка",
             "poster_b1": "Оплата защищена (Безопасная сделка)", "poster_b2": "Проверенные продавцы",
             "poster_b3": "Доставка по Казахстану", "poster_qr": "Наведи камеру на QR →",
@@ -1004,9 +876,7 @@ enum SiteShareText {
             "email": "Пошта", "photo": "Фото-карточка", "story": "Сторис үшін", "more": "Тағы", "later": "Кейін",
             "making": "Фото дайындалуда…", "failed": "Болмады, қайта көріңіз",
             "insta_hint": "Сілтеме көшірілді — Instagram-ға қойыңыз. Жазбаға фото сақталуда…",
-            "save": "Сақтау", "share": "Бөлісу", "saved": "Сурет сақталды",
-            "save_denied": "Фотоға рұқсат жоқ — Баптауларда рұқсат етіңіз",
-            "qr_label": "Хабарландыру сілтемесінің QR-коды", "qr_hint": "Телефон камерасын бағыттаңыз — хабарландыру ашылады",
+            "qr": "QR-код",
             "poster_item": "Хабарландыру", "poster_guarantee": "Қауіпсіз мәміле",
             "poster_b1": "Төлем қорғалған (Қауіпсіз мәміле)", "poster_b2": "Тексерілген сатушылар",
             "poster_b3": "Қазақстан бойынша жеткізу", "poster_qr": "Камераны QR-ға бағытта →",
@@ -1020,9 +890,7 @@ enum SiteShareText {
             "email": "Mail", "photo": "Photo card", "story": "For stories", "more": "More", "later": "Later",
             "making": "Preparing the photo…", "failed": "Something went wrong, try again",
             "insta_hint": "Link copied — paste it in Instagram. Saving a photo for the post…",
-            "save": "Save", "share": "Share", "saved": "Image saved",
-            "save_denied": "No access to Photos — allow it in Settings",
-            "qr_label": "QR code of the listing link", "qr_hint": "Point a phone camera at it to open the listing",
+            "qr": "QR code",
             "poster_item": "Listing", "poster_guarantee": "Safe deal",
             "poster_b1": "Payment protected (Safe deal)", "poster_b2": "Verified sellers",
             "poster_b3": "Delivery across Kazakhstan", "poster_qr": "Point your camera at the QR →",
@@ -1036,9 +904,7 @@ enum SiteShareText {
             "email": "البريد", "photo": "بطاقة صورة", "story": "للقصص", "more": "المزيد", "later": "لاحقًا",
             "making": "جارٍ تجهيز الصورة…", "failed": "تعذّر ذلك، حاول مرة أخرى",
             "insta_hint": "تم نسخ الرابط — الصقه في Instagram. جارٍ حفظ صورة للمنشور…",
-            "save": "حفظ", "share": "مشاركة", "saved": "تم حفظ الصورة",
-            "save_denied": "لا يوجد وصول إلى الصور — اسمح به في الإعدادات",
-            "qr_label": "رمز QR لرابط الإعلان", "qr_hint": "وجّه كاميرا الهاتف لفتح الإعلان",
+            "qr": "رمز QR",
             "poster_item": "إعلان", "poster_guarantee": "صفقة آمنة",
             "poster_b1": "الدفع محمي (صفقة آمنة)", "poster_b2": "بائعون موثّقون",
             "poster_b3": "التوصيل في جميع أنحاء كازاخستان", "poster_qr": "وجّه الكاميرا إلى رمز QR ←",
