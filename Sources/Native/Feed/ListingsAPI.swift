@@ -71,6 +71,43 @@ enum ListingsAPI {
     /// `куки` — заголовки заранее: фоновая проверка сохранённых поисков (этап 12) берёт их у WebKit сама, с пределом
     /// по времени, и одни на все запросы; пустые — запрос без куков. nil — как раньше, у WebKit перед запросом.
     static func загрузить(_ з: Запрос, куки заданные: [String: String]? = nil) async throws -> (страница: ListingsPage, сырое: Data) {
+        var запрос = URLRequest(url: адрес(з))
+        запрос.httpShouldHandleCookies = false
+        let заголовки: [String: String]
+        if let заданные { заголовки = заданные } else { заголовки = await SiteSession.куки() }
+        for (имя, значение) in заголовки { запрос.setValue(значение, forHTTPHeaderField: имя) }
+
+        let данные: Data
+        let ответ: URLResponse
+        do { (данные, ответ) = try await данныеСПовтором(запрос) } catch { throw Ошибка.сеть }
+        if let http = ответ as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw Ошибка.статус(http.statusCode)
+        }
+        /* Скорость: разбор страницы (48 карточек) — не на главной очереди. */
+        let страница = try await разобратьВФоне(данные)
+        return (страница, данные)
+    }
+
+    /// Скорость: GET ленты и карточки — ещё раз после короткой паузы, если сеть оборвалась (не ответ сервера). Отмена
+    /// задачи (сменили раздел) — сразу наверх, без повтора.
+    private static func данныеСПовтором(_ запрос: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await сессия.data(for: запрос)
+        } catch let e as URLError where e.code != .cancelled && !Task.isCancelled
+                    && (e.code == .networkConnectionLost || e.code == .timedOut || e.code == .cannotConnectToHost
+                        || e.code == .dnsLookupFailed || e.code == .cannotFindHost) {
+            try await Task.sleep(nanoseconds: 600_000_000)
+            return try await сессия.data(for: запрос)
+        }
+    }
+
+    /// Разбор вне главной очереди: nonisolated async уходит с MainActor.
+    nonisolated static func разобратьВФоне(_ данные: Data) async throws -> ListingsPage {
+        try разобрать(данные)
+    }
+
+    /// Адрес запроса ленты — как _mkApiQS сайта. Он же, без page, seed и gs, — ключ копии выдачи на диске (КэшВыдачи).
+    static func адрес(_ з: Запрос) -> URL {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
         var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.параметр),    // «Новые» — reco, как у сайта
@@ -85,20 +122,7 @@ enum ListingsAPI {
         if з.page > 1, let gs = з.gs, gs > 0 { поля.append(URLQueryItem(name: "gs", value: String(gs))) }
         if let seed = з.seed, seed > 0 { поля.append(URLQueryItem(name: "seed", value: String(seed))) }   // на всех страницах
         ч.queryItems = поля
-
-        var запрос = URLRequest(url: ч.url!)
-        запрос.httpShouldHandleCookies = false
-        let заголовки: [String: String]
-        if let заданные { заголовки = заданные } else { заголовки = await SiteSession.куки() }
-        for (имя, значение) in заголовки { запрос.setValue(значение, forHTTPHeaderField: имя) }
-
-        let данные: Data
-        let ответ: URLResponse
-        do { (данные, ответ) = try await сессия.data(for: запрос) } catch { throw Ошибка.сеть }
-        if let http = ответ as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw Ошибка.статус(http.statusCode)
-        }
-        return (try разобрать(данные), данные)
+        return ч.url!
     }
 
     /// Полная карточка: GET /api/listings.php?id=<номер> → {ok, item}. Тоже с куками: избранное и цена для вошедшего.
@@ -121,13 +145,36 @@ enum ListingsAPI {
 
         let данные: Data
         let ответ: URLResponse
-        do { (данные, ответ) = try await сессия.data(for: запрос) } catch { throw Ошибка.сеть }
+        do { (данные, ответ) = try await данныеСПовтором(запрос) } catch { throw Ошибка.сеть }
         if let http = ответ as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw Ошибка.статус(http.statusCode)
         }
         let товар: Listing
         do { товар = try JSONDecoder().decode(ListingEnvelope.self, from: данные).item } catch { throw Ошибка.разбор }
+        if товар.id == id { полные.setObject(ЯщикТовара(товар), forKey: id as NSString) }
         return (товар: товар, сырое: данные)
+    }
+
+    /// Скорость: полные карточки, уже пришедшие за этот запуск, — в памяти. Открыли второй раз — описание, фото и
+    /// продавец на экране сразу, свежий ответ догоняет. NSCache потокобезопасен и сам отдаёт память системе.
+    private final class ЯщикТовара {
+        let товар: Listing
+        init(_ товар: Listing) { self.товар = товар }
+    }
+    private static let полные: NSCache<NSString, ЯщикТовара> = {
+        let кэш = NSCache<NSString, ЯщикТовара>()
+        кэш.countLimit = 300
+        return кэш
+    }()
+
+    /// Полная карточка из памяти этого запуска или nil.
+    static func готовая(_ id: String) -> Listing? {
+        полные.object(forKey: id as NSString)?.товар
+    }
+
+    /// Выход из аккаунта — карточки с ценами и избранным прежнего человека больше не показываем.
+    static func забытьГотовые() {
+        полные.removeAllObjects()
     }
 
     static func разобрать(_ данные: Data) throws -> ListingsPage {
@@ -193,7 +240,92 @@ enum ListingsCache {
     }
 
     static func стереть() {
+        /* Скорость: вместе с лентой — копии выдач и полные карточки в памяти: они тоже прежнего человека. */
+        КэшВыдачи.стереть()
+        ListingsAPI.забытьГотовые()
         guard let файл else { return }
         try? FileManager.default.removeItem(at: файл)
+    }
+}
+
+/**
+ СКОРОСТЬ: ПЕРВАЯ СТРАНИЦА КАЖДОЙ ВЫДАЧИ НА ДИСКЕ (владелец 30.09.2026: «чтобы моментально открывалось независимо от сети»).
+
+ Раздел, поиск, фильтры, «Аренда» — первая страница ответа лежит в Caches (система может её стереть — это копия, не
+ данные), файл на выдачу: ключ — адрес запроса без page, seed и gs. Открыли выдачу снова — копия на экране сразу, а
+ свежая подменяет её, как только придёт; нет сети — копия и строка «нет связи». Лента по умолчанию — как раньше, в
+ ListingsCache. Срок — сутки, не больше 40 файлов (лишние — самые давние). Версия в имени папки: сменится формат —
+ старые копии просто не найдутся. Чтение и запись — не на главной очереди.
+ */
+enum КэшВыдачи {
+    static let срок: TimeInterval = 24 * 3600
+    private static let предел = 40
+    private static let размер = 2 * 1024 * 1024
+    private static let очередь = DispatchQueue(label: "kz.kliko.feed-queries", qos: .utility)
+
+    private static var папка: URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("kliko-feed-queries-v1", isDirectory: true)
+    }
+
+    /// Ключ выдачи: адрес первой страницы без посева и снимка. FNV-1a — одинаковый между запусками (Hasher — нет).
+    static func ключ(_ з: ListingsAPI.Запрос) -> String {
+        var первая = з
+        первая.page = 1
+        первая.seed = nil
+        первая.gs = nil
+        var х: UInt64 = 0xcbf29ce484222325
+        for байт in ListingsAPI.адрес(первая).absoluteString.utf8 {
+            х ^= UInt64(байт)
+            х = х &* 0x100000001b3
+        }
+        return String(х, radix: 16)
+    }
+
+    static func сохранить(_ данные: Data, ключ: String) {
+        guard данные.count <= размер, let корень = папка else { return }
+        очередь.async {
+            let диск = FileManager.default
+            do {
+                try диск.createDirectory(at: корень, withIntermediateDirectories: true)
+                try данные.write(to: корень.appendingPathComponent(ключ + ".json"), options: .atomic)
+            } catch {
+                return        // диск полон — копия удобство, а не обязанность
+            }
+            guard let файлы = try? диск.contentsOfDirectory(at: корень,
+                                                           includingPropertiesForKeys: [.contentModificationDateKey],
+                                                           options: [.skipsHiddenFiles]),
+                  файлы.count > предел else { return }
+            let поДате = файлы.map { файл -> (URL, Date) in
+                let когда = (try? файл.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                return (файл, когда ?? .distantPast)
+            }.sorted { $0.1 > $1.1 }
+            for (файл, _) in поДате.dropFirst(предел) { try? диск.removeItem(at: файл) }
+        }
+    }
+
+    /// Копия первой страницы этой выдачи, не старше суток и не пустая; иначе nil.
+    static func прочитать(_ ключ: String) async -> [Listing]? {
+        guard let корень = папка else { return nil }
+        let файл = корень.appendingPathComponent(ключ + ".json")
+        return await withCheckedContinuation { (готово: CheckedContinuation<[Listing]?, Never>) in
+            очередь.async {
+                guard let свойства = try? файл.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let когда = свойства.contentModificationDate,
+                      Date().timeIntervalSince(когда) <= срок,
+                      let данные = try? Data(contentsOf: файл),
+                      let страница = try? ListingsAPI.разобрать(данные),
+                      !страница.items.isEmpty else {
+                    готово.resume(returning: nil)
+                    return
+                }
+                готово.resume(returning: страница.items)
+            }
+        }
+    }
+
+    static func стереть() {
+        guard let корень = папка else { return }
+        очередь.async { try? FileManager.default.removeItem(at: корень) }
     }
 }

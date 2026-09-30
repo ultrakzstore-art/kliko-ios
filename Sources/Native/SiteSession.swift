@@ -27,12 +27,41 @@ enum SiteSession {
     /// Куки kliko.kz из WebKit — готовым заголовком «Cookie». Хранилище WebKit живёт на главной нити.
     @MainActor
     static func куки() async -> [String: String] {
-        let все = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
-        let наши = все.filter { кука in
-            let домен = кука.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            return домен == "kliko.kz" || домен == "www.kliko.kz"
+        /* Скорость: заголовок держим 2 с и одним вопросом к WebKit на все запросы, что стартуют разом (лента, главная,
+           счётчики, картинки кабинета на запуске). Каждый allCookies — круг до сетевого процесса WebKit, а на холодном
+           старте ещё и его запуск. Куки сменились (вход, выход, ответ сервера) — наблюдатель сбрасывает запомненное. */
+        НаблюдательКук.shared.следить()
+        if let есть = запомненныеКуки, Date().timeIntervalSince(есть.когда) < 2 { return есть.поля }
+        if let идёт = кукиВПути { return await идёт.value }
+        let поколение = поколениеКук
+        let задача = Task<[String: String], Never> { @MainActor in
+            let все = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+            let наши = все.filter { кука in
+                let домен = кука.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                return домен == "kliko.kz" || домен == "www.kliko.kz"
+            }
+            return HTTPCookie.requestHeaderFields(with: наши)
         }
-        return HTTPCookie.requestHeaderFields(with: наши)
+        кукиВПути = задача
+        let поля = await задача.value
+        if поколение == поколениеКук {
+            запомненныеКуки = (когда: Date(), поля: поля)
+            кукиВПути = nil
+        }
+        return поля
+    }
+
+    /// Скорость: запомненный заголовок «Cookie», вопрос к WebKit в пути и номер смены кук (наблюдатель его двигает).
+    @MainActor private static var запомненныеКуки: (когда: Date, поля: [String: String])?
+    @MainActor private static var кукиВПути: Task<[String: String], Never>?
+    @MainActor private static var поколениеКук = 0
+
+    /// Куки в WebKit сменились — следующий запрос спросит их заново.
+    @MainActor
+    static func кукиСменились() {
+        поколениеКук += 1
+        запомненныеКуки = nil
+        кукиВПути = nil
     }
 
     struct Состояние {
@@ -132,5 +161,22 @@ enum SiteSession {
             когдаБезСтраницы = Date()
         }
         return итог
+    }
+}
+
+/// Скорость: следит за хранилищем кук WebKit и сбрасывает заголовок, запомненный SiteSession.куки().
+@MainActor
+final class НаблюдательКук: NSObject, WKHTTPCookieStoreObserver {
+    static let shared = НаблюдательКук()
+    private var следим = false
+
+    func следить() {
+        guard !следим else { return }
+        следим = true
+        WKWebsiteDataStore.default().httpCookieStore.add(self)
+    }
+
+    nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor in SiteSession.кукиСменились() }
     }
 }

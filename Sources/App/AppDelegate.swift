@@ -21,6 +21,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        /* Скорость: большой общий URLCache — до первого запроса (картинки ленты, главная), а не когда поднимется веб-слой.
+           Тот же путь, что у WebContainer, — прежний кэш на диске не теряется; WebContainer, увидев большой, не трогает. */
+        if URLCache.shared.diskCapacity < 300 * 1024 * 1024 {
+            URLCache.shared = URLCache(memoryCapacity: 50 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024,
+                                       diskPath: "kliko-web")
+        }
         UNUserNotificationCenter.current().delegate = self
         // Этап 12: обработчик фоновой проверки сохранённых поисков — строго до конца запуска, иначе iOS роняет
         // приложение при первом же фоновом запуске задания.
