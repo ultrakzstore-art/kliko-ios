@@ -1820,9 +1820,14 @@ struct ListingCard: View {
     /// Витрина под вертикали (VerticalCards.swift): лента одного корня списком — широкая карточка.
     @Environment(\.расстановкаВитрины) private var расстановка
 
+    /// Всё, что карточка показывает об объявлении, — посчитано один раз и взято из памяти (FeedCardModel.swift), а не
+    /// заново на каждой отрисовке.
+    private let вид: ВидКарточки
+
     init(товар: Listing, вип: Bool = false) {
         self.товар = товар
         self.вип = вип
+        self.вид = КэшВидаКарточек.shared.вид(товар)
     }
 
     /// Золотая рамка и подложка: ТОП (.mh-c.is-top) или VIP-блок (.mh-vipg .mh-c).
@@ -1860,22 +1865,15 @@ struct ListingCard: View {
         }
     }
 
-    /// Вертикаль объявления — один раз на отрисовку.
-    private var вертикаль: ВертикальВитрины { товар.вертикаль }
+    /// Вертикаль объявления — из вида карточки.
+    private var вертикаль: ВертикальВитрины { вид.вертикаль }
 
     private var крупныйТекст: Bool { размерТекста.isAccessibilitySize }
 
     /// Голос карточки: товар, строка фактов вертикали («2019 г., 120 000 км») и знак доверия («Безопасно», «Подпись
     /// eGov»), если они есть.
     private var голосКарточки: String {
-        var части = [товар.голос]
-        if let заголовок = товар.заголовокЖилья { части.append(заголовок.replacingOccurrences(of: " · ", with: ", ")) }
-        if let заМетр = товар.ценаЗаМетр { части.append(заМетр) }
-        if товар.даром { части.append(ВитринаВертикалейТекст.т("free")) }
-        let факты = товар.фактыВитрины(список: расстановка == .список).map(\.текст)
-        if !факты.isEmpty { части.append(факты.joined(separator: ", ")) }
-        if let знак = товар.знакДоверияЛенты { части.append(знак.текст) }
-        return части.joined(separator: ", ")
+        расстановка == .список ? вид.голосСписка : вид.голосСетки
     }
 
     /**
@@ -1976,7 +1974,7 @@ struct ListingCard: View {
         VStack(alignment: .leading, spacing: 5) {
             строкаЦены(кегль(20))
                 .padding(.trailing, 34)
-            Text(товар.заголовокЖилья ?? товар.title)
+            Text(вид.заголовокЖилья ?? товар.title)
                 .font(.system(size: кегль(14), weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(Theme.текст)
@@ -1991,7 +1989,7 @@ struct ListingCard: View {
                     .foregroundStyle(Theme.текстВторой)
                     .lineLimit(1)
             }
-            ПотокЧиповВитрины(факты: товар.фактыВитрины(список: true), кегль: кегль(11.5), строк: крупныйТекст ? 3 : 2)
+            ПотокЧиповВитрины(факты: вид.фактыСписка, кегль: кегль(11.5), строк: крупныйТекст ? 3 : 2)
                 .padding(.top, 1)
             Spacer(minLength: 0)
             подвалСайта
@@ -2004,15 +2002,7 @@ struct ListingCard: View {
 
     /// Под названием широкой карточки: у жилья — район (название, если заголовок занял его место) и дата подачи; у
     /// прочих — дата. Нечего — nil.
-    private var втораяСтрокаСписка: String? {
-        var части: [String] = []
-        if товар.заголовокЖилья != nil { части.append(товар.адресЖилья) }
-        if let создано = товар.создано, !товар.city.isEmpty {
-            let дата = Listing.датаСайта(создано, коротко: true)
-            if !дата.isEmpty { части.append(дата) }
-        }
-        return части.isEmpty ? nil : части.joined(separator: " · ")
-    }
+    private var втораяСтрокаСписка: String? { вид.втораяСтрокаСписка }
 
     /// .mk-cshot: 4:3, фото с обрезкой по центру; подложка — мятный градиент (в тёмной — тёмно-зелёный).
     private var фотоСайта: some View {
@@ -2052,7 +2042,7 @@ struct ListingCard: View {
 
     /// Нет фото — значок корня раздела (машина, дом, лапа…), а не общий «фото».
     private var заглушкаФото: some View {
-        Image(systemName: товар.категория == nil ? "photo" : РазделыСайта.значок(товар.категория))
+        Image(systemName: вид.значокЗаглушки)
             .font(.system(size: 26))
             .foregroundStyle(Theme.текстВторой.opacity(0.5))
     }
@@ -2064,17 +2054,17 @@ struct ListingCard: View {
      */
     @ViewBuilder
     private func картинкаКарточки(пунктов: CGFloat) -> some View {
-        let целиком = товар.услуга || вертикаль.фотоЦеликом
+        let целиком = вид.фотоЦеликом
         ZStack {
-            if целиком && товар.обложка != nil {
-                КартинкаЛенты(товар.обложка, пунктов: 90) {
+            if целиком && вид.обложка != nil {
+                КартинкаЛенты(вид.обложка, пунктов: 90) {
                     Color.clear
                 }
                 .blur(radius: 18, opaque: true)
                 .overlay(Color.black.opacity(0.06))
                 .accessibilityHidden(true)
             }
-            КартинкаЛенты(товар.обложка, пунктов: пунктов, заполнить: !целиком) {
+            КартинкаЛенты(вид.обложка, пунктов: пунктов, заполнить: !целиком) {
                 заглушкаФото
             }
         }
@@ -2083,7 +2073,7 @@ struct ListingCard: View {
     /// .mk-cond — (8, 8), под ним .mk-resv-badge — (8, 34).
     private var меткиФото: some View {
         ZStack(alignment: .topLeading) {
-            if let метка = товар.меткаСостояния {
+            if let метка = вид.меткаСостояния {
                 меткаСостояния(метка)
                     .padding(.top, 8)
                     .padding(.leading, 8)
@@ -2179,7 +2169,7 @@ struct ListingCard: View {
             названиеСетки
             /* Факты вертикали чипами со значками (VerticalCards.swift): одна строка, что не влезло — не рисуется;
                пустая держит место, чтобы подвал у всех карточек стоял на одной линии. */
-            СтрокаФактовВитрины(факты: товар.фактыВитрины(список: false), кегль: кегль(11))
+            СтрокаФактовВитрины(факты: вид.фактыСетки, кегль: кегль(11))
                 .padding(.top, 2)
             подвалСайта
                 .padding(.top, 6)
@@ -2194,7 +2184,7 @@ struct ListingCard: View {
     /// район (как у Krisha); нечего сказать о квартире — название.
     @ViewBuilder
     private var названиеСетки: some View {
-        if let заголовок = товар.заголовокЖилья {
+        if let заголовок = вид.заголовокЖилья {
             Text(" ")
                 .font(.system(size: кегль(13), weight: .medium))
                 .lineLimit(крупныйТекст ? 3 : 2, reservesSpace: true)
@@ -2207,7 +2197,7 @@ struct ListingCard: View {
                             .monospacedDigit()
                             .foregroundStyle(Theme.текст)
                             .lineLimit(1)
-                        Text(товар.адресЖилья)
+                        Text(вид.адресЖилья)
                             .font(.system(size: кегль(12)))
                             .foregroundStyle(Theme.текстВторой)
                             .lineLimit(1)
@@ -2229,9 +2219,9 @@ struct ListingCard: View {
     /// «Даром».
     @ViewBuilder
     private func строкаЦены(_ размер: CGFloat) -> some View {
-        if let цена = ЦенаКарточкиСайта.для(товар, режимАренды: режимАренды) {
+        if let цена = вид.цена(режимАренды: режимАренды) {
             let сумма = текстЦены(цена, размер)
-            if let заМетр = товар.ценаЗаМетр {
+            if let заМетр = вид.ценаЗаМетр {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         сумма.lineLimit(1).fixedSize()
@@ -2253,7 +2243,7 @@ struct ListingCard: View {
                     .minimumScaleFactor(0.7)
                     .вСтрокуКарточки(.system(size: размер, weight: .heavy))
             }
-        } else if товар.даром {
+        } else if вид.даром {
             Text(ВитринаВертикалейТекст.т("free"))
                 .font(.system(size: размер * 0.9, weight: .heavy))
                 .foregroundStyle(Theme.акцент)
@@ -2270,7 +2260,7 @@ struct ListingCard: View {
     private func текстЦены(_ цена: ЦенаКарточкиСайта, _ размер: CGFloat) -> Text {
         let сумма = цена.текст(кегль: размер, главная: false, краска: краскаМагазина)
             .tracking(-0.02 * размер)
-        guard товар.ценаОт && цена.вид == .сумма else { return сумма }
+        guard вид.ценаОт && цена.вид == .сумма else { return сумма }
         return Text(ListingPageText.т("price_from") + " ")
             .font(.system(size: размер * 0.62, weight: .bold))
             .foregroundColor(Theme.текстВторой) + сумма
@@ -2280,10 +2270,10 @@ struct ListingCard: View {
     /// без города — когда добавлено. С точкой человека (FeedGeo.swift) до 5 км — булавка и расстояние яркой зеленью, жирно
     /// (.mk-vc-geo.near); за ним — время в пути «· 12 мин» (.mk-eta), если сервер его дал.
     private var подвалСайта: some View {
-        let место = товар.местоСРасстоянием(км: гео.км(до: товар))
+        let место = вид.место(км: гео.км(до: товар))
         let путь = гео.точка == nil ? nil : пути.оценка(товар.id)
         return HStack(spacing: 8) {
-            if let знак = товар.знакДоверияЛенты {
+            if let знак = вид.знак {
                 /* Узкая карточка и длинное место справа: вместо «Гар…» — один значок, текст целиком или никак. */
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 4) {
@@ -2332,7 +2322,7 @@ struct ListingCard: View {
     }
 
     /// Фирменный цвет магазина — полоса сверху и цена (.mk-cbrand); nil — не магазин или цвета нет.
-    private var краскаМагазина: Color? { товар.краскаМагазинаЛенты }
+    private var краскаМагазина: Color? { вид.краска }
 
     /// Подложка: в ТОПе и в VIP-блоке — золотистый верх (.mk-card.top-card), иначе поверхность.
     @ViewBuilder
