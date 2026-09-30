@@ -1499,6 +1499,7 @@ struct NativeFeedView: View {
         if !искомое.текст.isEmpty { ещё += 1 }
         if !ф.комнаты.isEmpty { ещё += 1 }
         if ф.годОт != nil || ф.годДо != nil { ещё += 1 }
+        if !ф.безРазделов { ещё += 1 }      // свои фильтры раздела: пробег, площадь, признаки, фасеты…
         guard !части.isEmpty || ещё > 0 else { return nil }
         let начало = части.isEmpty ? FilterText.т("filters") : части.prefix(2).joined(separator: " · ")
         return ещё > 0 ? начало + " +" + String(ещё) : начало
