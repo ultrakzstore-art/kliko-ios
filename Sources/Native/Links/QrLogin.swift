@@ -4,18 +4,21 @@ import UIKit
 
 /**
  ВХОД НА КОМПЬЮТЕРЕ ПО QR (владелец 29.09.2026: камера iPhone открывала код «Войти по QR» в приложении, а приложение
- отвечало «Страница недоступна в приложении»).
+ отвечало «Страница недоступна в приложении»). 30.09.2026 — под механизм самого сайта (свой серверный патч не ставится).
 
- Код на экране входа сайта — адрес https://kliko.kz/qr_login.php?t=<64 hex> (сервер: inc/app_qr_login.php, патч 75 в
- private/INTEGRATION.md). Универсальная ссылка приходит в WebBridge.открытьСнаружи / перейти — там её забирает
- ВходПоQR.перехватить раньше всех прочих разборов и показывает своё окно:
-   1. КабинетСайта.состояние — вошёл ли человек и токен формы (KlikoCsrf). Не вошёл — «Войдите, чтобы подтвердить вход»:
-      свой ЭкранВхода (ВходПоверх), после входа окно открывается снова с тем же кодом.
-   2. POST /api/app_qr_login.php {action:'info', t} — какое устройство просит вход (браузер и система, город, IP, время) и
-      в какой аккаунт. Компьютер в это время видит «Код отсканирован».
-   3. «Подтвердить вход» — {action:'confirm', t, csrf}; «Отмена» — {action:'cancel'} и окно закрывается. Без нажатия
-      ничего не подтверждается. Ответ «csrf» — токен перечитывается и запрос повторяется один раз.
- Ошибки сервера — своими словами: код устарел, уже использован, отменён, аккаунт недоступен, слишком часто.
+ Код на экране входа сайта — адрес https://kliko.kz/qr/<код> (код — 24 знака base64url, живёт 120 с; на всякий случай
+ принимается и путь с языком /kz/<язык>/qr/<код>). Универсальная ссылка приходит в WebBridge.открытьСнаружи / перейти —
+ там её забирает ВходПоQR.перехватить раньше всех прочих разборов и показывает своё окно:
+   1. КабинетСайта.состояние — вошёл ли человек и токен кабинета (KlikoCsrf = csrf_cab сессии kliko_cab). Не вошёл —
+      «Войдите, чтобы подтвердить вход»: свой ЭкранВхода (ВходПоверх), после входа окно открывается снова с тем же кодом.
+   2. POST /qr.php?action=info {csrf, i} — какое устройство просит вход (dev, city, ip, time, len). Точки может не быть
+      (404, неизвестное действие, сбой) — окно всё равно спрашивает, общей строкой «Компьютер запросил вход в ваш аккаунт».
+   3. «Подтвердить вход» — POST /qr.php?action=approve {csrf, i}; «Отмена» — action=deny с тем же телом, окно
+      закрывается сразу. Без нажатия ничего не подтверждается. Ответ «csrf» — токен перечитывается, запрос один раз снова.
+
+ 🔴 Сервер принимает только сессию куки kliko_cab (Bearer — нет) и User-Agent с меткой KlikoApp. Поэтому все три запроса —
+ КабинетСайта.вызвать(толькоСтраницей: true): fetch изнутри страницы сайта под слоем (WKWebView с
+ applicationNameForUserAgent «KlikoApp/<версия>», куки WebKit, настоящие Origin и Referer), мимо URLSession-транспорта.
 
  Второй вход — «Сканировать QR для входа» в «Кабинет → Безопасность» (СтрокаСканераВхода): тот же сканер, что у встречи
  сделки (КамераQRСделки), и то же окно.
@@ -25,18 +28,19 @@ enum ВходПоQR {
     /// Последний перехваченный код: одна ссылка, пришедшая дважды (холодный старт и continue), не ставит два окна.
     private static var последний: (токен: String, когда: Date)? = nil
 
-    /// Код из адреса «Войти по QR» (…/qr_login.php?t=<64 hex>, с языком в пути /kz/ru/ или без) или nil.
+    /// Код из адреса «Войти по QR» (…/qr/<24 знака base64url>, с /kz/<язык> в начале или без) или nil.
     static func токен(из адрес: URL) -> String? {
         let полный = адрес.absoluteURL
         guard let схема = полный.scheme?.lowercased(), схема == "https" || схема == "http",
               let части = URLComponents(url: полный, resolvingAgainstBaseURL: false) else { return nil }
-        let путь = части.path.lowercased()
-        guard путь.range(of: "^(/[a-z]{2}/[a-z]{2})?/qr_login(\\.php)?/?$", options: .regularExpression) != nil else {
-            return nil
+        /* Код различает регистр — путь целиком не приводим к нижнему. */
+        var куски = части.path.split(separator: "/", omittingEmptySubsequences: true).map { String($0) }
+        if куски.count == 4, куски[0].lowercased() == "kz", куски[1].count == 2 {
+            куски.removeFirst(2)
         }
-        let код = (части.queryItems?.first(where: { $0.name == "t" })?.value ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard код.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { return nil }
+        guard куски.count == 2, куски[0].lowercased() == "qr" else { return nil }
+        let код = куски[1]
+        guard код.range(of: "^[A-Za-z0-9_-]{24}$", options: .regularExpression) != nil else { return nil }
         return код
     }
 
@@ -70,24 +74,53 @@ enum ВходПоQR {
         }
     }
 
-    /// POST /api/app_qr_login.php с куками сессии приложения. Точки нет (404 без JSON) — {ok:false, error:"off"}.
-    static func запрос(_ тело: [String: Any]) async throws -> [String: Any] {
-        let ответ = try await КабинетСайта.вызвать("/api/app_qr_login.php", метод: "POST", тело: тело, отКорня: true)
+    /**
+     POST /qr.php?action=<действие> {csrf, i} — только страницей сайта (кука kliko_cab и User-Agent с KlikoApp).
+     Без JSON: 429 — «rate», 404 — «off» (действия или всей точки нет), 405 — «method».
+     */
+    static func запрос(_ действие: String, код: String, csrf: String) async throws -> [String: Any] {
+        let тело: [String: Any] = ["csrf": csrf, "i": код]
+        let ответ = try await КабинетСайта.вызвать("/qr.php?action=" + действие, метод: "POST", тело: тело,
+                                                   отКорня: true, толькоСтраницей: true)
         if let json = ответ.json { return json }
-        if ответ.код == 404 || ответ.код == 405 { return ["ok": false, "error": "off"] }
-        throw КабинетСайта.Сбой.приложение
+        switch ответ.код {
+        case 429: return ["ok": false, "error": "rate"]
+        case 404: return ["ok": false, "error": "off"]
+        case 405: return ["ok": false, "error": "method"]
+        default: throw КабинетСайта.Сбой.приложение
+        }
+    }
+
+    /// ok ответа: true, 1 или «1».
+    static func да(_ значение: Any?) -> Bool {
+        if let число = значение as? NSNumber { return число.intValue != 0 }
+        if let текст = значение as? String { return текст == "1" || текст == "true" }
+        return false
+    }
+
+    /// Код ошибки ответа: для «exp» — уточнение why, если сервер его прислал (expired | used | denied | approved).
+    static func кодОшибки(_ j: [String: Any]) -> String {
+        let ошибка = ((j["error"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if ошибка == "exp" {
+            let почему = ((j["why"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if ["expired", "used", "denied", "approved"].contains(почему) { return почему }
+        }
+        return ошибка
     }
 
     /// Текст ошибки сервера и можно ли повторить.
     static func ошибка(_ код: String) -> (текст: String, повтор: Bool) {
         switch код {
-        case "expired", "not_found": return (ВходПоQRText.т("e_expired"), false)
+        case "exp": return (ВходПоQRText.т("e_exp"), false)
+        case "expired": return (ВходПоQRText.т("e_expired"), false)
         case "used": return (ВходПоQRText.т("e_used"), false)
         case "denied": return (ВходПоQRText.т("e_denied"), false)
-        case "account": return (ВходПоQRText.т("e_account"), false)
+        case "approved": return (ВходПоQRText.т("e_approved"), false)
         case "rate": return (ВходПоQRText.т("e_rate"), true)
-        case "bad_token": return (ВходПоQRText.т("e_bad"), false)
-        case "off", "method", "action": return (ВходПоQRText.т("e_off"), false)
+        case "bad": return (ВходПоQRText.т("e_bad"), false)
+        case "imp": return (ВходПоQRText.т("e_imp"), false)
+        case "app": return (ВходПоQRText.т("e_ua"), false)
+        case "off": return (ВходПоQRText.т("e_off"), false)
         default: return (ВходПоQRText.т("e_app"), true)
         }
     }
@@ -98,20 +131,48 @@ enum ВходПоQR {
     }
 }
 
-/// Что сервер сказал об устройстве, которое просит вход ({action:'info'}).
+/// Что сервер сказал об устройстве, которое просит вход (action=info), и чей аккаунт. Пусто — общая строка.
 struct СведенияВходаПоQR: Equatable {
     var устройство: String = ""
     var город: String = ""
     var ip: String = ""
     var когда: String = ""
+    /// len — длина сеанса на компьютере в секундах (1800 или 43200); 0 — не сказали.
+    var сеанс: Int = 0
     var аккаунт: String = ""
 
-    init(_ j: [String: Any]) {
-        устройство = (j["dev"] as? String) ?? ""
-        город = (j["city"] as? String) ?? ""
-        ip = (j["ip"] as? String) ?? ""
-        когда = (j["when"] as? String) ?? ""
-        аккаунт = (j["name"] as? String) ?? ""
+    /// Без info — только аккаунт из страницы кабинета.
+    init(аккаунт: String) {
+        self.аккаунт = аккаунт
+    }
+
+    init(_ j: [String: Any], аккаунт: String) {
+        устройство = Self.строка(j["dev"])
+        город = Self.строка(j["city"])
+        ip = Self.строка(j["ip"])
+        когда = Self.строка(j["time"])
+        if let число = j["len"] as? NSNumber {
+            сеанс = число.intValue
+        } else if let текст = j["len"] as? String {
+            сеанс = Int(текст) ?? 0
+        }
+        self.аккаунт = аккаунт
+    }
+
+    private static func строка(_ значение: Any?) -> String {
+        ((значение as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Сервер рассказал об устройстве — можно показывать «По QR-коду просят войти… на этом устройстве:».
+    var есть: Bool { !устройство.isEmpty || !город.isEmpty || !ip.isEmpty }
+
+    /// «30 мин» / «12 ч».
+    private var длинаСеанса: String {
+        guard сеанс > 0 else { return "" }
+        if сеанс >= 3600 && сеанс % 3600 == 0 {
+            return ВходПоQRText.т("u_h").replacingOccurrences(of: "{n}", with: String(сеанс / 3600))
+        }
+        return ВходПоQRText.т("u_min").replacingOccurrences(of: "{n}", with: String(max(1, сеанс / 60)))
     }
 
     /// Строки карточки: подпись и значение, пустые — прочь.
@@ -121,13 +182,10 @@ struct СведенияВходаПоQR: Equatable {
             (ВходПоQRText.т("city"), город),
             (ВходПоQRText.т("ip"), ip),
             (ВходПоQRText.т("when"), когда),
+            (ВходПоQRText.т("sess"), длинаСеанса),
             (ВходПоQRText.т("acc"), аккаунт)
         ]
         return все.filter { !$0.1.isEmpty }
-    }
-
-    static func == (a: СведенияВходаПоQR, b: СведенияВходаПоQR) -> Bool {
-        a.устройство == b.устройство && a.город == b.город && a.ip == b.ip && a.когда == b.когда && a.аккаунт == b.аккаунт
     }
 }
 
@@ -142,7 +200,7 @@ struct ОкноВходаПоQR: View {
         case нуженВход
         case вопрос(СведенияВходаПоQR)
         case отправка(СведенияВходаПоQR)
-        case готово(eGov: Bool)
+        case готово
         case ошибка(текст: String, повтор: Bool)
     }
 
@@ -191,8 +249,8 @@ struct ОкноВходаПоQR: View {
             вопрос(сведения, идёт: false)
         case .отправка(let сведения):
             вопрос(сведения, идёт: true)
-        case .готово(let eGov):
-            шапка(значок: "checkmark.circle.fill", заголовок: т("done_t"), текст: eGov ? т("done_egov") : т("done_s"))
+        case .готово:
+            шапка(значок: "checkmark.circle.fill", заголовок: т("done_t"), текст: т("done_s"))
             кнопка(т("ok"), главная: true) { закрыть() }
         case .ошибка(let текст, let повтор):
             шапка(значок: "exclamationmark.triangle", заголовок: т("err_t"), текст: текст)
@@ -205,8 +263,10 @@ struct ОкноВходаПоQR: View {
 
     private func вопрос(_ сведения: СведенияВходаПоQR, идёт: Bool) -> some View {
         VStack(spacing: 14) {
-            шапка(значок: "desktopcomputer", заголовок: т("ask_t"), текст: т("ask_s"))
-            карточка(сведения)
+            шапка(значок: "desktopcomputer", заголовок: т("ask_t"), текст: сведения.есть ? т("ask_s") : т("ask_g"))
+            if !сведения.строки.isEmpty {
+                карточка(сведения)
+            }
             Text(т("warn"))
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.текстВторой)
@@ -283,33 +343,52 @@ struct ОкноВходаПоQR: View {
 
     // MARK: Действия
 
+    /**
+     Вошёл ли человек, токен кабинета и сведения об устройстве. info не обязателен: нет точки, неизвестное действие,
+     сбой — окно всё равно спрашивает, общей строкой. Решают только ясные ответы: код мёртв, нужен вход, чужой вход.
+     */
     private func загрузить() async {
         шаг = .загрузка
+        let состояние: КабинетСайта.Состояние
         do {
-            let состояние = try await КабинетСайта.состояние()
-            if состояние.вошёл == false {
-                шаг = .нуженВход
-                return
-            }
-            csrf = состояние.csrf
-            let j = try await ВходПоQR.запрос(["action": "info", "t": токен])
-            if (j["ok"] as? Bool) == true {
-                шаг = .вопрос(СведенияВходаПоQR(j))
-                return
-            }
-            let код = (j["error"] as? String) ?? ""
-            if код == "auth" {
-                шаг = .нуженВход
-            } else {
-                let о = ВходПоQR.ошибка(код)
-                шаг = .ошибка(текст: о.текст, повтор: о.повтор)
-            }
+            состояние = try await КабинетСайта.состояние()
         } catch {
             шаг = .ошибка(текст: ВходПоQR.сбой(error), повтор: true)
+            return
+        }
+        if состояние.вошёл == false {
+            шаг = .нуженВход
+            return
+        }
+        csrf = состояние.csrf
+        let аккаунт = состояние.имя.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let j = try? await ВходПоQR.запрос("info", код: токен, csrf: csrf) else {
+            шаг = .вопрос(СведенияВходаПоQR(аккаунт: аккаунт))
+            return
+        }
+        if ВходПоQR.да(j["ok"]) {
+            let st = ((j["st"] as? String) ?? "").lowercased()
+            if ["expired", "used", "denied", "approved"].contains(st) {
+                let о = ВходПоQR.ошибка(st)
+                шаг = .ошибка(текст: о.текст, повтор: о.повтор)
+                return
+            }
+            шаг = .вопрос(СведенияВходаПоQR(j, аккаунт: аккаунт))
+            return
+        }
+        let код = ВходПоQR.кодОшибки(j)
+        switch код {
+        case "auth":
+            шаг = .нуженВход
+        case "exp", "expired", "used", "denied", "approved", "bad", "imp":
+            let о = ВходПоQR.ошибка(код)
+            шаг = .ошибка(текст: о.текст, повтор: о.повтор)
+        default:
+            шаг = .вопрос(СведенияВходаПоQR(аккаунт: аккаунт))
         }
     }
 
-    /// «Подтвердить вход» — ждём ответа; «Отмена» — окно закрывается сразу, отказ уходит следом.
+    /// «Подтвердить вход» — ждём ответа; «Отмена» — окно закрывается сразу, отказ (deny) уходит следом.
     private func ответить(_ да: Bool) {
         guard case .вопрос(let сведения) = шаг else { return }
         let код = токен
@@ -317,25 +396,29 @@ struct ОкноВходаПоQR: View {
             let токенФормы = csrf
             закрыть()
             Task { @MainActor in
-                _ = try? await ВходПоQR.запрос(["action": "cancel", "t": код, "csrf": токенФормы])
+                _ = try? await ВходПоQR.запрос("deny", код: код, csrf: токенФормы)
             }
             return
         }
         шаг = .отправка(сведения)
         Task { @MainActor in
             do {
-                var j = try await ВходПоQR.запрос(["action": "confirm", "t": код, "csrf": csrf])
-                if (j["error"] as? String) == "csrf" {
+                var j = try await ВходПоQR.запрос("approve", код: код, csrf: csrf)
+                if !ВходПоQR.да(j["ok"]) && ВходПоQR.кодОшибки(j) == "csrf" {
                     let состояние = try await КабинетСайта.состояние()
+                    if состояние.вошёл == false {
+                        шаг = .нуженВход
+                        return
+                    }
                     csrf = состояние.csrf
-                    j = try await ВходПоQR.запрос(["action": "confirm", "t": код, "csrf": csrf])
+                    j = try await ВходПоQR.запрос("approve", код: код, csrf: csrf)
                 }
-                if (j["ok"] as? Bool) == true {
-                    шаг = .готово(eGov: (j["egov"] as? Bool) ?? false)
+                if ВходПоQR.да(j["ok"]) {
+                    шаг = .готово
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     return
                 }
-                let ошибка = (j["error"] as? String) ?? ""
+                let ошибка = ВходПоQR.кодОшибки(j)
                 if ошибка == "auth" {
                     шаг = .нуженВход
                 } else {
@@ -503,21 +586,25 @@ enum ВходПоQRText {
             "confirm": "Подтвердить вход", "cancel": "Отмена",
             "done_t": "Готово — вход на компьютере выполнен",
             "done_s": "Компьютер откроет ваш кабинет сам. Если это были не вы — завершите чужой сеанс в «Устройства и входы».",
-            "done_egov": "В аккаунте включена защита входа: осталось подтвердить вход через eGov на компьютере.",
             "ok": "Готово", "close": "Закрыть", "retry": "Повторить",
             "need_t": "Войдите, чтобы подтвердить вход",
             "need_s": "Вход на компьютере подтверждает телефон, на котором вы уже вошли в Kliko. Войдите — и окно откроется снова.",
             "sign_in": "Войти",
             "err_t": "Не получилось подтвердить вход",
-            "e_expired": "Код устарел. Обновите QR-код на компьютере и отсканируйте его ещё раз.",
+            "e_expired": "Код истёк — он действует 2 минуты. Обновите QR-код на компьютере и отсканируйте его ещё раз.",
             "e_used": "Этот код уже использован. Обновите QR-код на компьютере.",
-            "e_denied": "Вход по этому коду уже отменён. Обновите QR-код на компьютере.",
-            "e_account": "Этот аккаунт сейчас недоступен для входа. Напишите в поддержку.",
-            "e_rate": "Слишком много попыток. Подождите пару минут.",
-            "e_bad": "Ссылка из QR-кода неполная. Отсканируйте код ещё раз.",
+            "e_denied": "Вход по этому коду отклонён. Обновите QR-код на компьютере.",
+            "e_rate": "Слишком часто. Подождите минуту и попробуйте ещё раз.",
+            "e_bad": "Неверный код. Отсканируйте QR-код на компьютере ещё раз.",
             "e_off": "Вход по QR сейчас недоступен. Войдите на компьютере по номеру и паролю.",
             "e_net": "Нет соединения. Проверьте интернет и попробуйте ещё раз.",
             "e_app": "Не получилось. Попробуйте ещё раз.",
+            "e_exp": "Код истёк или уже использован. Обновите QR-код на компьютере и отсканируйте его ещё раз.",
+            "e_approved": "Вход по этому коду уже подтверждён.",
+            "e_imp": "Вход под пользователем недоступен: подтверждать вход по QR можно только из своего аккаунта.",
+            "e_ua": "Подтвердить вход можно только в приложении Kliko. Обновите приложение и попробуйте ещё раз.",
+            "ask_g": "Компьютер запросил вход в ваш аккаунт.",
+            "sess": "Сеанс", "u_min": "{n} мин", "u_h": "{n} ч",
             "row": "Сканировать QR для входа",
             "scan_t": "Вход по QR", "scan_h": "Наведите камеру на QR-код «Войти по QR» на экране компьютера",
             "scan_wrong": "Это не код входа Kliko. Откройте на компьютере «Войти» → «Войти по QR».",
@@ -533,21 +620,25 @@ enum ВходПоQRText {
             "confirm": "Кіруді растау", "cancel": "Бас тарту",
             "done_t": "Дайын — компьютерде кіру орындалды",
             "done_s": "Компьютер кабинетіңізді өзі ашады. Бұл сіз болмасаңыз — «Құрылғылар мен кірулер» бөлімінде бөгде сеансты аяқтаңыз.",
-            "done_egov": "Аккаунтта кіруді қорғау қосулы: компьютерде eGov арқылы кіруді растау қалды.",
             "ok": "Дайын", "close": "Жабу", "retry": "Қайталау",
             "need_t": "Кіруді растау үшін аккаунтқа кіріңіз",
             "need_s": "Компьютерде кіруді Kliko-ға кірген телефон растайды. Кіріңіз — терезе қайта ашылады.",
             "sign_in": "Кіру",
             "err_t": "Кіруді растау мүмкін болмады",
-            "e_expired": "Кодтың мерзімі өтті. Компьютерде QR-кодты жаңартып, қайта сканерлеңіз.",
-            "e_used": "Бұл код қолданылған. Компьютерде QR-кодты жаңартыңыз.",
-            "e_denied": "Бұл код бойынша кіру тоқтатылған. Компьютерде QR-кодты жаңартыңыз.",
-            "e_account": "Бұл аккаунтқа қазір кіру мүмкін емес. Қолдауға жазыңыз.",
-            "e_rate": "Әрекет тым көп. Бірнеше минут күтіңіз.",
-            "e_bad": "QR-кодтағы сілтеме толық емес. Кодты қайта сканерлеңіз.",
+            "e_expired": "Кодтың мерзімі өтті — ол 2 минут жарамды. Компьютерде QR-кодты жаңартып, қайта сканерлеңіз.",
+            "e_used": "Бұл код қолданылып қойған. Компьютерде QR-кодты жаңартыңыз.",
+            "e_denied": "Бұл код бойынша кіру қабылданбады. Компьютерде QR-кодты жаңартыңыз.",
+            "e_rate": "Тым жиі. Бір минут күтіп, қайталап көріңіз.",
+            "e_bad": "Код қате. Компьютердегі QR-кодты қайта сканерлеңіз.",
             "e_off": "QR арқылы кіру қазір қолжетімсіз. Компьютерде нөмір мен құпиясөз арқылы кіріңіз.",
             "e_net": "Байланыс жоқ. Интернетті тексеріп, қайталап көріңіз.",
             "e_app": "Болмады. Қайталап көріңіз.",
+            "e_exp": "Кодтың мерзімі өтті немесе ол қолданылып қойған. Компьютерде QR-кодты жаңартып, қайта сканерлеңіз.",
+            "e_approved": "Бұл код бойынша кіру расталып қойған.",
+            "e_imp": "Пайдаланушы атынан кіру режимінде бұл қолжетімсіз: QR арқылы кіруді тек өз аккаунтыңыздан растауға болады.",
+            "e_ua": "Кіруді тек Kliko қосымшасында растауға болады. Қосымшаны жаңартып, қайталап көріңіз.",
+            "ask_g": "Компьютер аккаунтыңызға кіруді сұрады.",
+            "sess": "Сеанс", "u_min": "{n} мин", "u_h": "{n} сағ",
             "row": "Кіру үшін QR сканерлеу",
             "scan_t": "QR арқылы кіру", "scan_h": "Камераны компьютер экранындағы «QR арқылы кіру» кодына бағыттаңыз",
             "scan_wrong": "Бұл Kliko кіру коды емес. Компьютерде «Кіру» → «QR арқылы кіру» бөлімін ашыңыз.",
@@ -563,21 +654,25 @@ enum ВходПоQRText {
             "confirm": "Confirm sign-in", "cancel": "Cancel",
             "done_t": "Done — you're signed in on the computer",
             "done_s": "The computer will open your account by itself. If it wasn't you, end that session in “Devices and sign-ins”.",
-            "done_egov": "Sign-in protection is on for this account: confirm the sign-in with eGov on the computer.",
             "ok": "Done", "close": "Close", "retry": "Try again",
             "need_t": "Sign in to confirm",
             "need_s": "A sign-in on the computer is confirmed by a phone that's already signed in to Kliko. Sign in and this window will open again.",
             "sign_in": "Sign in",
             "err_t": "Couldn't confirm the sign-in",
-            "e_expired": "The code has expired. Refresh the QR code on the computer and scan it again.",
+            "e_expired": "The code has expired — it is valid for 2 minutes. Refresh the QR code on the computer and scan it again.",
             "e_used": "This code has already been used. Refresh the QR code on the computer.",
-            "e_denied": "Sign-in with this code was cancelled. Refresh the QR code on the computer.",
-            "e_account": "This account can't be signed in to right now. Please contact support.",
-            "e_rate": "Too many attempts. Please wait a couple of minutes.",
-            "e_bad": "The link in the QR code is incomplete. Scan the code again.",
+            "e_denied": "Sign-in with this code was declined. Refresh the QR code on the computer.",
+            "e_rate": "Too often. Wait a minute and try again.",
+            "e_bad": "Invalid code. Scan the QR code on the computer again.",
             "e_off": "QR sign-in isn't available right now. Sign in on the computer with your number and password.",
             "e_net": "No connection. Check the internet and try again.",
             "e_app": "Something went wrong. Please try again.",
+            "e_exp": "The code has expired or was already used. Refresh the QR code on the computer and scan it again.",
+            "e_approved": "Sign-in with this code has already been confirmed.",
+            "e_imp": "Not available while signed in as another user: QR sign-in can only be confirmed from your own account.",
+            "e_ua": "Sign-in can only be confirmed in the Kliko app. Update the app and try again.",
+            "ask_g": "A computer has requested to sign in to your account.",
+            "sess": "Session", "u_min": "{n} min", "u_h": "{n} h",
             "row": "Scan QR to sign in",
             "scan_t": "QR sign-in", "scan_h": "Point the camera at the “Sign in with QR” code on the computer screen",
             "scan_wrong": "This isn't a Kliko sign-in code. On the computer open “Sign in” → “Sign in with QR”.",
@@ -593,21 +688,25 @@ enum ВходПоQRText {
             "confirm": "تأكيد الدخول", "cancel": "إلغاء",
             "done_t": "تم — سُجّل الدخول على الحاسوب",
             "done_s": "سيفتح الحاسوب حسابك تلقائيًا. إذا لم تكن أنت، فأنهِ تلك الجلسة من «الأجهزة وعمليات الدخول».",
-            "done_egov": "حماية الدخول مفعّلة في هذا الحساب: أكّد الدخول عبر eGov على الحاسوب.",
             "ok": "تم", "close": "إغلاق", "retry": "إعادة المحاولة",
             "need_t": "سجّل الدخول للتأكيد",
             "need_s": "يؤكَّد الدخول على الحاسوب من هاتف مسجَّل الدخول في Kliko. سجّل الدخول وستُفتح هذه النافذة من جديد.",
             "sign_in": "تسجيل الدخول",
             "err_t": "تعذّر تأكيد الدخول",
-            "e_expired": "انتهت صلاحية الرمز. حدّث رمز QR على الحاسوب وامسحه من جديد.",
+            "e_expired": "انتهت صلاحية الرمز — فهو صالح لمدة دقيقتين. حدّث رمز QR على الحاسوب وامسحه من جديد.",
             "e_used": "استُخدم هذا الرمز من قبل. حدّث رمز QR على الحاسوب.",
-            "e_denied": "أُلغي الدخول بهذا الرمز. حدّث رمز QR على الحاسوب.",
-            "e_account": "لا يمكن الدخول إلى هذا الحساب حاليًا. راسل الدعم.",
-            "e_rate": "محاولات كثيرة جدًا. انتظر بضع دقائق.",
-            "e_bad": "الرابط في رمز QR غير مكتمل. امسح الرمز مرة أخرى.",
+            "e_denied": "رُفض الدخول بهذا الرمز. حدّث رمز QR على الحاسوب.",
+            "e_rate": "محاولات متكررة جدًا. انتظر دقيقة وحاول مجددًا.",
+            "e_bad": "رمز غير صحيح. امسح رمز QR على الحاسوب مرة أخرى.",
             "e_off": "الدخول عبر QR غير متاح الآن. سجّل الدخول على الحاسوب برقمك وكلمة المرور.",
             "e_net": "لا يوجد اتصال. تحقّق من الإنترنت وحاول مجددًا.",
             "e_app": "لم ينجح ذلك. حاول مجددًا.",
+            "e_exp": "انتهت صلاحية الرمز أو استُخدم من قبل. حدّث رمز QR على الحاسوب وامسحه من جديد.",
+            "e_approved": "تم تأكيد الدخول بهذا الرمز من قبل.",
+            "e_imp": "غير متاح أثناء الدخول باسم مستخدم آخر: لا يمكن تأكيد الدخول عبر QR إلا من حسابك.",
+            "e_ua": "لا يمكن تأكيد الدخول إلا في تطبيق Kliko. حدّث التطبيق وحاول مجددًا.",
+            "ask_g": "طلب حاسوب تسجيل الدخول إلى حسابك.",
+            "sess": "الجلسة", "u_min": "{n} دقيقة", "u_h": "{n} ساعة",
             "row": "مسح QR لتسجيل الدخول",
             "scan_t": "الدخول عبر QR", "scan_h": "وجّه الكاميرا إلى رمز «الدخول عبر QR» على شاشة الحاسوب",
             "scan_wrong": "هذا ليس رمز دخول Kliko. افتح على الحاسوب «تسجيل الدخول» ← «الدخول عبر QR».",
