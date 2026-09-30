@@ -31,6 +31,10 @@ targets:
       # слежки. Лежит вне Sources и подключён ресурсом явно — чтобы не зависеть от того, как XcodeGen понимает .xcprivacy.
       - path: Privacy/Kliko/PrivacyInfo.xcprivacy
         buildPhase: resources
+      # СТАРТОВЫЕ ДАННЫЕ (СтартовыеДанные, Sources/Native/System/StartSeed.swift): разделы, справочники подачи, марки авто,
+      # типы запчастей — чтобы первый запуск после установки не ждал сеть. Обновляет scripts/fetch_seed.sh.
+      - path: Seed
+        buildPhase: resources
     dependencies:
       - target: KlikoWidgets        # встраиваем виджет-расширение в приложение
     # Схема Kliko (её же собирает CI: -scheme Kliko). Своё здесь одно — файл StoreKit для запуска из Xcode.

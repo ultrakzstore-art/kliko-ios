@@ -225,10 +225,19 @@ extension ПодачаМодель {
         guard маркиАвто.isEmpty else { return }
         маркиНеДоступны = false
         typealias A = МоиОбъявленияAPI
+        /* Скорость: марки из сборки (Seed/seed-auto.json, тот же ответ ?brands=1) — сразу; свежие с сайта подменят. */
+        if let стартовые = СтартовыеДанные.объект("seed-auto") { принятьМарки(стартовые) }
         guard let j = try? await A.получить("/api/auto_models.php?brands=1", отКорня: true), A.да(j["ok"]) else {
-            маркиНеДоступны = true
+            маркиНеДоступны = маркиАвто.isEmpty
             return
         }
+        принятьМарки(j)
+        маркиНеДоступны = маркиАвто.isEmpty
+    }
+
+    /// {groups:[{region, brands:[{brand}]}]} → марки по порядку и группы; пустой ответ прежние не стирает.
+    private func принятьМарки(_ j: [String: Any]) {
+        typealias A = МоиОбъявленияAPI
         var список: [String] = []
         var группы: [ГруппаМарок] = []
         var были = Set<String>()
@@ -252,7 +261,7 @@ extension ПодачаМодель {
                 группы.append(ГруппаМарок(регион: подпись, марки: свои))
             }
         }
-        маркиНеДоступны = список.isEmpty
+        guard !список.isEmpty else { return }
         маркиАвто = список
         группыМарок = группы
     }
@@ -265,7 +274,8 @@ extension ПодачаМодель {
         typealias A = МоиОбъявленияAPI
         let код = чистая.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? чистая
         guard let j = try? await A.получить("/api/auto_models.php?brand=" + код, отКорня: true), A.да(j["ok"]) else {
-            return []
+            /* Нет сети — модели из сборки, без поколений; в кэш не кладём: следующий раз спросим сайт снова. */
+            return СтартовыеДанные.моделиМарки(чистая).map { МодельАвто(имя: $0.имя, поколения: [], кузов: $0.кузов) }
         }
         let модели = ((j["models"] as? [Any]) ?? []).compactMap { запись -> МодельАвто? in
             guard let м = запись as? [String: Any] else { return nil }
@@ -297,7 +307,15 @@ extension ПодачаМодель {
     func загрузитьТипыЗапчастей() async {
         guard типыЗапчастей.isEmpty else { return }
         typealias A = МоиОбъявленияAPI
+        /* Скорость: типы из сборки (Seed/seed-parts.json) — сразу; свежие с сайта подменят. */
+        if let стартовые = СтартовыеДанные.объект("seed-parts") { принятьТипыЗапчастей(стартовые) }
         guard let j = try? await A.получить("/api/parts_types.php?syn=1", отКорня: true) else { return }
+        принятьТипыЗапчастей(j)
+    }
+
+    /// {groups:[{items:[{k, n}]}]} → варианты «Что за деталь»; пустой ответ прежние не стирает.
+    private func принятьТипыЗапчастей(_ j: [String: Any]) {
+        typealias A = МоиОбъявленияAPI
         var список: [ВариантПоля] = []
         for группа in (j["groups"] as? [Any]) ?? [] {
             guard let г = группа as? [String: Any] else { continue }
@@ -307,6 +325,7 @@ extension ПодачаМодель {
                 if !ключ.isEmpty { список.append(ВариантПоля(ключ: ключ, подпись: A.строка(п["n"]))) }
             }
         }
+        guard !список.isEmpty else { return }
         типыЗапчастей = список
     }
 
