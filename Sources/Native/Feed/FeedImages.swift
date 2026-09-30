@@ -62,10 +62,9 @@ final class КартинкиЛенты {
         } else {
             номерЗагрузки += 1
             let задача = Task<UIImage?, Never> {
-                guard let ответ = try? await URLSession.shared.data(from: адрес) else { return nil }
-                if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+                guard let данные = await КартинкиЛенты.скачать(адрес, пикселей: пикселей, заполнить: заполнить) else { return nil }
                 if Task.isCancelled { return nil }
-                guard let картинка = await КартинкиЛенты.уменьшить(ответ.0, пикселей: пикселей, заполнить: заполнить)
+                guard let картинка = await КартинкиЛенты.уменьшить(данные, пикселей: пикселей, заполнить: заполнить)
                 else { return nil }
                 self.память.setObject(картинка, forKey: ключ as NSString, cost: КартинкиЛенты.вес(картинка))
                 return картинка
@@ -95,12 +94,11 @@ final class КартинкиЛенты {
             номерЗагрузки += 1
             let номер = номерЗагрузки
             let задача = Task<UIImage?, Never>(priority: .utility) {
-                let ответ = try? await URLSession.shared.data(from: адрес)
+                let данные = await КартинкиЛенты.скачать(адрес, пикселей: пикселей, заполнить: заполнить)
                 defer { if self.вПути[ключ]?.номер == номер { self.вПути[ключ] = nil } }
-                guard let ответ else { return nil }
-                if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+                guard let данные else { return nil }
                 if Task.isCancelled { return nil }
-                guard let картинка = await КартинкиЛенты.уменьшить(ответ.0, пикселей: пикселей, заполнить: заполнить)
+                guard let картинка = await КартинкиЛенты.уменьшить(данные, пикселей: пикселей, заполнить: заполнить)
                 else { return nil }
                 self.память.setObject(картинка, forKey: ключ as NSString, cost: КартинкиЛенты.вес(картинка))
                 return картинка
@@ -120,6 +118,57 @@ final class КартинкиЛенты {
             идёт.задача.cancel()
             вПути[ключ] = nil
         }
+    }
+
+    // MARK: - Лёгкие фото (img.php, правка 102 сервера)
+
+    /// Адрес уменьшенной копии на img.php или nil — качать исходный адрес: рубильник выключен, фото не из img/uploads
+    /// сайта, нужно больше 1280 точек (полный экран — оригинал), превью _t и так не больше нужного.
+    /// Ключ памяти остаётся по исходному адресу: ячейка и «заранее» делят одну загрузку, как раньше.
+    nonisolated static func адресЛёгкого(_ адрес: URL, пикселей: Int, заполнить: Bool) -> URL? {
+        guard Config.лёгкиеФото else { return nil }
+        /* Ширины, которые делает img.php сайта (наибольшая сторона); другие сервер округляет вверх до этих же.
+           Превью ленты (_t) — около 420 точек: его только уменьшаем, крупнее не просим — трафик не должен расти. */
+        let ширины = [160, 320, 480, 640, 960, 1280]
+        let ширинаПревью = 420
+        let полный = адрес.absoluteURL
+        guard let хост = полный.host?.lowercased(), let свой = Config.apiBase.host?.lowercased(),
+              хост == свой || хост == "www." + свой,
+              полный.query == nil else { return nil }
+        let путь = полный.path
+        guard путь.hasPrefix("/img/uploads/"), !путь.contains("..") else { return nil }
+        let расширение = полный.pathExtension.lowercased()
+        guard ["jpg", "jpeg", "png", "webp"].contains(расширение) else { return nil }
+        /* «Заполнить» обрезает снимок по ячейке: короткая сторона 4:3 должна покрыть её — длинная на треть больше. */
+        let нужно = заполнить ? (пикселей * 4 + 2) / 3 : пикселей
+        guard let ширина = ширины.first(where: { $0 >= нужно }) else { return nil }
+        let имя = полный.deletingPathExtension().lastPathComponent
+        if имя.hasSuffix("_t") && ширина >= ширинаПревью { return nil }
+        var части = URLComponents()
+        части.scheme = полный.scheme ?? "https"
+        части.host = полный.host
+        части.port = полный.port
+        части.path = "/img.php"
+        части.queryItems = [URLQueryItem(name: "src", value: String(путь.dropFirst())),
+                            URLQueryItem(name: "w", value: String(ширина))]
+        return части.url
+    }
+
+    /// Байты картинки: при включённых лёгких фото — с img.php (Accept с WebP/AVIF), не вышло (не 2xx, нет сети) —
+    /// исходный адрес. nil — не скачалось вовсе.
+    nonisolated private static func скачать(_ адрес: URL, пикселей: Int, заполнить: Bool) async -> Data? {
+        if let лёгкий = адресЛёгкого(адрес, пикселей: пикселей, заполнить: заполнить) {
+            var запрос = URLRequest(url: лёгкий)
+            запрос.setValue("image/avif,image/webp,image/jpeg;q=0.8,image/png;q=0.8", forHTTPHeaderField: "Accept")
+            if let ответ = try? await URLSession.shared.data(for: запрос),
+               let http = ответ.1 as? HTTPURLResponse, (200..<300).contains(http.statusCode), !ответ.0.isEmpty {
+                return ответ.0
+            }
+            if Task.isCancelled { return nil }
+        }
+        guard let ответ = try? await URLSession.shared.data(from: адрес) else { return nil }
+        if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+        return ответ.0
     }
 
     /// Сколько байт занимает растр — цена для NSCache.

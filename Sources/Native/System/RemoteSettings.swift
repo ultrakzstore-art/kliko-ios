@@ -19,10 +19,10 @@ import SwiftUI
  Ключи — те же, что в белом списке сервера (inc/app_remote_config.php): чужие ключи отбрасываются.
  */
 enum НастройкиСервера {
-    /// Рубильники, которые читает приложение. banner_on — показ полосы над лентой.
+    /// Рубильники, которые читает приложение. banner_on — показ полосы над лентой; img_resize — лёгкие фото (img.php).
     static let ключиФлагов: Set<String> = [
         "checks_rk", "ai_recognize", "native_session", "listing_chat", "chat_send", "listing_map",
-        "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on"
+        "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize"
     ]
     /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store.
     static let ключиТекстов: Set<String> = [
