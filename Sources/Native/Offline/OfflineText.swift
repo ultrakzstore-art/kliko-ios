@@ -23,12 +23,16 @@ enum OfflineText {
 
     private static let тексты: [String: [String: String]] = [
         "ru": ["copy": "Сохранённая копия · %@",
-               "copy_sub": "Нет связи с сайтом — цена и наличие могли измениться."],
+               "copy_sub": "Нет связи с сайтом — цена и наличие могли измениться.",
+               "list_copy": "Нет связи — показан сохранённый список"],
         "kk": ["copy": "Сақталған көшірме · %@",
-               "copy_sub": "Сайтпен байланыс жоқ — бағасы мен бар-жоғы өзгеруі мүмкін."],
+               "copy_sub": "Сайтпен байланыс жоқ — бағасы мен бар-жоғы өзгеруі мүмкін.",
+               "list_copy": "Байланыс жоқ — сақталған тізім көрсетілуде"],
         "en": ["copy": "Saved copy · %@",
-               "copy_sub": "Can't reach the website — the price and availability may have changed."],
+               "copy_sub": "Can't reach the website — the price and availability may have changed.",
+               "list_copy": "No connection — showing the saved list"],
         "ar": ["copy": "نسخة محفوظة · %@",
-               "copy_sub": "تعذّر الاتصال بالموقع — ربما تغيّر السعر أو التوفر."]
+               "copy_sub": "تعذّر الاتصال بالموقع — ربما تغيّر السعر أو التوفر.",
+               "list_copy": "لا يوجد اتصال — نعرض القائمة المحفوظة"]
     ]
 }
