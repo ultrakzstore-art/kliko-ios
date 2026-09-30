@@ -38,10 +38,109 @@ enum ОкноПродавца {
         return ВитринаПродавцаAPI.годный(номер) ? номер : nil
     }
 
-    /// Для корневого «открыть»: страница продавца — своя витрина, true; иначе false.
+    /// Для корневого «открыть»: страница продавца — своя витрина, true; иначе false. Ссылка по нику (/s/<ник>,
+    /// seller.php?u=<ник>) — тоже витрина: номер узнаётся по нику (у сайта ?u= главнее ?id=).
     static func перехватить(_ адрес: URL) -> Bool {
+        if let ник = ник(из: адрес) { return открыть(ник: ник) }
         guard let номер = номер(из: адрес) else { return false }
         return открыть(id: номер)
+    }
+
+    /**
+     Ник витрины из короткой ссылки магазина: /s/<ник> (.htaccess сайта: → seller.php?u=<ник>) и /seller.php?u=<ник>, с
+     /kz/<язык> впереди или без. Нормализация — store_handle_norm сайта: строчные, только a-z, 0-9 и «-», без «-» по краям.
+     */
+    nonisolated static func ник(из адрес: URL) -> String? {
+        guard let части = URLComponents(url: адрес.absoluteURL, resolvingAgainstBaseURL: false) else { return nil }
+        if let хост = части.host?.lowercased(), хост != "kliko.kz" && хост != "www.kliko.kz" { return nil }
+        guard (части.fragment ?? "").isEmpty else { return nil }
+        let путь = части.path
+        var сырой = ""
+        if путь.range(of: "^(/[a-z]{2}/[a-z]{2})?/s/[A-Za-z0-9-]+/?$", options: .regularExpression) != nil {
+            сырой = путь.split(separator: "/").last.map(String.init) ?? ""
+        } else if путь.range(of: "^(/[a-z]{2}/[a-z]{2})?/seller(\\.php)?/?$", options: .regularExpression) != nil {
+            сырой = (части.queryItems ?? []).first(where: { $0.name == "u" })?.value ?? ""
+        } else {
+            return nil
+        }
+        let допустимые = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
+        let чистый = String(сырой.lowercased().filter { допустимые.contains($0) })
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        guard !чистый.isEmpty, чистый.count <= 40 else { return nil }
+        return чистый
+    }
+
+    /// Витрина по нику: пока номер ищется — «Загружаем витрину…», не нашёлся — «Продавец не найден» (своим экраном).
+    @discardableResult
+    static func открыть(ник: String) -> Bool {
+        ПоверхВсего.показать { закрыть in
+            ЭкранВитриныПоНику(ник: ник, закрыть: закрыть)
+        }
+        return true
+    }
+}
+
+/// Короткая ссылка магазина (/s/<ник>): номер продавца по нику, затем обычная витрина; нет такого — «Продавец не найден».
+struct ЭкранВитриныПоНику: View {
+    let ник: String
+    let закрыть: () -> Void
+
+    @State private var итог: ВитринаПродавцаAPI.ПоискПоНику? = nil
+    @State private var попытка = 0
+
+    private func т(_ ключ: String) -> String { StorefrontText.т(ключ) }
+
+    private var найденный: String? {
+        if case .найден(let номер)? = итог { return номер }
+        return nil
+    }
+
+    var body: some View {
+        if let номер = найденный {
+            ЭкранВитриныПродавца(продавецID: номер, имя: "", закрыть: закрыть)
+        } else {
+            NavigationStack {
+                ожидание
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Theme.фонСтраницы.ignoresSafeArea())
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbarBackground(Theme.поверхность, for: .navigationBar)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(т("close")) { закрыть() }
+                        }
+                    }
+            }
+            .tint(Theme.акцент)
+            .task(id: попытка) { await найти() }
+        }
+    }
+
+    @ViewBuilder
+    private var ожидание: some View {
+        switch итог {
+        case .нетПродавца?:
+            ПустоСайта(значок: "person.crop.circle.badge.questionmark", заголовок: т("nf_title"),
+                       подпись: т("nf_sub"), кнопка: т("close"), действие: { закрыть() })
+        case .нетСвязи?:
+            ПустоСайта(значок: "wifi.exclamationmark", заголовок: т("no_conn"), кнопка: т("retry"),
+                       действие: { попытка += 1 })
+        default:
+            HStack(spacing: 10) {
+                SiteSpinner()
+                Text(т("loading"))
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.текстВторой)
+            }
+        }
+    }
+
+    private func найти() async {
+        итог = nil
+        let пришло = await ВитринаПродавцаAPI.номерПоНику(ник)
+        guard !Task.isCancelled else { return }
+        итог = пришло
     }
 }
 

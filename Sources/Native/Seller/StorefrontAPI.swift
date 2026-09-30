@@ -237,3 +237,41 @@ enum ВитринаПродавцаAPI {
         в.акцент = в.товары.lazy.compactMap { $0.акцентМагазина }.first
     }
 }
+
+// MARK: - Витрина по нику (/s/<ник>, seller.php?u=<ник>)
+
+extension ВитринаПродавцаAPI {
+    enum ПоискПоНику: Equatable {
+        case найден(String)
+        case нетПродавца
+        case нетСвязи
+    }
+
+    /**
+     Ник → номер продавца. JSON-вопроса у сайта нет: seller.php сам ищет продавца по store_handle (?u=) и печатает его
+     номер в разметку (const SELLER_ID='…', var SL_SELLER = "…"); не нашёл или витрина скрыта — уводит на
+     marketplace.php, где номера нет. Поэтому — одна страница seller.php?u=<ник> с куками веб-сессии, как у витрины.
+     */
+    static func номерПоНику(_ ник: String) async -> ПоискПоНику {
+        let хвост = ник.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ник
+        guard let адрес = Config.страницаСайта("seller.php?u=" + хвост) else { return .нетПродавца }
+        let куки = await SiteSession.куки()
+        var запрос = URLRequest(url: адрес)
+        запрос.httpShouldHandleCookies = false
+        запрос.setValue("text/html", forHTTPHeaderField: "Accept")
+        for (поле, значение) in куки { запрос.setValue(значение, forHTTPHeaderField: поле) }
+        guard let пришло = try? await сессия.data(for: запрос) else { return .нетСвязи }
+        if let http = пришло.1 as? HTTPURLResponse {
+            if http.statusCode >= 500 { return .нетСвязи }
+            if !(200..<300).contains(http.statusCode) { return .нетПродавца }
+        }
+        guard let html = String(data: пришло.0, encoding: .utf8) else { return .нетПродавца }
+        for метка in ["SELLER_ID='", "SL_SELLER = \""] {
+            guard let начало = html.range(of: метка) else { continue }
+            let хвостСтроки = html[начало.upperBound...].prefix(80)
+            let номер = String(хвостСтроки.prefix(while: { $0 != "'" && $0 != "\"" }))
+            if годный(номер) { return .найден(номер) }
+        }
+        return .нетПродавца
+    }
+}

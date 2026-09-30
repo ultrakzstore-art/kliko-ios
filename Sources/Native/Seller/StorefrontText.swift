@@ -22,7 +22,9 @@ enum StorefrontText {
             "empty_sub": "Подпишитесь — сообщим, когда продавец выложит новое.", "close": "Закрыть",
             "share": "Поделиться", "since": "На Kliko с %@",
             "deals": "сделок", "rating": "оценка", "followers": "подписчиков",
-            "more_goods": "Показаны последние объявления продавца"
+            "more_goods": "Показаны последние объявления продавца",
+            "nf_title": "Продавец не найден",
+            "nf_sub": "Такой ссылки на витрину нет — возможно, продавец сменил её или удалил аккаунт."
         ],
         "kk": [
             "seller": "Сатушы", "shop": "Дүкен", "verified": "Тексерілген сатушы", "new_seller": "Жаңа сатушы",
@@ -32,7 +34,9 @@ enum StorefrontText {
             "empty": "Әзірге хабарландыру жоқ", "empty_sub": "Жазылыңыз — сатушы жаңасын қосқанда хабарлаймыз.",
             "close": "Жабу", "share": "Бөлісу", "since": "Kliko-да %@ бастап",
             "deals": "мәміле", "rating": "баға", "followers": "жазылушы",
-            "more_goods": "Сатушының соңғы хабарландырулары көрсетілген"
+            "more_goods": "Сатушының соңғы хабарландырулары көрсетілген",
+            "nf_title": "Сатушы табылмады",
+            "nf_sub": "Витринаның мұндай сілтемесі жоқ — сатушы оны өзгерткен немесе аккаунтын жойған болуы мүмкін."
         ],
         "en": [
             "seller": "Seller", "shop": "Shop", "verified": "Verified seller", "new_seller": "New seller",
@@ -42,7 +46,9 @@ enum StorefrontText {
             "empty_sub": "Follow — we'll let you know when the seller posts something new.", "close": "Close",
             "share": "Share", "since": "On Kliko since %@",
             "deals": "deals", "rating": "rating", "followers": "followers",
-            "more_goods": "Showing the seller's latest listings"
+            "more_goods": "Showing the seller's latest listings",
+            "nf_title": "Seller not found",
+            "nf_sub": "There is no storefront at this link — the seller may have changed it or deleted the account."
         ],
         "ar": [
             "seller": "البائع", "shop": "متجر", "verified": "بائع موثّق", "new_seller": "بائع جديد",
@@ -52,7 +58,9 @@ enum StorefrontText {
             "empty_sub": "تابِع البائع وسنخبرك عندما ينشر جديدًا.", "close": "إغلاق",
             "share": "مشاركة", "since": "على Kliko منذ %@",
             "deals": "صفقات", "rating": "التقييم", "followers": "متابعون",
-            "more_goods": "تُعرض أحدث إعلانات البائع"
+            "more_goods": "تُعرض أحدث إعلانات البائع",
+            "nf_title": "لم يتم العثور على البائع",
+            "nf_sub": "لا يوجد متجر بهذا الرابط — ربما غيّره البائع أو حذف حسابه."
         ]
     ]
 }
