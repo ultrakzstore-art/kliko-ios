@@ -38,6 +38,9 @@ import Foundation
      карточек (kind:'text'), только на колонках, что отбирает сервер (MKF_SRV_LIST: cpu→gear, gpu→fuel, ram→ramv,
      storage→stov, значения через «|», как _mkApiQS);
    · услуги — без состояния (cat_condition_mode 'none': сервер cond у них не применяет).
+   · прочая электроника (ТВ, мониторы, принтеры, наушники, фото и видео, приставки, часы, комплектующие, оргтехника…) —
+     набор раздела из inc/e_specs.php (Filters/ElectronicsSpecs.swift): значения чипами (gear, fuel, ramv, stov через «|»),
+     числа на ram и storage — «от — до» (kmin/kmax, emin/emax), год выпуска — ymin/ymax.
 
  Сменили раздел — фильтры раздела (всё, кроме порядка, состояния, «Проверенных» и «Только с фото») уходят в память ленты
  (FeedModel), а у нового раздела возвращаются те, что были выбраны в нём прежде. Новый поиск и смена города фильтры не
@@ -192,8 +195,14 @@ struct ФасетРаздела: Hashable, Sendable {
     let колонка: String
     /// Ключ FilterText подписи («Размер», «Цвет», …).
     let ключПодписи: String
+    /// Электроника (inc/e_specs.php): значения справочника вместо «частых из карточек» и готовая подпись.
+    var значения: [String] = []
+    var заголовок: String = ""
 
-    var подпись: String { FilterText.т(ключПодписи) }
+    var подпись: String { заголовок.isEmpty ? FilterText.т(ключПодписи) : заголовок }
+
+    /// Набор из справочника электроники: значения показываем на языке телефона (ev_).
+    var электроника: Bool { !значения.isEmpty }
 
     /// MKF_SRV_LIST сайта: какой параметр отбирает эту колонку списком.
     var параметр: String { ФасетРаздела.параметрКолонки(колонка) }
@@ -238,6 +247,8 @@ enum ВидФильтра: Hashable, Sendable {
     case озу
     case накопитель
     case дискретная
+    /// «От — до» характеристики электроники (колонка ram или storage).
+    case характеристика(String)
     /// Колонка и значение фасета MKF_SPECS.
     case фасет(String, String)
     /// Поиск, раздел и «Рядом со мной» — чипы mkRenderActive тоже, но живут не в фильтрах: их «×» — в FeedModel.
@@ -300,6 +311,10 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
     var дискретная = false
     /// Фасеты MKF_SPECS: колонка → выбранные значения (уходят списком через «|»).
     var фасеты: [String: [String]] = [:]
+    /// Электроника (inc/e_specs.php): «от» и «до» числовой характеристики — колонка (ram, storage) → значение
+    /// справочника («27», «512GB»); в запрос — числом (kmin/kmax, emin/emax).
+    var характеристикиОт: [String: String] = [:]
+    var характеристикиДо: [String: String] = [:]
 
     /// Страница ленты у сайта — per=48 (mkApiNext).
     static let наСтранице = 48
@@ -320,7 +335,7 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
     var безРазделов: Bool {
         ступениОт.isEmpty && ступениДо.isEmpty && сделка.isEmpty && признакиЖилья.isEmpty && размещение.isEmpty
             && типыДеталей.isEmpty && процессор.isEmpty && озуОт == nil && накопительОт == nil && !дискретная
-            && фасеты.values.allSatisfy { $0.isEmpty }
+            && фасеты.values.allSatisfy { $0.isEmpty } && характеристикиОт.isEmpty && характеристикиДо.isEmpty
     }
 
     /// Ни марки, ни модели, ни коробки, ни топлива.
@@ -352,6 +367,7 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         if накопительОт != nil { n += 1 }
         if дискретная { n += 1 }
         n += фасеты.values.filter { !$0.isEmpty }.count
+        n += характеристикиОт.count + характеристикиДо.count
         return n
     }
 
@@ -414,6 +430,17 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
             поля.append(URLQueryItem(name: ФасетРаздела.параметрКолонки(колонка),
                                      value: значения.joined(separator: "|")))
         }
+        /* Числа электроники — MKF_SRV_RANGE сайта: ram → kmin/kmax, storage → emin/emax. */
+        for колонка in ["ram", "storage"] {
+            let имяОт = колонка == "ram" ? "kmin" : "emin"
+            let имяДо = колонка == "ram" ? "kmax" : "emax"
+            if let v = характеристикиОт[колонка], let n = ХарактеристикиЭлектроники.вЧисло(v) {
+                поля.append(URLQueryItem(name: имяОт, value: n))
+            }
+            if let v = характеристикиДо[колонка], let n = ХарактеристикиЭлектроники.вЧисло(v) {
+                поля.append(URLQueryItem(name: имяДо, value: n))
+            }
+        }
         return поля
     }
 
@@ -428,6 +455,7 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
     /// колонка year); у участка его нет.
     static func годДоступен(_ раздел: String) -> Bool {
         машины(раздел) || (РазделыСайта.корень(раздел) == "realty" && !РазделыСайта.внутри(раздел, ["land"]))
+            || ХарактеристикиЭлектроники.набор(раздел).contains { $0.колонка == "year" }
     }
 
     /// «Год выпуска» у транспорта, «Год постройки» у жилья (fac_build_year).
@@ -544,6 +572,13 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
      сервер списком не отбирает — его нет.
      */
     static func фасеты(_ раздел: String) -> [ФасетРаздела] {
+        /* Электроника — из справочника (mkFacetSet сайта: _mkESpecFacets раньше MKF_SPECS). */
+        let электроника = ХарактеристикиЭлектроники.набор(раздел).filter { $0.чипами }
+        if !электроника.isEmpty {
+            return электроника.map { х in
+                ФасетРаздела(колонка: х.колонка, ключПодписи: "", значения: х.значения, заголовок: х.подпись)
+            }
+        }
         if РазделыСайта.внутри(раздел, ["smartphones", "tablets"]) {
             return [ФасетРаздела(колонка: "cpu", ключПодписи: "fs_chipset")]
         }
@@ -579,6 +614,11 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         default:
             return []
         }
+    }
+
+    /// Числовые характеристики электроники «от — до» (ram, storage) — в порядке справочника.
+    static func диапазоныХарактеристик(_ раздел: String) -> [ХарактеристикаЭлектроники] {
+        ХарактеристикиЭлектроники.набор(раздел).filter { $0.диапазоном }
     }
 
     /// Значения фасета — «топ по частоте» из загруженных карточек, как чипы kind:'text' сайта (до 12), и всегда
@@ -662,6 +702,9 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         }
         let колонки = Set(Self.фасеты(раздел).map { $0.колонка })
         итог.фасеты = итог.фасеты.filter { колонки.contains($0.key) && !$0.value.isEmpty }
+        let числа = Set(Self.диапазоныХарактеристик(раздел).map { $0.колонка })
+        итог.характеристикиОт = итог.характеристикиОт.filter { числа.contains($0.key) }
+        итог.характеристикиДо = итог.характеристикиДо.filter { числа.contains($0.key) }
         return итог
     }
 
@@ -700,6 +743,8 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         итог.накопительОт = nil
         итог.дискретная = false
         итог.фасеты = [:]
+        итог.характеристикиОт = [:]
+        итог.характеристикиДо = [:]
         return итог
     }
 
@@ -730,6 +775,9 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         case .озу:                   озуОт = nil
         case .накопитель:            накопительОт = nil
         case .дискретная:            дискретная = false
+        case .характеристика(let колонка):
+            характеристикиОт[колонка] = nil
+            характеристикиДо[колонка] = nil
         case .фасет(let колонка, let значение):
             var список = фасеты[колонка] ?? []
             список.removeAll { $0 == значение }
@@ -831,12 +879,20 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         if дискретная {
             итог.append(АктивныйФильтр(вид: .дискретная, текст: FilterText.т("discrete")))
         }
-        let подписи = Dictionary(Self.фасеты(раздел).map { ($0.колонка, $0.подпись) }, uniquingKeysWith: { а, _ in а })
+        let наборФасетов = Self.фасеты(раздел)
+        let подписи = Dictionary(наборФасетов.map { ($0.колонка, $0.подпись) }, uniquingKeysWith: { а, _ in а })
+        let электроника = наборФасетов.contains { $0.электроника }
         for колонка in ["cpu", "gpu", "ram", "storage"] {
             for значение in фасеты[колонка] ?? [] {
-                let текст = подписи[колонка].map { String(format: формат, $0, значение) } ?? значение
+                let показ = электроника ? ХарактеристикиЭлектроники.показ(значение) : значение
+                let текст = подписи[колонка].map { String(format: формат, $0, показ) } ?? показ
                 итог.append(АктивныйФильтр(вид: .фасет(колонка, значение), текст: текст))
             }
+        }
+        for х in Self.диапазоныХарактеристик(раздел) {
+            guard let строка = Self.диапазонХарактеристики(характеристикиОт[х.колонка], характеристикиДо[х.колонка])
+            else { continue }
+            итог.append(АктивныйФильтр(вид: .характеристика(х.колонка), текст: String(format: формат, х.подпись, строка)))
         }
         return итог
     }
@@ -847,6 +903,16 @@ struct ФильтрыЛенты: Equatable, Hashable, Sendable {
         case let (.some(а), .some(б)): return д.запись(а) + "–" + д.запись(б)
         case let (.some(а), .none):    return String(format: FilterText.т("from_x"), д.запись(а))
         case let (.none, .some(б)):    return String(format: FilterText.т("to_x"), д.запись(б))
+        case (.none, .none):           return nil
+        }
+    }
+
+    /// «от 27», «до 1TB» или «27–32» — значения справочника электроники как есть.
+    static func диапазонХарактеристики(_ от: String?, _ до: String?) -> String? {
+        switch (от, до) {
+        case let (.some(а), .some(б)): return а + "–" + б
+        case let (.some(а), .none):    return String(format: FilterText.т("from_x"), а)
+        case let (.none, .some(б)):    return String(format: FilterText.т("to_x"), б)
         case (.none, .none):           return nil
         }
     }

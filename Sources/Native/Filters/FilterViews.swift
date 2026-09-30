@@ -502,6 +502,7 @@ struct ЛистФильтров: View {
             if ФильтрыЛенты.годДоступен(раздел) { группаГода }
             if ФильтрыЛенты.комнатыДоступны(раздел) { группаКомнат }
             ForEach(ФильтрыЛенты.ступени(раздел), id: \.self) { д in группаСтупеней(д) }
+            ForEach(ФильтрыЛенты.диапазоныХарактеристик(раздел), id: \.self) { х in группаХарактеристики(х) }
             if ФильтрыЛенты.автоДоступно(раздел) { группыАвто }
             if ФильтрыЛенты.размещениеДоступно(раздел) { группаРазмещения }
             ForEach(ФильтрыЛенты.группыПризнаков(раздел, сделка: модель.фильтры.сделка, аренда: модель.аренда),
@@ -603,7 +604,7 @@ struct ЛистФильтров: View {
         return ГруппаФильтра(FilterText.т("part_type")) {
             ПолеВыбораФильтра(подпись: FilterText.т("part_type"),
                               значение: типы.isEmpty ? nil : типы.map { $0.название }.joined(separator: ", "),
-                              подсказка: nil, доступно: true) {
+                              подсказка: nil, доступно: true, пусто: FilterText.т("any_m")) {
                 открытьВыбор(.типДетали)
             }
         }
@@ -630,6 +631,20 @@ struct ЛистФильтров: View {
                 применить { ф in
                     ф.ступениОт[д] = от
                     ф.ступениДо[д] = до
+                }
+            }
+        }
+    }
+
+    /// Число электроники (диагональ, мощность, накопитель…): «от» и «до» значениями справочника (inc/e_specs.php).
+    private func группаХарактеристики(_ х: ХарактеристикаЭлектроники) -> some View {
+        ГруппаФильтра(х.подпись) {
+            ПараХарактеристики(подпись: х.подпись, значения: х.значения,
+                               от: модель.фильтры.характеристикиОт[х.колонка],
+                               до: модель.фильтры.характеристикиДо[х.колонка]) { от, до in
+                применить { ф in
+                    ф.характеристикиОт[х.колонка] = от
+                    ф.характеристикиДо[х.колонка] = до
                 }
             }
         }
@@ -709,15 +724,19 @@ struct ЛистФильтров: View {
     }
 
     /// Фасет MKF_SPECS (kind:'text'): значения — из загруженных карточек раздела; нет ни одного — группы нет, как у сайта.
+    /// У электроники — значения справочника (и выбранные, если их там нет), словами на языке телефона.
     @ViewBuilder
     private func группаФасета(_ фасет: ФасетРаздела) -> some View {
         let выбранные = модель.фильтры.фасеты[фасет.колонка] ?? []
-        let значения = ФильтрыЛенты.значенияФасета(фасет.колонка, из: модель.items, выбранные: выбранные)
+        let значения = фасет.электроника
+            ? выбранные.filter { !фасет.значения.contains($0) } + фасет.значения
+            : ФильтрыЛенты.значенияФасета(фасет.колонка, из: модель.items, выбранные: выбранные)
         if !значения.isEmpty {
             ГруппаФильтра(фасет.подпись) {
                 ПереносЧипов {
                     ForEach(значения, id: \.self) { значение in
-                        ВариантФильтра(текст: значение, выбран: выбранные.contains(значение)) {
+                        ВариантФильтра(текст: фасет.электроника ? ХарактеристикиЭлектроники.показ(значение) : значение,
+                                       выбран: выбранные.contains(значение)) {
                             применить { ф in
                                 var список = ф.фасеты[фасет.колонка] ?? []
                                 ФильтрыЛенты.переключить(значение, в: &список)
@@ -963,13 +982,15 @@ private struct ПолеВыбораФильтра: View {
     let значение: String?
     let подсказка: String?
     let доступно: Bool
+    /// Пусто — «Любая» (марка, модель); у типа детали — «Любой» (any_m).
+    var пусто: String = FilterText.т("any_f")
     let действие: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Button(action: действие) {
                 HStack(spacing: 8) {
-                    Text(значение ?? FilterText.т("any_f"))
+                    Text(значение ?? пусто)
                         .font(.system(size: 16, weight: значение == nil ? .regular : .semibold))
                         .foregroundStyle(значение == nil ? Theme.текстВторой : Theme.текст)
                         .lineLimit(1)
@@ -994,7 +1015,7 @@ private struct ПолеВыбораФильтра: View {
             .disabled(!доступно)
             .opacity(доступно ? 1 : 0.55)
             .accessibilityLabel(подпись)
-            .accessibilityValue(значение ?? FilterText.т("any_f"))
+            .accessibilityValue(значение ?? пусто)
             if let подсказка {
                 Text(подсказка)
                     .font(.system(size: 12))
@@ -1216,7 +1237,7 @@ private struct ЛистМаркиМодели: View {
         } else {
             let найденные = чистыйПоиск.isEmpty ? все : все.filter { $0.подпись.lowercased().contains(чистыйПоиск) }
             if чистыйПоиск.isEmpty {
-                строка(FilterText.т("any_f"), выбрана: лента.фильтры.типыДеталей.isEmpty) {
+                строка(FilterText.т("any_m"), выбрана: лента.фильтры.типыДеталей.isEmpty) {
                     изменить { ф in ф.типыДеталей = [] }
                 }
             }
@@ -1464,6 +1485,68 @@ private struct ПараСтупеней: View {
         .buttonStyle(.plain)
         .accessibilityLabel(диапазон.подпись + ", " + подсказка)
         .accessibilityValue(значение.map { диапазон.запись($0) } ?? FilterText.т("any_v"))
+    }
+}
+
+/// «От — до» числа электроники: значения справочника списком («27», «512GB»); «Не важно» снимает границу.
+private struct ПараХарактеристики: View {
+    let подпись: String
+    let значения: [String]
+    let от: String?
+    let до: String?
+    let выбрать: (String?, String?) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            меню(значение: от, подсказка: FilterText.т("from")) { новое in выбрать(новое, до) }
+            Text("—")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.текстВторой)
+                .accessibilityHidden(true)
+            меню(значение: до, подсказка: FilterText.т("to")) { новое in выбрать(от, новое) }
+        }
+    }
+
+    private func меню(значение: String?, подсказка: String,
+                      действие: @escaping (String?) -> Void) -> some View {
+        Menu {
+            Button(FilterText.т("any_v")) { действие(nil) }
+            ForEach(значения, id: \.self) { шаг in
+                Button {
+                    действие(шаг)
+                } label: {
+                    if значение == шаг {
+                        Label(шаг, systemImage: "checkmark")
+                    } else {
+                        Text(шаг)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(значение ?? подсказка)
+                    .font(.system(size: 16, weight: значение == nil ? .regular : .semibold))
+                    .foregroundStyle(значение == nil ? Theme.текстВторой : Theme.текст)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.текстВторой)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(значение == nil ? Theme.поверхность2 : Theme.мята,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(значение == nil ? Theme.линия : Theme.зелёный2, lineWidth: значение == nil ? 1.5 : 2)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(подпись + ", " + подсказка)
+        .accessibilityValue(значение ?? FilterText.т("any_v"))
     }
 }
 
