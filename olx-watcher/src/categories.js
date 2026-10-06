@@ -129,6 +129,23 @@ const FALLBACK_CHILDREN = Object.fromEntries(Object.entries(FALLBACK).map(([pare
   [parent, list.map(([name, slug]) => ({ name, path: `${parent}/${slug}` }))]));
 
 const CITY_SLUGS = new Set(CITIES.map((c) => c.slug));
+// Город в адресе OLX идёт ПОСЛЕ рубрики (/d/<рубрика>/<город>/), поэтому ссылки «эта рубрика
+// в Каскелене» выглядят как подрубрики. Крупные города — CITY_SLUGS, остальные — по названию.
+const TOWNS = new Set(`алматы астана нур-султан шымкент караганда актобе тараз павлодар усть-каменогорск
+семей костанай кызылорда уральск петропавловск актау атырау темиртау туркестан кокшетау талдыкорган
+экибастуз рудный жанаозен жезказган балхаш кентау сатпаев каскелен конаев капчагай талгар есик
+узынагаш жаркент текели ушарал сарканд уштобе аксу степногорск щучинск риддер аягоз алтай зыряновск
+шемонаиха лисаковск аркалык житикара кульсары аксай байконур аральск казалинск шиели жанакорган
+сарыагаш ленгер жетысай арыс шардара каратау шу жанатас кордай мерке шахтинск сарань абай приозерск
+каражал атбасар макинск ерейментау есиль державинск булаево мамлютка сергеевка тайынша курчатов
+серебрянск чарск хромтау кандыагаш эмба шалкар алга темир жем форт-шевченко тобыл косшы хоргос
+боралдай отеген-батыр иргели бесагаш туздыбастау шамалган жибек-жолы академгородок кокпек чунджа
+кеген нарынкол бурундай аксукент шолаккорган карабулак сайрам аксуат зайсан урджар маканчи
+бородулиха глубокое белоусовка осакаровка топар жайрем каркаралинск агадырь`.split(/\s+/).filter(Boolean));
+function looksLikePlace(name) {
+  const n = name.toLowerCase().replace(/ё/g, 'е').replace(/^(г\.|город|пос\.|с\.)\s*/, '').trim();
+  return TOWNS.has(n) || /област|район|обл\.|р-н|поселок|(^|\s)(село|аул)(\s|$)/.test(n);
+}
 // Служебные разделы, которые тоже выглядят как /d/<что-то>/.
 const NOT_CATEGORY = new Set(['obyavlenie', 'kk', 'list', 'myaccount', 'account', 'post-new-ad', 'rus', 'ru']);
 
@@ -153,7 +170,7 @@ async function children(path) {
   if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.list;
   let list = [];
   try {
-    list = parseChildren(await fetchHtml(`${BASE}/d/${path}/`), path);
+    list = await onlyCategories(path, parseChildren(await fetchHtml(`${BASE}/d/${path}/`), path));
   } catch {
     list = [];
   }
@@ -178,10 +195,33 @@ function parseChildren(html, path) {
     const last = parts[parts.length - 1];
     if (CITY_SLUGS.has(last) || NOT_CATEGORY.has(last) || last.startsWith('q-')) continue;
     const name = decodeEntities(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').replace(/\s*\d[\d\s]*$/, '').trim();
-    if (!name || name.length > 60 || out.has(p)) continue;
+    if (!name || name.length > 60 || out.has(p) || looksLikePlace(name)) continue;
     out.set(p, { name, path: p });
   }
   return [...out.values()].slice(0, 40);
+}
+
+// Сверка со страницей той же рубрики в Алматы: там ссылки подрубрик сохраняют город
+// (/d/<рубрика>/<подрубрика>/almaty/), а ссылки на другие города — нет. Подрубрика —
+// только то, что нашлось с /almaty/ на конце. Ничего не нашлось (OLX сменил вид) — первый список.
+function parseCityChildren(html, path, city) {
+  const out = new Set();
+  const re = /href="(?:https?:\/\/(?:www\.)?olx\.kz)?\/(?:d\/)?(?:(?:kk|ru)\/)?([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"/gi;
+  for (const m of String(html).matchAll(re)) {
+    const parts = m[1].toLowerCase().split('/');
+    if (parts[parts.length - 1] !== city) continue;
+    const p = parts.slice(0, -1).join('/');
+    if (p.startsWith(path + '/') && p.split('/').length === path.split('/').length + 1) out.add(p);
+  }
+  return out;
+}
+async function onlyCategories(path, list) {
+  if (list.length < 2) return list;
+  try {
+    const real = parseCityChildren(await fetchHtml(`${BASE}/d/${path}/almaty/`), path, 'almaty');
+    if (real.size) return list.filter((c) => real.has(c.path));
+  } catch { /* не открылась — остаётся первый список */ }
+  return list;
 }
 
 function decodeEntities(s) {
@@ -218,6 +258,6 @@ function parsePrice(text) {
 }
 
 module.exports = {
-  TOP, CITIES, FALLBACK_CHILDREN, children, parseChildren, buildSearchUrl, parsePrice,
+  TOP, CITIES, FALLBACK_CHILDREN, children, parseChildren, parseCityChildren, looksLikePlace, buildSearchUrl, parsePrice,
   _setFetch: (fn) => { fetchHtml = fn; cache.clear(); },
 };

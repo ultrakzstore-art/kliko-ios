@@ -158,7 +158,7 @@ function parseKaspiChildren(html, path) {
     const p = parts.join('/');
     if (parts.length !== depth || !p.startsWith(`${path}/`) || /^k--/.test(parts[parts.length - 1])) continue;
     const name = m[2].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').replace(/\s*\d[\d\s]*$/, '').trim();
-    if (!name || name.length > 60 || out.has(p)) continue;
+    if (!name || name.length > 60 || out.has(p) || KASPI_CITY_SLUGS.includes(parts[parts.length - 1]) || cats.looksLikePlace(name)) continue;
     out.set(p, { name, path: p });
   }
   return [...out.values()].slice(0, 40);

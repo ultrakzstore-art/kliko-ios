@@ -36,6 +36,30 @@ test('подрубрики со страницы OLX: только на уров
   ]);
 });
 
+test('подрубрики OLX: города и области не попадают в список рубрик', async () => {
+  const main = `
+    <a href="/d/elektronika/telefony-i-aksesuary/">Телефоны и аксессуары</a>
+    <a href="/d/elektronika/noutbuki-i-aksesuary/">Ноутбуки и аксессуары</a>
+    <a href="/d/elektronika/kaskelen/">Каскелен</a>
+    <a href="/d/elektronika/alm/">Алматинская область</a>
+    <a href="/d/elektronika/tobol/">Тобол</a>`;
+  // «Тобол» — не из списка городов: отсеет сверка со страницей Алматы.
+  assert.deepStrictEqual(cats.parseChildren(main, 'elektronika').map((c) => c.name),
+    ['Телефоны и аксессуары', 'Ноутбуки и аксессуары', 'Тобол']);
+  const city = `
+    <a href="/d/elektronika/telefony-i-aksesuary/almaty/">Телефоны и аксессуары</a>
+    <a href="/d/elektronika/noutbuki-i-aksesuary/almaty/">Ноутбуки и аксессуары</a>
+    <a href="/d/elektronika/tobol/">Тобол</a>
+    <a href="/d/elektronika/almaty/?search%5Bdistrict_id%5D=5">Медеуский район</a>`;
+  cats._setFetch(async (url) => (url.endsWith('/d/elektronika/almaty/') ? city : main));
+  assert.deepStrictEqual((await cats.children('elektronika')).map((c) => c.path),
+    ['elektronika/telefony-i-aksesuary', 'elektronika/noutbuki-i-aksesuary']);
+  // Страница города без ссылок с /almaty/ (OLX сменил вид) — первый список, без известных городов.
+  cats._setFetch(async (url) => (url.endsWith('/almaty/') ? '' : main));
+  assert.strictEqual((await cats.children('elektronika')).length, 3);
+  assert.ok(cats.looksLikePlace('г. Талгар') && cats.looksLikePlace('Карасайский район') && !cats.looksLikePlace('Ноутбуки'));
+});
+
 test('мастер: рубрика → подрубрика → город → слова → цена → проверка → сохранить', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-wiz-'));
   const db = new Db(path.join(dir, 'w.db'));
