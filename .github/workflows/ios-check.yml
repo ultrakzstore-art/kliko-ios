@@ -129,7 +129,7 @@ jobs:
   # Не роняет прогон.
   screens:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 75
     continue-on-error: true
     permissions:
       contents: write
@@ -210,20 +210,18 @@ jobs:
             xcrun simctl terminate "$dev" kz.kliko.app 2>/dev/null || true
             xcrun simctl launch "$dev" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "($lang)" -AppleLocale "$loc" "$@"
             sleep "$wait"; xcrun simctl io "$dev" screenshot "shots/store/$name.png"
+            echo "::notice title=Кадр $name::$(date -u +%H:%M:%S)"
           }
           storeset() {  # устройство, приставка
             xcrun simctl ui "$1" appearance light
             for lang in ru en; do
-              store "$1" $lang "$2-$lang-lenta" 25
-              store "$1" $lang "$2-$lang-garant" 25 -klikoSheet garant
-              store "$1" $lang "$2-$lang-filtry" 25 -klikoSheet filters
-              if [ -n "$id" ]; then
-                store "$1" $lang "$2-$lang-kartochka" 20 -klikoOpen "https://kliko.kz/marketplace?item=$id"
-                store "$1" $lang "$2-$lang-qr" 30 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr
-              fi
+              if [ "$lang" = ru ]; then store "$1" $lang "$2-$lang-lenta" 25; fi
+              store "$1" $lang "$2-$lang-garant" 22 -klikoSheet garant
+              store "$1" $lang "$2-$lang-filtry" 22 -klikoSheet filters
+              if [ -n "$id" ]; then store "$1" $lang "$2-$lang-qr" 28 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr; fi
             done
+            return 0
           }
-          storeset "$UDID" iphone
           ipad=$(xcrun simctl list devices available -j | python3 -c '
           import json,sys
           d=json.load(sys.stdin)["devices"]
@@ -234,9 +232,14 @@ jobs:
                       if x["name"].startswith("iPad") and want in x["name"]:
                           print(x["udid"]); raise SystemExit
           ' || true)
+          # iPad загружается, пока снимается iPhone.
+          [ -n "$ipad" ] && { xcrun simctl boot "$ipad" || true; }
+          echo "::notice title=Снимаю кадры App Store::iPad ${ipad:-нет}, $(date -u +%H:%M:%S)"
+          storeset "$UDID" iphone
           if [ -n "$ipad" ]; then
-            xcrun simctl boot "$ipad" || true
-            xcrun simctl bootstatus "$ipad" -b
+            # Не дольше 5 минут: bootstatus -b без предела мог бы съесть весь прогон.
+            for i in $(seq 1 60); do xcrun simctl list devices | grep "$ipad" | grep -q Booted && break; sleep 5; done
+            sleep 20
             xcrun simctl status_bar "$ipad" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
             xcrun simctl install "$ipad" "$APP"
             storeset "$ipad" ipad
