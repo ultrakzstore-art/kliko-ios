@@ -17,6 +17,11 @@ import SwiftUI
  включаются только сборкой, прошедшей проверку App Review (правила 2.3.1, 3.1.1).
 
  Ключи — те же, что в белом списке сервера (inc/app_remote_config.php): чужие ключи отбрасываются.
+
+ ПЛАТЁЖНАЯ ОРГАНИЗАЦИЯ (правка 103 сервера, владелец 06.10.2026: «написано Freedom Pay, а эквайер выбирается в
+ админке»). Ответ несёт psp {id, title, org:{ru,kz,en,ar}, site} — acq_org_provider() сайта, тот же эквайер, что
+ в подвале и «Условиях оплаты». Последнее значение лежит отдельно (ключПлатёжной) и ответом без psp не стирается.
+ Не было ни разу — тексты пишут «платёжная организация» без названия (ПлатёжнаяОрганизация.текущая == nil).
  */
 enum НастройкиСервера {
     /// Рубильники, которые читает приложение. banner_on — показ полосы над лентой; img_resize — лёгкие фото (img.php).
@@ -33,16 +38,20 @@ enum НастройкиСервера {
 
     private static let ключКэша = "kliko.remoteSettings.json"
     private static let ключМетки = "kliko.remoteSettings.etag"
+    private static let ключПлатёжной = "kliko.remoteSettings.psp"
 
     /// Разобранный ответ сервера.
     private struct Снимок {
         var флаги: [String: Bool] = [:]
         var тексты: [String: String] = [:]
+        var платёжная: ПлатёжнаяОрганизация? = nil
     }
 
     private static let замок = NSLock()
     /// Текущие значения: с запуска — из кэша, потом — из свежего ответа. Читаются и пишутся только под замком.
     private static var текущий: Снимок = снимокИзКэша()
+    /// Последняя полученная платёжная организация (из своего ключа UserDefaults, потом из свежего ответа).
+    private static var платёжная: ПлатёжнаяОрганизация? = платёжнаяИзКэша()
 
     // MARK: - Разрешение значений
 
@@ -70,6 +79,13 @@ enum НастройкиСервера {
         defer { замок.unlock() }
         guard let т = текущий.тексты[ключ], !т.isEmpty else { return nil }
         return т
+    }
+
+    /// Платёжная организация от сервера (последняя полученная) или nil — сервер её ещё ни разу не назвал.
+    static func платёжнаяОрганизация() -> ПлатёжнаяОрганизация? {
+        замок.lock()
+        defer { замок.unlock() }
+        return платёжная
     }
 
     /// Текст баннера на языке телефона (kk/ru/en/ar); на этом языке пусто — русский.
@@ -143,6 +159,11 @@ enum НастройкиСервера {
         } else {
             хранилище.removeObject(forKey: ключМетки)
         }
+        if let объект = (try? JSONSerialization.jsonObject(with: пара.0)) as? [String: Any],
+           снимок.платёжная != nil, let псп = объект["psp"],
+           let сырые = try? JSONSerialization.data(withJSONObject: псп) {
+            хранилище.set(сырые, forKey: ключПлатёжной)
+        }
         поставить(снимок)
         return true
     }
@@ -150,7 +171,17 @@ enum НастройкиСервера {
     private static func поставить(_ снимок: Снимок) {
         замок.lock()
         текущий = снимок
+        if let п = снимок.платёжная { платёжная = п }
         замок.unlock()
+    }
+
+    private static func платёжнаяИзКэша() -> ПлатёжнаяОрганизация? {
+        if let данные = UserDefaults.standard.data(forKey: ключПлатёжной),
+           let объект = try? JSONSerialization.jsonObject(with: данные),
+           let п = ПлатёжнаяОрганизация.разобрать(объект) {
+            return п
+        }
+        return снимокИзКэша().платёжная
     }
 
     private static func снимокИзКэша() -> Снимок {
@@ -175,7 +206,60 @@ enum НастройкиСервера {
                 if !чистый.isEmpty { снимок.тексты[ключ] = String(чистый.prefix(300)) }
             }
         }
+        снимок.платёжная = ПлатёжнаяОрганизация.разобрать(объект["psp"])
         return снимок
+    }
+}
+
+/// Платёжная организация сайта (psp ответа app_config, правка 103): марка, юридическое имя на ru/kz/en/ar, сайт.
+struct ПлатёжнаяОрганизация: Equatable {
+    let марка: String
+    /// Ключи — языки сайта: ru, kz, en, ar.
+    let имена: [String: String]
+    /// Домен без схемы: tiptoppay.kz.
+    let сайт: String
+
+    /// Последняя полученная от сервера или nil — тогда в текстах без названия.
+    static var текущая: ПлатёжнаяОрганизация? { НастройкиСервера.платёжнаяОрганизация() }
+
+    /// Юридическое имя на языке приложения (kk → kz сайта), нет на нём — русское, нет и его — марка.
+    func имя(язык: String) -> String {
+        let код = язык == "kk" ? "kz" : язык
+        return имена[код] ?? имена["ru"] ?? марка
+    }
+
+    /// https://<site> или nil, если сайта нет.
+    var ссылка: URL? {
+        сайт.isEmpty ? nil : URL(string: "https://" + сайт)
+    }
+
+    /// Имя для Markdown-ссылки: без квадратных скобок, ломающих разметку.
+    func имяДляСсылки(язык: String) -> String {
+        имя(язык: язык).replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
+    }
+
+    /// Разбор psp; имя чистится и обрезается, сайт — только домен из латиницы, цифр, точек и дефисов.
+    static func разобрать(_ значение: Any?) -> ПлатёжнаяОрганизация? {
+        guard let d = значение as? [String: Any] else { return nil }
+        func чистый(_ x: Any?, _ предел: Int) -> String {
+            let s = ((x as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return String(s.prefix(предел))
+        }
+        let марка = чистый(d["title"], 60)
+        var имена: [String: String] = [:]
+        if let орг = d["org"] as? [String: Any] {
+            for код in ["ru", "kz", "en", "ar"] {
+                let v = чистый(орг[код], 120)
+                if !v.isEmpty { имена[код] = v }
+            }
+        }
+        if марка.isEmpty && имена.isEmpty { return nil }
+        var сайт = чистый(d["site"], 80).lowercased()
+        let допустимые = Set("abcdefghijklmnopqrstuvwxyz0123456789.-")
+        if сайт.isEmpty || !сайт.contains(".") || !сайт.allSatisfy({ допустимые.contains($0) }) || сайт.hasPrefix(".") {
+            сайт = ""
+        }
+        return ПлатёжнаяОрганизация(марка: марка, имена: имена, сайт: сайт)
     }
 }
 

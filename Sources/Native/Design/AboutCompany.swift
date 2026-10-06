@@ -60,7 +60,6 @@ struct ЭкранОКомпании: View {
     private static let телефон = "+7 778 000 83 72"
     private static let телефонАдрес = "tel:+77780008372"
     private static let бин = "260840012679"
-    private static let платёжка = "https://freedompay.kz"
 
     /// «Как работает Безопасная сделка» — только пока гарант не на паузе.
     private var ссылкиПомощи: [СсылкаСтраницы] {
@@ -251,33 +250,44 @@ struct ЭкранОКомпании: View {
                         .foregroundStyle(Theme.текстВторой)
                 }
                 .padding(.vertical, 4)
-                Button {
-                    if let адрес = URL(string: Self.платёжка) { UIApplication.shared.open(адрес) }
-                } label: {
-                    HStack(spacing: 12) {
-                        ЗначокСтрокиСайта(значок: "building.columns")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(т("psp"))
-                                .font(.footnote)
-                                .foregroundStyle(Theme.текстВторой)
-                            Text(д("f_pay_psp"))
-                                .font(.body)
-                                .foregroundStyle(Theme.текст)
-                        }
-                        Spacer(minLength: 8)
-                        Image(systemName: "arrow.up.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Theme.текстВторой.opacity(0.6))
-                            .accessibilityHidden(true)
-                    }
-                    .contentShape(Rectangle())
+                /* Платёжная организация — эквайер, выбранный в админке сайта (psp из app_config, правка 103), как
+                   «платёжная организация …» в подвале сайта. Сервер ещё ни разу не назвал — строки нет. */
+                if let псп = ПлатёжнаяОрганизация.текущая {
+                    строкаПлатёжной(псп)
                 }
-                .accessibilityHint(д("f_pay_open"))
             }
             .строкиСайта()
         } header: {
             ЗаголовокГруппыКабинета(т("payment"))
         }
+    }
+
+    private func строкаПлатёжной(_ псп: ПлатёжнаяОрганизация) -> some View {
+        Button {
+            if let адрес = псп.ссылка { UIApplication.shared.open(адрес) }
+        } label: {
+            HStack(spacing: 12) {
+                ЗначокСтрокиСайта(значок: "building.columns")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(т("psp"))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.текстВторой)
+                    Text(псп.имя(язык: DesignText.язык))
+                        .font(.body)
+                        .foregroundStyle(Theme.текст)
+                }
+                Spacer(minLength: 8)
+                if псп.ссылка != nil {
+                    Image(systemName: "arrow.up.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.текстВторой.opacity(0.6))
+                        .accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .disabled(псп.ссылка == nil)
+        .accessibilityHint(псп.ссылка != nil ? д("f_pay_open") : "")
     }
 
     // MARK: Соцсети

@@ -10,7 +10,7 @@ import UIKit
 
  Код сайта — докачанный модуль js/cabinet-wallet.min.js (карта §5.2–§5.3 писалась без него: теперь тела известны).
  Пополнение (doTopup):
-   · POST pay.php?action=create {csrf, amount, fresh} → {ok, redirect_url} — страница банка (Freedom Pay). fresh — «после
+   · POST pay.php?action=create {csrf, amount, fresh} → {ok, redirect_url} — страница банка (эквайер из админки сайта). fresh — «после
      неудачной оплаты» (sessionStorage.ulx_pay_retry сайта: ставит возврат ?topup=fail, снимает следующий doTopup);
    · ответ payments_off → сайт сам шлёт POST cabinet.php?action=topup {csrf, amount, fresh} → ok «Баланс пополнен на N ₸»;
      need_verify → «Нужна верификация»; иначе error || «Онлайн-оплата временно недоступна». Натив второй денежный запрос
