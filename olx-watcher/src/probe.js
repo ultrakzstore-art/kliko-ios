@@ -1,6 +1,7 @@
 // Диагностика без Телеграма: что OLX реально отдаёт на этой машине.
 //   npm run probe -- "<ссылка на поиск>"          — выдача поиска и карточка самого свежего
 //   npm run probe -- "<ссылка на объявление>"     — карточка по номеру и 5 следующих номеров
+//   npm run probe -- olx race [минут]             — кто раньше отдаёт новое объявление: API v2, v1 или лента
 const olx = require('./olx');
 const cats = require('./categories');
 const sources = require('./sources');
@@ -264,9 +265,81 @@ async function kaspiProbe(id) {
   console.log('\nПришлите этот вывод, если по номеру объявления Kaspi что-то не так.');
 }
 
+// npm run probe -- olx race [минут] — гонка источников OLX: для новых номеров — когда объявление
+// впервые открылось через API v2, через API v1 и когда появилось в ленте свежих. Запросов немного
+// (до ~3 в секунду); на 403 замер останавливается и печатает, что успел.
+async function olxRace(ms) {
+  const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'application/json' };
+  const card = async (v, id) => {
+    const url = v === 2 ? `${olx.BASE}/api/v2/offers/${id}` : `${olx.BASE}/api/v1/offers/${id}/`;
+    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(15_000) });
+    if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
+    if (!res.ok) return null;
+    try { const j = await res.json(); const d = j.data || j; return Number(d.id) === id ? d : null; } catch { return null; }
+  };
+  const seen = new Map();   // id → { v2, v1, list, created, status }
+  const rec = (id) => { if (!seen.has(id)) seen.set(id, {}); return seen.get(id); };
+  let edge = 0;
+  const end = Date.now() + ms;
+  console.log(`Гонка источников OLX ${Math.round(ms / 60_000)} мин: API v2, API v1, лента свежих…\n`);
+  let stop = '';
+  while (Date.now() < end && !stop) {
+    const t0 = Date.now();
+    try {
+      const list = await olx.fetchLatest();
+      for (const a of list) {
+        const r = rec(a.id);
+        if (!r.list) r.list = Date.now();
+        if (!r.created && a.createdAt) r.created = a.createdAt;
+        edge = Math.max(edge, a.id);
+      }
+      // Номера за краем и недавние, которые видел не каждый источник.
+      const ids = edge ? [edge + 1, edge + 2, edge + 3] : [];
+      for (const [id, r] of [...seen].sort((a, b) => b[0] - a[0])) {
+        if (ids.length >= 6) break;
+        if (id > edge - 40 && (!r.v1 || !r.v2) && !ids.includes(id)) ids.push(id);
+      }
+      for (const id of ids) {
+        for (const v of [2, 1]) {
+          const r = seen.get(id);
+          if (r?.[`v${v}`]) continue;
+          const d = await card(v, id);
+          if (!d) continue;
+          const x = rec(id);
+          x[`v${v}`] = Date.now();
+          const c = Date.parse(d.created_time || d.createdTime || '');
+          if (!x.created && Number.isFinite(c)) x.created = c;
+          if (d.status) x.status = d.status;
+          edge = Math.max(edge, id);
+        }
+      }
+    } catch (e) {
+      if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) stop = `OLX ответил ${e.status} — остановил замер`;
+      else console.log(`  ошибка: ${e.message}`);
+    }
+    const wait = 4000 - (Date.now() - t0);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+  if (stop) console.log(stop);
+  const rows = [...seen].filter(([, r]) => r.created && r.created > Date.now() - ms - 120_000 && (r.v1 || r.v2 || r.list)).sort((a, b) => a[0] - b[0]);
+  const ago = (t, c) => (t ? `${Math.round((t - c) / 1000)} с` : '—');
+  console.log('\nномер        подано    API v2   API v1   лента   статус');
+  const first = { v2: 0, v1: 0, list: 0 };
+  for (const [id, r] of rows) {
+    const at = new Date(r.created).toLocaleTimeString('ru-RU');
+    console.log(`${id}  ${at}  ${ago(r.v2, r.created).padStart(7)}  ${ago(r.v1, r.created).padStart(7)}  ${ago(r.list, r.created).padStart(6)}   ${r.status || ''}`);
+    const ts = [['v2', r.v2], ['v1', r.v1], ['list', r.list]].filter(([, t]) => t);
+    ts.sort((a, b) => a[1] - b[1]);
+    if (ts.length > 1 && ts[1][1] - ts[0][1] >= 1000) first[ts[0][0]] += 1;   // ничья (разница меньше секунды) — не в счёт
+  }
+  console.log(`\nКто увидел первым (где видели хотя бы двое): API v2 — ${first.v2}, API v1 — ${first.v1}, лента — ${first.list}`);
+  console.log('Время — сколько секунд прошло от подачи до того, как источник отдал объявление. Пришлите этот вывод.');
+}
+
 (async () => {
   const url = process.argv[2];
   if (/^\d{6,}$/.test(String(url || '').trim())) return deepProbe(Number(url.trim()));
+  if (url === 'olx' && process.argv[3] === 'race') return olxRace((Number(process.argv[4]) || 10) * 60_000);
   // npm run probe -- categories [путь] — подрубрики, как их увидит мастер /new
   if (url === 'categories') {
     const p = process.argv[3];
