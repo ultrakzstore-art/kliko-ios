@@ -225,9 +225,14 @@ jobs:
           IN_VERSION: ${{ inputs.version }}
         run: |
           set -o pipefail
-          # Номер сборки — номер запуска workflow. App Store Connect отклоняет повторный
-          # номер при той же версии, а руками его никто не помнит.
-          build_no="${{ github.run_number }}"
+          # Номер сборки — как у Codemagic: самый большой уже залитый в App Store Connect + 1
+          # (ci/asc.py). Номер запуска workflow отстаёт от сборок Codemagic, и Apple отклоняет
+          # такую заливку. Номер запуска остаётся запасным, если App Store Connect не ответил.
+          build_no=$(ASC_KEY_ID="$KID" ASC_ISSUER_ID="$ISS" ASC_KEY_PATH="$KEY_DIR/AuthKey_$KID.p8" \
+            python3 ci/asc.py next-build-number 2>/dev/null || true)
+          case "$build_no" in ''|*[!0-9]*) build_no="${{ github.run_number }}";; esac
+          echo "Номер сборки: $build_no"
+          echo "KLIKO_BUILD_NO=$build_no" >> "$GITHUB_ENV"
           version="$IN_VERSION"
           if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
             version="${GITHUB_REF_NAME#v}"          # тег v1.0.0 → 1.0.0
@@ -314,7 +319,7 @@ jobs:
           export ASC_KEY_PATH="$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
           version="$IN_VERSION"
           if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then version="${GITHUB_REF_NAME#v}"; fi
-          fastlane ios beta build:"${{ github.run_number }}" ${version:+version:"$version"}
+          fastlane ios beta build:"$KLIKO_BUILD_NO" ${version:+version:"$version"}
 
       - name: Убрать ключ
         if: always()
