@@ -58,10 +58,35 @@ enum ВерсияПриложения {
     }
 }
 
-/// Пункт списка: ключ текста (WhatsNewText, подпись — ключ + "_sub") и значок SF Symbols.
+/// Пункт списка: ключ текста (WhatsNewText, подпись — ключ + "_sub"), значок SF Symbols и цвет его кружка.
 struct ПунктНового: Identifiable {
     let id: String
     let значок: String
+    var цвет: Color = Theme.зелёныйЯркий
+
+    /// Что появилось в этой версии (по «мажор.минор» из ВерсияПриложения.текущая). Пусто — лист показывает только
+    /// общий список. Новая версия — новая ветка switch и её строки в WhatsNewText (словарь версии).
+    static var новоеВерсии: [ПунктНового] {
+        let части = ВерсияПриложения.текущая.split(separator: ".")
+        let версия = части.prefix(2).joined(separator: ".")
+        switch версия {
+        case "1.11":
+            var пункты = [
+                ПунктНового(id: "v111_filters", значок: "slider.horizontal.3", цвет: Theme.оранжевый),
+                ПунктНового(id: "v111_qr", значок: "qrcode", цвет: Theme.зелёный2),
+                ПунктНового(id: "v111_speed", значок: "bolt.fill", цвет: Theme.золото),
+                ПунктНового(id: "v111_delivery", значок: "shippingbox.fill", цвет: Theme.зелёныйЯркий)
+            ]
+            /* Гарант на паузе — про гарант-ссылки не пишем: окно откроется, но сделку сейчас не начать. */
+            if !ПаузаГаранта.наПаузеСейчас {
+                пункты.append(ПунктНового(id: "v111_guarantee", значок: "checkmark.shield.fill", цвет: Theme.проверен))
+            }
+            пункты.append(ПунктНового(id: "v111_city", значок: "mappin.and.ellipse", цвет: Theme.малиновый))
+            return пункты
+        default:
+            return []
+        }
+    }
 
     /// Что умеет приложение с включёнными рубильниками. Лист виден только над нативным слоем, поэтому лента — всегда.
     /// @MainActor — из-за UIDevice: две колонки обещаем только на iPad.
@@ -95,14 +120,29 @@ struct ПунктНового: Identifiable {
 /// Лист «Что нового»: заголовок, пункты со значками и «Понятно». Смахнуть вниз тоже можно — это то же «Понятно».
 struct ЭкранЧтоНового: View {
     @Environment(\.dismiss) private var закрыть
+    @Environment(\.accessibilityReduceMotion) private var тихо
+    /// Пункты выходят по очереди (stagger): шапка, потом строка за строкой.
+    @State private var появилось = false
+    private let новое = ПунктНового.новоеВерсии
 
     var body: some View {
+        /* Общий список — здесь, в body (главный поток): ПунктНового.список читает UIDevice. */
+        let общее = ПунктНового.список
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 22) {
                     шапка
-                    ForEach(ПунктНового.список) { пункт in
-                        СтрокаНового(пункт: пункт)
+                    if !новое.isEmpty {
+                        заголовокРаздела(String(format: WhatsNewText.т("new_head"), ВерсияПриложения.текущая), номер: 0)
+                        ForEach(Array(новое.enumerated()), id: \.element.id) { i, пункт in
+                            СтрокаНового(пункт: пункт, номер: i + 1, появилось: появилось, тихо: тихо)
+                        }
+                        заголовокРаздела(WhatsNewText.т("also_head"), номер: новое.count + 1)
+                            .padding(.top, 6)
+                    }
+                    ForEach(Array(общее.enumerated()), id: \.element.id) { i, пункт in
+                        СтрокаНового(пункт: пункт, номер: новое.isEmpty ? i + 1 : новое.count + 2 + i,
+                                     появилось: появилось, тихо: тихо)
                     }
                 }
                 .padding(.horizontal, 28)
@@ -135,14 +175,37 @@ struct ЭкранЧтоНового: View {
         .листПоВысоте()
         /* Виденной версия считается здесь — и когда лист открыли строкой в кабинете: второй раз тот же список сам не
            всплывёт. */
-        .onAppear { ЧтоНового.shared.показали() }
+        .onAppear {
+            ЧтоНового.shared.показали()
+            if тихо {
+                появилось = true
+            } else {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { появилось = true }
+            }
+        }
+    }
+
+    private func заголовокРаздела(_ текст: String, номер: Int) -> some View {
+        Text(текст.uppercased())
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
+            .opacity(появилось ? 1 : 0)
+            .animation(тихо ? nil : Animation.easeOut(duration: 0.35).delay(СтрокаНового.задержка(номер)), value: появилось)
     }
 
     private var шапка: some View {
         VStack(spacing: 10) {
             Image(systemName: "sparkles")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(Theme.green2)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 76, height: 76)
+                .background(LinearGradient(colors: [Theme.шапкаВерх, Theme.зелёныйЯркий],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Circle())
+                .shadow(color: Theme.зелёныйЯркий.opacity(0.35), radius: 12, x: 0, y: 6)
+                .scaleEffect(появилось || тихо ? 1 : 0.5)
+                .rotationEffect(.degrees(появилось || тихо ? 0 : -25))
                 .accessibilityHidden(true)
             Text(WhatsNewText.т("title"))
                 .font(.largeTitle.weight(.bold))
@@ -162,16 +225,24 @@ struct ЭкранЧтоНового: View {
     }
 }
 
-/// Строка списка: значок слева, название и подпись. VoiceOver читает её одной фразой.
+/// Строка списка: значок в цветном кружке слева, название и подпись. VoiceOver читает её одной фразой.
+/// Выходит по очереди: снизу с проявлением, с задержкой по номеру; «Уменьшение движения» — сразу, без сдвига.
 private struct СтрокаНового: View {
     let пункт: ПунктНового
+    var номер: Int = 0
+    var появилось: Bool = true
+    var тихо: Bool = false
+
+    /// Шаг очереди 0,07 с, не дольше 0,9 с — длинный список не заставляет ждать хвост.
+    static func задержка(_ номер: Int) -> Double { min(0.9, 0.12 + 0.07 * Double(номер)) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: пункт.значок)
-                .font(.title2)
-                .foregroundStyle(Theme.green2)
-                .frame(width: 36)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(пункт.цвет)
+                .frame(width: 42, height: 42)
+                .background(пункт.цвет.opacity(0.14), in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(WhatsNewText.т(пункт.id))
@@ -184,6 +255,9 @@ private struct СтрокаНового: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
+        .opacity(появилось ? 1 : 0)
+        .offset(y: появилось || тихо ? 0 : 18)
+        .animation(тихо ? nil : Animation.spring(response: 0.5, dampingFraction: 0.82).delay(Self.задержка(номер)), value: появилось)
     }
 }
 
@@ -214,7 +288,9 @@ struct СлойЧтоНового<Содержимое: View>: View {
     }
 
     private var можноПоказать: Bool {
-        Config.чтоНового && новое.ждёт && мост.лентаВидна && !(замок.enabled && (замок.locked || замок.cover))
+        /* splashDone — приветственный экран запуска ушёл: лист — отдельный контроллер поверх окна и лёг бы НАД ним. */
+        Config.чтоНового && новое.ждёт && мост.лентаВидна && мост.splashDone
+            && !(замок.enabled && (замок.locked || замок.cover))
     }
 
     private func показатьПозже() async {
