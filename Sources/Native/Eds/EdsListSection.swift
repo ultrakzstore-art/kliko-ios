@@ -112,7 +112,9 @@ struct СтрокаСделкиEDS: View {
 
     var body: some View {
         let плашка = СтатусEDS.плашка(сделка.статус, способ: сделка.способ)
-        HStack(alignment: .center, spacing: 12) {
+        /* Ровная схема (владелец 06.10.2026): название и статус — первой строкой (плашка по верху, в одну строку),
+           под ними «номер · цена · роль» одной строкой с многоточием; миниатюра одна на всех. */
+        HStack(alignment: .top, spacing: 12) {
             КартинкаЛенты(Config.url(сделка.фото), пунктов: 46) {
                 ZStack {
                     Theme.поверхность2
@@ -124,19 +126,25 @@ struct СтрокаСделкиEDS: View {
             .frame(width: 46, height: 46)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
             .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(сделка.название)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(сделка.название)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.текст)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ПилюляEDS(вид: плашка.вид, текст: плашка.текст, вОднуСтроку: true)
+                        .frame(maxWidth: 140, alignment: .trailing)
+                }
                 Text(подпись)
                     .font(.system(size: 12))
+                    .monospacedDigit()
                     .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            ПилюляEDS(вид: плашка.вид, текст: плашка.текст)
-                .frame(maxWidth: 140, alignment: .trailing)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .topLeading)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

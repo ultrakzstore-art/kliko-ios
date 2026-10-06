@@ -51,11 +51,14 @@ extension ТочкаEDS {
 struct ПилюляEDS: View {
     let вид: ВидПлашкиEDS
     let текст: String
+    /// В строке списка — одна строка (ровная схема карточек), длинный статус ужимается; в окне сделки — до двух.
+    var вОднуСтроку: Bool = false
 
     var body: some View {
         Text(текст)
             .font(.system(size: 11, weight: .bold))
-            .lineLimit(2)
+            .lineLimit(вОднуСтроку ? 1 : 2)
+            .minimumScaleFactor(вОднуСтроку ? 0.8 : 1)
             .multilineTextAlignment(.center)
             .foregroundStyle(вид.текст)
             .padding(.horizontal, 10)
