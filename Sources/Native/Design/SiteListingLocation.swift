@@ -339,9 +339,9 @@ enum МаршрутОбъявления {
     }
 
     /// inDrive: приложение по своей схеме indriver:// (адрес маршрута схема не принимает — точку вводят в нём),
-    /// нет приложения — его страница в App Store, а не сайт indrive.com.
+    /// нет приложения — сайт indrive.com.
     static let inDrive: (приложение: URL?, запасной: URL?) = (
-        URL(string: "indriver://"), URL(string: "https://apps.apple.com/kz/app/indrive/id780125801")
+        URL(string: "indriver://"), URL(string: "https://indrive.com")
     )
 
     /// Apple Карты открываются всегда — своей схемы и проверки не нужно.
