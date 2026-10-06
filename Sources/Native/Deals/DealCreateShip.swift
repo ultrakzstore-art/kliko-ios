@@ -83,7 +83,13 @@ enum ДоставкаСделкиText {
         "co_ship_house_why": "Без точного дома доставку не посчитать — поставьте точку на карте, и цена появится сразу.",
         "car_calc_h": "Сколько стоит доставка до вас",
         "car_go_hint": "Выбранный вариант СДЭК и пункт выдачи перейдут в сделку",
-        "ship_other_city": "Это другой город — туда возит только СДЭК: посчитайте в блоке «Доставка в другой город»."
+        "ship_other_city": "Это другой город — туда возит только СДЭК: посчитайте в блоке «Доставка в другой город».",
+        "co_ship_intercity_l": "Дальше 30 км доставляем только СДЭК, а для этого товара и адреса он сейчас недоступен — оформить с доставкой не получится. Напишите продавцу.",
+        "ask_seller": "Написать продавцу",
+        "car_na_t": "Доставка СДЭК",
+        "car_na_s": "сейчас не рассчитать",
+        "car_na_p": "—",
+        "co_go_self_hint": "Чтобы оформить сделку, выберите «Заберу сам» или договоритесь с продавцом о доставке."
     ]
 
     private static let kk: [String: String] = [
@@ -138,7 +144,13 @@ enum ДоставкаСделкиText {
         "co_ship_house_why": "Нақты үйсіз жеткізуді есептеу мүмкін емес — картада нүкте қойыңыз, баға бірден шығады.",
         "car_calc_h": "Сізге дейін жеткізу қанша тұрады",
         "car_go_hint": "Таңдалған СДЭК нұсқасы мен беру пункті мәмілеге өтеді",
-        "ship_other_city": "Бұл басқа қала — онда тек СДЭК жеткізеді: «Басқа қалаға жеткізу» блогында есептеңіз."
+        "ship_other_city": "Бұл басқа қала — онда тек СДЭК жеткізеді: «Басқа қалаға жеткізу» блогында есептеңіз.",
+        "co_ship_intercity_l": "30 км-ден алыс тек СДЭК арқылы жеткіземіз, ал бұл тауар мен мекенжай үшін ол қазір қолжетімсіз — жеткізумен рәсімдеу мүмкін емес. Сатушыға жазыңыз.",
+        "ask_seller": "Сатушыға жазу",
+        "car_na_t": "СДЭК жеткізуі",
+        "car_na_s": "қазір есептеу мүмкін емес",
+        "car_na_p": "—",
+        "co_go_self_hint": "Мәмілені рәсімдеу үшін «Өзім алып кетемін» таңдаңыз немесе жеткізу туралы сатушымен келісіңіз."
     ]
 
     private static let en: [String: String] = [
@@ -193,7 +205,13 @@ enum ДоставкаСделкиText {
         "co_ship_house_why": "Delivery can't be priced without the exact building — drop a pin on the map and the price appears right away.",
         "car_calc_h": "Delivery cost to you",
         "car_go_hint": "The chosen CDEK option and pickup point go into the deal",
-        "ship_other_city": "That's another city — only CDEK delivers there: calculate it in the «Delivery to another city» block."
+        "ship_other_city": "That's another city — only CDEK delivers there: calculate it in the «Delivery to another city» block.",
+        "co_ship_intercity_l": "Beyond 30 km we deliver only with CDEK, and it isn’t available for this item and address right now — you can’t check out with delivery. Message the seller.",
+        "ask_seller": "Message the seller",
+        "car_na_t": "CDEK delivery",
+        "car_na_s": "can't be priced right now",
+        "car_na_p": "—",
+        "co_go_self_hint": "To place the deal, choose “I'll pick it up” or agree on delivery with the seller."
     ]
 
     private static let ar: [String: String] = [
@@ -248,7 +266,13 @@ enum ДоставкаСделкиText {
         "co_ship_house_why": "لا يمكن حساب التوصيل دون المبنى بالضبط — ضع نقطة على الخريطة وسيظهر السعر فورًا.",
         "car_calc_h": "تكلفة التوصيل إليك",
         "car_go_hint": "سينتقل خيار CDEK ونقطة الاستلام المختاران إلى الصفقة",
-        "ship_other_city": "هذه مدينة أخرى — يوصل إليها CDEK فقط: احسبها في قسم «التوصيل إلى مدينة أخرى»."
+        "ship_other_city": "هذه مدينة أخرى — يوصل إليها CDEK فقط: احسبها في قسم «التوصيل إلى مدينة أخرى».",
+        "co_ship_intercity_l": "أبعد من 30 كم نوصل عبر CDEK فقط، وهو غير متاح حاليًا لهذا المنتج والعنوان — لا يمكن إتمام الشراء مع التوصيل. راسل البائع.",
+        "ask_seller": "مراسلة البائع",
+        "car_na_t": "توصيل CDEK",
+        "car_na_s": "لا يمكن حسابه الآن",
+        "car_na_p": "—",
+        "co_go_self_hint": "لإتمام الصفقة اختر «سأستلمه بنفسي» أو اتفق مع البائع على التوصيل."
     ]
 }
 
@@ -716,7 +740,8 @@ final class ДоставкаНовойСделки: ObservableObject {
     /// Проверка перед create: nil — можно оформлять.
     func ошибкаПередОформлением() -> String? {
         guard включена else { return nil }
-        if case .межгородНельзя = расчёт { return т("co_ship_intercity") }
+        /* Межгород без расчёта СДЭК: с доставкой не оформить; «Заберу сам» — можно (владелец 06.10.2026: «тупик»). */
+        if оформлениеЗакрыто { return т("co_go_self_hint") }
         guard !скрыт, !самЗаберу else { return nil }
         switch расчёт {
         case .считаем:
@@ -729,6 +754,14 @@ final class ДоставкаНовойСделки: ObservableObject {
         default:
             return nil
         }
+    }
+
+    /// Кнопка «Оформить» закрыта: в другой город СДЭК не посчитал, а «Заберу сам» не выбрано — сумма была бы без доставки,
+    /// которую человек ждёт. Выбрал «Заберу сам» — открыта.
+    var оформлениеЗакрыто: Bool {
+        guard включена, !скрыт, !самЗаберу else { return false }
+        if case .межгородНельзя = расчёт { return true }
+        return false
     }
 
     /// Поля create: адрес, точка, доставка, дверь.
@@ -761,13 +794,18 @@ final class ДоставкаНовойСделки: ObservableObject {
 struct БлокДоставкиНовойСделки: View {
     @ObservedObject var доставка: ДоставкаНовойСделки
     let изменитьАдрес: () -> Void
-    /// Окно объявления («Доставка в другой город»): без строки «Заберу сам» — там только расчёт.
+    /// Окно объявления («Доставка в другой город»): без строки «Заберу сам» и без заголовка «Как получить» — там свой
+    /// заголовок «Сколько стоит доставка до вас», и два подряд читались повтором.
     let безСамовывоза: Bool
+    /// «Написать продавцу» в плашке, когда СДЭК не посчитал межгород; nil — кнопки нет (нативного чата нет).
+    let написатьПродавцу: (() -> Void)?
 
-    init(доставка: ДоставкаНовойСделки, изменитьАдрес: @escaping () -> Void, безСамовывоза: Bool = false) {
+    init(доставка: ДоставкаНовойСделки, изменитьАдрес: @escaping () -> Void, безСамовывоза: Bool = false,
+         написатьПродавцу: (() -> Void)? = nil) {
         self.доставка = доставка
         self.изменитьАдрес = изменитьАдрес
         self.безСамовывоза = безСамовывоза
+        self.написатьПродавцу = написатьПродавцу
     }
 
     private func т(_ ключ: String) -> String { ДоставкаСделкиText.т(ключ) }
@@ -778,10 +816,12 @@ struct БлокДоставкиНовойСделки: View {
                 ЗаметкаСделки(Text(т("co_ship_free")), вид: .хорошо, символ: "gift")
             }
             if !доставка.скрыт {
-                Text(т("co_ship_pick").uppercased())
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Theme.зелёный)
-                    .accessibilityAddTraits(.isHeader)
+                if !безСамовывоза {
+                    Text(т("co_ship_pick").uppercased())
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Theme.зелёный)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 варианты
             }
             адрес
@@ -841,7 +881,15 @@ struct БлокДоставкиНовойСделки: View {
             строкаСам
             ПодписьСделки(т("co_ship_same"))
         case .межгородНельзя:
-            ЗаметкаСделки(Text(т("co_ship_intercity")), вид: .предупреждение, символ: "shippingbox")
+            /* Владелец 06.10.2026: плашка звала «Заберу сам» и «напишите продавцу», а ни того, ни другого на экране не
+               было. Теперь кнопка чата — в плашке, ниже — СДЭК без цены (не выбрать) и «Заберу сам». В окне объявления
+               «Заберу сам» нет — там текст сайта: с доставкой не оформить, напишите продавцу. */
+            плашкаМежгорода
+            if !безСамовывоза {
+                СтрокаВыбораДоставки(заголовок: т("car_na_t"), подпись: т("car_na_s"), цена: т("car_na_p"),
+                                     выбрана: false, пунктир: false, доступна: false) {}
+                строкаСамСама
+            }
         case .регион:
             ЗаметкаСделки(Text(т("co_ship_region")), вид: .инфо, символ: "map")
         case .курьер(let список):
@@ -862,6 +910,48 @@ struct БлокДоставкиНовойСделки: View {
 
     private func выбран(_ в: ВариантДоставкиСделки) -> Bool {
         доставка.выбранная?.id == в.id
+    }
+
+    /// Жёлтая плашка «СДЭК не смог рассчитать» и под текстом — «Написать продавцу».
+    private var плашкаМежгорода: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "shippingbox")
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(т(безСамовывоза ? "co_ship_intercity_l" : "co_ship_intercity"))
+                    .font(.system(size: 13))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .foregroundStyle(ВидЗаметкиСделки.предупреждение.краска)
+            if let написатьПродавцу {
+                Button(action: написатьПродавцу) {
+                    Label(т("ask_seller"), systemImage: "bubble.left.and.bubble.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.зелёный2)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(Theme.поверхность,
+                                    in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                                .strokeBorder(Theme.зелёный2, lineWidth: 1.5)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ВидЗаметкиСделки.предупреждение.фон,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                .strokeBorder(ВидЗаметкиСделки.предупреждение.кромка, lineWidth: 1.5)
+        }
     }
 
     /// Ключ текста причины бесплатной доставки без курьера (free_no_from, free_costly, free_self); nil — не она.
