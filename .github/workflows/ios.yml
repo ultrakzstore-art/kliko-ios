@@ -295,7 +295,13 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_DIR/AuthKey_$KID.p8" \
             -authenticationKeyID "$KID" \
-            -authenticationKeyIssuerID "$ISS"
+            -authenticationKeyIssuerID "$ISS" > export.log 2>&1 \
+            || { tail -60 export.log
+                 # Причину — в аннотации рана: их видно без скачивания лога.
+                 grep -iE "error|fail|invalid|denied|already|must|bundle version" export.log | sort -u | head -15 \
+                   | while IFS= read -r line; do echo "::error title=Экспорт и заливка::$line"; done
+                 exit 1; }
+          tail -5 export.log
 
       # СБОРКА НА ТЕЛЕФОНЕ (владелец 25.09.2026: «я не вижу с iOS его»). Заливка кладёт сборку в App Store Connect,
       # но в TestFlight на телефоне она видна, только когда её выдали группе тестировщиков. Ждём обработку Apple и
