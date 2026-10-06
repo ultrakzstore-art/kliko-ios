@@ -391,7 +391,9 @@ struct КарточкаМоегоОбъявления: View {
                 .lineSpacing(2)
                 .foregroundStyle(Theme.текст)
                 .multilineTextAlignment(.leading)
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)      // ровная схема: короткое название держит место второй строки
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if товар.топ { ЗначокТоп() }
         }
     }
@@ -399,7 +401,7 @@ struct КарточкаМоегоОбъявления: View {
     /// Дата как её прислал сервер; #номер с копированием (advCopyId) — только бизнесу.
     private var мета: some View {
         HStack(spacing: 6) {
-            Text(товар.создано)
+            Text(товар.создано.isEmpty ? " " : товар.создано)
                 .lineLimit(1)
             if бизнес { номерОбъявления }
         }
