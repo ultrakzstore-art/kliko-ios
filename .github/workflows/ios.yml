@@ -237,6 +237,10 @@ jobs:
           if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
             version="${GITHUB_REF_NAME#v}"          # тег v1.0.0 → 1.0.0
           fi
+          # Без версии — та же, что в codemagic.yaml (APP_VERSION): 0.1.0 из project.yml Apple
+          # не примет — в App Store уже одобрена 1.10.
+          [ -n "$version" ] || version="1.11"
+          echo "KLIKO_VERSION=$version" >> "$GITHUB_ENV"
           extra=""
           [ -n "$version" ] && extra="MARKETING_VERSION=$version"
 
@@ -324,7 +328,7 @@ jobs:
           command -v fastlane >/dev/null 2>&1 || brew install fastlane
           export ASC_KEY_PATH="$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
           version="$IN_VERSION"
-          if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          [ -n "$version" ] || version="$KLIKO_VERSION"
           fastlane ios beta build:"$KLIKO_BUILD_NO" ${version:+version:"$version"}
 
       - name: Убрать ключ

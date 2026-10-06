@@ -28,7 +28,7 @@ definitions:
     groups:
       - Kliko
     vars:
-      APP_VERSION: "1.10"          # версия TestFlight: выше 1.9 из App Store (сборки 1.8 там не видно)
+      APP_VERSION: "1.11"          # версия TestFlight: 1.10 уже одобрена в App Store, новые сборки — только выше
       SCHEME: Kliko
 
   scripts:
