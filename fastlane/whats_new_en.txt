@@ -1,0 +1,9 @@
+Kliko 1.11 — shop with peace of mind anywhere in Kazakhstan: Kliko holds the money until the item is in your hands.
+
+• Filters like on the website: each section has its own, with section and subsection choice on top and “Show N” at the bottom.
+• Listing QR code: Share → QR code. Show it on screen or print it — a phone camera opens the listing right away.
+• Faster feed: the feed and your profile open right after launch, and long feeds scroll smoothly.
+• Item in another city — the listing shows “Delivery from the city”. If CDEK can’t quote delivery, “I’ll pick it up” and “Message the seller” are right there.
+• Partner links to the Safe deal open in a window inside the app.
+• Refreshed launch screen: logo and loading progress.
+• Smoother on older iPhones, in Low Power Mode and when the phone is warm.

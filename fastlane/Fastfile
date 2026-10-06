@@ -182,13 +182,17 @@ platform :ios do
     note.call("Сборка к отправке", "#{version} (#{build.version}); шифрование: #{build.uses_non_exempt_encryption.nil? ? 'не указано' : build.uses_non_exempt_encryption}")
 
     # «Что нового» обязательно у обновления. Пустое поле заполняем текстом из репозитория, заполненное не трогаем.
-    notes_file = File.join(ENV.fetch("GITHUB_WORKSPACE"), "fastlane", "whats_new_ru.txt")
-    notes_ru = File.exist?(notes_file) ? File.read(notes_file).strip : ""
+    # Текст по языку: ru* — whats_new_ru.txt, en* — whats_new_en.txt (без файла — пусто, как раньше).
+    notes_for = lambda do |locale|
+      lang = locale.to_s[0, 2]
+      file = File.join(ENV.fetch("GITHUB_WORKSPACE"), "fastlane", "whats_new_#{lang}.txt")
+      File.exist?(file) ? File.read(file).strip : ""
+    end
     locs = edit.get_app_store_version_localizations
     locs.each do |l|
       shots = l.get_app_screenshot_sets.map { |s| "#{s.screenshot_display_type}=#{(s.app_screenshots || []).size}" }.join(", ")
       whats = if !blank.call(l.whats_new) then "есть"
-              elsif l.locale.start_with?("ru") && !notes_ru.empty? then "пусто, впишем из fastlane/whats_new_ru.txt"
+              elsif !notes_for.call(l.locale).empty? then "пусто, впишем из fastlane/whats_new_#{l.locale[0, 2]}.txt"
               else "ПУСТО"
               end
       note.call("Язык #{l.locale}", "описание #{blank.call(l.description) ? 'ПУСТО' : 'есть'}; ключевые слова #{blank.call(l.keywords) ? 'ПУСТО' : 'есть'}; ссылка поддержки #{blank.call(l.support_url) ? 'ПУСТО' : 'есть'}; что нового: #{whats}; кадры #{shots.empty? ? 'нет' : shots}")
@@ -213,9 +217,10 @@ platform :ios do
     end
 
     locs.each do |l|
-      next unless blank.call(l.whats_new) && l.locale.start_with?("ru") && !notes_ru.empty?
-      l.update(attributes: { whatsNew: notes_ru })
-      note.call("Что нового #{l.locale}", "вписано из fastlane/whats_new_ru.txt")
+      text = notes_for.call(l.locale)
+      next unless blank.call(l.whats_new) && !text.empty?
+      l.update(attributes: { whatsNew: text })
+      note.call("Что нового #{l.locale}", "вписано из fastlane/whats_new_#{l.locale[0, 2]}.txt")
     end
 
     deliver(
