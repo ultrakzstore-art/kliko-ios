@@ -24,9 +24,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         /* Скорость: большой общий URLCache — до первого запроса (картинки ленты, главная), а не когда поднимется веб-слой.
            Тот же путь, что у WebContainer, — прежний кэш на диске не теряется; WebContainer, увидев большой, не трогает. */
         if URLCache.shared.diskCapacity < 300 * 1024 * 1024 {
-            URLCache.shared = URLCache(memoryCapacity: 50 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024,
+            /* Слабое железо (DeviceMode.swift): в памяти 20 МБ, а не 50 — готовые картинки и так держит КартинкиЛенты. */
+            let вПамяти = (ЖелезоУстройства.слабое ? 20 : 50) * 1024 * 1024
+            URLCache.shared = URLCache(memoryCapacity: вПамяти, diskCapacity: 300 * 1024 * 1024,
                                        diskPath: "kliko-web")
         }
+        /* Замеры скорости (PerfTelemetry.swift): MetricKit и время холодного запуска — с самого начала. Отправка — только
+           при включённом в админке рубильнике perf_telemetry. */
+        ЗамерыСкорости.запустить()
         UNUserNotificationCenter.current().delegate = self
         // Этап 12: обработчик фоновой проверки сохранённых поисков — строго до конца запуска, иначе iOS роняет
         // приложение при первом же фоновом запуске задания.

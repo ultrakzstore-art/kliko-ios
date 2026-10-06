@@ -122,6 +122,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         подписка = Publishers.CombineLatest4(стильСтраницы, мост.$splashDone, мост.$loadFailed, замокВиден)
             .receive(on: DispatchQueue.main)
             .sink { [weak корень] стиль, сплэшУшёл, нетСвязи, подЗамком in
+                if сплэшУшёл { ЗамерыСкорости.заставкаУшла() }      // один раз за запуск (PerfTelemetry.swift)
                 guard let стиль, сплэшУшёл, !нетСвязи, !подЗамком else { корень?.стильСтроки = .default; return }
                 корень?.стильСтроки = стиль
             }
@@ -206,11 +207,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene)  {
         AppLock.shared.sceneDidEnterBackground()
         ПроверкаПоисков.запланировать()             // этап 12: проверка сохранённых поисков — не раньше чем через час
+        ЗамерыСкорости.вФон()                       // замеры скорости — на диск и пачкой на сервер (PerfTelemetry.swift)
     }
     func sceneWillEnterForeground(_ scene: UIScene) { AppLock.shared.sceneWillEnterForeground() }
     func sceneDidBecomeActive(_ scene: UIScene)     {
         AppLock.shared.sceneDidBecomeActive()
         // Запуск и возврат: версия App Store (не чаще раза в 6 часов) и предупреждение или запрет устаревшей версии.
         Task { await ПринудительноеОбновление.shared.проверить() }
+        ЗамерыСкорости.приАктивности()              // раз в сутки — пачка замеров скорости
     }
 }

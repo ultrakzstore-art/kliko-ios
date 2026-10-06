@@ -394,10 +394,14 @@ final class FeedModel: ObservableObject {
                 self.начатьЛенту(копия, запрос: з, последняя: false)
             }
         }
+        let начало = Date()
         do {
             let (страница, сырое) = try await ListingsAPI.загрузить(з)
             /* Пока ехал ответ, человек сменил раздел или искомое — этот ответ уже не про то, что на экране. */
             guard номер == поколение, !Task.isCancelled else { return }
+            /* Замер скорости (PerfTelemetry.swift): сколько ехала и разбиралась страница. */
+            ЗамерыСкорости.отметить(сброс ? "feed_page" : "feed_more", ms: ЗамерыСкорости.мс(с: начало),
+                                    n: ["kb": Double(сырое.count / 1024)])
             ошибка = nil
             /* Этап 33: следующая страница — по has_more ответа, как у сайта (_mkMore = !!n.has_more); не пришёл — по
                размеру страницы, как раньше. Решаем до раскладки: последняя страница дочитывает хвост ритма. */
@@ -439,6 +443,7 @@ final class FeedModel: ObservableObject {
             }
         } catch let e as ListingsAPI.Ошибка {
             guard номер == поколение, !Task.isCancelled else { return }
+            ЗамерыСкорости.отметить("feed_err", ms: ЗамерыСкорости.мс(с: начало), s: ["e": Self.видОшибки(e)])
             ответПришёл = true
             if сброс { всего = nil }
             ошибка = e
@@ -449,6 +454,15 @@ final class FeedModel: ObservableObject {
             if сброс { всего = nil }
             ошибка = .сеть
             if !сброс { запрос.page -= 1 }
+        }
+    }
+
+    /// Вид ошибки ленты для замеров скорости: net, http-<код>, parse.
+    private static func видОшибки(_ e: ListingsAPI.Ошибка) -> String {
+        switch e {
+        case .сеть: return "net"
+        case .статус(let код): return "http-" + String(код)
+        case .разбор: return "parse"
         }
     }
 

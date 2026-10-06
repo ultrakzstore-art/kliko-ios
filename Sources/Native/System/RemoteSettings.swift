@@ -24,10 +24,12 @@ import SwiftUI
  Не было ни разу — тексты пишут «платёжная организация» без названия (ПлатёжнаяОрганизация.текущая == nil).
  */
 enum НастройкиСервера {
-    /// Рубильники, которые читает приложение. banner_on — показ полосы над лентой; img_resize — лёгкие фото (img.php).
+    /// Рубильники, которые читает приложение. banner_on — показ полосы над лентой; img_resize — лёгкие фото (img.php);
+    /// perf_telemetry — замеры скорости на api/app_perf.php (PerfTelemetry.swift).
     static let ключиФлагов: Set<String> = [
         "checks_rk", "ai_recognize", "native_session", "listing_chat", "chat_send", "listing_map",
-        "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize"
+        "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize",
+        "perf_telemetry"
     ]
     /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store; force_lag и force_grace_hours —
     /// числа для принудительного обновления (ПринудительноеОбновление, ForcedUpdate.swift): порог отставания от App Store
