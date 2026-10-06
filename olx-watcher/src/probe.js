@@ -267,69 +267,95 @@ async function kaspiProbe(id) {
 }
 
 // npm run probe -- olx race [минут] — гонка источников OLX: для новых номеров — когда объявление
-// впервые открылось карточкой API v2, карточкой API v1, когда появилось в JSON-списке свежих и
-// на витрине «сначала новые». До ~3 запросов в секунду; на 403 замер останавливается.
+// впервые открылось карточкой API v2 и v1, когда появилось в JSON-списке свежих и на витрине.
+// Сначала находит настоящий край номеров (список может отставать на минуты), часы ПК сверяет
+// с часами OLX (заголовок Date). До ~3 запросов в секунду; на 403 останавливается.
 async function olxRace(ms) {
   const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'application/json' };
-  const card = async (v, id) => {
-    const url = v === 2 ? `${olx.BASE}/api/v2/offers/${id}` : `${olx.BASE}/api/v1/offers/${id}/`;
-    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(8_000) });
+  let skew = null;   // часы OLX минус часы ПК, мс
+  const now = () => Date.now() + (skew || 0);
+  const ask = async (url, timeout = 8_000) => {
+    const sent = Date.now();
+    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(timeout) });
+    const d = Date.parse(res.headers.get('date') || '');
+    if (skew === null && Number.isFinite(d)) skew = d + 500 - (sent + Date.now()) / 2;   // Date — с точностью до секунды
     if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
+    return res;
+  };
+  const card = async (v, id) => {
+    const res = await ask(v === 2 ? `${olx.BASE}/api/v2/offers/${id}` : `${olx.BASE}/api/v1/offers/${id}/`);
     if (!res.ok) return null;
     try { const j = await res.json(); const d = j.data || j; return Number(d.id) === id ? d : null; } catch { return null; }
   };
   // JSON-список — именно он, без запасного пути через витрину: их сравниваем отдельно.
   const jsonList = async () => {
-    const url = `${olx.BASE}/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc`;
-    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(15_000) });
-    if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
+    const res = await ask(`${olx.BASE}/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc`, 15_000);
     if (!res.ok) return [];
     try { return ((await res.json()).data || []).map(olx.normalizeOffer); } catch { return []; }
   };
   const seen = new Map();   // id → { v2, v1, list, show, created, status }
   const rec = (id) => { if (!seen.has(id)) seen.set(id, {}); return seen.get(id); };
-  let edge = 0;
+  const note = (id, d, key, t) => {
+    const x = rec(id);
+    if (!x[key]) x[key] = t;
+    const c = Date.parse(d?.created_time || d?.createdTime || '');
+    if (!x.created && Number.isFinite(c)) x.created = c;
+    if (d?.status) x.status = d.status;
+  };
+  // Настоящий край: от номера из списка шагаем вперёд 8, 16, 32… пока карточки открываются,
+  // потом делением пополам. Пропуски в номерах бывают — смотрим по три номера подряд.
+  const opens = async (id) => {
+    for (const n of [id, id + 1, id + 2]) if (await card(2, n)) return true;
+    return false;
+  };
+  const findEdge = async (from) => {
+    let lo = from;
+    let step = 8;
+    while (await opens(lo + step)) { lo += step; step *= 2; if (step > 4096) break; }
+    let hi = lo + step;
+    while (hi - lo > 3) { const mid = Math.floor((lo + hi) / 2); if (await opens(mid)) lo = mid; else hi = mid; }
+    return lo;
+  };
+
   const end = Date.now() + ms;
-  console.log(`Гонка источников OLX ${Math.round(ms / 60_000)} мин: карточки API v2 и v1, JSON-список, витрина…\n`);
+  console.log(`Гонка источников OLX ${Math.round(ms / 60_000)} мин: карточки API v2 и v1, JSON-список, витрина…`);
   let stop = '';
-  let slow = 0;        // карточек, не ответивших за 8 с
-  let longest = 0;     // самый долгий круг, мс
+  let edge = 0;
+  let slow = 0;
+  let longest = 0;
+  let shown = 0;
+  try {
+    const list = await jsonList();
+    const top = Math.max(0, ...list.map((a) => a.id));
+    if (!top) throw new Error('JSON-список пуст — не от чего искать край');
+    edge = await findEdge(top);
+    console.log(`Часы ПК ${skew === null ? 'не сверены' : `${skew > 0 ? 'отстают от' : 'спешат относительно'} OLX на ${Math.abs(Math.round(skew / 1000))} с — поправлено`}.`);
+    console.log(`Последний номер в JSON-списке ${top}, настоящий край ${edge}: список отстаёт на ${edge - top} номеров.\n`);
+  } catch (e) {
+    stop = e instanceof olx.HttpError ? `OLX ответил ${e.status} — остановил замер` : `Не начал: ${e.message}`;
+  }
+  const t1 = Date.now();
   while (Date.now() < end && !stop) {
     const t0 = Date.now();
     try {
-      const list = await jsonList();
+      for (const a of await jsonList()) note(a.id, null, 'list', now());
       try {
-        for (const a of (await olx.fetchSearch(`${olx.BASE}/list/`)).ads) {
-          const r = seen.get(a.id);
-          if (r && !r.show) r.show = Date.now();
-          else if (!r && a.id > edge - 40) rec(a.id).show = Date.now();
-        }
+        for (const a of (await olx.fetchSearch(`${olx.BASE}/list/`)).ads) if (a.id > edge - 300) note(a.id, null, 'show', now());
       } catch (e) { if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) throw e; }
-      for (const a of list) {
-        const r = rec(a.id);
-        if (!r.list) r.list = Date.now();
-        if (!r.created && a.createdAt) r.created = a.createdAt;
-        edge = Math.max(edge, a.id);
+      // Номера за краем (пять — с запасом на пропуски) и недавние, где не ответила одна из версий.
+      const ids = [1, 2, 3, 4, 5].map((k) => edge + k);
+      for (const [id, r] of [...seen].sort((x, y) => y[0] - x[0])) {
+        if (ids.length >= 8) break;
+        if (id > edge - 40 && (r.v1 || r.v2) && (!r.v1 || !r.v2) && !ids.includes(id)) ids.push(id);
       }
-      // Номера за краем и недавние, которые видел не каждый источник.
-      const ids = edge ? [edge + 1, edge + 2, edge + 3] : [];
-      for (const [id, r] of [...seen].sort((a, b) => b[0] - a[0])) {
-        if (ids.length >= 6) break;
-        if (id > edge - 40 && (!r.v1 || !r.v2) && !ids.includes(id)) ids.push(id);
-      }
-      // Карточки — все сразу: по очереди один медленный ответ OLX задерживал весь круг на минуты.
       const asks = ids.flatMap((id) => [2, 1].filter((v) => !seen.get(id)?.[`v${v}`]).map((v) => ({ id, v })));
-      const got = await Promise.all(asks.map(({ id, v }) => card(v, id).then((d) => ({ id, v, d, t: Date.now() }), (e) => ({ id, v, e }))));
+      const got = await Promise.all(asks.map(({ id, v }) => card(v, id).then((d) => ({ id, v, d, t: now() }), (e) => ({ id, v, e }))));
       const limited = got.find((g) => g.e instanceof olx.HttpError);
       if (limited) throw limited.e;
       for (const { id, v, d, t, e } of got) {
         if (e) { slow += 1; continue; }
         if (!d) continue;
-        const x = rec(id);
-        x[`v${v}`] = t;
-        const c = Date.parse(d.created_time || d.createdTime || '');
-        if (!x.created && Number.isFinite(c)) x.created = c;
-        if (d.status) x.status = d.status;
+        note(id, d, `v${v}`, t);
         edge = Math.max(edge, id);
       }
     } catch (e) {
@@ -337,30 +363,37 @@ async function olxRace(ms) {
       else console.log(`  ошибка: ${e.message}`);
     }
     longest = Math.max(longest, Date.now() - t0);
-    const min = Math.floor((Date.now() - (end - ms)) / 60_000);
-    if (min > (olxRace.shown || 0)) {
-      olxRace.shown = min;
-      const r = [...seen.values()];
-      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · список ${r.filter((x) => x.list).length} · витрина ${r.filter((x) => x.show).length}${longest > 10_000 ? ` · OLX тормозил: круг до ${Math.round(longest / 1000)} с, без ответа ${slow}` : ''}`);
+    const min = Math.floor((Date.now() - t1) / 60_000);
+    if (min > shown) {
+      shown = min;
+      const r = [...seen.values()].filter((x) => x.v2 || x.v1);
+      console.log(`  ${min} мин: номеров открыто ${r.length} · из них в списке ${r.filter((x) => x.list).length} · на витрине ${r.filter((x) => x.show).length}${longest > 10_000 ? ` · OLX тормозил: круг до ${Math.round(longest / 1000)} с, без ответа ${slow}` : ''}`);
       longest = 0;
     }
-    const wait = 4000 - (Date.now() - t0);
+    const wait = 3000 - (Date.now() - t0);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
   if (stop) console.log(stop);
-  const rows = [...seen].filter(([, r]) => r.created && r.created > Date.now() - ms - 120_000 && (r.v1 || r.v2 || r.list)).sort((a, b) => a[0] - b[0]);
-  const ago = (t, c) => (t ? `${Math.round((t - c) / 1000)} с` : '—');
+
+  // Только номера, открытые карточкой во время замера (а не старые из списка).
+  const rows = [...seen].filter(([, r]) => r.created && (r.v2 || r.v1)).sort((x, y) => x[0] - y[0]);
+  const sec = (t, c) => (t ? Math.round((t - c) / 1000) : null);
+  const cell = (t, c, w) => (t ? `${sec(t, c)} с` : '—').padStart(w);
   console.log('\nномер        подано    API v2   API v1  список  витрина  статус');
-  const first = { v2: 0, v1: 0, list: 0, show: 0 };
   for (const [id, r] of rows) {
-    const at = new Date(r.created).toLocaleTimeString('ru-RU');
-    console.log(`${id}  ${at}  ${ago(r.v2, r.created).padStart(7)}  ${ago(r.v1, r.created).padStart(7)}  ${ago(r.list, r.created).padStart(6)}  ${ago(r.show, r.created).padStart(7)}   ${r.status || ''}`);
-    const ts = [['v2', r.v2], ['v1', r.v1], ['list', r.list], ['show', r.show]].filter(([, t]) => t);
-    ts.sort((a, b) => a[1] - b[1]);
-    if (ts.length > 1 && ts[1][1] - ts[0][1] >= 1000) first[ts[0][0]] += 1;   // ничья (разница меньше секунды) — не в счёт
+    console.log(`${id}  ${new Date(r.created).toLocaleTimeString('ru-RU')}  ${cell(r.v2, r.created, 7)}  ${cell(r.v1, r.created, 7)}  ${cell(r.list, r.created, 6)}  ${cell(r.show, r.created, 7)}   ${r.status || ''}`);
   }
-  console.log(`\nКто увидел первым (где видели хотя бы двое): карточка v2 — ${first.v2}, карточка v1 — ${first.v1}, JSON-список — ${first.list}, витрина — ${first.show}`);
-  console.log('Время — сколько секунд прошло от подачи до того, как источник отдал объявление. Пришлите этот вывод.');
+  const med = (a) => { if (!a.length) return '—'; const s2 = [...a].sort((x, y) => x - y); return `${s2[Math.floor(s2.length / 2)]} с`; };
+  const cardT = (r) => Math.min(r.v2 || Infinity, r.v1 || Infinity);
+  const v2first = rows.filter(([, r]) => r.v2 && r.v1 && r.v1 - r.v2 >= 1000).length;
+  const v1first = rows.filter(([, r]) => r.v2 && r.v1 && r.v2 - r.v1 >= 1000).length;
+  const both = rows.filter(([, r]) => r.list);
+  console.log(`\nИтог (${rows.length} новых объявлений):`);
+  console.log(`  карточка (v2 или v1) — через ${med(rows.map(([, r]) => sec(cardT(r), r.created)))} после подачи (медиана)`);
+  console.log(`  v2 раньше v1: ${v2first}, v1 раньше v2: ${v1first}, одновременно: ${rows.length - v2first - v1first}`);
+  console.log(`  JSON-список — через ${med(both.map(([, r]) => sec(r.list, r.created)))}; карточка раньше списка у ${both.filter(([, r]) => r.list - cardT(r) >= 1000).length} из ${both.length}, на сколько — ${med(both.map(([, r]) => sec(r.list, cardT(r))))}`);
+  console.log(`  в список попали ${both.length} из ${rows.length}, на витрину — ${rows.filter(([, r]) => r.show).length} (там только 40 самых свежих — быстрые потоки проскакивают)`);
+  console.log('Секунды — от времени подачи (по часам OLX) до первого ответа источника. Опрос раз в 3 с: точность ±3 с.');
 }
 
 // npm run probe -- olx track <номер> [минут] — одно (своё, только что поданное) объявление во
