@@ -1,97 +1,283 @@
 import SwiftUI
 
 /**
- ЗАГРУЗОЧНЫЙ ЭКРАН КАК НА САЙТЕ (владелец 26.09.2026: «лоадера почему нету?»).
+ ПРИВЕТСТВЕННЫЙ ЭКРАН ЗАПУСКА (владелец 26.09.2026: «лоадера почему нету?»; 06.10.2026: «при запуске прогресс-бар
+ красивый, приветственный лоадер сделай мощным, и пользы отмечай с анимацией»).
 
- Копия #ulx-preloader главной сайта (разметка и стили — в home.html и css/marketplace.min.css):
-  • фон на весь экран — #f4f7f5, в тёмной теме #0d0d14;
-  • значок 90×90 (brand_logo_icon: плашка 48×48 с радиусом 13, градиент #16a34a → #0f7a44, белый пин, циферблат
-    #0f7a44, стрелки; минутная крутится klk-spin 6 с, кольцо пульсирует klk-ring 2,1 с) с тенью
-    drop-shadow(0 12px 26px rgba(15,122,68,.32));
-  • надпись «Klıko.kz» 112×28 (viewBox 296×74, Unbounded 800 — те же векторные WmKliko и WmKz, что у KlikoWordmark),
-    «.kz» зелёная #16a34a, маяк над «ı» — кольцо klk-ring и точка klk-blink 1,5 с;
-  • между значком и надписью 14 (--m-3h), до колеса 20 (--m-5);
-  • колесо .prg 34×34, обводка 3 (#d7e8df и зелёный верх; в тёмной #26332c и --mk-bright), оборот 0,8 с;
-  • подсказка .phint внизу (bottom 34, поля 24, 14 пт, #5f6f66 / #93a49b, жирное — зелёным), новая каждые 2,6 с:
-    гаснет за 0,35 с, меняется и загорается; первая — случайная, как у скрипта сайта;
-  • появление ulxp-in 0,5 с cubic-bezier(.2,.8,.25,1): масштаб .86 → 1 и непрозрачность 0 → 1. Уход (0,45 с) —
-    у того, кто показывает экран (RootWebView).
+ Логотип — тот же, что у #ulx-preloader сайта (brand_logo_icon и brand_logo_wordmark, viewBox 48×48 и 296×74, те же
+ klk-spin, klk-ring, klk-blink), фон — #f4f7f5 и #0d0d14, как у экрана запуска iOS (LaunchBackground): между ними нет
+ вспышки, и строка состояния при сплэше остаётся системной (SceneDelegate). Зелень шапки приложения (шапкаВерх →
+ зелёныйЯркий) — в мягком свечении за логотипом, в значках польз и в заливке прогресса.
+  • Логотип появляется (масштаб .86 → 1) и потом «дышит» — едва заметно растёт и опадает, свечение за ним тоже.
+  • Карусель польз: значок в зелёном кружке, заголовок и строка; новая каждые 1,2 с — въезжает сбоку с проявлением,
+    точки внизу показывают, какая. Пользы — только то, что правда есть в приложении (ПользыЗапуска).
+  • Прогресс — настоящий, насколько это знает приложение. Готово (первые данные главной или ленты — ЗаставкаЗапуска;
+    в веб-обёртке — страница отрисована) — полоса быстро добегает до 100 %. До того — плавное заполнение по времени
+    (к восьмой секунде, потолку заставки, около 92 %), а в веб-обёртке не ниже доли загрузки страницы
+    (WKWebView.estimatedProgress). Своих задержек здесь нет: уходит экран тогда, когда решит RootWebView.
 
- «Уменьшение движения» — как @media(prefers-reduced-motion:reduce) сайта: стоят стрелка, кольца, колесо и появление.
- Точку маяка и смену подсказок сайт не останавливает — здесь тоже.
+ «Уменьшение движения» — стоят стрелка, кольца, дыхание, блик полосы; пользы сменяются проявлением, без сдвига.
  */
 struct SitePreloader: View {
     @Environment(\.accessibilityReduceMotion) private var тихо
+    @ObservedObject private var заставка = ЗаставкаЗапуска.shared
+    @ObservedObject private var мост = WebBridge.shared
     @State private var появилось = false
-    @State private var номер = Int.random(in: 0..<ПодсказкиПрелоадера.список.count)
-    @State private var подсказкаВидна = true
-    @ScaledMetric(relativeTo: .subheadline) private var кегль: CGFloat = 14
+    @State private var дышит = false
+    @State private var доля: Double = 0.06
+    @State private var номер = 0
+    /// Набор читается один раз: пауза гаранта (ПаузаГаранта) меняться посреди заставки не должна.
+    @State private var пользы: [ПользаЗапуска] = ПользыЗапуска.список
+
+    /// Приложению есть что показать: у нативной ленты — первые данные, у веб-обёртки — отрисованная страница.
+    private var готово: Bool { Config.нативнаяЛента ? заставка.данныеЕсть : мост.isLoaded }
 
     var body: some View {
-        /* #ulx-preloader — position:fixed; inset:0: весь экран, под вырезом и домашней полосой тоже; значок с колесом —
-           по центру экрана, подсказка — в 34 от его низа. */
-        ZStack(alignment: .bottom) {
+        ZStack {
             ПодсказкиПрелоадера.фон
+                .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                VStack(spacing: 14) {
-                    ЗначокПрелоадера(стоит: тихо)
-                        .frame(width: 90, height: 90)
-                        .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, 0.32)), radius: 13, x: 0, y: 12)
-                    НадписьПрелоадера(стоит: тихо)
-                        .frame(width: 112, height: 28)
-                }
-                .scaleEffect(появилось ? 1 : 0.86)
+            /* Мягкое зелёное свечение за логотипом — зелень шапки приложения. */
+            RadialGradient(colors: [Theme.зелёныйЯркий.opacity(0.22), Theme.зелёныйЯркий.opacity(0)],
+                           center: .center, startRadius: 4, endRadius: 210)
+                .frame(width: 420, height: 420)
+                .scaleEffect(дышит ? 1.12 : 0.94)
                 .opacity(появилось ? 1 : 0)
+                .offset(y: -110)
+                .allowsHitTesting(false)
 
-                SiteSpinner(размер: 34, толщина: 3,
-                            дорожка: Theme.цвет(0xD7E8DF, 0x26332C),
-                            верх: Theme.цвет(0x1D7D4A, 0x5CD39A),
-                            период: 0.8, стоит: тихо)
+            VStack(spacing: 0) {
+                Spacer(minLength: 24)
+                логотип
+                Spacer(minLength: 24)
+                КарусельПольз(пользы: пользы, номер: номер, тихо: тихо)
+                    .frame(maxWidth: 440)
+                    .padding(.horizontal, 20)
+                ПолосаЗапуска(доля: доля, готово: готово, тихо: тихо)
+                    .frame(maxWidth: 400)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 26)
+                    .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            подсказка
         }
-        .ignoresSafeArea()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ПодсказкиПрелоадера.загрузка)
+        .accessibilityValue(Text(verbatim: "\(Int((доля * 100).rounded()))%"))
         .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
             if тихо {
                 появилось = true
             } else {
                 withAnimation(.timingCurve(0.2, 0.8, 0.25, 1, duration: 0.5)) { появилось = true }
+                withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true).delay(0.5)) { дышит = true }
+            }
+            /* Данные уже есть (лента с диска, стартовые данные сборки) — полоса не прыгает, а плавно добегает за 0,5 с,
+               пока длится минимум показа (0,6 с, RootWebView). */
+            if готово {
+                if тихо { доля = 1 } else { withAnimation(.easeInOut(duration: 0.5)) { доля = 1 } }
             }
         }
-        .task { await менятьПодсказки() }
+        .onChange(of: готово) { _, есть in
+            guard есть else { return }
+            if тихо { доля = 1 } else { withAnimation(.easeOut(duration: 0.3)) { доля = 1 } }
+        }
+        .task { await заполнять() }
+        .task { await листать() }
     }
 
-    private var подсказка: some View {
-        Text(ПодсказкиПрелоадера.строка(ПодсказкиПрелоадера.список[номер % ПодсказкиПрелоадера.список.count],
-                                        кегль: кегль))
-            .font(.system(size: кегль))
-            .foregroundStyle(ПодсказкиПрелоадера.цветТекста)
-            .multilineTextAlignment(.center)
-            .lineSpacing(кегль * 0.3)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 540)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 34)
-            .opacity(подсказкаВидна ? 1 : 0)
+    private var логотип: some View {
+        VStack(spacing: 16) {
+            ЗначокПрелоадера(стоит: тихо)
+                .frame(width: 96, height: 96)
+                .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, дышит ? 0.40 : 0.28)),
+                        radius: дышит ? 18 : 13, x: 0, y: 12)
+            НадписьПрелоадера(стоит: тихо)
+                .frame(width: 128, height: 32)
+        }
+        .scaleEffect(появилось ? 1 : 0.86)
+        .scaleEffect(дышит ? 1.035 : 1)
+        .opacity(появилось ? 1 : 0)
     }
 
-    /// Скрипт сайта: setInterval 2600 — гаснет (transition .35s ease), через 350 мс новая и загорается.
-    private func менятьПодсказки() async {
-        let переход = Animation.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.35)
-        try? await Task.sleep(nanoseconds: 2_600_000_000)
+    /// Плавное заполнение до готовности: быстро в начале и всё медленнее к 92 % — никогда не «застревает» на месте.
+    /// Готово — onChange добегает до 100 %.
+    @MainActor
+    private func заполнять() async {
+        let старт = Date()
         while !Task.isCancelled {
-            withAnimation(переход) { подсказкаВидна = false }
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            if готово { return }
+            let t = Date().timeIntervalSince(старт)
+            let поВремени = 0.06 + 0.86 * (1 - exp(-t / 2.4))
+            let поСтранице = Config.нативнаяЛента ? 0 : мост.progress * 0.95
+            let цель = min(0.95, max(доля, поВремени, поСтранице))
+            if тихо {
+                доля = цель
+            } else {
+                withAnimation(.linear(duration: 0.12)) { доля = цель }
+            }
+            try? await Task.sleep(nanoseconds: 120_000_000)
+        }
+    }
+
+    /// Новая польза каждые 1,2 с, по кругу.
+    @MainActor
+    private func листать() async {
+        guard пользы.count > 1 else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
             if Task.isCancelled { break }
-            номер = (номер + 1) % ПодсказкиПрелоадера.список.count
-            withAnimation(переход) { подсказкаВидна = true }
-            try? await Task.sleep(nanoseconds: 2_250_000_000)
+            let следующий = (номер + 1) % пользы.count
+            if тихо {
+                withAnimation(.easeInOut(duration: 0.25)) { номер = следующий }
+            } else {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { номер = следующий }
+            }
+        }
+    }
+}
+
+// MARK: - Карусель польз
+
+private struct КарусельПольз: View {
+    let пользы: [ПользаЗапуска]
+    let номер: Int
+    let тихо: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                if !пользы.isEmpty {
+                    КартаПользы(польза: пользы[номер % пользы.count], тихо: тихо)
+                        .id(номер)
+                        .transition(переход)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 78)
+            HStack(spacing: 6) {
+                ForEach(пользы.indices, id: \.self) { i in
+                    Capsule()
+                        .fill(i == номер % max(1, пользы.count) ? Theme.зелёныйЯркий : Theme.линия)
+                        .frame(width: i == номер % max(1, пользы.count) ? 18 : 6, height: 6)
+                }
+            }
+        }
+    }
+
+    private var переход: AnyTransition {
+        if тихо { return .opacity }
+        return .asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                           removal: .move(edge: .leading).combined(with: .opacity))
+    }
+}
+
+private struct КартаПользы: View {
+    let польза: ПользаЗапуска
+    let тихо: Bool
+    @State private var значокВиден = false
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [Theme.шапкаВерх, Theme.зелёныйЯркий],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: польза.значок)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 48, height: 48)
+            .shadow(color: Theme.зелёныйЯркий.opacity(0.35), radius: 8, x: 0, y: 4)
+            .scaleEffect(значокВиден ? 1 : 0.55)
+            .rotationEffect(.degrees(значокВиден ? 0 : -18))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(польза.заголовок)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(польза.строка)
+                    .font(.footnote)
+                    .foregroundStyle(ПодсказкиПрелоадера.цветТекста)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.линия, lineWidth: 1))
+        .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, 0.10)), radius: 14, x: 0, y: 6)
+        .onAppear {
+            if тихо {
+                значокВиден = true
+            } else {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(0.08)) { значокВиден = true }
+            }
+        }
+    }
+}
+
+// MARK: - Полоса прогресса: скруглённая дорожка, заливка зеленью шапки со свечением и бегущим бликом, процент.
+
+private struct ПолосаЗапуска: View {
+    let доля: Double
+    let готово: Bool
+    let тихо: Bool
+
+    var body: some View {
+        let p = max(0.04, min(1, доля))
+        VStack(spacing: 8) {
+            GeometryReader { г in
+                let w = г.size.width
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.цвет(0xDCE9E1, 0x26332C))
+                    Capsule()
+                        .fill(LinearGradient(colors: [Theme.шапкаВерх, Theme.зелёныйЯркий, ПодсказкиПрелоадера.маяк],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(8, w * p))
+                        .overlay(alignment: .leading) { блик(ширина: w) }
+                        .clipShape(Capsule())
+                        .shadow(color: ПодсказкиПрелоадера.маяк.opacity(0.5), radius: 6)
+                }
+            }
+            .frame(height: 8)
+            HStack {
+                Text(подпись)
+                Spacer()
+                Text(verbatim: "\(Int((p * 100).rounded()))%")
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(ПодсказкиПрелоадера.цветТекста)
+        }
+        .environment(\.layoutDirection, .leftToRight)   // полоса растёт слева направо и в арабском, как у сайта
+    }
+
+    /// Блик пробегает по заливке за 1,3 с; при «Уменьшении движения» его нет.
+    @ViewBuilder
+    private func блик(ширина w: CGFloat) -> some View {
+        if !тихо {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { шкала in
+                let фаза = шкала.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.3) / 1.3
+                LinearGradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 64)
+                    .offset(x: -64 + CGFloat(фаза) * (w + 64))
+            }
+        }
+    }
+
+    private var подпись: String {
+        switch DesignText.язык {
+        case "kk": return готово ? "Дайын" : "Жүктелуде"
+        case "en": return готово ? "Ready" : "Loading"
+        case "ar": return готово ? "جاهز" : "جارٍ التحميل"
+        default: return готово ? "Готово" : "Загружаем"
         }
     }
 }
@@ -231,8 +417,6 @@ enum ПодсказкиПрелоадера {
     static let фон = Theme.цвет(0xF4F7F5, 0x0D0D14)
     /// .phint: #5f6f66 и #93a49b.
     static let цветТекста = Theme.цвет(0x5F6F66, 0x93A49B)
-    /// .phint b: --mk-green2 и --mk-bright тёмной темы.
-    static let цветЖирного = Theme.цвет(0x1D7D4A, 0x5CD39A)
 
     /// klk-ring 2,1 с cubic-bezier(.2,.6,.3,1): масштаб .4 → 1.95 за весь период, непрозрачность .85 → 0 к 70 %.
     /// Стоит — кольцо как в разметке, без анимации: масштаб 1, непрозрачность 1.
@@ -271,33 +455,6 @@ enum ПодсказкиПрелоадера {
         return by((низ + верх) / 2)
     }
 
-    /// Строка с <b>…</b> сайта: жирное — 700 и зелёным.
-    static func строка(_ исходная: String, кегль: CGFloat) -> AttributedString {
-        var итог = AttributedString()
-        var жирный = false
-        var остаток = Substring(исходная)
-        while !остаток.isEmpty {
-            let тег = жирный ? "</b>" : "<b>"
-            guard let r = остаток.range(of: тег) else {
-                итог.append(кусок(String(остаток), жирный: жирный, кегль: кегль))
-                break
-            }
-            итог.append(кусок(String(остаток[..<r.lowerBound]), жирный: жирный, кегль: кегль))
-            остаток = остаток[r.upperBound...]
-            жирный.toggle()
-        }
-        return итог
-    }
-
-    private static func кусок(_ текст: String, жирный: Bool, кегль: CGFloat) -> AttributedString {
-        var a = AttributedString(текст)
-        if жирный {
-            a.font = Font.system(size: кегль, weight: .bold)
-            a.foregroundColor = цветЖирного
-        }
-        return a
-    }
-
     /// aria-label «Загрузка…».
     static var загрузка: String {
         switch DesignText.язык {
@@ -307,66 +464,70 @@ enum ПодсказкиПрелоадера {
         default: return "Загрузка…"
         }
     }
+}
 
-    /// Подсказки #ulxp-hint на языке приложения. Русские — дословно из скрипта главной сайта (переменная H).
-    static var список: [String] {
-        switch DesignText.язык {
-        case "kk": return kk
-        case "en": return en
-        case "ar": return ar
-        default: return ru
+// MARK: - Пользы платформы для экрана запуска
+
+/// Одна польза: значок SF Symbols в зелёном кружке, заголовок и строка.
+struct ПользаЗапуска: Identifiable {
+    let id: String
+    let значок: String
+    let заголовок: String
+    let строка: String
+}
+
+/**
+ Пользы на экране запуска — ТОЛЬКО то, что приложение и сайт правда делают (сверено по коду 06.10.2026):
+  • «Безопасная сделка» — гарант (SiteSafeDeal, DealMoney*). Обещаем лишь пока гарант не на паузе по последней сверке
+    (ПаузаГаранта.наПаузеСейчас): «деньги у Kliko, пока не получите товар» на паузе было бы неправдой.
+  • «Знайте, с кем имеете дело» — верификация eGov (EgovWindow), синяя галочка, отзывы и рейтинг продавца.
+  • «Kliko AI» — распознавание фото в подаче (Posting: «Сфотографируйте — Kliko AI заполнит всё сам»).
+  • «Бесплатная доставка» — у объявления «Доставка бесплатно», когда её оплачивает продавец (SiteListingDelivery).
+  • «Доставка по Казахстану» — СДЭК в другой город и курьер Яндекс Go по городу (SiteListingLocation, Eds).
+  • «QR-код объявления» — окно ЛистQRОбъявления (ListingQR.swift).
+ */
+enum ПользыЗапуска {
+    static var список: [ПользаЗапуска] {
+        let язык = DesignText.язык
+        let т = тексты[язык] ?? тексты["ru"]!
+        var ключи: [(String, String)] = []
+        if !ПаузаГаранта.наПаузеСейчас { ключи.append(("escrow", "lock.shield.fill")) }
+        ключи.append(("verified", "checkmark.seal.fill"))
+        ключи.append(("ai", "sparkles"))
+        ключи.append(("freeship", "shippingbox.fill"))
+        ключи.append(("delivery", "truck.box.fill"))
+        ключи.append(("qr", "qrcode"))
+        return ключи.map { ключ, значок in
+            ПользаЗапуска(id: ключ, значок: значок,
+                          заголовок: т[ключ + "_t"] ?? тексты["ru"]![ключ + "_t"] ?? "",
+                          строка: т[ключ + "_s"] ?? тексты["ru"]![ключ + "_s"] ?? "")
         }
     }
 
-    private static let ru: [String] = [
-        "Покупайте безопасно — <b>деньги у нас, пока не проверите товар</b>",
-        "Продавайте за 30 секунд: сфоткайте — <b>Kliko AI заполнит объявление</b>",
-        "Подпишитесь на поиск — <b>пришлём пуш</b>, когда появится нужное",
-        "У проверенных продавцов — <b>синяя галочка</b>",
-        "Заказывайте <b>доставку и курьера</b> прямо из чата",
-        "Нажмите на <b>знаки доверия</b> в объявлении — что даёт гарантия и доставка",
-        "Предлагайте свою цену — <b>торгуйтесь</b> прямо в объявлении",
-        "Аренда, обмен и услуги — <b>всё в одном месте</b>",
-        "Общайтесь в чате — <b>видно, когда продавец онлайн</b>",
-        "Сохраняйте в избранное — <b>ничего не потеряете</b>"
-    ]
-
-    private static let kk: [String] = [
-        "Қауіпсіз сатып алыңыз — <b>тауарды тексергенше ақша бізде</b>",
-        "30 секундта сатыңыз: суретке түсіріңіз — <b>Kliko AI хабарландыруды толтырады</b>",
-        "Іздеуге жазылыңыз — <b>керегі шыққанда пуш жібереміз</b>",
-        "Тексерілген сатушыларда — <b>көк белгі</b>",
-        "<b>Жеткізу мен курьерді</b> тікелей чаттан тапсырыс беріңіз",
-        "Хабарландырудағы <b>сенім белгілерін</b> басыңыз — кепілдік пен жеткізу не береді",
-        "Өз бағаңызды ұсыныңыз — <b>тікелей хабарландыруда саудаласыңыз</b>",
-        "Жалға беру, айырбас және қызметтер — <b>бәрі бір жерде</b>",
-        "Чатта сөйлесіңіз — <b>сатушы желіде екені көрінеді</b>",
-        "Таңдаулыларға сақтаңыз — <b>ештеңе жоғалмайды</b>"
-    ]
-
-    private static let en: [String] = [
-        "Buy safely — <b>we hold the money until you check the item</b>",
-        "Sell in 30 seconds: take a photo — <b>Kliko AI fills in the listing</b>",
-        "Subscribe to a search — <b>we’ll send a push</b> when what you need appears",
-        "Verified sellers have a <b>blue checkmark</b>",
-        "Order <b>delivery and a courier</b> right from the chat",
-        "Tap the <b>trust badges</b> in a listing — see what the guarantee and delivery give you",
-        "Offer your price — <b>bargain</b> right in the listing",
-        "Rentals, swaps and services — <b>all in one place</b>",
-        "Chat with sellers — <b>see when they’re online</b>",
-        "Save to favorites — <b>never lose a thing</b>"
-    ]
-
-    private static let ar: [String] = [
-        "اشترِ بأمان — <b>نحتفظ بالمال حتى تتحقق من السلعة</b>",
-        "بِع في 30 ثانية: التقط صورة — <b>Kliko AI يملأ الإعلان</b>",
-        "اشترك في البحث — <b>سنرسل إشعارًا</b> عند ظهور ما تحتاجه",
-        "لدى البائعين الموثَّقين — <b>علامة زرقاء</b>",
-        "اطلب <b>التوصيل والمندوب</b> مباشرة من الدردشة",
-        "اضغط على <b>علامات الثقة</b> في الإعلان — لترى ما يقدمه الضمان والتوصيل",
-        "اقترح سعرك — <b>فاوِض</b> مباشرة في الإعلان",
-        "الإيجار والمقايضة والخدمات — <b>كل شيء في مكان واحد</b>",
-        "تحدث في الدردشة — <b>ترى متى يكون البائع متصلًا</b>",
-        "احفظ في المفضلة — <b>لن يضيع منك شيء</b>"
+    private static let тексты: [String: [String: String]] = [
+        "ru": ["escrow_t": "Безопасная сделка", "escrow_s": "Деньги у Kliko, пока вы не получите товар",
+               "verified_t": "Знайте, с кем имеете дело", "verified_s": "Проверка через eGov, отзывы и рейтинг продавца",
+               "ai_t": "Kliko AI", "ai_s": "Сфотографируйте вещь — объявление заполнится само",
+               "freeship_t": "Бесплатная доставка", "freeship_s": "Многие продавцы везут за свой счёт",
+               "delivery_t": "Доставка по Казахстану", "delivery_s": "СДЭК в другой город, курьер Яндекс Go — по городу",
+               "qr_t": "QR-код объявления", "qr_s": "Покажите или распечатайте — откроется в Kliko"],
+        "kk": ["escrow_t": "Қауіпсіз мәміле", "escrow_s": "Тауарды алғанша ақша Kliko-да тұрады",
+               "verified_t": "Кіммен іс істейтініңізді біліңіз", "verified_s": "eGov арқылы тексеру, сатушының пікірлері мен рейтингі",
+               "ai_t": "Kliko AI", "ai_s": "Затты суретке түсіріңіз — хабарландыру өзі толтырылады",
+               "freeship_t": "Тегін жеткізу", "freeship_s": "Көп сатушы өз есебінен жеткізеді",
+               "delivery_t": "Қазақстан бойынша жеткізу", "delivery_s": "Басқа қалаға СДЭК, қала ішінде Яндекс Go курьері",
+               "qr_t": "Хабарландырудың QR-коды", "qr_s": "Көрсетіңіз не басып шығарыңыз — Kliko-да ашылады"],
+        "en": ["escrow_t": "Safe deal", "escrow_s": "Kliko holds the money until you get the item",
+               "verified_t": "Know who you deal with", "verified_s": "eGov verification, seller reviews and rating",
+               "ai_t": "Kliko AI", "ai_s": "Snap a photo — the listing fills itself in",
+               "freeship_t": "Free delivery", "freeship_s": "Many sellers ship at their own cost",
+               "delivery_t": "Delivery across Kazakhstan", "delivery_s": "CDEK to other cities, Yandex Go courier in town",
+               "qr_t": "Listing QR code", "qr_s": "Show it or print it — opens right in Kliko"],
+        "ar": ["escrow_t": "صفقة آمنة", "escrow_s": "يحتفظ Kliko بالمال حتى تستلم السلعة",
+               "verified_t": "اعرف مع من تتعامل", "verified_s": "توثيق عبر eGov، ومراجعات البائع وتقييمه",
+               "ai_t": "Kliko AI", "ai_s": "التقط صورة — يُملأ الإعلان تلقائيًا",
+               "freeship_t": "توصيل مجاني", "freeship_s": "كثير من البائعين يوصلون على نفقتهم",
+               "delivery_t": "توصيل في أنحاء كازاخستان", "delivery_s": "CDEK إلى المدن الأخرى، ومندوب Yandex Go داخل المدينة",
+               "qr_t": "رمز QR للإعلان", "qr_s": "اعرضه أو اطبعه — يُفتح في Kliko"]
     ]
 }
