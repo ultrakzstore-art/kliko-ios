@@ -170,7 +170,8 @@ async function children(path) {
   if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.list;
   let list = [];
   try {
-    list = await onlyCategories(path, parseChildren(await fetchHtml(`${BASE}/d/${path}/`), path));
+    const html = await fetchHtml(`${BASE}/d/${path}/`);
+    list = parseChildren(html, path, await placeSlugs());
   } catch {
     list = [];
   }
@@ -183,45 +184,51 @@ async function children(path) {
   return list;
 }
 
-function parseChildren(html, path) {
+// Все ссылки ровно на уровень ниже path: [{ path, last, name }], без служебных и без дублей.
+function linksBelow(html, path) {
   const depth = path.split('/').length + 1;
   const out = new Map();
   // Ссылки рубрик бывают и с /d/, и без: /d/elektronika/telefony/ и /elektronika/telefony/.
   const re = /<a\b[^>]*href="(?:https?:\/\/(?:www\.)?olx\.kz)?\/(?:d\/)?(?:(?:kk|ru)\/)?([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"[^>]*>([\s\S]*?)<\/a>/gi;
-  for (const m of html.matchAll(re)) {
+  for (const m of String(html).matchAll(re)) {
     const p = m[1].toLowerCase();
     const parts = p.split('/');
     if (parts.length !== depth || !p.startsWith(path + '/')) continue;
     const last = parts[parts.length - 1];
-    if (CITY_SLUGS.has(last) || NOT_CATEGORY.has(last) || last.startsWith('q-')) continue;
+    if (NOT_CATEGORY.has(last) || last.startsWith('q-')) continue;
     const name = decodeEntities(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').replace(/\s*\d[\d\s]*$/, '').trim();
-    if (!name || name.length > 60 || out.has(p) || looksLikePlace(name)) continue;
-    out.set(p, { name, path: p });
+    if (!name || name.length > 60 || out.has(p)) continue;
+    out.set(p, { path: p, last, name });
   }
-  return [...out.values()].slice(0, 40);
+  return [...out.values()];
 }
 
-// Сверка со страницей той же рубрики в Алматы: там ссылки подрубрик сохраняют город
-// (/d/<рубрика>/<подрубрика>/almaty/), а ссылки на другие города — нет. Подрубрика —
-// только то, что нашлось с /almaty/ на конце. Ничего не нашлось (OLX сменил вид) — первый список.
-function parseCityChildren(html, path, city) {
-  const out = new Set();
-  const re = /href="(?:https?:\/\/(?:www\.)?olx\.kz)?\/(?:d\/)?(?:(?:kk|ru)\/)?([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/?(?:\?[^"]*)?"/gi;
-  for (const m of String(html).matchAll(re)) {
-    const parts = m[1].toLowerCase().split('/');
-    if (parts[parts.length - 1] !== city) continue;
-    const p = parts.slice(0, -1).join('/');
-    if (p.startsWith(path + '/') && p.split('/').length === path.split('/').length + 1) out.add(p);
-  }
-  return out;
+// Подрубрики со страницы рубрики: без городов (крупные — по списку, остальные — по названию
+// и по places). Обрезаем уже после отсева: иначе города вытесняли настоящие подрубрики.
+function parseChildren(html, path, placeSet = new Set()) {
+  return linksBelow(html, path)
+    .filter((l) => !CITY_SLUGS.has(l.last) && !placeSet.has(l.last) && !looksLikePlace(l.name))
+    .map(({ name, path: p }) => ({ name, path: p }))
+    .slice(0, 60);
 }
-async function onlyCategories(path, list) {
-  if (list.length < 2) return list;
-  try {
-    const real = parseCityChildren(await fetchHtml(`${BASE}/d/${path}/almaty/`), path, 'almaty');
-    if (real.size) return list.filter((c) => real.has(c.path));
-  } catch { /* не открылась — остаётся первый список */ }
-  return list;
+
+// Города и сёла: ссылки «эта рубрика в Каскелене» одинаковы на страницах любых рубрик, а
+// подрубрики у каждой рубрики свои. Последние части ссылок, общие для двух непохожих рубрик, —
+// места. Список крупных городов и фильтр по названию — на случай, если OLX этих ссылок не даёт.
+const REF = ['otdam-darom', 'uslugi', 'rabota'];
+let places = { at: 0, set: new Set() };
+async function placeSlugs() {
+  if (Date.now() - places.at > 24 * 3600_000) {
+    const sets = [];
+    for (const ref of REF) {
+      try { sets.push(new Set(linksBelow(await fetchHtml(`${BASE}/d/${ref}/`), ref).map((l) => l.last))); } catch { /* не открылась */ }
+      if (sets.length === 2) break;
+    }
+    const set = new Set();
+    if (sets.length === 2) for (const x of sets[0]) if (sets[1].has(x)) set.add(x);
+    places = { at: Date.now() - (sets.length === 2 ? 0 : 23 * 3600_000), set };   // не вышло — попробуем через час
+  }
+  return places.set;
 }
 
 function decodeEntities(s) {
@@ -258,6 +265,6 @@ function parsePrice(text) {
 }
 
 module.exports = {
-  TOP, CITIES, FALLBACK_CHILDREN, children, parseChildren, parseCityChildren, looksLikePlace, buildSearchUrl, parsePrice,
-  _setFetch: (fn) => { fetchHtml = fn; cache.clear(); },
+  TOP, CITIES, FALLBACK_CHILDREN, children, parseChildren, looksLikePlace, buildSearchUrl, parsePrice,
+  _setFetch: (fn) => { fetchHtml = fn; cache.clear(); places = { at: 0, set: new Set() }; },
 };

@@ -36,27 +36,24 @@ test('подрубрики со страницы OLX: только на уров
   ]);
 });
 
-test('подрубрики OLX: города и области не попадают в список рубрик', async () => {
-  const main = `
-    <a href="/d/elektronika/telefony-i-aksesuary/">Телефоны и аксессуары</a>
-    <a href="/d/elektronika/noutbuki-i-aksesuary/">Ноутбуки и аксессуары</a>
-    <a href="/d/elektronika/kaskelen/">Каскелен</a>
-    <a href="/d/elektronika/alm/">Алматинская область</a>
-    <a href="/d/elektronika/tobol/">Тобол</a>`;
-  // «Тобол» — не из списка городов: отсеет сверка со страницей Алматы.
-  assert.deepStrictEqual(cats.parseChildren(main, 'elektronika').map((c) => c.name),
-    ['Телефоны и аксессуары', 'Ноутбуки и аксессуары', 'Тобол']);
-  const city = `
-    <a href="/d/elektronika/telefony-i-aksesuary/almaty/">Телефоны и аксессуары</a>
-    <a href="/d/elektronika/noutbuki-i-aksesuary/almaty/">Ноутбуки и аксессуары</a>
-    <a href="/d/elektronika/tobol/">Тобол</a>
-    <a href="/d/elektronika/almaty/?search%5Bdistrict_id%5D=5">Медеуский район</a>`;
-  cats._setFetch(async (url) => (url.endsWith('/d/elektronika/almaty/') ? city : main));
-  assert.deepStrictEqual((await cats.children('elektronika')).map((c) => c.path),
-    ['elektronika/telefony-i-aksesuary', 'elektronika/noutbuki-i-aksesuary']);
-  // Страница города без ссылок с /almaty/ (OLX сменил вид) — первый список, без известных городов.
-  cats._setFetch(async (url) => (url.endsWith('/almaty/') ? '' : main));
-  assert.strictEqual((await cats.children('elektronika')).length, 3);
+test('подрубрики OLX: города и сёла не попадают в рубрики, настоящие подрубрики — все', async () => {
+  const towns = '<a href="/d/X/kaskelen/">Каскелен</a><a href="/d/X/tobol/">Тобол</a><a href="/d/X/shamalgan-1/">Шамалган-1</a>';
+  const page = (p, subs) => towns.replaceAll('/d/X/', `/d/${p}/`) + subs.map(([n, s]) => `<a href="/d/${p}/${s}/">${n} 123</a>`).join('');
+  // Тридцать городов впереди подрубрик — раньше обрезка до 40 отрезала настоящие подрубрики.
+  const many = Array.from({ length: 30 }, (_, i) => `<a href="/d/elektronika/selo-${i}/">Село ${i}</a>`).join('');
+  const subs = Array.from({ length: 15 }, (_, i) => [`Подрубрика ${i}`, `sub-${i}`]);
+  const pages = {
+    'otdam-darom': page('otdam-darom', [['Даром вещи', 'veshchi']]),
+    uslugi: page('uslugi', [['Ремонт', 'remont']]),
+    'elektronika/telefony-i-aksesuary/mobilnye-telefony-smartfony': page('elektronika/telefony-i-aksesuary/mobilnye-telefony-smartfony', [['Apple', 'apple'], ['Samsung', 'samsung']]),
+    elektronika: page('elektronika', []).replace('<a', many + '<a') + subs.map(([n, s]) => `<a href="/d/elektronika/${s}/">${n}</a>`).join('') + '<a href="/d/elektronika/selo-1/">Село 1</a>',
+  };
+  // «Село N» — есть только в «Электронике»: его отсеет название («село»), а не общий список.
+  cats._setFetch(async (url) => pages[url.replace(/^.*\/d\//, '').replace(/\/$/, '')] || '');
+  const kids = await cats.children('elektronika');
+  assert.deepStrictEqual(kids.map((c) => c.path), subs.map(([, s]) => `elektronika/${s}`));
+  // Четвёртый уровень (марки) — тоже, и без Каскелена/Тобола/Шамалгана.
+  assert.deepStrictEqual((await cats.children('elektronika/telefony-i-aksesuary/mobilnye-telefony-smartfony')).map((c) => c.name), ['Apple', 'Samsung']);
   assert.ok(cats.looksLikePlace('г. Талгар') && cats.looksLikePlace('Карасайский район') && !cats.looksLikePlace('Ноутбуки'));
 });
 
