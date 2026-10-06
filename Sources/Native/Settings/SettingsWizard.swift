@@ -37,22 +37,24 @@ struct ЛистНачалаРаботы: View {
 
     var body: some View {
         NavigationStack {
-            содержимое
-                .background(Theme.фонСтраницы)
-                .tint(Theme.акцент)
-                .navigationTitle(заголовок)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(тН("close")) { крестик() }
-                    }
-                }
+            VStack(spacing: 0) {
+                верх
+                содержимое
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(Theme.фонСтраницы.ignoresSafeArea())
+            .tint(Theme.акцент)
+            // Своя шапка вместо панели навигации: на iOS 26 «Закрыть» в панели — стеклянная капсула с тенью, и
+            // заголовок уезжал из середины. Стек остаётся ради окон форм.
+            .toolbar(.hidden, for: .navigationBar)
         }
+        .presentationDragIndicator(.visible)
         .sheet(item: $применить, onDismiss: { вперёд() }) { поле in
             ОкноПрименения(поле: поле)
         }
     }
 
+    /// Заголовок шага крупно над карточкой (сама шапка листа — всегда «Начало работы»).
     private var заголовок: String {
         switch шаг {
         case 0: return тН("cabwiz_theme_t")
@@ -64,6 +66,20 @@ struct ЛистНачалаРаботы: View {
         }
     }
 
+    /// Шапка листа и, на шагах, полоса шага — на том же фоне, что тело; снизу тонкая черта, как у листа фильтров.
+    private var верх: some View {
+        VStack(spacing: 0) {
+            ШапкаЛистаМастера(заголовок: тН("cabwiz_t"), подписьЗакрыть: тН("close")) { крестик() }
+            if шаг >= 0 && шаг < Self.шагов {
+                полоса
+            }
+        }
+        .background(Theme.фонСтраницы)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.линия).frame(height: 1)
+        }
+    }
+
     @ViewBuilder
     private var содержимое: some View {
         if шаг < 0 {
@@ -71,10 +87,8 @@ struct ЛистНачалаРаботы: View {
         } else if шаг >= Self.шагов {
             финал
         } else {
-            VStack(spacing: 0) {
-                полоса
-                шагМастера
-            }
+            шагМастера
+                .environment(\.заголовокШагаМастера, заголовок)
         }
     }
 
@@ -105,15 +119,16 @@ struct ЛистНачалаРаботы: View {
 
     private var вступление: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(тН("cabwiz_lead"))
-                    .font(.system(size: 15))
+                    .font(.system(size: 16))
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(мета)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
-                VStack(alignment: .leading, spacing: 12) {
+                    .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 14) {
                     ForEach(пункты) { пункт in
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: пункт.значок)
@@ -131,19 +146,25 @@ struct ЛистНачалаРаботы: View {
                                     .foregroundStyle(Theme.текстВторой)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
+                            Spacer(minLength: 0)
                         }
                         .accessibilityElement(children: .combine)
                     }
                 }
-                .padding(14)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                КнопкаСайта(подпись: тН("cabwiz_go"), идёт: false) { начать() }
-                Button(тН("cabwiz_skip")) { пропуститьВсё() }
-                    .font(.system(size: 15, weight: .bold))
-                    .frame(maxWidth: .infinity)
+                .padding(.top, 16)
             }
-            .padding(16)
+            .padding(.horizontal, РазметкаМастера.отступ)
+            .padding(.vertical, 16)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ПанельКнопкиМастера {
+                КнопкаСайта(подпись: тН("cabwiz_go"), идёт: false) { начать() }
+                ВтораяКнопкаМастера(подпись: тН("cabwiz_skip")) { пропуститьВсё() }
+            }
         }
     }
 
@@ -157,21 +178,42 @@ struct ЛистНачалаРаботы: View {
 
     // MARK: - Шаги
 
-    /// Полоса шага (_cabWizПолоса): «Назад», «Шаг N из M», «Пропустить» и точки.
+    /// Полоса шага (_cabWizПолоса): «‹ Назад», «Шаг N из M», «Пропустить» и деления. С первого шага «Назад» ведёт на
+    /// вступление, как у сайта, — там он приглушён.
     private var полоса: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Button(тН("cabwiz_back")) { назад() }
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer(minLength: 8)
+        VStack(spacing: 8) {
+            ZStack {
                 Text(тН("cabwiz_step").replacingOccurrences(of: "{n}", with: String(шаг + 1))
                         .replacingOccurrences(of: "{m}", with: String(Self.шагов)))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
-                Spacer(minLength: 8)
-                Button(тН("cabwiz_skip")) { вперёд() }
-                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+                HStack(spacing: 0) {
+                    Button { назад() } label: {
+                        HStack(spacing: 2) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 13, weight: .bold))
+                                .flipsForRightToLeftLayoutDirection(true)
+                                .accessibilityHidden(true)
+                            Text(тН("cabwiz_back"))
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(шаг == 0 ? Theme.текстВторой : Theme.акцент)
+                        .frame(minHeight: 36)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Spacer(minLength: 8)
+                    Button { вперёд() } label: {
+                        Text(тН("cabwiz_skip"))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.акцент)
+                            .frame(minHeight: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                     .accessibilityLabel(тН("cabwiz_skip_step"))
+                }
             }
             HStack(spacing: 4) {
                 ForEach(0..<Self.шагов, id: \.self) { i in
@@ -182,9 +224,8 @@ struct ЛистНачалаРаботы: View {
             }
             .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Theme.поверхность)
+        .padding(.horizontal, РазметкаМастера.отступ)
+        .padding(.bottom, 12)
     }
 
     @ViewBuilder
@@ -225,7 +266,7 @@ struct ЛистНачалаРаботы: View {
                     .background(Theme.мята, in: Circle())
                     .accessibilityHidden(true)
                 Text(тН(сВерификацией ? "cabwiz_ver_t" : "cabwiz_done_t"))
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 22, weight: .heavy))
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
@@ -234,17 +275,23 @@ struct ЛистНачалаРаботы: View {
                     .foregroundStyle(Theme.текстВторой)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, РазметкаМастера.отступ)
+            .padding(.top, 32)
+            .padding(.bottom, 16)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ПанельКнопкиМастера {
                 if сВерификацией {
                     КнопкаСайта(подпись: тН("cabwiz_ver_go"), идёт: false) { пройтиВерификацию() }
-                    Button(тН("cabwiz_later")) { закрыть() }
-                        .font(.system(size: 15, weight: .bold))
+                    ВтораяКнопкаМастера(подпись: тН("cabwiz_later")) { закрыть() }
                 } else {
                     КнопкаСайта(подпись: тН("cabwiz_add"), идёт: false) { добавитьОбъявление() }
-                    Button(тН("cabwiz_home")) { закрыть() }
-                        .font(.system(size: 15, weight: .bold))
+                    ВтораяКнопкаМастера(подпись: тН("cabwiz_home")) { закрыть() }
                 }
             }
-            .padding(24)
         }
     }
 
@@ -313,8 +360,8 @@ struct ЛистНачалаРаботы: View {
     }
 }
 
-/// Шаг «Оформление» (cabPrefTheme): «Меняется сразу. «Как в системе» — как настроено на телефоне.», три кнопки темы,
-/// «Далее». Тема ставится приложению сразу (этап 15) и уходит в аккаунт (ui_prefs), как у сайта.
+/// Шаг «Оформление» (cabPrefTheme): заголовок шага, «Меняется сразу. «Как в системе» — как настроено на телефоне.»,
+/// три кнопки темы, «Далее» внизу. Тема ставится приложению сразу (этап 15) и уходит в аккаунт (ui_prefs), как у сайта.
 struct ФормаТемыМастера: View {
     let готово: () -> Void
     @ObservedObject private var выбор = ВыборТемы.shared
@@ -325,6 +372,7 @@ struct ФормаТемыМастера: View {
 
     var body: some View {
         Form {
+            РазделШагаМастера(подсказка: тН("cabwiz_theme_hint").replacingOccurrences(of: "{auto}", with: тН("ap_auto")))
             Section {
                 Picker(тН("cabwiz_theme_t"), selection: тема) {
                     Text(тН("ap_auto")).tag(ТемаОформления.системная)
@@ -333,13 +381,10 @@ struct ФормаТемыМастера: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-            } header: {
-                Text(тН("cabwiz_theme_hint").replacingOccurrences(of: "{auto}", with: тН("ap_auto")))
-                    .textCase(nil)
             }
-            КнопкаНастройки(подпись: тН("cabwiz_next"), идёт: false) { готово() }
         }
         .scrollContentBackground(.hidden)
+        .кнопкаШагаМастера(подпись: тН("cabwiz_next"), идёт: false) { готово() }
     }
 
     private var тема: Binding<ТемаОформления> {
@@ -347,5 +392,185 @@ struct ФормаТемыМастера: View {
             выбор.тема = новая
             НастройкиМодель.shared.темаВыбрана(новая)
         })
+    }
+}
+
+// MARK: - Общие части мастера
+
+/// Отступ мастера от края листа — как у карточек формы и листа фильтров.
+enum РазметкаМастера {
+    static let отступ: CGFloat = 16
+}
+
+/// Шапка листа мастера, как у листа фильтров (.afx-h): «×» слева, заголовок строго посередине, без панели навигации.
+struct ШапкаЛистаМастера: View {
+    let заголовок: String
+    let подписьЗакрыть: String
+    let закрыть: () -> Void
+
+    var body: some View {
+        ZStack {
+            Text(заголовок)
+                .font(.system(size: 19, weight: .heavy))
+                .tracking(-0.3)
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .padding(.horizontal, 56)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 0) {
+                Button(action: закрыть) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(подписьЗакрыть)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, minHeight: 56)
+    }
+}
+
+/// Нижняя панель мастера (.afx-f листа фильтров): кнопки закреплены внизу на всю ширину содержимого, над ними черта.
+struct ПанельКнопкиМастера<Содержимое: View>: View {
+    let содержимое: Содержимое
+
+    init(@ViewBuilder содержимое: () -> Содержимое) {
+        self.содержимое = содержимое()
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            содержимое
+        }
+        .padding(.horizontal, РазметкаМастера.отступ)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+        .background(Theme.фонСтраницы.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.линия).frame(height: 1)
+        }
+    }
+}
+
+/// Вторая кнопка под зелёной (.cabwiz-later): «Пропустить», «Позже», «В кабинет».
+struct ВтораяКнопкаМастера: View {
+    let подпись: String
+    let действие: () -> Void
+
+    var body: some View {
+        Button(action: действие) {
+            Text(подпись)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.акцент)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ЗаголовокШагаМастераКлюч: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    /// Форма настройки открыта шагом мастера: заголовок шага сверху, «Далее» закреплена внизу; nil — обычный лист.
+    var заголовокШагаМастера: String? {
+        get { self[ЗаголовокШагаМастераКлюч.self] }
+        set { self[ЗаголовокШагаМастераКлюч.self] = newValue }
+    }
+}
+
+/// Первый раздел формы в мастере: крупный заголовок шага и подсказка под ним, вровень с краем карточек.
+/// Вне мастера — ничего (подсказка там в шапке раздела, ПодсказкаФормыНастройки).
+struct РазделШагаМастера: View {
+    let подсказка: String
+    @Environment(\.заголовокШагаМастера) private var заголовок
+
+    init(подсказка: String) {
+        self.подсказка = подсказка
+    }
+
+    var body: some View {
+        if let заголовок {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(заголовок)
+                        .font(.system(size: 24, weight: .heavy))
+                        .tracking(-0.3)
+                        .foregroundStyle(Theme.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(подсказка)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 2, trailing: 0))
+            }
+        }
+    }
+}
+
+/// Подсказка в шапке раздела формы — только вне мастера (в мастере она под заголовком шага).
+struct ПодсказкаФормыНастройки: View {
+    let текст: String
+    @Environment(\.заголовокШагаМастера) private var шагМастера
+
+    init(_ текст: String) {
+        self.текст = текст
+    }
+
+    var body: some View {
+        if шагМастера == nil {
+            Text(текст).textCase(nil)
+        }
+    }
+}
+
+extension View {
+    /// В мастере: «Далее» закреплена внизу листа (ПанельКнопкиМастера), разделы формы плотнее. Вне мастера — как было
+    /// (кнопка — последней строкой формы, КнопкаНастройки).
+    func кнопкаШагаМастера(подпись: String, идёт: Bool, действие: @escaping () -> Void) -> some View {
+        modifier(КнопкаШагаМастера(подпись: подпись, идёт: идёт, действие: действие))
+    }
+}
+
+struct КнопкаШагаМастера: ViewModifier {
+    let подпись: String
+    let идёт: Bool
+    let действие: () -> Void
+    @Environment(\.заголовокШагаМастера) private var шагМастера
+
+    init(подпись: String, идёт: Bool, действие: @escaping () -> Void) {
+        self.подпись = подпись
+        self.идёт = идёт
+        self.действие = действие
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if шагМастера != nil {
+            content
+                .listSectionSpacing(.compact)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ПанельКнопкиМастера {
+                        КнопкаСайта(подпись: подпись, идёт: идёт, действие: действие)
+                    }
+                }
+        } else {
+            content
+        }
     }
 }

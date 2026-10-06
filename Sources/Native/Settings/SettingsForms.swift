@@ -73,15 +73,25 @@ struct КнопкаНастройки: View {
     let подпись: String
     let идёт: Bool
     let действие: () -> Void
+    /// В мастере «Начало работы» кнопка закреплена внизу листа (.кнопкаШагаМастера) — строкой формы её нет.
+    @Environment(\.заголовокШагаМастера) private var шагМастера
+
+    init(подпись: String, идёт: Bool, действие: @escaping () -> Void) {
+        self.подпись = подпись
+        self.идёт = идёт
+        self.действие = действие
+    }
 
     var body: some View {
-        Section {
-            КнопкаСайта(подпись: подпись, идёт: идёт, действие: действие)
-                .мерилоФормы()
+        if шагМастера == nil {
+            Section {
+                КнопкаСайта(подпись: подпись, идёт: идёт, действие: действие)
+                    .мерилоФормы()
+            }
+            .listRowBackground(Color.clear)
+            // Снизу 10 — тень зелёной кнопки не обрезается строкой списка.
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 10, trailing: 0))
         }
-        .listRowBackground(Color.clear)
-        /* Снизу 10 — тень зелёной кнопки не обрезается строкой списка. */
-        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 10, trailing: 0))
     }
 }
 
@@ -570,6 +580,7 @@ struct ФормаКатегорий: View {
 
     var body: some View {
         Form {
+            РазделШагаМастера(подсказка: тН("cabset_cats_hint"))
             Section {
                 if грузится {
                     HStack(spacing: 10) {
@@ -597,13 +608,14 @@ struct ФормаКатегорий: View {
                     .accessibilityAddTraits(отмечены.contains(раздел.ключ) ? [.isSelected] : [])
                 }
             } header: {
-                Text(тН("cabset_cats_hint")).textCase(nil)
+                ПодсказкаФормыНастройки(тН("cabset_cats_hint"))
             }
             if let ошибка {
                 Section { ОшибкаНастройки(текст: ошибка) }
             }
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
+        .кнопкаШагаМастера(подпись: кнопка, идёт: идёт) { сохранить() }
         .task { await загрузить() }
     }
 
@@ -669,6 +681,7 @@ struct ФормаЧасов: View {
 
     var body: some View {
         Form {
+            РазделШагаМастера(подсказка: тН("cabset_hours_hint"))
             Section {
                 Picker(тН("cabset_hours"), selection: $режим) {
                     Text(тН("hours_247")).tag("247")
@@ -682,13 +695,14 @@ struct ФормаЧасов: View {
                     DatePicker(тН("hours_to"), selection: $до, displayedComponents: .hourAndMinute)
                 }
             } header: {
-                Text(тН("cabset_hours_hint")).textCase(nil)
+                ПодсказкаФормыНастройки(тН("cabset_hours_hint"))
             }
             if let ошибка {
                 Section { ОшибкаНастройки(текст: ошибка) }
             }
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
+        .кнопкаШагаМастера(подпись: кнопка, идёт: идёт) { сохранить() }
     }
 
     /// «Не указывать» — mode пустой; не «Своё время» — оба времени пустые (cabPrefHoursSave).
@@ -751,11 +765,12 @@ struct ФормаФото: View {
 
     var body: some View {
         Form {
+            РазделШагаМастера(подсказка: тН("pr_hint"))
             Section {
                 пример
                     .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
             } header: {
-                Text(тН("pr_hint")).textCase(nil)
+                ПодсказкаФормыНастройки(тН("pr_hint"))
             }
             Section {
                 вариант(false, заголовок: тН("pr_off_t"), подпись: тН("pr_off_s"), значок: "eye")
@@ -765,6 +780,7 @@ struct ФормаФото: View {
             }
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
+        .кнопкаШагаМастера(подпись: кнопка, идёт: идёт) { сохранить() }
     }
 
     /// Демо сайта: /img/demo/redact-before.webp и -after.webp, подпись «Пример: номера скрыты / видны».

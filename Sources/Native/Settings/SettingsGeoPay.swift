@@ -65,6 +65,7 @@ struct ФормаРегиона: View {
 
     var body: some View {
         Form {
+            РазделШагаМастера(подсказка: тН("cabset_geo_hint"))
             Section {
                 if грузится {
                     HStack(spacing: 10) {
@@ -115,7 +116,7 @@ struct ФормаРегиона: View {
                     }
                 }
             } header: {
-                Text(тН("cabset_geo_hint")).textCase(nil)
+                ПодсказкаФормыНастройки(тН("cabset_geo_hint"))
             } footer: {
                 Text(тН("pg_map_note"))
             }
@@ -134,6 +135,7 @@ struct ФормаРегиона: View {
             }
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
+        .кнопкаШагаМастера(подпись: кнопка, идёт: идёт) { сохранить() }
         .task { await загрузить() }
         .sheet(isPresented: $карта) {
             ТочкаНаКартеНастроек(начало: точка) { новая in
