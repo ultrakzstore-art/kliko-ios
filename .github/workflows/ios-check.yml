@@ -201,24 +201,27 @@ jobs:
             [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
           # КАДРЫ APP STORE (fastlane/screenshots): светлая тема, полный размер, iPhone и iPad 13″. Листы открываются сами
-          # аргументом -klikoSheet (СъёмкаCI, только отладочная сборка): garant — «Как работает Безопасная сделка»,
+          # на русском и английском, аргументом -klikoSheet (СъёмкаCI, только отладочная сборка): garant — «Как работает Безопасная сделка»,
           # filters — фильтры ленты, qr — QR-код карточки. Кладутся в shots/store/ JPEG без уменьшения.
           mkdir -p shots/store
-          store() {  # устройство, имя, пауза, аргументы запуска
-            dev=$1; name=$2; wait=$3; shift 3
+          store() {  # устройство, язык (ru/en), имя, пауза, аргументы запуска
+            dev=$1; lang=$2; name=$3; wait=$4; shift 4
+            loc=ru_KZ; [ "$lang" = en ] && loc=en_KZ
             xcrun simctl terminate "$dev" kz.kliko.app 2>/dev/null || true
-            xcrun simctl launch "$dev" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@"
+            xcrun simctl launch "$dev" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "($lang)" -AppleLocale "$loc" "$@"
             sleep "$wait"; xcrun simctl io "$dev" screenshot "shots/store/$name.png"
           }
           storeset() {  # устройство, приставка
             xcrun simctl ui "$1" appearance light
-            store "$1" "$2-lenta" 25
-            store "$1" "$2-garant" 25 -klikoSheet garant
-            store "$1" "$2-filtry" 25 -klikoSheet filters
-            if [ -n "$id" ]; then
-              store "$1" "$2-kartochka" 20 -klikoOpen "https://kliko.kz/marketplace?item=$id"
-              store "$1" "$2-qr" 30 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr
-            fi
+            for lang in ru en; do
+              store "$1" $lang "$2-$lang-lenta" 25
+              store "$1" $lang "$2-$lang-garant" 25 -klikoSheet garant
+              store "$1" $lang "$2-$lang-filtry" 25 -klikoSheet filters
+              if [ -n "$id" ]; then
+                store "$1" $lang "$2-$lang-kartochka" 20 -klikoOpen "https://kliko.kz/marketplace?item=$id"
+                store "$1" $lang "$2-$lang-qr" 30 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr
+              fi
+            done
           }
           storeset "$UDID" iphone
           ipad=$(xcrun simctl list devices available -j | python3 -c '
