@@ -377,8 +377,8 @@ function tellUser(userId, text) {
 }
 
 // ---------- автообновление ----------
-// Новые версии собирает и раздаёт ваш сервер (deploy/updates: http://<IP>:8787/) — GitHub
-// Releases больше не открываются. Без сервера — по-старому, из GitHub. Раз в час проверяем,
+// Новые версии — в GitHub Releases; запасной источник — ваш сервер обновлений
+// (deploy/updates: http://<IP>:8787/). Раз в час проверяем,
 // скачиваем в фоне и спрашиваем: перезапустить сейчас или позже. «Позже» — поставится само
 // при следующем выходе из приложения.
 
@@ -392,12 +392,19 @@ function setupAutoUpdate() {
   }
   let autoUpdater;
   try { ({ autoUpdater } = require('electron-updater')); } catch { return; }
-  const host = settings.updateHost || settings.server?.host;
-  if (host) {
+  // Сначала GitHub Releases. Не ответил (репозиторий закрыт, аккаунт ограничен) — ваш сервер
+  // обновлений, если он известен; переключаемся до перезапуска программы.
+  let fromServer = false;
+  const toServer = () => {
+    const host = settings.updateHost || settings.server?.host;
+    if (fromServer || !host) return false;
+    fromServer = true;
     autoUpdater.setFeedURL({ provider: 'generic', url: `http://${host}:${UPDATE_PORT}/` });
     // Сервер отдаёт файлы целиком, без докачки кусками.
     autoUpdater.disableDifferentialDownload = true;
-  }
+    log(`Обновления: GitHub не ответил — проверяю сервер ${host}`);
+    return true;
+  };
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-available', (i) => { update.status = 'downloading'; update.version = i.version; log(`Есть обновление ${i.version} — скачиваю…`); pushState(); });
@@ -427,7 +434,10 @@ function setupAutoUpdate() {
     log(`Обновление ${i.version} скачано`);
     await askInstall();
   });
-  const check = () => autoUpdater.checkForUpdates().catch((e) => log(`Обновление: ${e.message}`));
+  const check = () => autoUpdater.checkForUpdates().catch((e) => {
+    if (toServer()) return autoUpdater.checkForUpdates().catch((e2) => log(`Обновление: ${e2.message}`));
+    log(`Обновление: ${e.message}`);
+  });
   setTimeout(check, 10_000);
   setInterval(check, 3600_000);
   // Кнопка «Проверить обновления» — работает и пока бот запущен (бот не останавливается).
