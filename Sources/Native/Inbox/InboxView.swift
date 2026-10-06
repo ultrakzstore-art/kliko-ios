@@ -523,13 +523,15 @@ struct СтрокаИнбоксаВид: View {
                         .font(.system(size: 12, weight: .semibold))
                         .accessibilityHidden(true)
                 }
-                Text((строка.превьюМоё ? т("you") : "") + строка.превью)
+                Text(текстПревью.isEmpty ? " " : текстПревью)     // пустое держит строку — высота строк одна
                     .lineLimit(1)
             }
             .font(.system(size: 13))
             .foregroundStyle(непрочитана ? ИнбоксКраска.текст : Theme.текстВторой)
         }
     }
+
+    private var текстПревью: String { (строка.превьюМоё ? т("you") : "") + строка.превью }
 
     /// .msg-more: «⋯» справа сверху строки.
     private var меню: some View {
@@ -640,6 +642,13 @@ struct ПодстрокаИнбокса: View {
                     .fixedSize()
                 }
                 .clipped()
+        } else {
+            /* Ровная схема (владелец 06.10.2026): нечего сказать — пустая строка той же высоты, строки инбокса одной
+               высоты. */
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 18)
+                .accessibilityHidden(true)
         }
     }
 

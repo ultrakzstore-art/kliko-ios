@@ -262,7 +262,7 @@ struct ChatListView: View {
     }
 
     private func строка(_ д: ЧатДиалог) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             обложка(д)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
@@ -272,14 +272,17 @@ struct ChatListView: View {
                     Spacer()
                     Text(ЧатВремя.коротко(д.последнееКогда))
                         .font(.caption2)
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
-                }
-                if !д.объявление.isEmpty {
-                    Text(д.объявление)
-                        .font(.caption)
-                        .foregroundStyle(Theme.green2)
                         .lineLimit(1)
+                        .fixedSize()
                 }
+                /* Ровная схема (владелец 06.10.2026): строка объявления есть всегда — без него пустая той же высоты,
+                   и все строки диалогов одной высоты. */
+                Text(д.объявление.isEmpty ? " " : д.объявление)
+                    .font(.caption)
+                    .foregroundStyle(Theme.green2)
+                    .lineLimit(1)
                 HStack {
                     Text((д.последнееМоё ? ChatText.т("you") : "") + д.последнее)
                         .font(.footnote)
