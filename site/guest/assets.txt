@@ -1,0 +1,16 @@
+/css/brandfonts.css?v=1790354024
+/css/cabinet-parts.min.css?v=1790261403
+/css/cabinet.css?v=1790691276
+/css/chat.min.css?v=1789559656
+/css/fonts.css?v=1790354024
+/css/inter.css?v=1790354024
+/css/skin-classic.min.css?v=1788594044
+/css/skin-vitrina.min.css?v=1789664892
+/css/ui-prefs.min.css?v=1789664892
+/css/widgets.min.css?v=1790350586
+/js/appstore-promo.min.js?v=1790350586
+/js/i18n-auth-ru.js?v=1791303462
+/js/passkey.min.js?v=1791276680
+/js/phone-field.min.js?v=1790745694
+/js/pwa-install.min.js?v=1790745694
+https://telegram.org/js/telegram-widget.js?22
