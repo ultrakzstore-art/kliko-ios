@@ -652,6 +652,73 @@ enum КабинетСайта {
         return текст
     }
 
+    // MARK: - Страница по адресу: куда она привела
+
+    /// Итог открытия страницы сайта: HTTP-код последнего ответа, адрес после всех перенаправлений и текст страницы.
+    /// Перенаправила — текст не качается (пусто): нужен только адрес, куда она вела.
+    struct ОтветСтраницы {
+        let код: Int
+        /// r.url — адрес последнего ответа; nil — страница не сказала.
+        let адрес: URL?
+        let перенаправлена: Bool
+        let текст: String
+    }
+
+    /// Аргумент u — путь от корня сайта. Перенаправила — тело обрывается (AbortController): карточка, на которую
+    /// ведёт гарант-ссылка, весит много, а нужен только её адрес.
+    private static let скриптСтраницы = """
+    try {
+      const c = (typeof AbortController === 'function') ? new AbortController() : null;
+      const o = {method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'follow'};
+      if (c) { o.signal = c.signal; }
+      const r = await fetch(u, o);
+      const a = String(r.url || '');
+      if (r.redirected) {
+        if (c) { try { c.abort(); } catch (x) {} }
+        return JSON.stringify({s: r.status, a: a, r: 1, t: ''});
+      }
+      const t = await r.text();
+      return JSON.stringify({s: r.status, a: a, r: 0, t: t});
+    } catch (e) {
+      return JSON.stringify({e: (e && e.name === 'TypeError') ? 'net' : 'js'});
+    }
+    """
+
+    /**
+     Гарант-ссылка партнёра (/dl.php?c=<код>, GuaranteeLink.swift): страница сама отмечает открытие и кладёт цену
+     продавца тому, кто вошёл, а кончается перенаправлением на карточку или своей страницей «нет ссылки / срок вышел».
+     Тот же fetch изнутри страницы под слоем, что у вызвать(толькоСтраницей: true): кука сессии kliko_cab, User-Agent
+     с KlikoApp, настоящие Origin и Referer — без подставленных заголовков и мимо URLSession-транспорта. Обычный GET,
+     как переход по ссылке; отличие от запроса — отдаёт и адрес, куда страница привела (r.url, r.redirected).
+     путь — от корня сайта («/dl.php?c=…»).
+     */
+    static func открытьСтраницу(_ путь: String, ждать: Bool = true) async throws -> ОтветСтраницы {
+        let web = try await страницаСайта(ждать: ждать)
+        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
+            web.callAsyncJavaScript(скриптСтраницы, arguments: ["u": путь], in: nil, in: .defaultClient) { итог in
+                switch итог {
+                case .success(let значение):
+                    продолжение.resume(returning: (значение as? String) ?? "")
+                case .failure(let ошибка):
+                    продолжение.resume(throwing: ошибка)
+                }
+            }
+        }
+        guard let данные = сырой.data(using: .utf8),
+              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+            throw Сбой.приложение
+        }
+        if let сбой = объект["e"] as? String {
+            throw сбой == "net" ? Сбой.сеть : Сбой.приложение
+        }
+        let код = (объект["s"] as? NSNumber)?.intValue ?? 0
+        let строкаАдреса = ((объект["a"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let адрес: URL? = строкаАдреса.isEmpty ? nil : URL(string: строкаАдреса)
+        let перенаправлена = ((объект["r"] as? NSNumber)?.intValue ?? 0) != 0
+        return ОтветСтраницы(код: код, адрес: адрес, перенаправлена: перенаправлена,
+                             текст: (объект["t"] as? String) ?? "")
+    }
+
     /// Страница сайта под слоем, готовая выполнить запрос. Не на сайте (шлюз, eGov, пусто) — грузим главную и ждём.
     private static func страницаСайта(ждать: Bool) async throws -> WKWebView {
         guard let web = WebBridge.shared.webView else { throw Сбой.сеть }

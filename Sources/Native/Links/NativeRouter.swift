@@ -137,8 +137,9 @@ final class NativeRouter: ObservableObject {
         let путь = части.path.replacingOccurrences(of: "^/[a-z]{2}/[a-z]{2}(?=/)", with: "",
                                                    options: .regularExpression)
         /* ЧПУ объявления: /toyota-camry-pb61110afe145/ (так делится SiteShare), ?p= — номер фото; ?buy=1 / ?chat=1 —
-           как у ?item= (_MK_DEEP_ITEM сайта читает те же параметры). */
-        if Config.нативнаяКарточка, параметры.allSatisfy({ ["p", "buy", "chat"].contains($0.name) }),
+           как у ?item= (_MK_DEEP_ITEM сайта читает те же параметры); ?qty= — штуки гарант-ссылки (dl.php), витрина
+           сайта их пока не читает. */
+        if Config.нативнаяКарточка, параметры.allSatisfy({ ["p", "buy", "chat", "qty"].contains($0.name) }),
            путь.range(of: "^/[a-z0-9-]+-p[0-9a-f]{8,20}/?$", options: .regularExpression) != nil,
            let r = путь.range(of: "p[0-9a-f]{8,20}(?=/?$)", options: .regularExpression) {
             return .объявление(id: String(путь[r]), намерение: НамерениеОбъявления.из(параметры))
