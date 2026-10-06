@@ -45,6 +45,7 @@ class Watcher {
     // Пропуски у края ленты доски — номера, которых в ленте нет: обычно объявления на проверке
     // (номер выдан при подаче, в ленту попадут после проверки). Турбо перепроверяет их до 3 часов.
     this.gaps = new Map();   // номер → { added, checked }
+    this.needSync = true;    // турбо: сначала найти настоящий край номеров (после запуска и пауз)
     this.found = new Set();  // номера, которые уже видели (в ленте или по номеру), — не пропуски   // VIP-рубрика → номера объявлений из выдачи её поиска
     this.lockCache = { at: 0, list: [] };
     this.traceLog = new Map();   // номер → последние события («почему не пришло?»)
@@ -145,6 +146,7 @@ class Watcher {
       } else {
         this.otherBackoff.set(source, b);
       }
+      if (source === 'olx') this.needSync = true;   // за паузу край уйдёт вперёд на сотни номеров
       const name = source === 'olx' ? 'OLX' : sources.get(source).title;
       this.log(`${name} ограничил запросы (${e.status}) — пауза ${Math.round(b.ms / 60_000)} мин`);   // для журнала и «Статуса» в приложении
       this.alert(`${name} ограничил запросы (${e.status}). Пауза ${Math.round(b.ms / 60_000)} мин, потом продолжу реже.`);
@@ -690,6 +692,39 @@ class Watcher {
 
   // ---------- турбо (только платные) ----------
 
+  // Настоящий край номеров. Лента свежих отстаёт от карточек на минуты (замер: на 500 номеров),
+  // а турбо шагает по turboWindow номеров — после паузы или запуска он догонял бы минутами.
+  // Если за frontier + 2·окно карточки уже открываются — шагаем 8, 16, 32… пока открываются,
+  // потом делением пополам; пропущенное между старым и новым краем — в пропуски (gaps): их турбо
+  // проверит фоном, после новых номеров. По три номера подряд — номера бывают с пропусками.
+  async syncEdge() {
+    this.needSync = false;
+    const opens = async (id) => {
+      for (const n of [id, id + 1, id + 2]) {
+        const o = await olx.fetchOffer(n);
+        this.okRequest();
+        if (o) return true;
+      }
+      return false;
+    };
+    const w = this.cfg.turboWindow;
+    const from = this.frontier;
+    if (!(await opens(from + 2 * w))) return;
+    let lo = from + 2 * w;
+    let step = 8;
+    while (await opens(lo + step)) { lo += step; step *= 2; if (step > 8192) break; }
+    let hi = lo + step;
+    while (hi - lo > 3) { const mid = Math.floor((lo + hi) / 2); if (await opens(mid)) lo = mid; else hi = mid; }
+    const edge = lo - w;
+    const now = Date.now();
+    for (let id = Math.max(from + 1, edge - 1500); id <= edge; id++) {
+      if (!this.found.has(id) && !this.gaps.has(id)) this.gaps.set(id, { added: now, checked: 0 });
+    }
+    this.frontier = edge;
+    this.db.set('frontier', edge);
+    this.log(`турбо: край номеров ${lo} — догнал с ${from} (+${lo - from}), пропущенное проверю фоном`);
+  }
+
   async turboTick() {
     if (!this.db.get('turbo', true) || this.turboBusy || this.blocked() || !this.frontier) return;
     // Турбо — только OLX (у остальных площадок пока не проверено), всем, у кого есть доступ.
@@ -698,6 +733,9 @@ class Watcher {
     if (!subs.length) return;
     this.turboBusy = true;
     try {
+      if (this.needSync) {
+        try { await this.syncEdge(); } catch (e) { this.handleError(e); return; }
+      }
       // Сначала — пропущенные номера чуть ниже границы: номер мог ещё не открыться, когда
       // следующий уже появился и граница ушла вперёд. Дальше — новые номера за границей.
       // Порядок = очередь к OLX (запросы по номеру идут не чаще olx.offerRate() в секунду):
@@ -727,6 +765,8 @@ class Watcher {
         this.handleError(results[0].e);
         return;
       }
+      const ahead = results.filter((r) => r.id > this.frontier && r.o).length;
+      if (ahead >= Math.ceil(this.cfg.turboWindow * 0.7)) this.needSync = true;   // почти всё окно открылось — мы позади края
       for (const { id, o, e } of results) {
         if (e) {
           if (this.hiddenOffer(id, e)) continue;

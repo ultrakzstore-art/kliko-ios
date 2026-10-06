@@ -352,3 +352,35 @@ test('пауза своя у площадки: OLX ограничил — Kaspi 
   assert.ok(w.handleError(new olx.HttpError(429, 'u'), 'olx'));
   assert.strictEqual(w.backoffMs, 4 * 60_000, 'второй отказ подряд — пауза дольше');
 });
+
+test('турбо после паузы: прыгает на настоящий край номеров, пропущенное — фоном', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'olxw-edge-'));
+  const db = new Db(path.join(dir, 'w.db'));
+  const ad = (id, title) => ({ id, title, url: `https://www.olx.kz/d/obyavlenie/x-ID${olx.encodeId(id)}.html`, price: 200000, city: 'Алматы', categoryId: 1234, createdAt: Date.now() + 60_000 });
+  // Бот стоял на 1000, а OLX ушёл до 1600 (каждый 10-й номер — пропуск).
+  const offers = new Map();
+  for (let id = 1001; id <= 1600; id++) if (id % 10 !== 7) offers.set(id, ad(id, id === 1599 ? 'HP 250 свежее' : 'что-то'));
+  const origOffer = olx.fetchOffer;
+  let asked = 0;
+  olx.fetchOffer = async (id) => { asked += 1; return offers.get(id) || null; };
+  const sent = [];
+  const w = new Watcher({
+    db, config: { pollSec: 2, turboSec: 1, turboWindow: 10, freshMs: 30 * 60_000 },
+    notify: async (userId, a, subs, via) => { sent.push({ id: a.id, via }); },
+    alert: async () => {}, log: () => {},
+  });
+  try {
+    db.touchUser(1, 'Платный');
+    db.extend(1, 7);
+    const s = db.addSub(1, 'HP', 'https://www.olx.kz/d/elektronika/q-hp-250/');
+    db.updateSub(s.id, { initialized: 1 });
+    w.frontier = 1000;
+    await w.turboTick();
+    assert.ok(w.frontier >= 1585 && w.frontier <= 1600, `край найден, frontier ${w.frontier}`);
+    assert.ok(asked < 120, `поиск края — десятки запросов, а не сотни (${asked})`);
+    assert.deepStrictEqual(sent, [{ id: 1599, via: 'turbo' }], 'свежее у края пришло в первый же проход');
+    assert.ok(w.gaps.size > 400, 'пропущенное между старым и новым краем — в фоновую проверку');
+  } finally {
+    olx.fetchOffer = origOffer;
+  }
+});
