@@ -273,7 +273,7 @@ async function olxRace(ms) {
   const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'application/json' };
   const card = async (v, id) => {
     const url = v === 2 ? `${olx.BASE}/api/v2/offers/${id}` : `${olx.BASE}/api/v1/offers/${id}/`;
-    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(8_000) });
     if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
     if (!res.ok) return null;
     try { const j = await res.json(); const d = j.data || j; return Number(d.id) === id ? d : null; } catch { return null; }
@@ -290,8 +290,10 @@ async function olxRace(ms) {
   const rec = (id) => { if (!seen.has(id)) seen.set(id, {}); return seen.get(id); };
   let edge = 0;
   const end = Date.now() + ms;
-  console.log(`Гонка источников OLX ${Math.round(ms / 60_000)} мин: API v2, API v1, лента свежих…\n`);
+  console.log(`Гонка источников OLX ${Math.round(ms / 60_000)} мин: карточки API v2 и v1, JSON-список, витрина…\n`);
   let stop = '';
+  let slow = 0;        // карточек, не ответивших за 8 с
+  let longest = 0;     // самый долгий круг, мс
   while (Date.now() < end && !stop) {
     const t0 = Date.now();
     try {
@@ -315,29 +317,32 @@ async function olxRace(ms) {
         if (ids.length >= 6) break;
         if (id > edge - 40 && (!r.v1 || !r.v2) && !ids.includes(id)) ids.push(id);
       }
-      for (const id of ids) {
-        for (const v of [2, 1]) {
-          const r = seen.get(id);
-          if (r?.[`v${v}`]) continue;
-          const d = await card(v, id);
-          if (!d) continue;
-          const x = rec(id);
-          x[`v${v}`] = Date.now();
-          const c = Date.parse(d.created_time || d.createdTime || '');
-          if (!x.created && Number.isFinite(c)) x.created = c;
-          if (d.status) x.status = d.status;
-          edge = Math.max(edge, id);
-        }
+      // Карточки — все сразу: по очереди один медленный ответ OLX задерживал весь круг на минуты.
+      const asks = ids.flatMap((id) => [2, 1].filter((v) => !seen.get(id)?.[`v${v}`]).map((v) => ({ id, v })));
+      const got = await Promise.all(asks.map(({ id, v }) => card(v, id).then((d) => ({ id, v, d, t: Date.now() }), (e) => ({ id, v, e }))));
+      const limited = got.find((g) => g.e instanceof olx.HttpError);
+      if (limited) throw limited.e;
+      for (const { id, v, d, t, e } of got) {
+        if (e) { slow += 1; continue; }
+        if (!d) continue;
+        const x = rec(id);
+        x[`v${v}`] = t;
+        const c = Date.parse(d.created_time || d.createdTime || '');
+        if (!x.created && Number.isFinite(c)) x.created = c;
+        if (d.status) x.status = d.status;
+        edge = Math.max(edge, id);
       }
     } catch (e) {
       if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) stop = `OLX ответил ${e.status} — остановил замер`;
       else console.log(`  ошибка: ${e.message}`);
     }
+    longest = Math.max(longest, Date.now() - t0);
     const min = Math.floor((Date.now() - (end - ms)) / 60_000);
     if (min > (olxRace.shown || 0)) {
       olxRace.shown = min;
       const r = [...seen.values()];
-      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · список ${r.filter((x) => x.list).length} · витрина ${r.filter((x) => x.show).length}`);
+      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · список ${r.filter((x) => x.list).length} · витрина ${r.filter((x) => x.show).length}${longest > 10_000 ? ` · OLX тормозил: круг до ${Math.round(longest / 1000)} с, без ответа ${slow}` : ''}`);
+      longest = 0;
     }
     const wait = 4000 - (Date.now() - t0);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
