@@ -207,7 +207,8 @@ extension Listing: Decodable {
         rentPriceDay = число("rent_price_day")
         let первоеФото = (try? c.decode([String].self, forKey: Ключ("images")))?.first
         thumb = непусто(строка("thumb")) ?? непусто(строка("img")) ?? непусто(первоеФото)
-        city = непусто(строка("city")) ?? ""
+        /* «Карагандинская городская администрация» из геокодера — городом справочника (ГеоДанные). */
+        city = ГеоДанные.городБезАдминистрации(непусто(строка("city")) ?? "")
         isTop = да("is_top")
         isNew = строка("condition") == "new"
 

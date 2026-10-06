@@ -261,8 +261,8 @@ enum ДоставкаТКAPI {
             список.insert(первый, at: 0)
         }
         return ОтветЛогистики(межгород: да(j["intercity"]),
-                              откуда: строка(j["from_city"]),
-                              куда: строка(j["to_city"]),
+                              откуда: строка(j["from_city"]).map { ГеоДанные.городБезАдминистрации($0) },
+                              куда: строка(j["to_city"]).map { ГеоДанные.городБезАдминистрации($0) },
                               безАукциона: (j["auction"] as? Bool) == false,
                               партнёры: список)
     }
@@ -655,7 +655,7 @@ struct ЛистЗапросаИсполнителям: View {
                 let место = CLLocation(latitude: координата.latitude, longitude: координата.longitude)
                 let найдено = try? await CLGeocoder().reverseGeocodeLocation(место)
                 if let имя = найдено?.first?.locality, !имя.isEmpty {
-                    город = имя
+                    город = ГеоДанные.городБезАдминистрации(имя)
                     статус = .найден
                 } else {
                     статус = .нетГорода
@@ -712,16 +712,20 @@ struct ДоставкаИзГородаСайта: View {
     @ObservedObject var расчёт: ДоставкаНовойСделки
     /// Адрес по умолчанию уже запрошен (есть он или нет) — до этого блок не показываем.
     let адресГотов: Bool
+    /// «Написать продавцу» в плашке «СДЭК не смог рассчитать» — тот же чат, что «Согласовать с продавцом»; nil — нет.
+    let написатьПродавцу: (() -> Void)?
 
     @ObservedObject private var гео = ГеоЛенты.shared
     @State private var открыто = false
     @State private var загрузка: Загрузка = .нет
 
-    init(товар: Listing, оформить: (() -> Void)?, расчёт: ДоставкаНовойСделки, адресГотов: Bool) {
+    init(товар: Listing, оформить: (() -> Void)?, расчёт: ДоставкаНовойСделки, адресГотов: Bool,
+         написатьПродавцу: (() -> Void)? = nil) {
         self.товар = товар
         self.оформить = оформить
         _расчёт = ObservedObject(wrappedValue: расчёт)
         self.адресГотов = адресГотов
+        self.написатьПродавцу = написатьПродавцу
     }
 
     enum Загрузка {
@@ -734,7 +738,7 @@ struct ДоставкаИзГородаСайта: View {
 
     /// «Астана» и « астана » — один город; ё — как е.
     static func имяГорода(_ s: String) -> String {
-        var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var t = ГеоДанные.городБезАдминистрации(s).lowercased()
         t = t.replacingOccurrences(of: "ё", with: "е")
         for приставка in ["г. ", "г.", "город "] where t.hasPrefix(приставка) {
             t = String(t.dropFirst(приставка.count)).trimmingCharacters(in: .whitespaces)
@@ -854,7 +858,8 @@ struct ДоставкаИзГородаСайта: View {
                     .foregroundStyle(Theme.текстВторой)
                     .padding(.vertical, 6)
             } else {
-                КарточкаТКСайта(товар: товар, ответ: сдэк, оформить: оформить, расчёт: расчёт)
+                КарточкаТКСайта(товар: товар, ответ: сдэк, оформить: оформить, расчёт: расчёт,
+                                написатьПродавцу: написатьПродавцу)
             }
         }
     }
@@ -890,6 +895,7 @@ private struct КарточкаТКСайта: View {
     /// Расчёт СДЭК прямо здесь: адрес, цена, срок, пункт выдачи или до двери — тот же ship_quote, что окно сделки.
     /// Общий с ДоставкаИзГородаСайта: курьерский ответ (свой город) прячет весь блок.
     @ObservedObject var расчёт: ДоставкаНовойСделки
+    let написатьПродавцу: (() -> Void)?
 
     @State private var ставки: Ставки = .нет
     /// Окно карты «Куда доставить» для расчёта.
@@ -975,7 +981,8 @@ private struct КарточкаТКСайта: View {
             Text(ДоставкаСделкиText.т("car_calc_h"))
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Theme.текст)
-            БлокДоставкиНовойСделки(доставка: расчёт, изменитьАдрес: { открытьКарту() }, безСамовывоза: true)
+            БлокДоставкиНовойСделки(доставка: расчёт, изменитьАдрес: { открытьКарту() }, безСамовывоза: true,
+                                    написатьПродавцу: написатьПродавцу)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1020,15 +1027,19 @@ private struct КарточкаТКСайта: View {
     private var кнопкаДальше: some View {
         if ответ.безАукциона {
             if !товар.безГаранта, let оформить {
+                /* СДЭК не посчитал межгород — «Оформить с доставкой» серая и не нажимается (у сайта: «оформить с
+                   доставкой не получится»); что делать — в плашке выше, с «Написать продавцу». */
+                let закрыто = считаемЗдесь && расчёт.оформлениеЗакрыто
                 Button { оформитьСВыбором(оформить) } label: {
                     Text(тДост("logi_car_cta"))
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(закрыто ? Theme.текстВторой : .white)
                         .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(Theme.зелёный2,
+                        .background(закрыто ? Theme.поверхность2 : Theme.зелёный2,
                                     in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                 }
                 .buttonStyle(НажатиеПанелиСайта(сжатие: 0.99))
+                .disabled(закрыто)
                 .padding(.top, 4)
                 if считаемЗдесь && расчёт.выбранная != nil {
                     Text(ДоставкаСделкиText.т("car_go_hint"))

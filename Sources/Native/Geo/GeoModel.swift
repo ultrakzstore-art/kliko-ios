@@ -180,6 +180,59 @@ enum ГеоДанные {
     private static func безСловаРайон(_ s: String) -> String {
         s.hasSuffix(" район") ? String(s.dropLast(6)) : s
     }
+
+    /**
+     Город из административного имени геокодера (владелец 06.10.2026: «Доставка из Карагандинская городская
+     администрация»): у части объявлений в city лежит не город, а «… городская администрация», «… городской акимат»,
+     «… г.а.», «… қалалық әкімдігі». Такое имя сверяем со справочником: «Карагандинская» — основа «караганд» — Караганда.
+     Обычное название города не трогаем; не нашлось в справочнике — остаток без административных слов.
+     */
+    static func городБезАдминистрации(_ s: String) -> String {
+        let исходное = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !исходное.isEmpty else { return исходное }
+        var t = " " + исходное.lowercased().replacingOccurrences(of: "ё", with: "е") + " "
+        var найдено = false
+        for метка in меткиАдминистрации where t.contains(метка) {
+            t = t.replacingOccurrences(of: метка, with: " ")
+            найдено = true
+        }
+        guard найдено else { return исходное }
+        let лишнее = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        t = t.trimmingCharacters(in: лишнее)
+        for приставка in ["г. ", "город "] where t.hasPrefix(приставка) {
+            t = String(t.dropFirst(приставка.count)).trimmingCharacters(in: лишнее)
+        }
+        guard !t.isEmpty else { return исходное }
+        var лучший = ""
+        var длина = 0
+        for город in всеГорода {
+            let своё = город.lowercased().replacingOccurrences(of: "ё", with: "е")
+            if своё == t { return город }
+            let основа = основаИмени(своё)
+            if основа.count >= 4 && основа.count > длина && t.hasPrefix(основа) {
+                лучший = город
+                длина = основа.count
+            }
+        }
+        if !лучший.isEmpty { return лучший }
+        return t.prefix(1).uppercased() + String(t.dropFirst())
+    }
+
+    /// Слова административного имени — с пробелами по краям, чтобы «га» внутри слова не задеть.
+    private static let меткиАдминистрации = [
+        " городская администрация ", " городской администрации ", " городской акимат ", " акимат города ",
+        " администрация города ", " г.а. ", " г. а. ", " г.а ", " қалалық әкімдігі ", " қаласының әкімдігі ",
+        " қалалық әкімшілігі ", " қаласы әкімдігі ", " city administration ", " city akimat "
+    ]
+
+    /// «караганда» — «караганд», «костанай» — «костан»: без гласных и «й», «ь» на конце.
+    private static func основаИмени(_ s: String) -> String {
+        var t = s
+        while let последняя = t.last, "аеиоуыэюяйьі".contains(последняя) {
+            t.removeLast()
+        }
+        return t
+    }
 }
 
 // MARK: - Выбор

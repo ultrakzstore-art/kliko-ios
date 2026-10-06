@@ -545,7 +545,7 @@ struct ЛистТочкиСделки: View {
 
     static func строка(_ метка: CLPlacemark) -> String {
         var части: [String] = []
-        if let город = метка.locality, !город.isEmpty { части.append(город) }
+        if let город = метка.locality, !город.isEmpty { части.append(ГеоДанные.городБезАдминистрации(город)) }
         var улица = метка.thoroughfare ?? ""
         if let дом = метка.subThoroughfare, !дом.isEmpty {
             улица = улица.isEmpty ? дом : улица + ", " + дом
