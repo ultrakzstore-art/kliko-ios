@@ -317,6 +317,12 @@ async function olxRace(ms) {
       if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) stop = `OLX ответил ${e.status} — остановил замер`;
       else console.log(`  ошибка: ${e.message}`);
     }
+    const min = Math.floor((Date.now() - (end - ms)) / 60_000);
+    if (min > (olxRace.shown || 0)) {
+      olxRace.shown = min;
+      const r = [...seen.values()];
+      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 открыл ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · в ленте ${r.filter((x) => x.list).length}`);
+    }
     const wait = 4000 - (Date.now() - t0);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
@@ -339,7 +345,9 @@ async function olxRace(ms) {
 (async () => {
   const url = process.argv[2];
   if (/^\d{6,}$/.test(String(url || '').trim())) return deepProbe(Number(url.trim()));
-  if (url === 'olx' && process.argv[3] === 'race') return olxRace((Number(process.argv[4]) || 10) * 60_000);
+  // «olx race 10» — из программы на ПК приходит одной строкой, из консоли — тремя словами.
+  const race = /^olx\s*race(?:\s+(\d+))?$/i.exec([url, ...process.argv.slice(3)].join(' ').trim());
+  if (race) return olxRace((Number(race[1]) || 10) * 60_000);
   // npm run probe -- categories [путь] — подрубрики, как их увидит мастер /new
   if (url === 'categories') {
     const p = process.argv[3];
