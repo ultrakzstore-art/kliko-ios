@@ -185,7 +185,7 @@ enum ГеоДанные {
 // MARK: - Выбор
 
 /// Где искать — mkSt.city, mkSt.region и район сайта. Пустое — вся страна.
-struct ГдеИскать: Equatable, Sendable {
+struct ГдеИскать: Hashable, Sendable {
     /// Город названием («Астана»); пусто — не город.
     var город = ""
     /// Ключ региона MK_GEO («abai»); только без города.
