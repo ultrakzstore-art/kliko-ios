@@ -143,6 +143,12 @@ struct NativeFeedView: View {
             ГеоЛенты.shared.тихо()          // mkGeoFetch: точка из памяти или замер при уже данном разрешении
             await модель.начать()
         }
+        /* Съёмка кадров App Store в CI (СъёмкаCI): лист открывается сам, когда лента уже на экране. */
+        .task {
+            guard let лист = СъёмкаCI.лист, лист == "garant" || лист == "filters" else { return }
+            try? await Task.sleep(for: .seconds(8))
+            if лист == "garant" { кнопкаГаранта = .понятно; гарантПоказан = true } else { фильтрыПоказаны = true }
+        }
         /* Загрузочный экран запуска (SitePreloader, RootWebView) уходит, когда здесь есть что показать. */
         .onChange(of: первыеДанныеЕсть, initial: true) { _, есть in
             if есть { ЗаставкаЗапуска.shared.данныеПришли() }

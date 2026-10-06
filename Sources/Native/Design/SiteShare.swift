@@ -166,6 +166,11 @@ struct ЛистПоделитьсяСайта: View {
         .task {
             if фото == nil { фото = await ПоделитьсяСайта.загрузить(данные.фото) }
         }
+        .task {
+            guard СъёмкаCI.лист == "qr" else { return }      // съёмка кадров App Store в CI
+            try? await Task.sleep(for: .seconds(2))
+            окноQR = true
+        }
         .onAppear {
             if !данные.id.isEmpty { КонтактыПродавца.отметить("share", объявление: данные.id) }
         }

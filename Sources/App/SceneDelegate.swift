@@ -217,3 +217,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         ЗамерыСкорости.приАктивности()              // раз в сутки — пачка замеров скорости
     }
 }
+
+/// СЪЁМКА КАДРОВ APP STORE В CI (ios-check.yml, job screens): аргумент запуска `-klikoSheet <имя>` открывает лист сам —
+/// garant (окно «Как работает Безопасная сделка» на ленте), filters (фильтры ленты), qr (QR-код открытой карточки).
+/// Только в отладочной сборке; в выпуске всегда nil.
+enum СъёмкаCI {
+    static var лист: String? {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: "klikoSheet")
+        #else
+        return nil
+        #endif
+    }
+}

@@ -172,7 +172,9 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO | tail -5
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=1.11 CURRENT_PROJECT_VERSION=999 | tail -5
+          # Версия как у выпуска: с 0.1.0 из project.yml поверх снимков вставало окно «Эта версия устарела».
           app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
           echo "APP=$app" >> "$GITHUB_ENV"
 
@@ -198,6 +200,49 @@ jobs:
             run "3-sait-glavnaya-$theme" 25 -klikoSite "https://kliko.kz/kz/ru/?ci=1"
             [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
+          # КАДРЫ APP STORE (fastlane/screenshots): светлая тема, полный размер, iPhone и iPad 13″. Листы открываются сами
+          # аргументом -klikoSheet (СъёмкаCI, только отладочная сборка): garant — «Как работает Безопасная сделка»,
+          # filters — фильтры ленты, qr — QR-код карточки. Кладутся в shots/store/ JPEG без уменьшения.
+          mkdir -p shots/store
+          store() {  # устройство, имя, пауза, аргументы запуска
+            dev=$1; name=$2; wait=$3; shift 3
+            xcrun simctl terminate "$dev" kz.kliko.app 2>/dev/null || true
+            xcrun simctl launch "$dev" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@"
+            sleep "$wait"; xcrun simctl io "$dev" screenshot "shots/store/$name.png"
+          }
+          storeset() {  # устройство, приставка
+            xcrun simctl ui "$1" appearance light
+            store "$1" "$2-lenta" 25
+            store "$1" "$2-garant" 25 -klikoSheet garant
+            store "$1" "$2-filtry" 25 -klikoSheet filters
+            if [ -n "$id" ]; then
+              store "$1" "$2-kartochka" 20 -klikoOpen "https://kliko.kz/marketplace?item=$id"
+              store "$1" "$2-qr" 30 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr
+            fi
+          }
+          storeset "$UDID" iphone
+          ipad=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for want in ("13-inch", "iPad Pro", "iPad"):
+              for k in rt:
+                  for x in d[k]:
+                      if x["name"].startswith("iPad") and want in x["name"]:
+                          print(x["udid"]); raise SystemExit
+          ' || true)
+          if [ -n "$ipad" ]; then
+            xcrun simctl boot "$ipad" || true
+            xcrun simctl bootstatus "$ipad" -b
+            xcrun simctl status_bar "$ipad" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+            xcrun simctl install "$ipad" "$APP"
+            storeset "$ipad" ipad
+            xcrun simctl shutdown "$ipad" || true
+          else
+            echo "::warning::Нет симулятора iPad — кадры iPad не сняты"
+          fi
+          for f in shots/store/*.png; do sips -s format jpeg -s formatOptions 92 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          echo "::notice title=Кадры App Store::$(cd shots/store && ls | tr '\n' ' ')"
           # Исходники сайта рядом со снимками: HTML главной и карточки, все подключённые CSS — точные цвета, картинки
           # плиток и адреса кнопок для нативных экранов.
           mkdir -p shots/site
