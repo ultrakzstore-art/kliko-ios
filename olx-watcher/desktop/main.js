@@ -258,7 +258,9 @@ function runProbe(url) {
     child.stderr?.on('data', add);
     // «kaspi watch» — наблюдение на 5 минут, «olx race N» — на N минут; остальные — до 90 секунд.
     const race = /^olx\s*race(?:\s+(\d+))?$/i.exec(url);
-    const limit = /^kaspi\s*watch$/i.test(url) ? 6 * 60_000 : race ? ((Number(race[1]) || 10) + 1) * 60_000 : 90_000;
+    const track = /^olx\s*track\s+\d{6,}(?:\s+(\d+))?$/i.exec(url);
+    const limit = /^kaspi\s*watch$/i.test(url) ? 6 * 60_000 : race ? ((Number(race[1]) || 10) + 1) * 60_000
+      : track ? ((Number(track[1]) || 30) + 1) * 60_000 : 90_000;
     const timer = setTimeout(() => { out.push('\n…долго нет ответа — остановил проверку.'); child.kill(); }, limit);
     child.on('exit', () => { clearTimeout(timer); resolve(out.join('') || 'Пусто — площадка ничего не вернула.'); });
   });

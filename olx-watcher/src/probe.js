@@ -1,7 +1,8 @@
 // Диагностика без Телеграма: что OLX реально отдаёт на этой машине.
 //   npm run probe -- "<ссылка на поиск>"          — выдача поиска и карточка самого свежего
 //   npm run probe -- "<ссылка на объявление>"     — карточка по номеру и 5 следующих номеров
-//   npm run probe -- olx race [минут]             — кто раньше отдаёт новое объявление: API v2, v1 или лента
+//   npm run probe -- olx race [минут]             — кто раньше отдаёт новое объявление: карточки v2/v1, JSON-список, витрина
+//   npm run probe -- olx track <номер> [минут]    — одно объявление во времени: где и когда оно появилось
 const olx = require('./olx');
 const cats = require('./categories');
 const sources = require('./sources');
@@ -266,8 +267,8 @@ async function kaspiProbe(id) {
 }
 
 // npm run probe -- olx race [минут] — гонка источников OLX: для новых номеров — когда объявление
-// впервые открылось через API v2, через API v1 и когда появилось в ленте свежих. Запросов немного
-// (до ~3 в секунду); на 403 замер останавливается и печатает, что успел.
+// впервые открылось карточкой API v2, карточкой API v1, когда появилось в JSON-списке свежих и
+// на витрине «сначала новые». До ~3 запросов в секунду; на 403 замер останавливается.
 async function olxRace(ms) {
   const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'application/json' };
   const card = async (v, id) => {
@@ -277,7 +278,15 @@ async function olxRace(ms) {
     if (!res.ok) return null;
     try { const j = await res.json(); const d = j.data || j; return Number(d.id) === id ? d : null; } catch { return null; }
   };
-  const seen = new Map();   // id → { v2, v1, list, created, status }
+  // JSON-список — именно он, без запасного пути через витрину: их сравниваем отдельно.
+  const jsonList = async () => {
+    const url = `${olx.BASE}/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc`;
+    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(15_000) });
+    if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
+    if (!res.ok) return [];
+    try { return ((await res.json()).data || []).map(olx.normalizeOffer); } catch { return []; }
+  };
+  const seen = new Map();   // id → { v2, v1, list, show, created, status }
   const rec = (id) => { if (!seen.has(id)) seen.set(id, {}); return seen.get(id); };
   let edge = 0;
   const end = Date.now() + ms;
@@ -286,7 +295,14 @@ async function olxRace(ms) {
   while (Date.now() < end && !stop) {
     const t0 = Date.now();
     try {
-      const list = await olx.fetchLatest();
+      const list = await jsonList();
+      try {
+        for (const a of (await olx.fetchSearch(`${olx.BASE}/list/`)).ads) {
+          const r = seen.get(a.id);
+          if (r && !r.show) r.show = Date.now();
+          else if (!r && a.id > edge - 40) rec(a.id).show = Date.now();
+        }
+      } catch (e) { if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) throw e; }
       for (const a of list) {
         const r = rec(a.id);
         if (!r.list) r.list = Date.now();
@@ -321,7 +337,7 @@ async function olxRace(ms) {
     if (min > (olxRace.shown || 0)) {
       olxRace.shown = min;
       const r = [...seen.values()];
-      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 открыл ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · в ленте ${r.filter((x) => x.list).length}`);
+      console.log(`  ${min} мин: новых номеров ${seen.size} · v2 ${r.filter((x) => x.v2).length} · v1 ${r.filter((x) => x.v1).length} · список ${r.filter((x) => x.list).length} · витрина ${r.filter((x) => x.show).length}`);
     }
     const wait = 4000 - (Date.now() - t0);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -329,17 +345,73 @@ async function olxRace(ms) {
   if (stop) console.log(stop);
   const rows = [...seen].filter(([, r]) => r.created && r.created > Date.now() - ms - 120_000 && (r.v1 || r.v2 || r.list)).sort((a, b) => a[0] - b[0]);
   const ago = (t, c) => (t ? `${Math.round((t - c) / 1000)} с` : '—');
-  console.log('\nномер        подано    API v2   API v1   лента   статус');
-  const first = { v2: 0, v1: 0, list: 0 };
+  console.log('\nномер        подано    API v2   API v1  список  витрина  статус');
+  const first = { v2: 0, v1: 0, list: 0, show: 0 };
   for (const [id, r] of rows) {
     const at = new Date(r.created).toLocaleTimeString('ru-RU');
-    console.log(`${id}  ${at}  ${ago(r.v2, r.created).padStart(7)}  ${ago(r.v1, r.created).padStart(7)}  ${ago(r.list, r.created).padStart(6)}   ${r.status || ''}`);
-    const ts = [['v2', r.v2], ['v1', r.v1], ['list', r.list]].filter(([, t]) => t);
+    console.log(`${id}  ${at}  ${ago(r.v2, r.created).padStart(7)}  ${ago(r.v1, r.created).padStart(7)}  ${ago(r.list, r.created).padStart(6)}  ${ago(r.show, r.created).padStart(7)}   ${r.status || ''}`);
+    const ts = [['v2', r.v2], ['v1', r.v1], ['list', r.list], ['show', r.show]].filter(([, t]) => t);
     ts.sort((a, b) => a[1] - b[1]);
     if (ts.length > 1 && ts[1][1] - ts[0][1] >= 1000) first[ts[0][0]] += 1;   // ничья (разница меньше секунды) — не в счёт
   }
-  console.log(`\nКто увидел первым (где видели хотя бы двое): API v2 — ${first.v2}, API v1 — ${first.v1}, лента — ${first.list}`);
+  console.log(`\nКто увидел первым (где видели хотя бы двое): карточка v2 — ${first.v2}, карточка v1 — ${first.v1}, JSON-список — ${first.list}, витрина — ${first.show}`);
   console.log('Время — сколько секунд прошло от подачи до того, как источник отдал объявление. Пришлите этот вывод.');
+}
+
+// npm run probe -- olx track <номер> [минут] — одно (своё, только что поданное) объявление во
+// времени: когда впервые открылась карточка v2 и v1, когда оно попало в JSON-список свежих и на
+// витрину «сначала новые», как менялся статус. Раз в 2 секунды, до 30 минут или пока не увидят все.
+async function olxTrack(id, ms) {
+  const H = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Accept-Language': 'ru-RU,ru;q=0.9', Accept: 'application/json' };
+  const json = async (url) => {
+    const res = await fetch(url, { headers: H, signal: AbortSignal.timeout(15_000) });
+    if (res.status === 403 || res.status === 429) throw new olx.HttpError(res.status, url);
+    if (!res.ok) return { code: res.status };
+    try { return { code: res.status, body: await res.json() }; } catch { return { code: res.status }; }
+  };
+  const start = Date.now();
+  const clock = () => new Date().toLocaleTimeString('ru-RU');
+  const since = () => `+${Math.round((Date.now() - start) / 1000)} с`;
+  const first = {};
+  const status = { v2: '', v1: '' };
+  const event = (key, text) => { if (!first[key]) { first[key] = Date.now(); console.log(`${clock()}  ${since().padStart(7)}  ${text}`); } };
+  console.log(`Слежу за объявлением ${id}: карточка v2, карточка v1, JSON-список, витрина — раз в 2 с.\nЗапишите рядом время из кабинета OLX и время уведомлений.\n`);
+  let created = null;
+  while (Date.now() - start < ms) {
+    const t0 = Date.now();
+    try {
+      for (const v of ['v2', 'v1']) {
+        const r = await json(v === 'v2' ? `${olx.BASE}/api/v2/offers/${id}` : `${olx.BASE}/api/v1/offers/${id}/`);
+        const d = r.body && (r.body.data || r.body);
+        if (d && Number(d.id) === id) {
+          event(v, `карточка ${v} открылась (статус «${d.status || '—'}»)`);
+          if (d.status && d.status !== status[v]) {
+            if (status[v]) console.log(`${clock()}  ${since().padStart(7)}  карточка ${v}: статус «${status[v]}» → «${d.status}»`);
+            status[v] = d.status;
+          }
+          const c = Date.parse(d.created_time || d.createdTime || '');
+          if (!created && Number.isFinite(c)) { created = c; console.log(`           время подачи по карточке: ${new Date(c).toLocaleTimeString('ru-RU')}`); }
+        } else if (first[v] && !first[`${v}-gone`]) {
+          first[`${v}-gone`] = Date.now();
+          console.log(`${clock()}  ${since().padStart(7)}  карточка ${v} снова не открывается (ответ ${r.code})`);
+        }
+      }
+      const list = await json(`${olx.BASE}/api/v1/offers/?offset=0&limit=40&sort_by=created_at:desc`);
+      if ((list.body?.data || []).some((a) => Number(a.id) === id)) event('list', 'появилось в JSON-списке свежих');
+      const show = await olx.fetchSearch(`${olx.BASE}/list/`);
+      if (show.ads.some((a) => a.id === id)) event('show', 'появилось на витрине «сначала новые»');
+    } catch (e) {
+      if (e instanceof olx.HttpError && (e.status === 403 || e.status === 429)) { console.log(`OLX ответил ${e.status} — остановил`); break; }
+      console.log(`  ошибка: ${e.message}`);
+    }
+    if (first.v2 && first.v1 && first.list && first.show) break;
+    const wait = 2000 - (Date.now() - t0);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+  const at = (k) => (first[k] ? new Date(first[k]).toLocaleTimeString('ru-RU') : 'не видели');
+  console.log(`\nИтог по ${id}${created ? ` (подано ${new Date(created).toLocaleTimeString('ru-RU')})` : ''}:`);
+  console.log(`  карточка v2: ${at('v2')}\n  карточка v1: ${at('v1')}\n  JSON-список: ${at('list')}\n  витрина:     ${at('show')}`);
+  console.log('Список и витрина показывают только 40 самых свежих по всей доске: если объявление успело уйти ниже, там будет «не видели».');
 }
 
 (async () => {
@@ -348,6 +420,8 @@ async function olxRace(ms) {
   // «olx race 10» — из программы на ПК приходит одной строкой, из консоли — тремя словами.
   const race = /^olx\s*race(?:\s+(\d+))?$/i.exec([url, ...process.argv.slice(3)].join(' ').trim());
   if (race) return olxRace((Number(race[1]) || 10) * 60_000);
+  const track = /^olx\s*track\s+(\d{6,})(?:\s+(\d+))?$/i.exec([url, ...process.argv.slice(3)].join(' ').trim());
+  if (track) return olxTrack(Number(track[1]), (Number(track[2]) || 30) * 60_000);
   // npm run probe -- categories [путь] — подрубрики, как их увидит мастер /new
   if (url === 'categories') {
     const p = process.argv[3];
