@@ -338,7 +338,11 @@ enum МаршрутОбъявления {
         return (URL(string: приложение), URL(string: веб))
     }
 
-    static let inDrive = URL(string: "https://indrive.com")
+    /// inDrive: приложение по своей схеме indriver:// (адрес маршрута схема не принимает — точку вводят в нём),
+    /// нет приложения — его страница в App Store, а не сайт indrive.com.
+    static let inDrive: (приложение: URL?, запасной: URL?) = (
+        URL(string: "indriver://"), URL(string: "https://apps.apple.com/kz/app/indrive/id780125801")
+    )
 
     /// Apple Карты открываются всегда — своей схемы и проверки не нужно.
     static func appleКарты(_ т: CLLocationCoordinate2D, туда: Bool) -> URL? {
@@ -855,7 +859,7 @@ struct ЛистМаршрутаСайта: View {
                 СтрокаПриложенияМаршрута(значок: "car.2.fill", название: "inDrive", подпись: тМеста("route_note_deal"),
                                          фон: Color(red: 0.757, green: 0.945, blue: 0.114),
                                          цвет: Color(red: 0.086, green: 0.145, blue: 0.039)) {
-                    открыть((приложение: nil, запасной: МаршрутОбъявления.inDrive))
+                    открыть(МаршрутОбъявления.inDrive)
                 }
                 СтрокаПриложенияМаршрута(значок: "location.north.circle.fill", название: "2ГИС", подпись: заметка,
                                          фон: Color(red: 0.149, green: 0.502, blue: 0.208), цвет: .white,

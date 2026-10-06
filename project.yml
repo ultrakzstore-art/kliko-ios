@@ -119,7 +119,7 @@ targets:
         # ЧУЖИЕ СХЕМЫ, КОТОРЫЕ СПРАШИВАЕМ canOpenURL: «Расположение» на странице объявления (SiteListingLocation.swift)
         # открывает маршрут в 2ГИС, Яндекс Картах, Google Maps и такси/курьера в Яндекс Go их приложениями, а если
         # приложения нет — тем же адресом в браузере. Без этого списка canOpenURL всегда отвечает «нет».
-        LSApplicationQueriesSchemes: [dgis, yandexmaps, comgooglemaps, yandextaxi, whatsapp, tg, instagram-stories, instagram]
+        LSApplicationQueriesSchemes: [dgis, yandexmaps, comgooglemaps, yandextaxi, indriver, whatsapp, tg, instagram-stories, instagram]
         UIBackgroundModes: [remote-notification, fetch]   # фоновые/тихие пуши; fetch — BGAppRefreshTask (этап 12)
         # ФОНОВАЯ ПРОВЕРКА СОХРАНЁННЫХ ПОИСКОВ (этап 12, ПроверкаПоисков). Идентификатор задания обязан быть в этом
         # списке: BGTaskScheduler.register с незаявленным идентификатором роняет приложение на запуске.
