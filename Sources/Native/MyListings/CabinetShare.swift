@@ -19,7 +19,9 @@ import UIKit
    · .soc-orshare — «или расскажите о нём» (у share пусто, остаётся отступ);
    · .soc-hero — «Сделать видео и поделиться» на градиенте Instagram (у сайта — студия роликов openReelForListing);
    · .soc-quick — WhatsApp, Telegram, «Ссылка» (socialQuickShare: «Название — 12 000 ₸» и адрес /marketplace.php?item=
-     от корня сайта; «Ссылка» кладёт в буфер текст и адрес строкой ниже);
+     от корня сайта; «Ссылка» кладёт в буфер текст и адрес строкой ниже); сверх сайта (владелец) четвёртой — «QR-код»:
+     окно кода объявления (ЛистQRОбъявления, ShareCard/ListingQR.swift) с тем же адресом «Ссылки», без p= фото —
+     показать покупателю с экрана или распечатать;
    · «Автопостинг в бизнес-аккаунт ⌄» — раскрывает кнопки Instagram и TikTok по social_status: включено и подключено —
      «Опубликовать в …» (@имя) → social_post; включено — «Подключить …» (один раз — потом постинг в 1 клик) →
      social_connect.php; выключено — серая «скоро — подключается администратором». Оба действия — за PRO
@@ -63,6 +65,7 @@ struct ОкноПоделитьсяКабинета: View {
     @State private var тост: String? = nil
     @State private var задачаТоста: Task<Void, Never>? = nil
     @State private var скопировано = false
+    @State private var окноQR = false
     @State private var автопостингОткрыт = false
     /// nil — social_status ещё идёт («Загрузка…»).
     @State private var соцсети: [String: СостояниеАвтопостинга]? = nil
@@ -130,6 +133,9 @@ struct ОкноПоделитьсяКабинета: View {
             if фото == nil { фото = await ПоделитьсяСайта.загрузить(данные.фото) }
         }
         .task { await загрузитьСоцсети() }
+        .sheet(isPresented: $окноQR) {
+            ЛистQRОбъявления(данные: данные, ссылка: адресКабинета)
+        }
     }
 
     // MARK: Шапка и превью
@@ -362,7 +368,7 @@ struct ОкноПоделитьсяКабинета: View {
         .accessibilityHint(т("hero_sub"))
     }
 
-    /// .soc-quick: три кнопки в рамке — WhatsApp, Telegram, «Ссылка».
+    /// .soc-quick: кнопки в рамке — WhatsApp, Telegram, «Ссылка» и сверх сайта «QR-код» (окно кода поверх листа).
     private var быстрые: some View {
         HStack(spacing: 8) {
             быстрая("WhatsApp", действие: { whatsApp() }) {
@@ -377,6 +383,11 @@ struct ОкноПоделитьсяКабинета: View {
                 Image(systemName: скопировано ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(скопировано ? Theme.акцент : Theme.цвет(0x475569, 0x94A3B8))
+            }
+            быстрая(т("qr"), действие: { окноQR = true }) {
+                Image(systemName: "qrcode")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.зелёный)
             }
         }
     }
@@ -809,7 +820,7 @@ enum CabinetShareText {
             "pu_cta": "Продвинуть объявление", "pu_done": "ТОП уже подключён",
             "pu_done_a": "Объявление сразу в верху выдачи", "pu_done_b": "Ничего доплачивать не нужно.",
             "hero": "Сделать видео и поделиться", "hero_sub": "Reels · TikTok · Stories — в один тап",
-            "link": "Ссылка", "copied": "Скопировано!", "link_copied": "Ссылка скопирована",
+            "link": "Ссылка", "copied": "Скопировано!", "link_copied": "Ссылка скопирована", "qr": "QR-код",
             "autopost": "Автопостинг в бизнес-аккаунт", "loading": "Загрузка…",
             "post_to": "Опубликовать в %@", "connect": "Подключить %@",
             "connect_sub": "один раз — потом постинг в 1 клик", "soon": "скоро — подключается администратором",
@@ -827,7 +838,7 @@ enum CabinetShareText {
             "pu_cta": "Хабарландыруды жарнамалау", "pu_done": "ТОП қосылған",
             "pu_done_a": "Хабарландыру бірден іздеудің жоғарғы жағында", "pu_done_b": "Қосымша төлеудің қажеті жоқ.",
             "hero": "Бейне жасап, бөлісу", "hero_sub": "Reels · TikTok · Stories — бір түртумен",
-            "link": "Сілтеме", "copied": "Көшірілді!", "link_copied": "Сілтеме көшірілді",
+            "link": "Сілтеме", "copied": "Көшірілді!", "link_copied": "Сілтеме көшірілді", "qr": "QR-код",
             "autopost": "Бизнес-аккаунтқа автопостинг", "loading": "Жүктелуде…",
             "post_to": "%@ желісіне жариялау", "connect": "%@ қосу",
             "connect_sub": "бір рет — кейін 1 рет басып жариялау", "soon": "жақында — әкімші қосады",
@@ -845,7 +856,7 @@ enum CabinetShareText {
             "pu_cta": "Promote listing", "pu_done": "TOP is already on",
             "pu_done_a": "The listing is at the top of search right away", "pu_done_b": "Nothing more to pay.",
             "hero": "Make a video and share", "hero_sub": "Reels · TikTok · Stories — in one tap",
-            "link": "Link", "copied": "Copied!", "link_copied": "Link copied",
+            "link": "Link", "copied": "Copied!", "link_copied": "Link copied", "qr": "QR code",
             "autopost": "Autopost to a business account", "loading": "Loading…",
             "post_to": "Post to %@", "connect": "Connect %@",
             "connect_sub": "once — then post in 1 tap", "soon": "coming soon — being set up by the admin",
@@ -863,7 +874,7 @@ enum CabinetShareText {
             "pu_cta": "روّج للإعلان", "pu_done": "القمة مفعّلة بالفعل",
             "pu_done_a": "الإعلان في أعلى نتائج البحث مباشرة", "pu_done_b": "لا حاجة لدفع أي شيء إضافي.",
             "hero": "أنشئ فيديو وشاركه", "hero_sub": "Reels · TikTok · Stories — بلمسة واحدة",
-            "link": "الرابط", "copied": "تم النسخ!", "link_copied": "تم نسخ الرابط",
+            "link": "الرابط", "copied": "تم النسخ!", "link_copied": "تم نسخ الرابط", "qr": "رمز QR",
             "autopost": "النشر التلقائي في حساب الأعمال", "loading": "جارٍ التحميل…",
             "post_to": "انشر في %@", "connect": "اربط %@",
             "connect_sub": "مرة واحدة — ثم النشر بلمسة", "soon": "قريبًا — يربطه المسؤول",
