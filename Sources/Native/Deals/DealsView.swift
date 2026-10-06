@@ -299,20 +299,35 @@ struct КарточкаВСпискеСделок: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
+            /* Владелец 06.10.2026 («схема должна быть ровной везде»): карточки сделок одной формы — строка 1 название и
+               статус справа (по верху), строка 2 «KLK-… · дата», строка 3 роль и ник; каждая ровно в одну строку, как
+               бы длинно ни было. Миниатюра одна на всех, нет фото — та же плашка. */
+            HStack(alignment: .top, spacing: 12) {
                 фото
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.текст)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(сделка.название.isEmpty ? т("deals_item_fallback") : сделка.название)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.текст)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 2)
+                        плашкаСтатуса
+                    }
+                    Text(номерИДата)
+                        .font(.system(size: 12))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
-                    Text(мета)
+                        .truncationMode(.tail)
+                    Text(роль)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                плашкаСтатуса
             }
             /* Статус доставки из кэша отслеживания (без сети); нет данных — ничего. */
             ПилюляТрекаСделки(сделка: сделка.id, сНазванием: true)
@@ -336,17 +351,22 @@ struct КарточкаВСпискеСделок: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var мета: String {
+    /// «KLK-… · 5 окт.».
+    private var номерИДата: String {
         var части: [String] = [сделка.id]
         let дата = СделкиФормат.деньМесяц(сделка.создана)
         if !дата.isEmpty { части.append(дата) }
-        части.append(СтрокаРолиСделки.текст(продавец: сделка.продавец, услуга: сделка.услуга, аренда: сделка.аренда,
-                                            имя: сделка.продавец ? сделка.имяПокупателя : сделка.имяПродавца))
         return части.joined(separator: " · ")
     }
 
+    /// «Я продаю · ник».
+    private var роль: String {
+        СтрокаРолиСделки.текст(продавец: сделка.продавец, услуга: сделка.услуга, аренда: сделка.аренда,
+                               имя: сделка.продавец ? сделка.имяПокупателя : сделка.имяПродавца)
+    }
+
     private var фото: some View {
-        КартинкаЛенты(Config.url(сделка.фото), пунктов: 46) {
+        КартинкаЛенты(Config.url(сделка.фото), пунктов: 56) {
             ZStack {
                 Theme.поверхность2
                 Image(systemName: "shippingbox")
@@ -354,7 +374,7 @@ struct КарточкаВСпискеСделок: View {
                     .foregroundStyle(Theme.текстВторой)
             }
         }
-        .frame(width: 46, height: 46)
+        .frame(width: 56, height: 56)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
         .accessibilityHidden(true)
     }
@@ -366,15 +386,17 @@ struct КарточкаВСпискеСделок: View {
         let символ = сделка.идётВозврат ? "arrow.uturn.backward" : с.символ
         /* У «Отправлено» сайт красит плашку --edge-warn, а не --tint-warn (карта r.shipped в loadDeals). */
         let отправлено = сделка.статус == "shipped" && !сделка.идётВозврат
-        /* nowrap сайта на 390pt ломает карточку: здесь плашка переносится в две строки и не шире 150. */
-        return HStack(spacing: 6) {
+        /* Ровная схема: плашка в одну строку и не шире 150 — длинный статус ужимается, а не переносится, и строка
+           названия у всех карточек одной высоты. */
+        return HStack(spacing: 5) {
             Image(systemName: символ)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .accessibilityHidden(true)
             Text(текст)
                 .font(.system(size: 11, weight: .bold))
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .truncationMode(.tail)
         }
         .foregroundStyle(вид.текст)
         .padding(.horizontal, 10)
@@ -384,30 +406,54 @@ struct КарточкаВСпискеСделок: View {
     }
 
     /**
-     Строка денег. Продавцу «Сумма · Комиссия −seller_fee · Получите seller_get», покупателю «Цена · Комиссия +сбор ·
-     Оплата total_pay». Сбор покупателя — buyer_fee сервера (у сайта здесь NaN и всегда 620 ₸, §4.1); нет его — разница.
+     Строка денег — таблица в три колонки: подпись мелко сверху, число под ней в одну строку. Продавцу «Сумма · Комиссия
+     −seller_fee · Получите seller_get», покупателю «Цена · Комиссия +сбор · Оплата total_pay»; не состоялась — сумма и
+     «сделка не состоялась». Сбор покупателя — buyer_fee сервера (у сайта здесь NaN и всегда 620 ₸, §4.1); нет его — разница.
      */
     private var строкаДенег: some View {
         let сумма = СделкиФормат.тенге(сделка.сумма)
-        let текст: Text
-        if сделка.несостоялась {
-            текст = Text(т(сделка.продавец ? "deal_sum" : "deal_price") + " ") + Text(сумма).bold()
-                + Text(" · " + т("deal_nodeal")).foregroundColor(Theme.текстВторой)
-        } else if сделка.продавец {
-            текст = Text(т("deal_sum") + " ") + Text(сумма).bold()
-                + Text(" · " + т("deal_fee") + " −" + СделкиФормат.тенге(сделка.сборПродавца) + " · ")
-                + Text(т("deal_get") + " " + СделкиФормат.тенге(сделка.продавецПолучит)).bold()
-                    .foregroundColor(КраскаСделокКабинета.хорошоТекст)
-        } else {
-            let сбор = сделка.сборПокупателя > 0 ? сделка.сборПокупателя : max(0, сделка.кОплате - сделка.сумма)
-            текст = Text(т("deal_price") + " ") + Text(сумма).bold()
-                + Text(" · " + т("deal_fee") + " +" + СделкиФормат.тенге(сбор) + " · ")
-                + Text(т("deal_pay") + " " + СделкиФормат.тенге(сделка.кОплате)).bold()
+        let перваяПодпись = т(сделка.продавец ? "deal_sum" : "deal_price")
+        return HStack(alignment: .top, spacing: 12) {
+            if сделка.несостоялась {
+                ячейкаДенег(перваяПодпись, сумма, краска: Theme.текст)
+                ячейкаДенег(" ", т("deal_nodeal"), краска: Theme.текстВторой, жирно: false)
+                ячейкаДенег(" ", " ", краска: Theme.текст)
+            } else if сделка.продавец {
+                ячейкаДенег(перваяПодпись, сумма, краска: Theme.текст)
+                ячейкаДенег(т("deal_fee"), "−" + СделкиФормат.тенге(сделка.сборПродавца), краска: Theme.текст, жирно: false)
+                ячейкаДенег(т("deal_get"), СделкиФормат.тенге(сделка.продавецПолучит),
+                            краска: КраскаСделокКабинета.хорошоТекст)
+            } else {
+                let сбор = сделка.сборПокупателя > 0 ? сделка.сборПокупателя : max(0, сделка.кОплате - сделка.сумма)
+                ячейкаДенег(перваяПодпись, сумма, краска: Theme.текст)
+                ячейкаДенег(т("deal_fee"), "+" + СделкиФормат.тенге(сбор), краска: Theme.текст, жирно: false)
+                ячейкаДенег(т("deal_pay"), СделкиФормат.тенге(сделка.кОплате), краска: Theme.текст)
+            }
         }
-        return текст
-            .font(.system(size: 13))
-            .foregroundStyle(Theme.текст)
-            .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 8)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Theme.линия)
+                .frame(height: 1)
+        }
+    }
+
+    /// Ячейка таблицы денег: подпись без двоеточия мелко, число под ней — одной строкой, длинное ужимается.
+    private func ячейкаДенег(_ подпись: String, _ значение: String, краска: Color, жирно: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(подпись.hasSuffix(":") ? String(подпись.dropLast()) : подпись)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(значение)
+                .font(.system(size: 13, weight: жирно ? .bold : .regular))
+                .monospacedDigit()
+                .foregroundStyle(краска)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// «Авто-подтверждение через Hч Mм» — delivered, время есть, возврата нет.
