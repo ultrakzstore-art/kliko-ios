@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Встроенные покупки в App Store Connect по Kliko.storekit (ci/asc.py iap-sync), тем же ключом API, что и
+# сборка и отправка на проверку (appstore-submit.yml).
+#
+# ТОЛЬКО ВРУЧНУЮ: Actions → «App Store · Завести покупки» → Run workflow. Сам по пушу не запускается никогда.
+# apply=false (по умолчанию) — только GET-запросы: в пометках прогона план — что будет создано и по какой цене.
+# apply=true — создать недостающие товары (16 Consumable + подписка Kliko PRO), локализации ru/en-US, цены в ₸
+# и доступность. Уже заведённое не дублируется. На проверку ничего не отправляется.
+# Mac не нужен — только HTTP-запросы, поэтому ubuntu (минуты дешевле).
+# ─────────────────────────────────────────────────────────────────────────────
+name: App Store · Завести покупки
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "false — только показать план; true — создать товары и цены"
+        type: boolean
+        default: false
+
+concurrency:
+  group: appstore-iap
+  cancel-in-progress: false
+
+jobs:
+  iap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEY_DIR: ${{ github.workspace }}/build/keys
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Проверить, что секреты заведены
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -z "$KID" ] && missing="$missing ASC_KEY_ID"
+          [ -z "$ISS" ] && missing="$missing ASC_ISSUER_ID"
+          [ -z "$P8" ]  && missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then echo "::error::Не заведены секреты:$missing"; exit 1; fi
+
+      - name: Разложить ключ App Store Connect
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$KEY_DIR"
+          # Те же три вида секрета, что принимает ios.yml: файл .p8 целиком, он же в base64, только тело ключа.
+          out="$KEY_DIR/AuthKey_$KID.p8"
+          if printf %s "$P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf %s "$P8" > "$out"
+          else
+            printf %s "$P8" | tr -d "[:space:]" | base64 -d > "$KEY_DIR/decoded" 2>/dev/null || true
+            if head -c 40 "$KEY_DIR/decoded" 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+              mv "$KEY_DIR/decoded" "$out"
+            else
+              body=$(printf %s "$P8" | tr -d "[:space:]" | fold -w 64)
+              { echo "-----BEGIN PRIVATE KEY-----"; printf %s "$body"; echo; echo "-----END PRIVATE KEY-----"; } > "$out"
+            fi
+            rm -f "$KEY_DIR/decoded"
+          fi
+          chmod 600 "$out"
+          head -1 "$out" | grep -q 'BEGIN PRIVATE KEY' || { echo "::error::ASC_KEY_P8 не похож на ключ"; exit 1; }
+          echo "ASC_KEY_PATH=$out" >> "$GITHUB_ENV"
+
+      - name: Покупки по Kliko.storekit
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          PYTHONIOENCODING: utf-8
+        run: python3 ci/asc.py iap-sync ${{ inputs.apply && '--apply' || '' }}
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -rf "$KEY_DIR"
