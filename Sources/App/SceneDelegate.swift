@@ -43,6 +43,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var подписка: AnyCancellable?
     /// Этап 15: смена темы в кабинете → окно.
     private var подпискаТемы: AnyCancellable?
+    /// Предупреждение и запрет устаревшей версии (ForcedUpdate.swift): своё окно над всем приложением, включая листы.
+    private var окноОбновленияПоверх: UIWindow?
+    private var подпискаОбновления: AnyCancellable?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let сцена = scene as? UIWindowScene else { return }
@@ -87,6 +90,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                                   options: [.transitionCrossDissolve, .allowUserInteraction],
                                   animations: { окноСцены.overrideUserInterfaceStyle = стиль },
                                   completion: nil)
+            }
+
+        /* Версия отстала от App Store на порог выпусков — предупреждение, потом запрет. Окно поверх всего, а не лист на
+           корне: лист не встанет над уже открытым листом или экраном во весь экран. Проверка — в sceneDidBecomeActive. */
+        подпискаОбновления = ПринудительноеОбновление.shared.$показ
+            .map { $0 != .нет }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak сцена] нужно in
+                guard let self, let сцена else { return }
+                self.показатьОкноОбновления(нужно, сцена: сцена)
             }
 
         let мост = WebBridge.shared
@@ -144,6 +158,26 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         ПросьбаОценить.запомнитьУстановку()
     }
 
+    /// Окно предупреждения или запрета устаревшей версии: показать над приложением или убрать.
+    private func показатьОкноОбновления(_ нужно: Bool, сцена: UIWindowScene) {
+        guard нужно else {
+            окноОбновленияПоверх?.isHidden = true
+            window?.makeKey()
+            return
+        }
+        if окноОбновленияПоверх == nil {
+            let контроллер = UIHostingController(rootView: СлойОбновленияПриложения())
+            контроллер.view.backgroundColor = .clear
+            let окно = UIWindow(windowScene: сцена)
+            окно.windowLevel = UIWindow.Level.alert + 1
+            окно.backgroundColor = .clear
+            окно.rootViewController = контроллер
+            окноОбновленияПоверх = окно
+        }
+        окноОбновленияПоверх?.overrideUserInterfaceStyle = window?.overrideUserInterfaceStyle ?? .unspecified
+        окноОбновленияПоверх?.makeKeyAndVisible()
+    }
+
     /// Плашка сделки или кнопка «Открыть в приложении», когда приложение уже запущено.
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.открытьСнаружи(наш) }
@@ -174,5 +208,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         ПроверкаПоисков.запланировать()             // этап 12: проверка сохранённых поисков — не раньше чем через час
     }
     func sceneWillEnterForeground(_ scene: UIScene) { AppLock.shared.sceneWillEnterForeground() }
-    func sceneDidBecomeActive(_ scene: UIScene)     { AppLock.shared.sceneDidBecomeActive() }
+    func sceneDidBecomeActive(_ scene: UIScene)     {
+        AppLock.shared.sceneDidBecomeActive()
+        // Запуск и возврат: версия App Store (не чаще раза в 6 часов) и предупреждение или запрет устаревшей версии.
+        Task { await ПринудительноеОбновление.shared.проверить() }
+    }
 }

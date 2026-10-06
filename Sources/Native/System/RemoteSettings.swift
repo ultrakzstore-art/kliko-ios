@@ -29,10 +29,15 @@ enum НастройкиСервера {
         "checks_rk", "ai_recognize", "native_session", "listing_chat", "chat_send", "listing_map",
         "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize"
     ]
-    /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store.
+    /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store; force_lag и force_grace_hours —
+    /// числа для принудительного обновления (ПринудительноеОбновление, ForcedUpdate.swift): порог отставания от App Store
+    /// в выпусках (0 — выключено) и срок предупреждения в часах. Не прислал сервер — 3 и 72.
     static let ключиТекстов: Set<String> = [
-        "banner_ru", "banner_kk", "banner_en", "banner_ar", "min_version", "app_store_url"
+        "banner_ru", "banner_kk", "banner_en", "banner_ar", "min_version", "app_store_url",
+        "force_lag", "force_grace_hours"
     ]
+    /// Ключи, которые сервер может прислать числом, а не строкой.
+    private static let ключиЧисел: Set<String> = ["force_lag", "force_grace_hours"]
     /// Ссылка на приложение в App Store, если сервер свою не дал (та же, что у студии роликов).
     static let ссылкаAppStoreПоУмолчанию = "https://apps.apple.com/kz/app/kliko-kz/id6805824484"
 
@@ -106,6 +111,12 @@ enum НастройкиСервера {
               т.hasPrefix("https://apps.apple.com/") || т.hasPrefix("https://itunes.apple.com/"),
               let u = URL(string: т) else { return запасная }
         return u
+    }
+
+    /// Целое неотрицательное число от сервера (force_lag, force_grace_hours) или nil — не прислал или прислал не число.
+    static func целоеЧисло(_ ключ: String) -> Int? {
+        guard let т = текст(ключ), let n = Int(т), n >= 0 else { return nil }
+        return n
     }
 
     /// Версия этой сборки ниже min_version сервера.
@@ -201,7 +212,9 @@ enum НастройкиСервера {
         }
         if let тексты = объект["texts"] as? [String: Any] {
             for (ключ, значение) in тексты where ключиТекстов.contains(ключ) {
-                guard let s = значение as? String else { continue }
+                var строка = значение as? String
+                if строка == nil, ключиЧисел.contains(ключ), let n = значение as? NSNumber { строка = n.stringValue }
+                guard let s = строка else { continue }
                 let чистый = s.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !чистый.isEmpty { снимок.тексты[ключ] = String(чистый.prefix(300)) }
             }
@@ -270,7 +283,7 @@ final class НастройкиСервераМодель: ObservableObject {
 
     /// Текст полосы над лентой или nil (выключена, пусто, человек закрыл этот текст).
     @Published private(set) var баннер: String? = nil
-    /// Версия ниже минимальной и сегодня ещё не спрашивали.
+    /// Версия ниже минимальной (или App Store ушёл вперёд на 1–2 выпуска) и сегодня ещё не спрашивали.
     @Published private(set) var просимОбновить = false
     @Published private(set) var ссылкаAppStore: URL = НастройкиСервера.ссылкаAppStore()
 
@@ -307,6 +320,11 @@ final class НастройкиСервераМодель: ObservableObject {
         просимОбновить = false
     }
 
+    /// Пересчитать окно «Обновите приложение» — после свежего ответа App Store (ПринудительноеОбновление).
+    func пересчитатьОкноОбновления() {
+        применить()
+    }
+
     private func применить() {
         let включён = НастройкиСервера.флаг("banner_on") ?? false
         let текст = включён ? НастройкиСервера.текстБаннера() : nil
@@ -315,7 +333,8 @@ final class НастройкиСервераМодель: ObservableObject {
         ссылкаAppStore = НастройкиСервера.ссылкаAppStore()
         let спрашивали = UserDefaults.standard.double(forKey: ключВопросаОбОбновлении)
         let давно = Date().timeIntervalSince1970 - спрашивали > 24 * 3600
-        просимОбновить = давно && НастройкиСервера.версияУстарела()
+        let отстали = НастройкиСервера.версияУстарела() || ВерсияВМагазине.мягкоеОтставание()
+        просимОбновить = давно && отстали
     }
 }
 
@@ -357,6 +376,8 @@ struct СлойНастроекСервера: ViewModifier {
 
     private func проверитьОкно() {
         guard лентаНаЭкране, настройки.просимОбновить, !окноОбновления else { return }
+        // Предупреждение или запрет устаревшей версии (ForcedUpdate.swift) — мягкое окно поверх них не нужно.
+        guard ПринудительноеОбновление.shared.показ == .нет else { return }
         окноОбновления = true
         настройки.окноОбновленияПоказано()
     }
@@ -455,28 +476,48 @@ enum ТекстыНастроекСервера {
             "upd_title": "Обновите приложение",
             "upd_text": "Вышла новая версия Kliko. Обновитесь в App Store, чтобы всё работало как надо.",
             "upd_go": "Обновить",
-            "upd_later": "Позже"
+            "upd_later": "Позже",
+            "force_text": "Эта версия Kliko устарела. Чтобы продолжить, установите обновление из App Store.",
+            "warn_title": "Эта версия устарела",
+            "warn_text": "Через {n} ч без обновления приложение перестанет работать. Установите новую версию из App Store.",
+            "warn_left_h": "Осталось {n} ч",
+            "warn_left_d": "Осталось {n} дн."
         ],
         "kk": [
             "close": "Жабу",
             "upd_title": "Қосымшаны жаңартыңыз",
             "upd_text": "Kliko-ның жаңа нұсқасы шықты. Бәрі дұрыс жұмыс істеуі үшін App Store-да жаңартыңыз.",
             "upd_go": "Жаңарту",
-            "upd_later": "Кейінірек"
+            "upd_later": "Кейінірек",
+            "force_text": "Kliko-ның бұл нұсқасы ескірді. Жалғастыру үшін App Store-дан жаңартуды орнатыңыз.",
+            "warn_title": "Бұл нұсқа ескірді",
+            "warn_text": "Жаңартпасаңыз, {n} сағаттан кейін қосымша жұмысын тоқтатады. App Store-дан жаңа нұсқаны орнатыңыз.",
+            "warn_left_h": "{n} сағ қалды",
+            "warn_left_d": "{n} күн қалды"
         ],
         "en": [
             "close": "Close",
             "upd_title": "Update the app",
             "upd_text": "A new version of Kliko is available. Update in the App Store to keep everything working.",
             "upd_go": "Update",
-            "upd_later": "Later"
+            "upd_later": "Later",
+            "force_text": "This version of Kliko is out of date. To continue, install the update from the App Store.",
+            "warn_title": "This version is out of date",
+            "warn_text": "Without an update, the app will stop working in {n} hours. Install the new version from the App Store.",
+            "warn_left_h": "{n} h left",
+            "warn_left_d": "{n} days left"
         ],
         "ar": [
             "close": "إغلاق",
             "upd_title": "حدّث التطبيق",
             "upd_text": "يتوفر إصدار جديد من Kliko. حدّث التطبيق من App Store ليعمل كل شيء كما ينبغي.",
             "upd_go": "تحديث",
-            "upd_later": "لاحقًا"
+            "upd_later": "لاحقًا",
+            "force_text": "هذا الإصدار من Kliko قديم. للمتابعة، ثبّت التحديث من App Store.",
+            "warn_title": "هذا الإصدار قديم",
+            "warn_text": "بدون تحديث سيتوقف التطبيق عن العمل خلال {n} ساعة. ثبّت الإصدار الجديد من App Store.",
+            "warn_left_h": "متبقٍ {n} ساعة",
+            "warn_left_d": "متبقٍ {n} يوم"
         ]
     ]
 }
