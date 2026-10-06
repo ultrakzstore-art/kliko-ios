@@ -750,356 +750,41 @@ final class ГеоEDS: NSObject, CLLocationManagerDelegate {
 // MARK: - Точка доставки на карте (hovAddrOpen «to»)
 
 /**
- Куда везти курьеру: булавка на карте (двигаете карту — двигается точка, нажатие ставит точку туда), поиск адреса
- (MKLocalSearch по Казахстану), адрес по точке — геокодер системы, «Определить моё место», «Встречу у подъезда», квартира,
- подъезд, этаж, домофон, комментарий. «Сохранить» отдаёт адрес, точку и дверь вызывающему — дальше ship_quote.
+ Куда везти курьеру — то же окно, что «Куда доставить» в сделке (ЛистТочкиСделки): поиск адреса, карта с кнопкой
+ «моё место», адрес по точке, «Встречу у подъезда», квартира, подъезд, этаж, домофон, комментарий, закреплённая
+ «Сохранить». Окно отдаёт адрес, точку и дверь сюда — дальше ship_quote (вопрос о цене встанет, когда лист уедет).
  */
 struct ЛистТочкиEDS: View {
+    let адрес: String
+    let дверь: ДверьEDS
     let выбрано: (String, ТочкаEDS?, ДверьEDS) -> Void
 
-    @Environment(\.dismiss) private var закрыть
-    @State private var камера: MapCameraPosition
-    @State private var координата: CLLocationCoordinate2D?
-    @State private var адрес: String
-    @State private var дверь: ДверьEDS
-    @State private var ищемАдрес = false
-    @State private var найдено: [MKMapItem] = []
-    @State private var ищем = false
-    @State private var определяем = false
-    @State private var ошибка: String? = nil
-    @State private var двигали = false
-    @State private var геокод: Task<Void, Never>? = nil
-
-    /// Центр Казахстана — [48.02, 66.92], масштаб страны.
-    private static let центрСтраны = CLLocationCoordinate2D(latitude: 48.02, longitude: 66.92)
-
     init(адрес: String, дверь: ДверьEDS, выбрано: @escaping (String, ТочкаEDS?, ДверьEDS) -> Void) {
+        self.адрес = адрес
+        self.дверь = дверь
         self.выбрано = выбрано
-        _адрес = State(initialValue: адрес)
-        _дверь = State(initialValue: дверь)
-        _координата = State(initialValue: nil)
-        _камера = State(initialValue: .region(MKCoordinateRegion(center: Self.центрСтраны,
-                                                                 span: MKCoordinateSpan(latitudeDelta: 18, longitudeDelta: 30))))
     }
 
-    private func т(_ ключ: String) -> String { EDSText.т(ключ) }
+    private var цель: ТочкаНаКартеСделки {
+        var д = ДверьСделки()
+        д.уПодъезда = дверь.уПодъезда
+        д.квартира = дверь.квартира
+        д.подъезд = дверь.подъезд
+        д.этаж = дверь.этаж
+        д.домофон = дверь.домофон
+        д.комментарий = дверь.заметка
+        return ТочкаНаКартеСделки(сторона: "to", адрес: адрес, точка: nil, дверь: д)
+    }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(т("map_sub"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                    карта
-                    кнопкиКарты
-                    полеАдреса
-                    if !найдено.isEmpty { результаты }
-                    заметкаТочки
-                    блокДвери
-                    if let ошибка {
-                        Text(ошибка)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(КраскаСделокКабинета.плохоТекст)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    КнопкаEDS(т("map_save"), символ: "checkmark") { сохранить() }
-                }
-                .padding(16)
+        ЛистТочкиСделки(цель: цель, модель: nil, выбрано: { итог in
+            let точка = итог.точка.map { ТочкаEDS(широта: $0.latitude, долгота: $0.longitude) }
+            let новая = ДверьEDS(итог.дверь)
+            let отдать = выбрано
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                отдать(итог.адрес, точка, новая)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Theme.фонСтраницы.ignoresSafeArea())
-            .modifier(ШапкаСделок(заголовок: т("map_t_to")))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(т("map_cancel")) { закрыть() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(т("map_done")) { сохранить() }
-                }
-            }
-        }
-        .tint(Theme.акцент)
-        .onDisappear { геокод?.cancel() }
-    }
-
-    private var карта: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-        return MapReader { прокси in
-            Map(position: $камера, interactionModes: .all) {
-                if let координата, !двигали {
-                    Marker(т("map_pin"), coordinate: координата)
-                        .tint(Theme.зелёный)
-                }
-                UserAnnotation()
-            }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .onMapCameraChange(frequency: .onEnd) { контекст in
-                guard двигали else { return }
-                поставить(контекст.region.center, сдвинуть: false, подобрать: true)
-            }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 6).onChanged { _ in
-                    if !двигали { двигали = true }
-                }
-            )
-            .onTapGesture { точка in
-                guard let к = прокси.convert(точка, from: .local) else { return }
-                двигали = false
-                поставить(к, сдвинуть: true, подобрать: true)
-            }
-            .overlay {
-                if двигали {
-                    Image(systemName: "mappin")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(Theme.зелёный)
-                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
-                        .offset(y: -17)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .frame(height: 240)
-        .clipShape(форма)
-        .overlay { форма.strokeBorder(Theme.линия, lineWidth: 1) }
-        .accessibilityLabel(т("map_a11y"))
-    }
-
-    private var кнопкиКарты: some View {
-        let пустой = адрес.trimmingCharacters(in: .whitespacesAndNewlines).count < 3
-        return HStack(spacing: 8) {
-            КнопкаEDS(т("map_locate"), символ: "location", главная: false, занята: определяем) { определить() }
-            КнопкаEDS(т("map_find"), символ: "magnifyingglass", главная: false, занята: ищем, доступна: !пустой) {
-                найти()
-            }
-        }
-    }
-
-    private var полеАдреса: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ПодписьПоляEDS(текст: т("map_addr_l"))
-            TextField(ищемАдрес ? т("map_looking") : т("co_to_ph2"), text: $адрес, axis: .vertical)
-                .lineLimit(1...3)
-                .textContentType(.fullStreetAddress)
-                .submitLabel(.search)
-                .onSubmit { найти() }
-                .onChange(of: адрес) { _, новое in
-                    if новое.count > 300 { адрес = String(новое.prefix(300)) }
-                }
-                .modifier(ПолеEDS())
-        }
-    }
-
-    private var результаты: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(найдено.enumerated()), id: \.offset) { пара in
-                Button {
-                    выбрать(пара.element)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "mappin.circle.fill")
-                            .foregroundStyle(Theme.акцент)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(пара.element.name ?? "")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Theme.текст)
-                                .lineLimit(1)
-                            Text(Self.строка(пара.element.placemark))
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.текстВторой)
-                                .lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                if пара.offset < найдено.count - 1 {
-                    Divider().padding(.leading, 40)
-                }
-            }
-        }
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
-    }
-
-    private var заметкаТочки: some View {
-        let текст: String
-        if let к = координата {
-            текст = т("map_has") + ": " + String(format: "%.5f, %.5f", к.latitude, к.longitude)
-        } else {
-            текст = т("map_none")
-        }
-        return Label(текст, systemImage: координата == nil ? "mappin.slash" : "mappin.and.ellipse")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(координата == nil ? Theme.текстВторой : Theme.зелёный2)
-    }
-
-    private var блокДвери: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: $дверь.уПодъезда) {
-                Text(т("map_out_b"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.текст)
-            }
-            .tint(Theme.зелёный)
-            if !дверь.уПодъезда {
-                HStack(spacing: 8) {
-                    поле(т("map_flat"), $дверь.квартира, предел: 16, цифры: false)
-                    поле(т("map_porch"), $дверь.подъезд, предел: 8, цифры: true)
-                }
-                HStack(spacing: 8) {
-                    поле(т("map_floor"), $дверь.этаж, предел: 8, цифры: true)
-                    поле(т("map_code"), $дверь.домофон, предел: 24, цифры: false)
-                }
-                Text(т("map_door_h"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            TextField(т("map_note_ph"), text: $дверь.заметка, axis: .vertical)
-                .lineLimit(2...4)
-                .onChange(of: дверь.заметка) { _, новое in
-                    if новое.count > 300 { дверь.заметка = String(новое.prefix(300)) }
-                }
-                .modifier(ПолеEDS())
-                .accessibilityLabel(т("map_note_l"))
-        }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
-        }
-    }
-
-    private func поле(_ подпись: String, _ текст: Binding<String>, предел: Int, цифры: Bool) -> some View {
-        TextField(подпись, text: Binding(get: { текст.wrappedValue }, set: { новое in
-            var чистое = цифры ? новое.filter { $0.isNumber } : новое
-            if чистое.count > предел { чистое = String(чистое.prefix(предел)) }
-            текст.wrappedValue = чистое
-        }))
-        .keyboardType(цифры ? .numberPad : .default)
-        .modifier(ПолеEDS())
-        .accessibilityLabel(подпись)
-    }
-
-    // MARK: Действия
-
-    private func поставить(_ к: CLLocationCoordinate2D, сдвинуть: Bool, подобрать: Bool) {
-        guard CLLocationCoordinate2DIsValid(к) else { return }
-        координата = к
-        найдено = []
-        ошибка = nil
-        if сдвинуть {
-            withAnimation(.easeInOut(duration: 0.35)) {
-                камера = .region(MKCoordinateRegion(center: к, latitudinalMeters: 500, longitudinalMeters: 500))
-            }
-        }
-        guard подобрать else { return }
-        геокод?.cancel()
-        ищемАдрес = true
-        геокод = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            guard !Task.isCancelled else { return }
-            let найденный = await Self.адресПоТочке(к)
-            guard !Task.isCancelled else { return }
-            ищемАдрес = false
-            if let найденный, !найденный.isEmpty { адрес = найденный }
-        }
-    }
-
-    private func определить() {
-        guard !определяем else { return }
-        определяем = true
-        Task { @MainActor in
-            defer { определяем = false }
-            if let к = await ГеоEDS.координата() {
-                двигали = false
-                поставить(к, сдвинуть: true, подобрать: true)
-            }
-        }
-    }
-
-    private func найти() {
-        let запрос = адрес.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard запрос.count >= 3, !ищем else { return }
-        ищем = true
-        ошибка = nil
-        Task { @MainActor in
-            defer { ищем = false }
-            let поиск = MKLocalSearch.Request()
-            поиск.naturalLanguageQuery = запрос
-            поиск.region = MKCoordinateRegion(center: Self.центрСтраны,
-                                              span: MKCoordinateSpan(latitudeDelta: 20, longitudeDelta: 40))
-            поиск.resultTypes = [.address, .pointOfInterest]
-            let ответ = try? await MKLocalSearch(request: поиск).start()
-            let места = Array((ответ?.mapItems ?? []).prefix(6))
-            if места.isEmpty {
-                ошибка = т("map_not_found")
-            } else if места.count == 1, let одно = места.first {
-                выбрать(одно)
-            } else {
-                найдено = места
-            }
-        }
-    }
-
-    private func выбрать(_ место: MKMapItem) {
-        let к = место.placemark.coordinate
-        let строка = Self.строка(место.placemark)
-        найдено = []
-        двигали = false
-        поставить(к, сдвинуть: true, подобрать: false)
-        if !строка.isEmpty { адрес = строка }
-    }
-
-    private func сохранить() {
-        let текст = адрес.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard текст.count >= 5 else {
-            ошибка = т("map_short")
-            return
-        }
-        let точка = координата.map { ТочкаEDS(широта: $0.latitude, долгота: $0.longitude) }
-        let итог = (String(текст.prefix(300)), точка, дверь)
-        закрыть()
-        /* Лист карты уезжает — вопрос о цене курьера встанет после него. */
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            выбрано(итог.0, итог.1, итог.2)
-        }
-    }
-
-    // MARK: Адрес по точке
-
-    static func адресПоТочке(_ к: CLLocationCoordinate2D) async -> String? {
-        let геокодер = CLGeocoder()
-        let место = CLLocation(latitude: к.latitude, longitude: к.longitude)
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
-        let локаль = Locale(identifier: язык == "kk" ? "kk_KZ" : "ru_KZ")
-        guard let метки = try? await геокодер.reverseGeocodeLocation(место, preferredLocale: локаль),
-              let метка = метки.first else { return nil }
-        let строка = Self.строка(метка)
-        return строка.isEmpty ? nil : строка
-    }
-
-    static func строка(_ метка: CLPlacemark) -> String {
-        var части: [String] = []
-        if let город = метка.locality, !город.isEmpty { части.append(город) }
-        var улица = метка.thoroughfare ?? ""
-        if let дом = метка.subThoroughfare, !дом.isEmpty {
-            улица = улица.isEmpty ? дом : улица + ", " + дом
-        }
-        if !улица.isEmpty { части.append(улица) }
-        if части.isEmpty, let имя = метка.name, !имя.isEmpty { части.append(имя) }
-        return части.joined(separator: ", ")
+        })
     }
 }
 

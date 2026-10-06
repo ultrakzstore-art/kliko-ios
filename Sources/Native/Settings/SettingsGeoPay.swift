@@ -33,6 +33,13 @@ struct ФормаРегиона: View {
     @State private var широта: Double?
     @State private var долгота: Double?
     @State private var карта = false
+    /// Квартира, подъезд, этаж, домофон адреса получения — их подставляет лист «Куда доставить».
+    @State private var квартира: String
+    @State private var подъезд: String
+    @State private var этаж: String
+    @State private var домофон: String
+    /// «Встречу у подъезда» и комментарий курьеру из листа — форма их не показывает, но и не теряет.
+    private let прочееДвери: ДверьСделки
     @State private var ошибка: String? = nil
     @State private var идёт = false
 
@@ -49,6 +56,41 @@ struct ФормаРегиона: View {
         _куда = State(initialValue: Set(профиль.регионыОтправки))
         _широта = State(initialValue: профиль.широта)
         _долгота = State(initialValue: профиль.долгота)
+        let дверь = профиль.дверьАдреса ?? ДверьПрофиляТелефона.загрузить() ?? ДверьСделки()
+        прочееДвери = дверь
+        _квартира = State(initialValue: дверь.квартира)
+        _подъезд = State(initialValue: дверь.подъезд)
+        _этаж = State(initialValue: дверь.этаж)
+        _домофон = State(initialValue: дверь.домофон)
+    }
+
+    /// Дверь для сохранения: поля формы плюс «у подъезда» и комментарий, как были.
+    private var дверьФормы: ДверьСделки {
+        var д = прочееДвери
+        д.квартира = String(квартира.trimmingCharacters(in: .whitespaces).prefix(16))
+        д.подъезд = String(подъезд.trimmingCharacters(in: .whitespaces).prefix(8))
+        д.этаж = String(этаж.trimmingCharacters(in: .whitespaces).prefix(8))
+        д.домофон = String(домофон.trimmingCharacters(in: .whitespaces).prefix(24))
+        return д
+    }
+
+    /// Квартира, подъезд, этаж, домофон — двумя строками по два поля.
+    private var поляДвери: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(ТочкаText.т("prof_door_l"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+            HStack(spacing: 12) {
+                TextField(ТочкаText.т("flat"), text: $квартира)
+                TextField(ТочкаText.т("porch"), text: $подъезд)
+                    .keyboardType(.numberPad)
+            }
+            HStack(spacing: 12) {
+                TextField(ТочкаText.т("floor"), text: $этаж)
+                    .keyboardType(.numberPad)
+                TextField(ТочкаText.т("code"), text: $домофон)
+            }
+        }
     }
 
     private var районы: [РайонКЗ] {
@@ -100,6 +142,7 @@ struct ФормаРегиона: View {
                     TextField(тН("pg_addr_ph"), text: $адрес)
                         .textContentType(.streetAddressLine1)
                 }
+                поляДвери
                 Button {
                     карта = true
                 } label: {
@@ -267,6 +310,8 @@ struct ФормаРегиона: View {
             поляГео["lat"] = NSNull()
             поляГео["lon"] = NSNull()
         }
+        let сохранённаяДверь = дверьФормы
+        поляГео["door"] = сохранённаяДверь.значениеПрофиля
         let гео = поляГео
         let области: [String] = отправка == "regions"
             ? регионы.map { $0.id }.filter { куда.contains($0) && $0 != регион }
@@ -285,6 +330,7 @@ struct ФормаРегиона: View {
                 let d = await ответДоставки
                 if МоиОбъявленияAPI.да(j["ok"]) {
                     let доставкаПринята = d.map { МоиОбъявленияAPI.да($0["ok"]) } ?? false
+                    ДверьПрофиляТелефона.запомнить(сохранённаяДверь)
                     НастройкиМодель.shared.изменить { п in
                         п.регион = сохранённыйРегион
                         п.район = сохранённыйРайон
@@ -293,6 +339,8 @@ struct ФормаРегиона: View {
                         п.адресПолучения = сохранённоеПолучение
                         п.широта = сохранённаяТочка?.latitude
                         п.долгота = сохранённаяТочка?.longitude
+                        п.дверьАдреса = сохранённаяДверь.естьДетали || !сохранённаяДверь.комментарий.isEmpty
+                            ? сохранённаяДверь : nil
                         if доставкаПринята {
                             п.отправка = сохранённаяОтправка
                             п.регионыОтправки = области

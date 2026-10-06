@@ -17,7 +17,7 @@ import CoreLocation
 
  Здесь то же на MapKit: булавка в центре карты (двигаете карту — двигается точка), нажатие на карту ставит точку туда,
  поиск адреса (MKLocalSearch по Казахстану), адрес по точке — геокодер системы, «Определить моё место» — геопозиция
- телефона, «Готово» в панели — сохранить, как «Сохранить» сайта.
+ телефона (круглая кнопка на карте), «Сохранить» — закреплена внизу листа.
 
  Посылка с кодом (hovFromEdit / hovAddrEdit при _hovParcel сайта): то же окно без подъезда и этажа, сохранение —
  chat.php?action=parcel_from | parcel_addr {deal_id, addr, lat, lon} (ПередачаСделкиМодель.адресПосылки); не вышло —
@@ -64,6 +64,18 @@ struct АдресИзКарты {
     let уПодъезда: Bool
 }
 
+/**
+ Вид окна (владелец, 06.10.2026: «Сохранить чтобы виднее было, причесать дизайн, кнопки объединить»): шапка как у листа
+ фильтров и мастера — «×» слева, заголовок посередине, без системной панели; сверху поле поиска адреса с лупой, под ним
+ карта с круглой кнопкой «моё место» в правом нижнем углу (как в Картах); под картой одна строка — подсказка или
+ «Точка на карте выбрана»; карточка адреса — поле «Адрес», «Встречу у подъезда» (включено — квартира не нужна, поля
+ скрыты; выключено — курьер идёт к двери, поля квартиры видны), комментарий. «Сохранить» — одна, закреплена внизу листа
+ и не нажимается, пока адрес не задан.
+
+ «Куда доставить» берёт адрес и детали двери из профиля (настройки «Регион и адрес»): если они есть — свёрнутая сводка
+ «кв. 12 · подъезд 3 · этаж 5 · домофон 12К» с кнопками «Изменить» и «Другой адрес»; «Другой адрес» — разовый, с
+ галочкой «Сохранить в профиле» (выключена). Детали двери хранятся на телефоне и уходят серверу в save_pref_geo (door).
+ */
 struct ЛистТочкиСделки: View {
     let цель: ТочкаНаКартеСделки
     /// Сделка, куда сохранить (set_pickup); nil — окно только выбирает адрес и отдаёт его в выбрано.
@@ -82,13 +94,31 @@ struct ЛистТочкиСделки: View {
     @State private var домофон: String
     @State private var комментарий: String
     @State private var ищемАдрес = false
+    @State private var геокодЗадача: Task<Void, Never>? = nil
+    /// Поиск адреса: текст, найденные места, идёт ли запрос, «Ничего не найдено» / «Нет связи».
+    @State private var запрос = ""
     @State private var найдено: [MKMapItem] = []
     @State private var ищем = false
+    @State private var итогПоиска: String? = nil
+    @State private var поискЗадача: Task<Void, Never>? = nil
+    /// Видимая часть карты — поиск сперва в ней (если это город, а не вся страна).
+    @State private var видимаяОбласть: MKCoordinateRegion? = nil
     @State private var сохраняем = false
+    /// Адрес уже отдан вызывающему — второе нажатие «Сохранить» ничего не делает.
+    @State private var отдано = false
     @State private var ошибка: String? = nil
+    /// «Не удалось определить место» под картой.
+    @State private var сообщениеМеста: String? = nil
+    /// Геопозиция запрещена — вопрос «Открыть настройки».
+    @State private var отказМеста = false
     /// Человек сам двигал карту — только тогда центр карты становится точкой.
     @State private var двигали = false
-    @State private var геокодЗадача: Task<Void, Never>? = nil
+    /// Детали двери показаны сводкой (есть сохранённые); «Изменить» раскрывает поля.
+    @State private var свёрнуто: Bool
+    /// Галочка «Сохранить в профиле».
+    @State private var вПрофиль = false
+    @State private var подставлено = false
+    @FocusState private var поискВФокусе: Bool
 
     /// Центр Казахстана и масштаб страны — [48.02, 66.92], zoom 5 у сайта.
     private static let центрСтраны = CLLocationCoordinate2D(latitude: 48.02, longitude: 66.92)
@@ -105,6 +135,8 @@ struct ЛистТочкиСделки: View {
         _этаж = State(initialValue: д.этаж)
         _домофон = State(initialValue: д.домофон)
         _комментарий = State(initialValue: д.комментарий)
+        let естьАдрес = !цель.адрес.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        _свёрнуто = State(initialValue: !цель.посылка && естьАдрес && д.естьДетали)
         if let т = цель.точка {
             let к = CLLocationCoordinate2D(latitude: т.широта, longitude: т.долгота)
             _координата = State(initialValue: к)
@@ -120,172 +152,142 @@ struct ЛистТочкиСделки: View {
 
     private func т(_ ключ: String) -> String { ТочкаText.т(ключ) }
 
+    /// Адрес получения из профиля и «Сохранить в профиле» — только для «Куда доставить» сделки (не посылки).
+    private var свойАдрес: Bool { !цель.откуда && !цель.посылка }
+
+    private var текстАдреса: String { адрес.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var можноСохранить: Bool { текстАдреса.count >= 5 && !сохраняем && !отдано }
+
+    private var дверьСейчас: ДверьСделки {
+        var д = ДверьСделки()
+        д.уПодъезда = уПодъезда
+        д.квартира = квартира.trimmingCharacters(in: .whitespaces)
+        д.подъезд = подъезд.trimmingCharacters(in: .whitespaces)
+        д.этаж = этаж.trimmingCharacters(in: .whitespaces)
+        д.домофон = домофон.trimmingCharacters(in: .whitespaces)
+        д.комментарий = String(комментарий.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
+        return д
+    }
+
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            шапка
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(т("sub"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                    карта
-                    кнопкиКарты
-                    полеАдреса
+                VStack(alignment: .leading, spacing: 16) {
+                    поиск
                     if !найдено.isEmpty { результаты }
-                    заметкаТочки
-                    if !цель.посылка { дверь }
-                    if let ошибка {
-                        Text(ошибка)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.скидкаТекст)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Button {
-                        сохранить()
-                    } label: {
-                        HStack(spacing: 8) {
-                            if сохраняем { SiteSpinner.белый }
-                            Text(сохраняем ? т("saving") : т("save"))
-                        }
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                    }
-                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-                    .disabled(сохраняем)
+                    if let итогПоиска { строкаПоиска(итогПоиска) }
+                    карта
+                    строкаТочки
+                    карточкаАдреса
                 }
                 .padding(16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.фонСтраницы.ignoresSafeArea())
-            .modifier(ШапкаСделок(заголовок: т(цель.откуда ? "t_from" : "t_to")))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(т("cancel")) { закрыть() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(т("done")) { сохранить() }
-                        .disabled(сохраняем)
-                }
-            }
+            .safeAreaInset(edge: .bottom, spacing: 0) { низ }
         }
+        .background(Theme.фонСтраницы.ignoresSafeArea())
         .tint(Theme.акцент)
-        .onChange(of: место.координата?.latitude) { _, _ in
+        .interactiveDismissDisabled(сохраняем)
+        .alert(т("geo_denied_t"), isPresented: $отказМеста) {
+            Button(т("geo_settings")) {
+                if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+            }
+            Button(т("cancel"), role: .cancel) {}
+        } message: {
+            Text(т("geo_denied"))
+        }
+        .onChange(of: место.номер) { _, _ in
             guard let к = место.координата else { return }
             двигали = false
             поставить(к, сдвинуть: true, подобрать: true)
         }
-        .onDisappear { геокодЗадача?.cancel() }
-    }
-
-    // MARK: - Карта
-
-    private var карта: some View {
-        /* .clc-map: высота 220, радиус 12, рамка 1px --line. */
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-        return MapReader { прокси in
-            Map(position: $камера, interactionModes: .all) {
-                if let координата, !двигали {
-                    Marker(т("pin"), coordinate: координата)
-                        .tint(Theme.зелёный)
-                }
-                UserAnnotation()
-            }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .onMapCameraChange(frequency: .onEnd) { контекст in
-                guard двигали else { return }
-                поставить(контекст.region.center, сдвинуть: false, подобрать: true)
-            }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 6).onChanged { _ in
-                    if !двигали { двигали = true }
-                }
-            )
-            .onTapGesture { точка in
-                guard let к = прокси.convert(точка, from: .local) else { return }
-                двигали = false
-                поставить(к, сдвинуть: true, подобрать: true)
-            }
-            .overlay {
-                /* Двигаете карту — точка в её центре, булавкой поверх. */
-                if двигали {
-                    Image(systemName: "mappin")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(Theme.зелёный)
-                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
-                        .offset(y: -17)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+        .onChange(of: место.номерСбоя) { _, _ in
+            guard let сбой = место.сбой else { return }
+            switch сбой {
+            case .отказано:
+                отказМеста = true
+            case .нетОтвета:
+                сообщениеМеста = т("geo_timeout")
             }
         }
-        .frame(height: 220)
-        .clipShape(форма)
-        .overlay {
-            форма.strokeBorder(Theme.линия, lineWidth: 1)
+        .task { await подставитьИзПрофиля() }
+        .onDisappear {
+            геокодЗадача?.cancel()
+            поискЗадача?.cancel()
         }
-        .accessibilityLabel(т("map_a11y"))
     }
 
-    private var кнопкиКарты: some View {
+    // MARK: - Шапка и низ
+
+    private var шапка: some View {
+        ШапкаЛистаМастера(заголовок: т(цель.откуда ? "t_from" : "t_to"), подписьЗакрыть: т("cancel")) { закрыть() }
+            .background(Theme.фонСтраницы)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.линия).frame(height: 1)
+            }
+    }
+
+    /// Закреплённая «Сохранить» (как «Показать N предложений» листа фильтров) и ошибка над ней.
+    private var низ: some View {
+        ПанельКнопкиМастера {
+            if let ошибка {
+                Text(ошибка)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.скидкаТекст)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 6)
+            }
+            Button {
+                сохранить()
+            } label: {
+                HStack(spacing: 8) {
+                    if сохраняем { SiteSpinner.белый }
+                    Text(сохраняем ? т("saving") : т("save"))
+                }
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(Theme.зелёный.opacity(можноСохранить || сохраняем ? 1 : 0.45),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            }
+            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+            .disabled(!можноСохранить)
+        }
+    }
+
+    // MARK: - Поиск адреса
+
+    private var поиск: some View {
         HStack(spacing: 8) {
-            Button {
-                место.запросить()
-            } label: {
-                ярлыкКнопки(т("locate"), символ: "location")
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            .disabled(место.ищет)
-            .opacity(место.ищет ? 0.55 : 1)
-            let пустойАдрес = адрес.trimmingCharacters(in: .whitespacesAndNewlines).count < 3
-            Button {
-                найти()
-            } label: {
-                ярлыкКнопки(т("find"), символ: "magnifyingglass")
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            .disabled(ищем || пустойАдрес)
-            .opacity(ищем || пустойАдрес ? 0.55 : 1)
-        }
-    }
-
-    /// .clc-geo: --acc-tint, текст --acc-on, рамка 1.5 --line, радиус 12, 13/800, значок 16.
-    private func ярлыкКнопки(_ текст: String, символ: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: символ)
+            Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
                 .accessibilityHidden(true)
-            Text(текст)
-                .font(.system(size: 13, weight: .heavy))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .foregroundStyle(КраскаСделокКабинета.акцент)
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, minHeight: 42)
-        .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1.5)
-        }
-    }
-
-    private var полеАдреса: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(т("addr_l"))
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.текст)
-            TextField(ищемАдрес ? т("looking") : т("addr_ph"), text: $адрес, axis: .vertical)
-                .lineLimit(1...3)
-                .textContentType(.fullStreetAddress)
+            TextField(т("search_ph"), text: $запрос)
+                .focused($поискВФокусе)
                 .submitLabel(.search)
-                .onSubmit { найти() }
-                .onChange(of: адрес) { _, новое in
-                    if новое.count > 300 { адрес = String(новое.prefix(300)) }
+                .autocorrectionDisabled()
+                .onSubmit { искать(сразу: true) }
+                .onChange(of: запрос) { _, _ in искать(сразу: false) }
+            if ищем {
+                SiteSpinner(размер: 16, толщина: 2)
+            } else if !запрос.isEmpty {
+                Button {
+                    запрос = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Theme.текстВторой)
                 }
-                .modifier(ПолеТочки())
+                .buttonStyle(.plain)
+                .accessibilityLabel(т("clear"))
+            }
         }
+        .modifier(ПолеТочки())
     }
 
     private var результаты: some View {
@@ -327,26 +329,219 @@ struct ЛистТочкиСделки: View {
         }
     }
 
-    private var заметкаТочки: some View {
-        let текст: String
-        if let к = координата {
-            текст = т("has") + ": " + String(format: "%.5f, %.5f", к.latitude, к.longitude)
-        } else {
-            текст = т("none")
-        }
-        return Label(текст, systemImage: координата == nil ? "mappin.slash" : "mappin.and.ellipse")
+    private func строкаПоиска(_ текст: String) -> some View {
+        Label(текст, systemImage: "magnifyingglass")
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(координата == nil ? Theme.текстВторой : Theme.зелёный2)
+            .foregroundStyle(Theme.текстВторой)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Подъезд
+    // MARK: - Карта
 
-    private var дверь: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: $уПодъезда) {
-                Text(т(цель.откуда ? "out_s" : "out_b"))
-                    .font(.system(size: 14, weight: .semibold))
+    private var карта: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        return MapReader { прокси in
+            Map(position: $камера, interactionModes: .all) {
+                if let координата, !двигали {
+                    Marker(т("pin"), coordinate: координата)
+                        .tint(Theme.зелёный)
+                }
+                UserAnnotation()
+            }
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
+            .onMapCameraChange(frequency: .onEnd) { контекст in
+                видимаяОбласть = контекст.region
+                guard двигали else { return }
+                поставить(контекст.region.center, сдвинуть: false, подобрать: true)
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6).onChanged { _ in
+                    if !двигали { двигали = true }
+                }
+            )
+            .onTapGesture { точка in
+                guard let к = прокси.convert(точка, from: .local) else { return }
+                двигали = false
+                поставить(к, сдвинуть: true, подобрать: true)
+            }
+            .overlay {
+                // Двигаете карту — точка в её центре, булавкой поверх.
+                if двигали {
+                    Image(systemName: "mappin")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(Theme.зелёный)
+                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
+                        .offset(y: -17)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .frame(height: 240)
+        .clipShape(форма)
+        .overlay {
+            форма.strokeBorder(Theme.линия, lineWidth: 1)
+        }
+        .accessibilityLabel(т("map_a11y"))
+        .overlay(alignment: .bottomTrailing) {
+            кнопкаМоегоМеста.padding(10)
+        }
+    }
+
+    /// «Моё место» поверх карты, как в Картах: круг, значок геопозиции; пока ищем — колесо и не нажимается.
+    private var кнопкаМоегоМеста: some View {
+        Button {
+            сообщениеМеста = nil
+            место.запросить()
+        } label: {
+            ZStack {
+                Circle().fill(Theme.поверхность)
+                if место.ищет {
+                    SiteSpinner(размер: 18, толщина: 2.2)
+                } else {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Theme.акцент)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .overlay { Circle().strokeBorder(Theme.линия, lineWidth: 1) }
+            .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
+        .disabled(место.ищет)
+        .accessibilityLabel(т("locate"))
+    }
+
+    /// Одна строка под картой: «не удалось определить место», «Точка на карте выбрана» или короткая подсказка.
+    @ViewBuilder
+    private var строкаТочки: some View {
+        if let сообщениеМеста {
+            Label(сообщениеМеста, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.скидкаТекст)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if координата != nil {
+            Label(т("point_ok"), systemImage: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.зелёный2)
+        } else {
+            Text(т("sub"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Адрес и дверь
+
+    private var карточкаАдреса: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            полеАдреса
+            if !цель.посылка {
+                Rectangle().fill(Theme.линия).frame(height: 1)
+                if свёрнуто {
+                    сводкаДвери
+                } else {
+                    поляДвери
+                }
+            }
+        }
+        .padding(16)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+    }
+
+    private var полеАдреса: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(т("addr_l"))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.текст)
+                Spacer(minLength: 0)
+                if ищемАдрес {
+                    SiteSpinner(размер: 14, толщина: 2)
+                    Text(т("looking"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                }
+            }
+            TextField(т("addr_ph"), text: $адрес, axis: .vertical)
+                .lineLimit(1...3)
+                .textContentType(.fullStreetAddress)
+                .onChange(of: адрес) { _, новое in
+                    if новое.count > 300 { адрес = String(новое.prefix(300)) }
+                }
+                .modifier(ПолеТочки())
+        }
+    }
+
+    /// Сохранённые детали двери одной строкой и две кнопки: «Изменить», «Другой адрес».
+    private var сводкаДвери: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: уПодъезда ? "figure.walk" : "building.2")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.акцент)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(уПодъезда ? т(цель.откуда ? "out_s" : "out_b") : дверьСейчас.сводка)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !комментарий.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(комментарий)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                кнопкаСводки(т("edit"), символ: "pencil") {
+                    withAnimation(ДвижениеСайта.появление) { свёрнуто = false }
+                }
+                кнопкаСводки(т("other"), символ: "plus") { другойАдрес() }
+            }
+        }
+    }
+
+    private func кнопкаСводки(_ текст: String, символ: String, действие: @escaping () -> Void) -> some View {
+        Button(action: действие) {
+            HStack(spacing: 6) {
+                Image(systemName: символ)
+                    .font(.system(size: 13, weight: .bold))
+                    .accessibilityHidden(true)
+                Text(текст)
+                    .font(.system(size: 14, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(КраскаСделокКабинета.акцент)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+    }
+
+    /// «Встречу у подъезда» включено — курьер звонит и вы выходите (квартира не нужна); выключено — курьер идёт к двери.
+    private var поляДвери: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $уПодъезда) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(т(цель.откуда ? "out_s" : "out_b"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                    Text(т(уПодъезда ? (цель.откуда ? "door_out_s" : "door_out_b") : "door_up"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .tint(Theme.зелёный)
             if !уПодъезда {
@@ -358,10 +553,6 @@ struct ЛистТочкиСделки: View {
                     поле(т("floor"), $этаж, предел: 8, цифры: true)
                     поле(т("code"), $домофон, предел: 24, цифры: false)
                 }
-                Text(т("door_h"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             TextField(т("note_ph"), text: $комментарий, axis: .vertical)
                 .lineLimit(2...4)
@@ -370,12 +561,14 @@ struct ЛистТочкиСделки: View {
                 }
                 .modifier(ПолеТочки())
                 .accessibilityLabel(т("note_l"))
-        }
-        .padding(14)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+            if свойАдрес {
+                Toggle(isOn: $вПрофиль) {
+                    Text(т("to_profile"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                }
+                .tint(Theme.зелёный)
+            }
         }
     }
 
@@ -392,18 +585,75 @@ struct ЛистТочкиСделки: View {
 
     // MARK: - Действия
 
+    /// Адрес и дверь из профиля, если окно открыто без своих (новая сделка, сделка без адреса).
+    @MainActor
+    private func подставитьИзПрофиля() async {
+        guard !подставлено, свойАдрес else { return }
+        подставлено = true
+        let пустаяДверь = !(цель.дверь?.естьДетали ?? false) && (цель.дверь?.комментарий ?? "").isEmpty
+        if НастройкиМодель.shared.профиль == nil && текстАдреса.isEmpty {
+            await НастройкиМодель.shared.загрузить()
+        }
+        let профиль = НастройкиМодель.shared.профиль
+        let сохранённая = АдресПолученияПрофиля.дверь(профиль)
+        // Сохранённого нет — новый адрес сразу запомнится (галочку можно снять).
+        if сохранённая == nil && АдресПолученияПрофиля.текст(профиль) == nil { вПрофиль = true }
+        if текстАдреса.isEmpty, let текст = АдресПолученияПрофиля.текст(профиль) {
+            адрес = текст
+            if координата == nil, let к = АдресПолученияПрофиля.точка(профиль) {
+                координата = к
+                камера = .region(MKCoordinateRegion(center: к, latitudinalMeters: 600, longitudinalMeters: 600))
+            }
+        }
+        // Поля двери подставляем, только если человек их ещё не трогал.
+        let тронуто = дверьСейчас.естьДетали || !комментарий.isEmpty
+        if пустаяДверь, !тронуто, let д = сохранённая {
+            уПодъезда = д.уПодъезда
+            квартира = д.квартира
+            подъезд = д.подъезд
+            этаж = д.этаж
+            домофон = д.домофон
+            комментарий = д.комментарий
+        }
+        if !текстАдреса.isEmpty && дверьСейчас.естьДетали { свёрнуто = true }
+    }
+
+    /// «Другой адрес»: разовый адрес этой сделки — всё с чистого листа, «Сохранить в профиле» выключена.
+    private func другойАдрес() {
+        геокодЗадача?.cancel()
+        ищемАдрес = false
+        адрес = ""
+        координата = nil
+        двигали = false
+        уПодъезда = false
+        квартира = ""
+        подъезд = ""
+        этаж = ""
+        домофон = ""
+        комментарий = ""
+        вПрофиль = false
+        сообщениеМеста = nil
+        withAnimation(ДвижениеСайта.появление) { свёрнуто = false }
+        поискВФокусе = true
+    }
+
     /// Поставить точку: запомнить, при нужде показать на карте и подобрать адрес (как _apkReverse — через 0,7 с).
+    /// Геокодер не ответил — точка остаётся, поле адреса не трогаем.
     private func поставить(_ к: CLLocationCoordinate2D, сдвинуть: Bool, подобрать: Bool) {
         guard CLLocationCoordinate2DIsValid(к) else { return }
         координата = к
         найдено = []
+        сообщениеМеста = nil
         if сдвинуть {
             withAnimation(ДвижениеСайта.камера) {
                 камера = .region(MKCoordinateRegion(center: к, latitudinalMeters: 500, longitudinalMeters: 500))
             }
         }
-        guard подобрать else { return }
         геокодЗадача?.cancel()
+        guard подобрать else {
+            ищемАдрес = false
+            return
+        }
         ищемАдрес = true
         геокодЗадача = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 700_000_000)
@@ -415,73 +665,104 @@ struct ЛистТочкиСделки: View {
         }
     }
 
-    /// Поиск по тексту поля: MKLocalSearch в пределах Казахстана, до шести мест.
-    private func найти() {
-        let запрос = адрес.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard запрос.count >= 3, !ищем else { return }
-        ищем = true
-        ошибка = nil
-        Task { @MainActor in
-            defer { ищем = false }
-            let поиск = MKLocalSearch.Request()
-            поиск.naturalLanguageQuery = запрос
-            поиск.region = MKCoordinateRegion(center: Self.центрСтраны,
-                                              span: MKCoordinateSpan(latitudeDelta: 20, longitudeDelta: 40))
-            поиск.resultTypes = [.address, .pointOfInterest]
-            let ответ = try? await MKLocalSearch(request: поиск).start()
-            let места = Array((ответ?.mapItems ?? []).prefix(6))
-            if места.isEmpty {
-                ошибка = т("not_found")
-            } else if места.count == 1, let одно = места.first {
-                выбрать(одно)
-            } else {
-                найдено = места
+    /// Поиск по полю: 0,45 с после последней буквы (или сразу по «Найти»), прошлый запрос отменяется.
+    private func искать(сразу: Bool) {
+        поискЗадача?.cancel()
+        итогПоиска = nil
+        let текст = запрос.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard текст.count >= 3 else {
+            найдено = []
+            ищем = false
+            return
+        }
+        let область = областьПоиска
+        поискЗадача = Task { @MainActor in
+            if !сразу {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            ищем = true
+            let итог = await ПоискАдресаКарты.найти(текст, область: область)
+            guard !Task.isCancelled else { return }
+            ищем = false
+            switch итог {
+            case .места(let места):
+                if сразу && места.count == 1, let одно = места.first {
+                    выбрать(одно)
+                } else {
+                    найдено = места
+                }
+            case .пусто:
+                найдено = []
+                итогПоиска = т("not_found")
+            case .сбой:
+                найдено = []
+                итогПоиска = т("search_err")
             }
         }
+    }
+
+    /// Карта приближена к городу — ищем в видимой части, иначе по всему Казахстану.
+    private var областьПоиска: MKCoordinateRegion? {
+        guard let в = видимаяОбласть, в.span.latitudeDelta < 3 else { return nil }
+        return в
     }
 
     private func выбрать(_ место: MKMapItem) {
         let к = место.placemark.coordinate
         let строка = ЛистТочкиСделки.строка(место.placemark)
+        поискЗадача?.cancel()
         найдено = []
+        итогПоиска = nil
+        ищем = false
+        запрос = ""
+        поискВФокусе = false
         двигали = false
-        поставить(к, сдвинуть: true, подобрать: false)
+        поставить(к, сдвинуть: true, подобрать: строка.isEmpty)
         if !строка.isEmpty { адрес = строка }
+    }
+
+    /// Адрес ушёл — запомнить в профиле, если отмечено «Сохранить в профиле».
+    private func запомнитьВПрофиле(_ текст: String) {
+        guard свойАдрес, вПрофиль else { return }
+        АдресПолученияПрофиля.сохранить(адрес: текст, точка: координата, дверь: дверьСейчас)
     }
 
     /// hovAddrSave + hovPickupSave сайта.
     private func сохранить() {
-        guard !сохраняем else { return }
-        let текст = адрес.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !сохраняем, !отдано else { return }
+        let текст = String(текстАдреса.prefix(300))
         guard текст.count >= 5 else {
             ошибка = т("short")
             return
         }
         ошибка = nil
         if let выбрано {
-            /* Новая сделка: адрес уходит в окно оформления, сервер получит его вместе с create. */
-            выбрано(АдресИзКарты(адрес: String(текст.prefix(300)), точка: координата, дверь: значениеДвери(),
-                                 уПодъезда: уПодъезда))
+            // Новая сделка: адрес уходит в окно оформления, сервер получит его вместе с create.
+            отдано = true
+            запомнитьВПрофиле(текст)
+            выбрано(АдресИзКарты(адрес: текст, точка: координата, дверь: значениеДвери(), уПодъезда: уПодъезда))
             закрыть()
             return
         }
         guard let м = модель else { return }
         if цель.посылка {
-            /* hovAddrSave при посылке: parcel_from / parcel_addr; ok — окно закрывается, иначе остаётся с ошибкой. */
+            // hovAddrSave при посылке: parcel_from / parcel_addr; ok — окно закрывается, иначе остаётся с ошибкой.
             сохраняем = true
             let точка = координата.flatMap { ТочкаСделки($0.latitude, $0.longitude) }
-            м.передача.адресПосылки(откуда: цель.откуда, адрес: String(текст.prefix(300)), точка: точка) { итог in
+            м.передача.адресПосылки(откуда: цель.откуда, адрес: текст, точка: точка) { итог in
                 сохраняем = false
                 if let итог {
                     if !итог.isEmpty { ошибка = итог }
                 } else {
+                    отдано = true
                     закрыть()
                 }
             }
             return
         }
         сохраняем = true
-        var тело: [String: Any] = ["deal_id": м.id, "addr": String(текст.prefix(300))]
+        var тело: [String: Any] = ["deal_id": м.id, "addr": текст]
         if let к = координата {
             тело["lat"] = к.latitude
             тело["lon"] = к.longitude
@@ -495,6 +776,8 @@ struct ЛистТочкиСделки: View {
             do {
                 let j = try await СделкиAPI.отправить("escrow.php?action=set_pickup", тело: тело)
                 if СделкиAPI.да(j["ok"]) {
+                    отдано = true
+                    запомнитьВПрофиле(текст)
                     закрыть()
                     м.показать(т(СделкиAPI.да(j["claim_live"]) ? "door_live" : "saved"))
                     await м.загрузить()
@@ -514,25 +797,20 @@ struct ЛистТочкиСделки: View {
 
     /// _apkDoorVal: у подъезда — {out:true, note?}; иначе {flat, porch, floor, code, note?}.
     private func значениеДвери() -> [String: Any] {
-        let заметка = String(комментарий.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
-        if уПодъезда {
-            var д: [String: Any] = ["out": true]
-            if !заметка.isEmpty { д["note"] = заметка }
-            return д
+        let д = дверьСейчас
+        if д.уПодъезда {
+            var з: [String: Any] = ["out": true]
+            if !д.комментарий.isEmpty { з["note"] = д.комментарий }
+            return з
         }
-        var д: [String: Any] = [
-            "flat": квартира.trimmingCharacters(in: .whitespaces),
-            "porch": подъезд.trimmingCharacters(in: .whitespaces),
-            "floor": этаж.trimmingCharacters(in: .whitespaces),
-            "code": домофон.trimmingCharacters(in: .whitespaces)
-        ]
-        if !заметка.isEmpty { д["note"] = заметка }
-        return д
+        var з: [String: Any] = ["flat": д.квартира, "porch": д.подъезд, "floor": д.этаж, "code": д.домофон]
+        if !д.комментарий.isEmpty { з["note"] = д.комментарий }
+        return з
     }
 
     // MARK: - Адрес по точке
 
-    /// «Алматы, улица Абая, 10» — город, улица, дом; пусто — nil.
+    /// «Алматы, улица Абая, 10» — город (по справочнику, без «… городская администрация»), улица, дом; пусто — nil.
     static func адресПоТочке(_ к: CLLocationCoordinate2D) async -> String? {
         let геокодер = CLGeocoder()
         let место = CLLocation(latitude: к.latitude, longitude: к.longitude)
@@ -551,8 +829,44 @@ struct ЛистТочкиСделки: View {
             улица = улица.isEmpty ? дом : улица + ", " + дом
         }
         if !улица.isEmpty { части.append(улица) }
-        if части.isEmpty, let имя = метка.name, !имя.isEmpty { части.append(имя) }
+        if части.isEmpty, let имя = метка.name, !имя.isEmpty {
+            части.append(ГеоДанные.городБезАдминистрации(имя))
+        }
         return части.joined(separator: ", ")
+    }
+}
+
+/// Итог поиска адреса: места, «ничего не найдено» или сбой сети.
+enum ИтогПоискаАдреса {
+    case места([MKMapItem])
+    case пусто
+    case сбой
+}
+
+/// Поиск адреса на карте (MKLocalSearch): в видимой части карты или по Казахстану, только места Казахстана, до шести.
+@MainActor
+enum ПоискАдресаКарты {
+    private static let страна = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 48.02, longitude: 66.92),
+                                                   span: MKCoordinateSpan(latitudeDelta: 20, longitudeDelta: 40))
+
+    static func найти(_ текст: String, область: MKCoordinateRegion?) async -> ИтогПоискаАдреса {
+        let поиск = MKLocalSearch.Request()
+        поиск.naturalLanguageQuery = текст
+        поиск.region = область ?? страна
+        поиск.resultTypes = [.address, .pointOfInterest]
+        do {
+            let ответ = try await MKLocalSearch(request: поиск).start()
+            let свои = ответ.mapItems.filter { м in
+                let код = м.placemark.isoCountryCode ?? ""
+                return код.isEmpty || код == "KZ"
+            }
+            let места = Array(свои.prefix(6))
+            return места.isEmpty ? .пусто : .места(места)
+        } catch {
+            let н = error as NSError
+            if н.domain == MKErrorDomain && н.code == Int(MKError.Code.placemarkNotFound.rawValue) { return .пусто }
+            return .сбой
+        }
     }
 }
 
@@ -572,12 +886,28 @@ private struct ПолеТочки: ViewModifier {
     }
 }
 
-/// «Определить моё место»: одна геопозиция телефона по нажатию (ulxGetPosition сайта).
+/// Почему геопозиция не пришла.
+enum СбойМестаТелефона: Equatable {
+    /// Доступ запрещён (или ограничен) — нужна кнопка «Открыть настройки».
+    case отказано
+    /// Телефон не ответил за 10 секунд или вернул ошибку.
+    case нетОтвета
+}
+
+/**
+ «Определить моё место»: одна геопозиция телефона по нажатию (ulxGetPosition сайта). Разрешения нет — спрашиваем;
+ запрещено — сбой .отказано; ответа нет 10 секунд — .нетОтвета, кнопка снова доступна. Пока ищем, второе нажатие
+ ничего не делает. Каждая новая точка — номер + 1, каждый сбой — номерСбоя + 1 (повторное одинаковое событие тоже видно).
+ */
 @MainActor
 final class МестоТелефона: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var координата: CLLocationCoordinate2D? = nil
     @Published private(set) var ищет = false
+    @Published private(set) var номер = 0
+    @Published private(set) var сбой: СбойМестаТелефона? = nil
+    @Published private(set) var номерСбоя = 0
     private let менеджер = CLLocationManager()
+    private var таймер: Task<Void, Never>? = nil
 
     override init() {
         super.init()
@@ -586,25 +916,62 @@ final class МестоТелефона: NSObject, ObservableObject, CLLocationMa
     }
 
     func запросить() {
-        ищет = true
+        guard !ищет else { return }
+        сбой = nil
+        координата = nil
         switch менеджер.authorizationStatus {
         case .notDetermined:
+            ищет = true
             менеджер.requestWhenInUseAuthorization()
         case .denied, .restricted:
-            ищет = false
+            ищет = true
+            закончить(.отказано)
         default:
-            менеджер.requestLocation()
+            ищет = true
+            спросить()
         }
+    }
+
+    private func спросить() {
+        менеджер.requestLocation()
+        таймер?.cancel()
+        таймер = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.закончить(.нетОтвета)
+        }
+    }
+
+    private func закончить(_ причина: СбойМестаТелефона) {
+        таймер?.cancel()
+        таймер = nil
+        guard ищет else { return }
+        менеджер.stopUpdatingLocation()
+        сбой = причина
+        номерСбоя += 1
+        ищет = false
+    }
+
+    private func пришло(_ к: CLLocationCoordinate2D) {
+        guard ищет else { return }
+        таймер?.cancel()
+        таймер = nil
+        координата = к
+        номер += 1
+        ищет = false
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let статус = manager.authorizationStatus
         Task { @MainActor in
-            guard self.ищет else { return }
-            if статус == .authorizedWhenInUse || статус == .authorizedAlways {
-                self.менеджер.requestLocation()
-            } else if статус != .notDetermined {
-                self.ищет = false
+            guard self.ищет, self.таймер == nil else { return }
+            switch статус {
+            case .authorizedWhenInUse, .authorizedAlways:
+                self.спросить()
+            case .denied, .restricted:
+                self.закончить(.отказано)
+            default:
+                break
             }
         }
     }
@@ -612,14 +979,12 @@ final class МестоТелефона: NSObject, ObservableObject, CLLocationMa
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let последняя = locations.last else { return }
         let к = последняя.coordinate
-        Task { @MainActor in
-            self.ищет = false
-            self.координата = к
-        }
+        Task { @MainActor in self.пришло(к) }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Task { @MainActor in self.ищет = false }
+        let запрещено = (error as NSError).domain == kCLErrorDomain && (error as NSError).code == CLError.Code.denied.rawValue
+        Task { @MainActor in self.закончить(запрещено ? .отказано : .нетОтвета) }
     }
 }
 
@@ -634,7 +999,19 @@ enum ТочкаText {
     private static let тексты: [String: [String: String]] = [
         "ru": [
             "t_from": "Откуда забрать", "t_to": "Куда доставить",
-            "sub": "Поставьте точку на карте или нажмите «Определить» — курьер приедет к подъезду, а не к улице. Текст адреса всё равно нужен: его вписывают в заявку.",
+            "sub": "Поставьте точку — курьер приедет к подъезду",
+            "search_ph": "Найти адрес или место", "clear": "Очистить", "point_ok": "Точка на карте выбрана",
+            "search_err": "Нет связи — поиск не сработал, попробуйте ещё раз",
+            "geo_denied_t": "Нет доступа к геопозиции",
+            "geo_denied": "Разрешите Kliko доступ к геопозиции в настройках — или найдите адрес поиском.",
+            "geo_settings": "Открыть настройки",
+            "geo_timeout": "Не удалось определить место — попробуйте ещё раз или найдите адрес поиском",
+            "door_up": "Курьер поднимется к двери — укажите квартиру",
+            "door_out_b": "Курьер позвонит, и вы выйдете к подъезду",
+            "door_out_s": "Курьер позвонит, и вы вынесете посылку к подъезду",
+            "edit": "Изменить", "other": "Другой адрес", "to_profile": "Сохранить в профиле",
+            "s_flat": "кв.", "s_porch": "подъезд", "s_floor": "этаж", "s_code": "домофон",
+            "prof_door_l": "Квартира, подъезд, этаж, домофон — для курьера",
             "locate": "Определить моё место", "find": "Найти на карте", "addr_l": "Адрес",
             "addr_ph": "Город, улица, дом", "looking": "Определяем адрес…",
             "has": "Точка задана", "none": "Точка не задана — маршрут будет по адресу",
@@ -645,12 +1022,24 @@ enum ТочкаText {
             "save": "Сохранить", "saving": "Сохранение…", "cancel": "Отмена", "done": "Готово",
             "short": "Напишите адрес: город, улица, дом", "saved": "Адрес сохранён",
             "door_live": "Курьер уже вызван — правка до него не дойдёт. Квартиру и подъезд скажите ему по телефону.",
-            "not_found": "Ничего не нашлось — уточните адрес или поставьте точку на карте",
+            "not_found": "Ничего не найдено — уточните запрос или поставьте точку на карте",
             "login": "Войдите в кабинет", "pin": "Точка", "map_a11y": "Карта: нажмите, чтобы поставить точку"
         ],
         "kk": [
             "t_from": "Қайдан алып кету", "t_to": "Қайда жеткізу",
-            "sub": "Картада нүкте қойыңыз немесе «Анықтау» басыңыз — курьер көшеге емес, кіреберіске келеді. Мекенжай мәтіні бәрібір керек: ол өтінімге жазылады.",
+            "sub": "Нүкте қойыңыз — курьер кіреберіске келеді",
+            "search_ph": "Мекенжай немесе орын іздеу", "clear": "Тазалау", "point_ok": "Картада нүкте таңдалды",
+            "search_err": "Байланыс жоқ — іздеу орындалмады, қайталап көріңіз",
+            "geo_denied_t": "Геолокацияға рұқсат жоқ",
+            "geo_denied": "Баптауларда Kliko-ға геолокацияға рұқсат беріңіз — немесе мекенжайды іздеп табыңыз.",
+            "geo_settings": "Баптауларды ашу",
+            "geo_timeout": "Орынды анықтау мүмкін болмады — қайталаңыз немесе мекенжайды іздеп табыңыз",
+            "door_up": "Курьер есікке дейін көтеріледі — пәтерді көрсетіңіз",
+            "door_out_b": "Курьер қоңырау шалады, сіз кіреберіске шығасыз",
+            "door_out_s": "Курьер қоңырау шалады, сіз сәлемдемені кіреберіске шығарасыз",
+            "edit": "Өзгерту", "other": "Басқа мекенжай", "to_profile": "Профильде сақтау",
+            "s_flat": "пәтер", "s_porch": "кіреберіс", "s_floor": "қабат", "s_code": "домофон",
+            "prof_door_l": "Пәтер, кіреберіс, қабат, домофон — курьер үшін",
             "locate": "Орнымды анықтау", "find": "Картадан табу", "addr_l": "Мекенжай",
             "addr_ph": "Қала, көше, үй", "looking": "Мекенжай анықталуда…",
             "has": "Нүкте қойылды", "none": "Нүкте қойылмаған — бағыт мекенжай бойынша болады",
@@ -666,7 +1055,19 @@ enum ТочкаText {
         ],
         "en": [
             "t_from": "Pickup point", "t_to": "Delivery point",
-            "sub": "Drop a pin on the map or tap “Locate” — the courier will come to the entrance, not just the street. The address text is still needed: it goes into the order.",
+            "sub": "Drop a pin — the courier will come to the entrance",
+            "search_ph": "Search for an address or place", "clear": "Clear", "point_ok": "Pin set on the map",
+            "search_err": "No connection — search failed, please try again",
+            "geo_denied_t": "No access to location",
+            "geo_denied": "Allow Kliko to use your location in Settings — or find the address with search.",
+            "geo_settings": "Open Settings",
+            "geo_timeout": "Couldn't get your location — try again or find the address with search",
+            "door_up": "The courier will come up to your door — add the apartment",
+            "door_out_b": "The courier will call and you'll come out to the entrance",
+            "door_out_s": "The courier will call and you'll bring the parcel out to the entrance",
+            "edit": "Edit", "other": "Another address", "to_profile": "Save to profile",
+            "s_flat": "apt", "s_porch": "entrance", "s_floor": "floor", "s_code": "intercom",
+            "prof_door_l": "Apartment, entrance, floor, intercom — for the courier",
             "locate": "Use my location", "find": "Find on map", "addr_l": "Address",
             "addr_ph": "City, street, building", "looking": "Looking up the address…",
             "has": "Pin set", "none": "No pin — the route will follow the address",
@@ -682,7 +1083,19 @@ enum ТочкаText {
         ],
         "ar": [
             "t_from": "مكان الاستلام", "t_to": "مكان التوصيل",
-            "sub": "ضع نقطة على الخريطة أو اضغط «تحديد» — سيأتي المندوب إلى المدخل لا إلى الشارع فقط. نص العنوان مطلوب أيضًا لأنه يُكتب في الطلب.",
+            "sub": "ضع نقطة — سيأتي المندوب إلى المدخل",
+            "search_ph": "ابحث عن عنوان أو مكان", "clear": "مسح", "point_ok": "تم اختيار النقطة على الخريطة",
+            "search_err": "لا يوجد اتصال — تعذّر البحث، حاول مرة أخرى",
+            "geo_denied_t": "لا يوجد وصول إلى الموقع",
+            "geo_denied": "اسمح لـ Kliko باستخدام موقعك من الإعدادات — أو ابحث عن العنوان.",
+            "geo_settings": "فتح الإعدادات",
+            "geo_timeout": "تعذّر تحديد موقعك — حاول مرة أخرى أو ابحث عن العنوان",
+            "door_up": "سيصعد المندوب إلى الباب — أدخل رقم الشقة",
+            "door_out_b": "سيتصل المندوب وتخرج إليه عند المدخل",
+            "door_out_s": "سيتصل المندوب وتُخرج الطرد إلى المدخل",
+            "edit": "تعديل", "other": "عنوان آخر", "to_profile": "حفظ في الملف الشخصي",
+            "s_flat": "شقة", "s_porch": "مدخل", "s_floor": "طابق", "s_code": "إنتركم",
+            "prof_door_l": "الشقة والمدخل والطابق والإنتركم — للمندوب",
             "locate": "تحديد موقعي", "find": "البحث على الخريطة", "addr_l": "العنوان",
             "addr_ph": "المدينة، الشارع، المبنى", "looking": "جارٍ تحديد العنوان…",
             "has": "تم تحديد النقطة", "none": "لم تُحدَّد نقطة — سيكون المسار حسب العنوان",
