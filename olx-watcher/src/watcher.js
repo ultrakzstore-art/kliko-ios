@@ -699,8 +699,11 @@ class Watcher {
   // проверит фоном, после новых номеров. По три номера подряд — номера бывают с пропусками.
   async syncEdge() {
     this.needSync = false;
+    this.lastSync = Date.now();
+    let probes = 0;
     const opens = async (id) => {
       for (const n of [id, id + 1, id + 2]) {
+        probes += 1;
         const o = await olx.fetchOffer(n);
         this.okRequest();
         if (o) return true;
@@ -709,12 +712,13 @@ class Watcher {
     };
     const w = this.cfg.turboWindow;
     const from = this.frontier;
-    if (!(await opens(from + 2 * w))) return;
+    if (!(await opens(from + 2 * w))) return;   // не отстали — выходим за 1–3 запроса
     let lo = from + 2 * w;
     let step = 8;
-    while (await opens(lo + step)) { lo += step; step *= 2; if (step > 8192) break; }
+    // Потолок запросов: при ограничении скорости поиск края не должен занимать турбо надолго.
+    while (probes < 90 && await opens(lo + step)) { lo += step; step *= 2; if (step > 8192) break; }
     let hi = lo + step;
-    while (hi - lo > 3) { const mid = Math.floor((lo + hi) / 2); if (await opens(mid)) lo = mid; else hi = mid; }
+    while (probes < 120 && hi - lo > 3) { const mid = Math.floor((lo + hi) / 2); if (await opens(mid)) lo = mid; else hi = mid; }
     const edge = lo - w;
     const now = Date.now();
     for (let id = Math.max(from + 1, edge - 1500); id <= edge; id++) {
@@ -765,8 +769,11 @@ class Watcher {
         this.handleError(results[0].e);
         return;
       }
-      const ahead = results.filter((r) => r.id > this.frontier && r.o).length;
-      if (ahead >= Math.ceil(this.cfg.turboWindow * 0.7)) this.needSync = true;   // почти всё окно открылось — мы позади края
+      // Позади края — только если открылся самый дальний проверенный номер (не просто «много»):
+      // иначе в оживлённом рынке пере-синк запускался почти каждый тик и турбо буксовало.
+      // И не чаще раза в 30 с.
+      const topId = Math.max(0, ...ids);
+      if (results.some((r) => r.id === topId && r.o) && Date.now() - (this.lastSync || 0) > 30_000) this.needSync = true;
       for (const { id, o, e } of results) {
         if (e) {
           if (this.hiddenOffer(id, e)) continue;
