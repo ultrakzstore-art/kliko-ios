@@ -159,13 +159,28 @@ function slowDown() {
 
 // Карточка объявления в том же JSON, которым пользуется сайт. 404/410 — такого номера на
 // OLX.kz нет (или ещё не создан, или удалён).
+// Сначала API v2 — свежее объявление там появляется быстрее. Если ответ v2 не разобрать
+// (сменился формат), дальше — v1, как раньше. 403/429 — та же пауза, что и для v1:
+// на другую версию при ограничении не переключаемся.
+let offerApi = process.env.OLX_OFFER_API === 'v1' ? 'v1' : 'v2';
 async function fetchOffer(id) {
   await slot();
-  const res = await fetch(`${BASE}/api/v1/offers/${id}/`, { headers: { ...HEADERS, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+  const url = offerApi === 'v2' ? `${BASE}/api/v2/offers/${id}` : `${BASE}/api/v1/offers/${id}/`;
+  const res = await fetch(url, { headers: { ...HEADERS, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
   if (res.status === 404 || res.status === 410) return null;
   if (!res.ok) throw new HttpError(res.status, res.url);
-  const body = await res.json();
-  return normalizeOffer(body.data || body);
+  let offer = null;
+  try {
+    const body = await res.json();
+    offer = normalizeOffer(body.data || body);
+  } catch { /* не JSON */ }
+  if (offer && offer.id === Number(id)) return offer;
+  if (offerApi === 'v2') {
+    offerApi = 'v1';
+    console.warn(`OLX: ответ API v2 по ${id} не разобрать — дальше карточки через API v1`);
+    return fetchOffer(id);
+  }
+  throw new Error(`OLX: непонятный ответ API по объявлению ${id}`);
 }
 
 function normalizeOffer(o) {
