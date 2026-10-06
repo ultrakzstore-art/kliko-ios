@@ -22,9 +22,13 @@ final class КартинкиЛенты {
     /// Распакованные картинки по адресу и размеру. Вес — байты растра; при нехватке памяти NSCache отдаёт их сам.
     private let память: NSCache<NSString, UIImage> = {
         let кэш = NSCache<NSString, UIImage>()
-        кэш.totalCostLimit = 100 * 1024 * 1024
+        /* Слабое железо (DeviceMode.swift, около 3 ГБ памяти) — вдвое меньше: iOS выгружает приложение раньше, чем
+           NSCache успевает отдать память сам. */
+        кэш.totalCostLimit = (ЖелезоУстройства.слабое ? 50 : 100) * 1024 * 1024
         return кэш
     }()
+    /// Скорость: сколько картинок качается одновременно — остальные ждут очереди (видимые ячейки раньше «заранее»).
+    private let очередь = ОчередьКартинок()
     /// Одна скачивающаяся картинка: общая задача и сколько ячеек её ещё ждёт (не отменённых).
     private struct Загрузка {
         let номер: Int
@@ -62,6 +66,8 @@ final class КартинкиЛенты {
         } else {
             номерЗагрузки += 1
             let задача = Task<UIImage?, Never> {
+                guard await self.очередь.войти(срочно: true) else { return nil }
+                defer { self.очередь.выйти() }
                 guard let данные = await КартинкиЛенты.скачать(адрес, пикселей: пикселей, заполнить: заполнить) else { return nil }
                 if Task.isCancelled { return nil }
                 guard let картинка = await КартинкиЛенты.уменьшить(данные, пикселей: пикселей, заполнить: заполнить)
@@ -88,14 +94,18 @@ final class КартинкиЛенты {
     /// за такой картинкой, ждёт ту же загрузку; ушла с экрана последней из ждущих — загрузка отменяется, как обычно.
     func заранее(_ адреса: [URL], пунктов: CGFloat, масштаб: CGFloat, заполнить: Bool = true) {
         let пикселей = max(64, Int((пунктов * max(1, масштаб)).rounded(.up)))
-        for адрес in адреса {
+        /* Лёгкий режим (DeviceMode.swift): заранее — только две ближайшие, сеть и память — тем, что на экране. */
+        let сколько = РежимУстройства.сейчас ? min(2, адреса.count) : адреса.count
+        for адрес in адреса.prefix(сколько) {
             let ключ = Self.ключ(адрес, пикселей, заполнить)
             guard память.object(forKey: ключ as NSString) == nil, вПути[ключ] == nil else { continue }
             номерЗагрузки += 1
             let номер = номерЗагрузки
             let задача = Task<UIImage?, Never>(priority: .utility) {
-                let данные = await КартинкиЛенты.скачать(адрес, пикселей: пикселей, заполнить: заполнить)
                 defer { if self.вПути[ключ]?.номер == номер { self.вПути[ключ] = nil } }
+                guard await self.очередь.войти(срочно: false) else { return nil }
+                defer { self.очередь.выйти() }
+                let данные = await КартинкиЛенты.скачать(адрес, пикселей: пикселей, заполнить: заполнить)
                 guard let данные else { return nil }
                 if Task.isCancelled { return nil }
                 guard let картинка = await КартинкиЛенты.уменьшить(данные, пикселей: пикселей, заполнить: заполнить)
@@ -202,6 +212,69 @@ final class КартинкиЛенты {
                          kCGImageSourceThumbnailMaxPixelSize: потолок] as CFDictionary
         guard let растр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры) else { return nil }
         return UIImage(cgImage: растр)
+    }
+}
+
+/**
+ Очередь скачивания картинок ленты (06.10.2026, «летало на всех девайсах»). Раньше при быстрой прокрутке разом уходили
+ десятки запросов: снимки ячеек и «заранее» делили канал поровну с запросом следующей страницы ленты, и видимое
+ приходило позже пролетевшего. Теперь одновременно качаются не больше шести (в лёгком режиме — трёх); видимые ячейки
+ (срочно) встают в очередь раньше заготовок «заранее». Отменённая задача уходит из очереди, не дожидаясь места.
+ */
+@MainActor
+final class ОчередьКартинок {
+    private struct Ждущий {
+        let номер: Int
+        let продолжение: CheckedContinuation<Bool, Never>
+    }
+    private var занято = 0
+    private var срочные: [Ждущий] = []
+    private var заранее: [Ждущий] = []
+    private var счётчик = 0
+
+    private var предел: Int { РежимУстройства.сейчас ? 3 : 6 }
+
+    /// Занять место. false — задачу отменили, пока она ждала: качать не нужно, выйти() не звать.
+    func войти(срочно: Bool) async -> Bool {
+        if Task.isCancelled { return false }
+        if занято < предел {
+            занято += 1
+            return true
+        }
+        счётчик += 1
+        let номер = счётчик
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (продолжение: CheckedContinuation<Bool, Never>) in
+                if Task.isCancelled {
+                    продолжение.resume(returning: false)
+                    return
+                }
+                let ждущий = Ждущий(номер: номер, продолжение: продолжение)
+                if срочно { срочные.append(ждущий) } else { заранее.append(ждущий) }
+            }
+        } onCancel: {
+            Task { @MainActor in self.снять(номер) }
+        }
+    }
+
+    /// Освободить место: оно сразу переходит первому ждущему (сначала срочные).
+    func выйти() {
+        if !срочные.isEmpty {
+            срочные.removeFirst().продолжение.resume(returning: true)
+        } else if !заранее.isEmpty {
+            заранее.removeFirst().продолжение.resume(returning: true)
+        } else {
+            занято = max(0, занято - 1)
+        }
+    }
+
+    /// Задачу отменили, пока она ждала, — убрать из очереди и отпустить с false.
+    private func снять(_ номер: Int) {
+        if let i = срочные.firstIndex(where: { $0.номер == номер }) {
+            срочные.remove(at: i).продолжение.resume(returning: false)
+        } else if let i = заранее.firstIndex(where: { $0.номер == номер }) {
+            заранее.remove(at: i).продолжение.resume(returning: false)
+        }
     }
 }
 

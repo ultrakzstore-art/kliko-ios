@@ -144,6 +144,8 @@ struct SiteSpinner: View {
 struct МерцаниеСайта: View {
     let радиус: CGFloat
     @Environment(\.accessibilityReduceMotion) private var безДвижения
+    /// Лёгкий режим (DeviceMode.swift): ровная заливка, как при «Уменьшении движения».
+    @ObservedObject private var режим = РежимУстройства.shared
 
     init(радиус: CGFloat) {
         self.радиус = радиус
@@ -151,7 +153,7 @@ struct МерцаниеСайта: View {
 
     var body: some View {
         Group {
-            if безДвижения {
+            if безДвижения || режим.лёгкий {
                 фигура(0.8)
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 20, paused: false)) { контекст in

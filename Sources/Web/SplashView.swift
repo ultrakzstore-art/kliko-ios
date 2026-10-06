@@ -104,11 +104,19 @@ struct SplashView: View {
 struct KlikoLogoIcon: View {
     let size: CGFloat
     /// «Уменьшить движение» — как @media(prefers-reduced-motion) у прелоадера сайта: значок стоит.
-    @Environment(\.accessibilityReduceMotion) private var безДвижения
+    @Environment(\.accessibilityReduceMotion) private var системаБезДвижения
+    /// Лёгкий режим (DeviceMode.swift): слабый телефон, энергосбережение, перегрев — значок тоже стоит.
+    @ObservedObject private var режим = РежимУстройства.shared
+
+    private var безДвижения: Bool { системаБезДвижения || режим.лёгкий }
 
     var body: some View {
-        /* 30 кадров в секунду хватает кольцу и стрелке; шапка ленты не перерисовывается на каждом кадре ProMotion. */
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: безДвижения)) { tl in
+        /* 30 кадров в секунду хватает кольцу и стрелке; шапка ленты не перерисовывается на каждом кадре ProMotion.
+           Скорость (06.10.2026): тень плашки — у неподвижной подложки той же формы под Canvas, а не у самого Canvas.
+           Тень на картинке, которая меняется 30 раз в секунду, система пересчитывала размытием каждый кадр — и в шапке
+           ленты, пока человек листает. Вид тот же: Canvas непрозрачен ровно по плашке. */
+        let стоп = безДвижения
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: стоп)) { tl in
             Canvas { ctx, cs in
                 let s = cs.width / 48
                 func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
@@ -125,7 +133,7 @@ struct KlikoLogoIcon: View {
                 // непрозрачность .85 → 0 к 70%.
                 let ph = t.truncatingRemainder(dividingBy: 2.1) / 2.1
                 let sc = 0.4 + 1.15 * kEaseOut(ph)
-                let op = безДвижения ? 0 : 0.85 * max(0, 1 - ph / 0.7)
+                let op = стоп ? 0 : 0.85 * max(0, 1 - ph / 0.7)
                 let rr = 8 * sc * s
                 ctx.stroke(Path(ellipseIn: CGRect(x: 24 * s - rr, y: 19.5 * s - rr, width: 2 * rr, height: 2 * rr)),
                            with: .color(.white.opacity(0.5 * op)), lineWidth: 2 * sc * s)
@@ -149,7 +157,7 @@ struct KlikoLogoIcon: View {
                 ctx.stroke(hh, with: .color(.white), style: StrokeStyle(lineWidth: 1.5 * s, lineCap: .round))
 
                 // Минутная — полный оборот за 6 с (klk-spin).
-                let ang = безДвижения ? 0 : (t.truncatingRemainder(dividingBy: 6) / 6) * 2 * .pi
+                let ang = стоп ? 0 : (t.truncatingRemainder(dividingBy: 6) / 6) * 2 * .pi
                 var mh = Path(); mh.move(to: P(24, 19.5)); mh.addLine(to: P(27, 16.9))
                 let rot = CGAffineTransform(translationX: 24 * s, y: 19.5 * s)
                     .rotated(by: ang).translatedBy(x: -24 * s, y: -19.5 * s)
@@ -160,7 +168,11 @@ struct KlikoLogoIcon: View {
                          with: .color(.white))
             }
             .frame(width: size, height: size)
-            .shadow(color: kGreen.opacity(0.32), radius: 18, y: 9)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 13 * size / 48, style: .continuous)
+                .fill(kGreen)
+                .shadow(color: kGreen.opacity(0.32), radius: 18, y: 9)
         }
     }
 }
@@ -176,11 +188,16 @@ struct KlikoWordmark: View {
     /// Цвет «.kz»; nil — родные краски картинки. На зелёной шапке сайта — мятный #a3dcc0 (.klk-wm tspan).
     var домен: Color? = nil
     /// «Уменьшить движение»: маяк без кольца, точка горит ровно.
-    @Environment(\.accessibilityReduceMotion) private var безДвижения
+    @Environment(\.accessibilityReduceMotion) private var системаБезДвижения
+    /// Лёгкий режим (DeviceMode.swift) — маяк тоже горит ровно.
+    @ObservedObject private var режим = РежимУстройства.shared
+
+    private var безДвижения: Bool { системаБезДвижения || режим.лёгкий }
 
     var body: some View {
         let s = height / 74
         let w = 296 * s
+        let стоп = безДвижения
         ZStack(alignment: .topLeading) {
             Image("WmKliko").resizable().renderingMode(.template).foregroundStyle(надпись ?? kInk)
                 .frame(width: w, height: height)
@@ -192,20 +209,20 @@ struct KlikoWordmark: View {
                     .frame(width: w, height: height)
             }
             // Маяк рисуем с запасом над надписью: кольцо растёт выше строки и не должно обрезаться.
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: безДвижения)) { tl in
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: стоп)) { tl in
                 Canvas { ctx, _ in
                     let t = tl.date.timeIntervalSinceReferenceDate
                     let c = CGPoint(x: 79 * s, y: (15 + 20) * s)
                     // Кольцо r 10, штрих 2.4 — klk-ring 2.1 с.
                     let ph = t.truncatingRemainder(dividingBy: 2.1) / 2.1
                     let sc = 0.4 + 1.15 * kEaseOut(ph)
-                    let op = безДвижения ? 0 : 0.85 * max(0, 1 - ph / 0.7)
+                    let op = стоп ? 0 : 0.85 * max(0, 1 - ph / 0.7)
                     let rr = 10 * sc * s
                     ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: 2 * rr, height: 2 * rr)),
                                with: .color(kBeacon.opacity(op)), lineWidth: 2.4 * sc * s)
                     // Точка r 6.2 — klk-blink 1.5 с: 1 → .28 → 1.
                     let bp = t.truncatingRemainder(dividingBy: 1.5) / 1.5
-                    let dop = безДвижения ? 1 : 0.28 + 0.72 * (0.5 + 0.5 * cos(2 * Double.pi * bp))
+                    let dop = стоп ? 1 : 0.28 + 0.72 * (0.5 + 0.5 * cos(2 * Double.pi * bp))
                     let dr = 6.2 * s
                     ctx.fill(Path(ellipseIn: CGRect(x: c.x - dr, y: c.y - dr, width: 2 * dr, height: 2 * dr)),
                              with: .color(kBeacon.opacity(dop)))
@@ -255,7 +272,11 @@ private struct LoadProgressBar: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
         }
-        .onAppear { withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { sheen = true } }
+        .onAppear {
+            /* Лёгкий режим (DeviceMode.swift): бегущий блик не запускаем — полоса и процент те же. */
+            guard !РежимУстройства.сейчас else { return }
+            withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { sheen = true }
+        }
     }
 
     private func подпись(_ p: Double) -> String {

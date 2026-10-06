@@ -18,6 +18,8 @@ import SwiftUI
 struct СкелетЛенты: View {
     let колонки: [GridItem]
     @Environment(\.accessibilityReduceMotion) private var безДвижения
+    /// Лёгкий режим (DeviceMode.swift): без блеска, как при «Уменьшении движения».
+    @ObservedObject private var режим = РежимУстройства.shared
 
     init(колонки: [GridItem]) {
         self.колонки = колонки
@@ -25,7 +27,7 @@ struct СкелетЛенты: View {
 
     var body: some View {
         Group {
-            if безДвижения {
+            if безДвижения || режим.лёгкий {
                 сетка(nil)
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { контекст in
