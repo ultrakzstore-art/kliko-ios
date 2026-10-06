@@ -129,7 +129,7 @@ jobs:
   # Не роняет прогон.
   screens:
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 60
     continue-on-error: true
     permissions:
       contents: write
@@ -178,6 +178,95 @@ jobs:
           app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
           echo "APP=$app" >> "$GITHUB_ENV"
 
+      # КАДРЫ APP STORE (fastlane/screenshots): светлая тема, полный размер, iPhone, на русском и английском. Листы
+      # открываются сами аргументом -klikoSheet (СъёмкаCI, только отладочная сборка): garant — «Как работает Безопасная
+      # сделка», filters — фильтры ленты, qr — QR-код карточки. Свой шаг с пределом времени: что успело сняться, уходит
+      # в ветку ci/store-shots следующим шагом в любом случае, остальные снимки не задерживаются.
+      - name: Кадры App Store
+        timeout-minutes: 12
+        continue-on-error: true
+        run: |
+          mkdir -p store
+          id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl ui "$UDID" appearance light
+          shot() {  # язык (ru/en), имя, пауза, аргументы запуска
+            lang=$1; name=$2; wait=$3; shift 3
+            loc=ru_KZ; [ "$lang" = en ] && loc=en_KZ
+            echo "$(date -u +%T) $name: запуск"
+            xcrun simctl launch --terminate-running-process "$UDID" kz.kliko.app -klikoNoPushPrompt YES \
+              -AppleLanguages "($lang)" -AppleLocale "$loc" "$@" || echo "::warning::$name: не запустилось"
+            sleep "$wait"
+            xcrun simctl io "$UDID" screenshot "store/$name.png" || echo "::warning::$name: не снялось"
+            echo "$(date -u +%T) $name: готово"
+          }
+          for lang in ru en; do
+            shot $lang "iphone-$lang-garant" 22 -klikoSheet garant
+            shot $lang "iphone-$lang-filtry" 22 -klikoSheet filters
+            if [ -n "$id" ]; then shot $lang "iphone-$lang-qr" 28 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr; fi
+            shot $lang "iphone-$lang-lenta" 22
+          done
+          xcrun simctl terminate "$UDID" kz.kliko.app || true
+          ls -la store
+
+      - name: Кадры App Store · iPad
+        timeout-minutes: 14
+        continue-on-error: true
+        run: |
+          mkdir -p store
+          id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
+          ipad=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for want in ("13-inch", "iPad Pro", "iPad"):
+              for k in rt:
+                  for x in d[k]:
+                      if x["name"].startswith("iPad") and want in x["name"]:
+                          print(x["udid"]); raise SystemExit
+          ' || true)
+          [ -n "$ipad" ] || { echo "::warning::Нет симулятора iPad"; exit 0; }
+          xcrun simctl shutdown "$UDID" || true
+          xcrun simctl boot "$ipad" || true
+          for i in $(seq 1 60); do xcrun simctl list devices | grep "$ipad" | grep -q Booted && break; sleep 5; done
+          sleep 15
+          xcrun simctl status_bar "$ipad" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+          xcrun simctl install "$ipad" "$APP"
+          xcrun simctl ui "$ipad" appearance light
+          shot() {
+            lang=$1; name=$2; wait=$3; shift 3
+            loc=ru_KZ; [ "$lang" = en ] && loc=en_KZ
+            echo "$(date -u +%T) $name: запуск"
+            xcrun simctl launch --terminate-running-process "$ipad" kz.kliko.app -klikoNoPushPrompt YES \
+              -AppleLanguages "($lang)" -AppleLocale "$loc" "$@" || echo "::warning::$name: не запустилось"
+            sleep "$wait"
+            xcrun simctl io "$ipad" screenshot "store/$name.png" || echo "::warning::$name: не снялось"
+          }
+          for lang in ru en; do
+            shot $lang "ipad-$lang-garant" 25 -klikoSheet garant
+            shot $lang "ipad-$lang-filtry" 22 -klikoSheet filters
+            if [ -n "$id" ]; then shot $lang "ipad-$lang-qr" 28 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr; fi
+          done
+          xcrun simctl shutdown "$ipad" || true
+          xcrun simctl boot "$UDID" || true
+          for i in $(seq 1 60); do xcrun simctl list devices | grep "$UDID" | grep -q Booted && break; sleep 5; done
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+
+      - name: Выложить кадры App Store в ветку ci/store-shots
+        if: always()
+        run: |
+          [ -n "$(ls store 2>/dev/null)" ] || { echo "::warning::Кадров App Store нет"; exit 0; }
+          cd store
+          for f in *.png; do sips -s format jpeg -s formatOptions 92 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "Кадры App Store: коммит %s, ветка %s\n" "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git add -A
+          git commit -qm "Кадры App Store $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/store-shots
+          echo "::notice title=Кадры App Store::$(ls *.jpg | tr '\n' ' ')"
+
       - name: Снять экраны
         run: |
           mkdir -p shots
@@ -200,55 +289,6 @@ jobs:
             run "3-sait-glavnaya-$theme" 25 -klikoSite "https://kliko.kz/kz/ru/?ci=1"
             [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
-          # КАДРЫ APP STORE (fastlane/screenshots): светлая тема, полный размер, iPhone и iPad 13″. Листы открываются сами
-          # на русском и английском, аргументом -klikoSheet (СъёмкаCI, только отладочная сборка): garant — «Как работает Безопасная сделка»,
-          # filters — фильтры ленты, qr — QR-код карточки. Кладутся в shots/store/ JPEG без уменьшения.
-          mkdir -p shots/store
-          store() {  # устройство, язык (ru/en), имя, пауза, аргументы запуска
-            dev=$1; lang=$2; name=$3; wait=$4; shift 4
-            loc=ru_KZ; [ "$lang" = en ] && loc=en_KZ
-            xcrun simctl terminate "$dev" kz.kliko.app 2>/dev/null || true
-            xcrun simctl launch "$dev" kz.kliko.app -klikoNoPushPrompt YES -AppleLanguages "($lang)" -AppleLocale "$loc" "$@"
-            sleep "$wait"; xcrun simctl io "$dev" screenshot "shots/store/$name.png"
-            echo "::notice title=Кадр $name::$(date -u +%H:%M:%S)"
-          }
-          storeset() {  # устройство, приставка
-            xcrun simctl ui "$1" appearance light
-            for lang in ru en; do
-              if [ "$lang" = ru ]; then store "$1" $lang "$2-$lang-lenta" 25; fi
-              store "$1" $lang "$2-$lang-garant" 22 -klikoSheet garant
-              store "$1" $lang "$2-$lang-filtry" 22 -klikoSheet filters
-              if [ -n "$id" ]; then store "$1" $lang "$2-$lang-qr" 28 -klikoOpen "https://kliko.kz/marketplace?item=$id" -klikoSheet qr; fi
-            done
-            return 0
-          }
-          ipad=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)["devices"]
-          rt=sorted([k for k in d if "iOS" in k], reverse=True)
-          for want in ("13-inch", "iPad Pro", "iPad"):
-              for k in rt:
-                  for x in d[k]:
-                      if x["name"].startswith("iPad") and want in x["name"]:
-                          print(x["udid"]); raise SystemExit
-          ' || true)
-          # iPad загружается, пока снимается iPhone.
-          [ -n "$ipad" ] && { xcrun simctl boot "$ipad" || true; }
-          echo "::notice title=Снимаю кадры App Store::iPad ${ipad:-нет}, $(date -u +%H:%M:%S)"
-          storeset "$UDID" iphone
-          if [ -n "$ipad" ]; then
-            # Не дольше 5 минут: bootstatus -b без предела мог бы съесть весь прогон.
-            for i in $(seq 1 60); do xcrun simctl list devices | grep "$ipad" | grep -q Booted && break; sleep 5; done
-            sleep 20
-            xcrun simctl status_bar "$ipad" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 || true
-            xcrun simctl install "$ipad" "$APP"
-            storeset "$ipad" ipad
-            xcrun simctl shutdown "$ipad" || true
-          else
-            echo "::warning::Нет симулятора iPad — кадры iPad не сняты"
-          fi
-          for f in shots/store/*.png; do sips -s format jpeg -s formatOptions 92 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
-          echo "::notice title=Кадры App Store::$(cd shots/store && ls | tr '\n' ' ')"
           # Исходники сайта рядом со снимками: HTML главной и карточки, все подключённые CSS — точные цвета, картинки
           # плиток и адреса кнопок для нативных экранов.
           mkdir -p shots/site
