@@ -445,6 +445,7 @@ private struct ОписаниеСтрокиФильтров: Identifiable {
 
 /**
  Лист «Фильтры» — форма подбора сайта (_afxForm): порядок карточек как у сайта по разделу —
+   · первой — «Раздел ›» (af_section): подразделы текущего, у них свои характеристики (см. карточкаРаздела);
    · авто: «Все / Новые / С пробегом»; тип запчасти, марка, модель; цена, год, пробег, объём; коробка, топливо;
    · жильё: «Все / Купить / Снять»; где помещение; комнаты, цена, площадь, участок, этаж; «Все / Новостройка /
      Вторичка», год постройки, «Уточнения»;
@@ -467,6 +468,8 @@ struct ЛистФильтров: View {
     @FocusState private var поле: ПолеФильтра?
     /// Открыт список выбора (лист поверх листа).
     @State private var выборАвто: ВыборАвтоФильтра?
+    /// Открыт список «Раздел» (_afxListTCat / _afxListTree сайта).
+    @State private var выборРаздела = false
 
     /// `начальные` — фильтры ленты на момент открытия: поля чисел начинаются с них.
     init(модель: FeedModel, начальные: ФильтрыЛенты) {
@@ -488,6 +491,13 @@ struct ЛистФильтров: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(КраскиЛистаФильтров.фон)
+            .sheet(isPresented: $выборРаздела) {
+                if let дерево = ДеревоРазделаФильтров.для(модель.раздел) {
+                    ЛистРазделаФильтров(дерево: дерево, текущий: модель.раздел) { ключ in
+                        выбратьРазделФильтров(ключ)
+                    }
+                }
+            }
             низ
         }
         .background(Theme.поверхность)
@@ -558,7 +568,9 @@ struct ЛистФильтров: View {
         let строки = строкиВыбора
         let характеристики = строкиХарактеристик
         let диапазоны = ФильтрыЛенты.диапазоныХарактеристик(раздел)
+        let дерево = ДеревоРазделаФильтров.для(раздел)
         return VStack(spacing: 8) {
+            if let дерево { карточкаРаздела(дерево) }
             if жильё {
                 if !модель.аренда { карточкаСделки }
             } else if ФильтрыЛенты.состояниеДоступно(раздел) {
@@ -572,6 +584,29 @@ struct ЛистФильтров: View {
             if !диапазоны.isEmpty { карточкаДиапазонов(диапазоны) }
             if жильё { карточкаЖильяЕщё }
             карточкаПродавца
+        }
+    }
+
+    /// «Раздел ›» вверху формы (af_section сайта: «Вся электроника», «Все товары»…). На корне раздела характеристик нет —
+    /// они у подразделов (ОЗУ у ноутбуков, память у смартфонов); владелец 06.10.2026: «человек не понимает, что выбрать
+    /// тип», — поэтому строка стоит первой, а под ней, пока выбран весь раздел, — подсказка.
+    private func карточкаРаздела(_ дерево: ДеревоРазделаФильтров) -> some View {
+        let весь = модель.раздел == дерево.верх
+        return КарточкаФильтров {
+            СтрокаФильтров(подпись: дерево.подпись, значение: дерево.имя(модель.раздел), пусто: "") {
+                поле = nil
+                применитьНабранное()
+                выборРаздела = true
+            }
+            if весь {
+                Text(FilterText.т("x_section_hint"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -996,6 +1031,21 @@ struct ЛистФильтров: View {
         ступениОт = [:]
         ступениДо = [:]
         модель.сброситьФильтры()
+    }
+
+    /// Выбрали раздел в списке «Раздел»: лента — этого раздела (FeedModel.выбратьРаздел, фильтры прежнего — в память), форма
+    /// сразу с его характеристиками. Набранная цена остаётся, как у mkAfPickTCat сайта; год и ступени — нового раздела.
+    private func выбратьРазделФильтров(_ ключ: String) {
+        поле = nil
+        применитьНабранное()
+        guard ключ != модель.раздел else { return }
+        модель.выбратьРаздел(ключ)
+        let н = модель.фильтры
+        годОт = н.годОт.map { String($0) } ?? ""
+        годДо = н.годДо.map { String($0) } ?? ""
+        ступениОт = н.ступениОт.mapValues { ДиапазонФильтра.вЗапрос($0) }
+        ступениДо = н.ступениДо.mapValues { ДиапазонФильтра.вЗапрос($0) }
+        применитьНабранное()
     }
 
     /// Список выбора: набранное — сначала в ленту, клавиатура прячется.
@@ -1792,5 +1842,215 @@ private struct ЛистМаркиМодели: View {
         case .коробка, .топливо, .размещение, .признаки, .фасет:
             break
         }
+    }
+}
+
+// MARK: - Раздел в форме
+
+/// Пункт списка «Раздел»: ключ дерева сайта и имя на языке приложения.
+private struct ПунктРазделаФильтров: Hashable {
+    let ключ: String
+    let имя: String
+}
+
+/**
+ Дерево списка «Раздел» — как _afxListTCat и _afxListTree сайта: «Все …» (корень), дальше группы жирной строкой и под
+ каждой её подразделы. У «Товаров» (MK_VSETS.goods) группы — разделы набора. Имена — из справочника разделов на языке
+ приложения (ЗагрузкаКаталогаПоиска); справочника нет, у корня нет детей или это «Работа» (у неё своё окно) — строки нет.
+ */
+private struct ДеревоРазделаФильтров {
+    struct Группа: Identifiable {
+        let id: String
+        let имя: String
+        let дети: [ПунктРазделаФильтров]
+    }
+
+    /// Корень формы: раздел дерева или «goods».
+    let верх: String
+    let группы: [Группа]
+    private let имена: [String: String]
+
+    @MainActor
+    static func для(_ раздел: String) -> ДеревоРазделаФильтров? {
+        guard !раздел.isEmpty, let каталог = ЗагрузкаКаталогаПоиска.сейчас else { return nil }
+        let корень = РазделыСайта.корень(раздел)
+        guard корень != "jobs" else { return nil }
+        let товары = раздел == "goods" || ListingsAPI.наборТоваров.contains(корень)
+        let верх = товары ? "goods" : корень
+        var детиУзла: [String: [String]] = [:]
+        var имена: [String: String] = [:]
+        for ключ in каталог.порядок {
+            guard let узел = каталог.узлы[ключ] else { continue }
+            имена[ключ] = узел.имя
+            if let родитель = узел.родитель { детиУзла[родитель, default: []].append(ключ) }
+        }
+        let головы = товары ? ListingsAPI.наборТоваров : (детиУзла[верх] ?? [])
+        let группы = головы.compactMap { г -> Группа? in
+            guard let имя = имена[г] else { return nil }
+            let дети = (детиУзла[г] ?? []).compactMap { к in имена[к].map { ПунктРазделаФильтров(ключ: к, имя: $0) } }
+            return Группа(id: г, имя: имя, дети: дети)
+        }
+        guard !группы.isEmpty else { return nil }
+        return ДеревоРазделаФильтров(верх: верх, группы: группы, имена: имена)
+    }
+
+    /// Подпись строки: «Раздел», у услуг — «Вид услуги», у животных — «Вид» (AFX_TREE сайта).
+    var подпись: String {
+        switch верх {
+        case "services": return FilterText.т("x_svc_kind")
+        case "animals":  return FilterText.т("x_pet_kind")
+        default:         return FilterText.т("x_section")
+        }
+    }
+
+    /// «Вся электроника», «Весь транспорт»… — корень целиком; у прочих корней — его имя.
+    var всё: String {
+        switch верх {
+        case "electronics": return FilterText.т("x_all_tech")
+        case "transport":   return FilterText.т("x_all_transport")
+        case "services":    return FilterText.т("x_all_svc")
+        case "animals":     return FilterText.т("x_all_pets")
+        case "goods":       return FilterText.т("x_all_goods")
+        default:            return имена[верх] ?? FilterText.т("all")
+        }
+    }
+
+    func имя(_ раздел: String) -> String {
+        раздел == верх ? всё : (имена[раздел] ?? раздел)
+    }
+}
+
+/// Список «Раздел» поверх формы (_afxPick сайта): «‹ Раздел», поиск, «Все …», группы и подразделы. Касание выбирает
+/// раздел и возвращает к форме — она уже с характеристиками выбранного.
+private struct ЛистРазделаФильтров: View {
+    let дерево: ДеревоРазделаФильтров
+    let текущий: String
+    let выбрать: (String) -> Void
+    @Environment(\.dismiss) private var закрыть
+    @State private var поиск = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            шапка
+            ПоискМастераПодачи(FilterText.т("x_section_find"), текст: $поиск)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .background(Theme.поверхность)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Theme.линия).frame(height: 1)
+                }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    список
+                }
+                .padding(.bottom, 16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Theme.поверхность)
+        }
+        .background(Theme.поверхность)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Theme.поверхность)
+        .presentationCornerRadius(Theme.Радиус.xl)
+    }
+
+    private var шапка: some View {
+        ZStack {
+            Text(дерево.подпись)
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .padding(.horizontal, 56)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 0) {
+                Button { закрыть() } label: {
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Theme.текст)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(FilterText.т("x_back"))
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .background(Theme.поверхность)
+    }
+
+    private var чистыйПоиск: String {
+        поиск.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// С поиском — плоский список совпавших (группы и подразделы), без — дерево.
+    @ViewBuilder
+    private var список: some View {
+        let запрос = чистыйПоиск
+        if !запрос.isEmpty {
+            let найденные = дерево.группы.flatMap { г in [ПунктРазделаФильтров(ключ: г.id, имя: г.имя)] + г.дети }
+                .filter { $0.имя.lowercased().contains(запрос) }
+            if найденные.isEmpty {
+                Text(FilterText.т("x_section_none"))
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.текстВторой)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
+            ForEach(найденные, id: \.self) { п in строка(п.имя, ключ: п.ключ, уровень: 2) }
+        } else {
+            строка(дерево.всё, ключ: дерево.верх, уровень: 0)
+            ForEach(дерево.группы) { г in
+                Rectangle()
+                    .fill(КраскиЛистаФильтров.фон)
+                    .frame(height: 10)
+                    .accessibilityHidden(true)
+                строка(г.имя, ключ: г.id, уровень: 1)
+                ForEach(г.дети, id: \.self) { п in строка(п.имя, ключ: п.ключ, уровень: 2) }
+            }
+        }
+    }
+
+    /// Уровень 0 — «Все …» со значком, 1 — группа жирной строкой (.is-grp), 2 — подраздел с отступом (.is-sub).
+    private func строка(_ имя: String, ключ: String, уровень: Int) -> some View {
+        let выбрана = ключ == текущий
+        return Button {
+            выбрать(ключ)
+            закрыть()
+        } label: {
+            HStack(spacing: 12) {
+                if уровень == 0 {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Theme.акцент)
+                        .frame(width: 26)
+                        .accessibilityHidden(true)
+                }
+                Text(имя)
+                    .font(.system(size: 16, weight: (уровень < 2 || выбрана) ? .semibold : .regular))
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if выбрана {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.акцент)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.leading, уровень == 2 ? 32 : 16)
+            .padding(.trailing, 16)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .overlay(alignment: .bottom) { ЧертаФильтров() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(выбрана ? .isSelected : [])
     }
 }
