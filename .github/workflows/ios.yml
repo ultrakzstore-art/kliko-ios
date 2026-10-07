@@ -257,7 +257,13 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM" \
             CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION="$build_no" \
-            $extra
+            $extra > archive.log 2>&1 \
+            || { tail -80 archive.log
+                 # Причину — в аннотации рана: лог отсюда не скачать.
+                 grep -E "error:|Provisioning|provisioning profile|App Group|entitlement" archive.log | sort -u | head -20 \
+                   | while IFS= read -r line; do echo "::error title=Собрать архив::$line"; done
+                 exit 1; }
+          tail -3 archive.log
 
       - name: Параметры экспорта
         env:
