@@ -24,6 +24,9 @@ struct ЭкранЛида: View {
     @State private var попытка = 0
     @State private var спроситьБлок = false
     @State private var жалоба = false
+    /// Записи, что были в переписке при открытии (и карточки торга, что уже прилетели): новые карточки торга прилетают
+    /// (ПоявлениеТорга, OfferMotion.swift). nil — переписка ещё не на экране.
+    @State private var известныеТорга: Set<String>? = nil
     @Environment(\.scenePhase) private var фаза
     @Environment(\.openURL) private var открытьСсылку
     /// «Назад» своей шапки — системная панель спрятана, как у переписки dm.php (стеклянная кнопка iOS 26 с тенью).
@@ -322,7 +325,11 @@ struct ЭкранЛида: View {
                             .padding(.top, 30)
                     }
                     ForEach(модель.сообщения) { м in
-                        строка(м).id(м.id)
+                        строка(м)
+                            .появлениеТорга(свежая: свежаяТорга(м), откуда: Self.видТорга(м)?.0 ?? .снизу,
+                                            исход: Self.видТорга(м)?.1 ?? .тихо,
+                                            сыграно: { _ = известныеТорга?.insert(м.id) })
+                            .id(м.id)
                     }
                     if модель.печатает {
                         HStack {
@@ -348,7 +355,28 @@ struct ЭкранЛида: View {
             .onChange(of: полеВФокусе) { _, вФокусе in
                 if вФокусе { прокрутка.scrollTo("низ", anchor: .bottom) }
             }
-            .onAppear { прокрутка.scrollTo("низ", anchor: .bottom) }
+            .onAppear {
+                прокрутка.scrollTo("низ", anchor: .bottom)
+                if известныеТорга == nil { известныеТорга = Set(модель.сообщения.map(\.id)) }
+            }
+        }
+    }
+
+    /// Карточка торга пришла при открытой переписке и ещё не прилетала.
+    private func свежаяТорга(_ м: СообщениеЛида) -> Bool {
+        guard let известные = известныеТорга, Self.видТорга(м) != nil else { return false }
+        return !известные.contains(м.id)
+    }
+
+    /// Откуда прилетает запись торга: предложение покупателя — слева, моя встречная — справа, «принято» и «отказ» —
+    /// строкой снизу. nil — запись не про торг.
+    private static func видТорга(_ м: СообщениеЛида) -> (ПоявлениеТорга.Откуда, ИсходТорга)? {
+        switch м.вид {
+        case "offer": return м.предложение != nil ? (.слева, .ждёт) : nil
+        case "counter": return м.встречная != nil ? (.справа, .ждёт) : nil
+        case "offer_ok", "offer_funded": return (.снизу, .хорошо)
+        case "offer_no": return (.снизу, .плохо)
+        default: return nil
         }
     }
 
@@ -655,7 +683,19 @@ struct КарточкаПредложенияЛида: View {
     /// Стрелка «наружу» и сайт — только у подкреплённого деньгами при выключенных деньгах сделок.
     private var наружу: Bool { !деньги && предложение.подкреплено > 0 }
 
+    /// Договорились — пульс и «успех» (ОтветТорга); погасло и использовано — тихо.
+    private var исход: ИсходТорга {
+        if погасла { return .тихо }
+        if согласовано > 0 { return .хорошо }
+        if предложение.принято { return .тихо }
+        return .ждёт
+    }
+
     var body: some View {
+        карточка.ответТорга(исход)
+    }
+
+    private var карточка: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(т("of_head"))
@@ -912,7 +952,19 @@ struct КарточкаВстречнойЛида: View {
     /// .gone: цена зачёркнута и бледнее.
     private var погасла: Bool { заменено || встречная.устарела }
 
+    /// Покупатель принял — пульс и «успех», не согласился — встряска (ОтветТорга).
+    private var исход: ИсходТорга {
+        if погасла { return .тихо }
+        if встречная.принята { return .хорошо }
+        if встречная.отклонена { return .плохо }
+        return .ждёт
+    }
+
     var body: some View {
+        карточка.ответТорга(исход)
+    }
+
+    private var карточка: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 64)
             VStack(alignment: .leading, spacing: 8) {

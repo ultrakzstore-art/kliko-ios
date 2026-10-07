@@ -24,6 +24,7 @@ import Foundation
 /// предложения — есть у сайта только разметкой), «Повторить» (как у ленты) и для «Лимит Kliko AI-ассистента исчерпан.» —
 /// это начало строки сайта без призыва оформить подписку: покупок цифрового внутри приложения не предлагаем (как
 /// klkAppNoDigital сайта прячет продвижение в приложении).
+/// Подписи смайлика окна предложения (mood_good, mood_mid, mood_bad, OfferMotion.swift) — тоже свои: в копии сайта их нет.
 enum ListingChatText {
     static func т(_ ключ: String) -> String {
         let словарь = тексты[язык] ?? тексты["ru"]!
@@ -73,6 +74,7 @@ enum ListingChatText {
             "deal_open": "Перейти к сделке", "placeholder": "Напишите сообщение…", "buyers": "Покупатели",
             "offer_seller_price": "Цена продавца:",
             "offer_sub": "Не готовы по этой цене — предложите свою: сумма уйдёт продавцу в чат, оплата после согласия.",
+            "mood_good": "Продавец, скорее всего, согласится", "mood_mid": "Продавец может согласиться — попробуйте", "mood_bad": "Большая скидка — продавец скорее откажет",
             "offer_dial": "Ваша цена", "offer_hint": "Потяните ползунок — предложите свою цену",
             "offer_own": "Или своя сумма", "offer_save": "экономия %@",
             "offer_over": "Выше цены продавца предлагать незачем — для этого есть «Купить безопасно»",
@@ -126,6 +128,7 @@ enum ListingChatText {
             "deal_open": "Мәмілеге өту", "placeholder": "Хабарлама жазыңыз…", "buyers": "Сатып алушылар",
             "offer_seller_price": "Сатушы бағасы:",
             "offer_sub": "Бұл бағаға дайын емессіз бе — өз бағаңызды ұсыныңыз: сома сатушыға чатқа кетеді, төлем келісімнен кейін.",
+            "mood_good": "Сатушы келісуі әбден мүмкін", "mood_mid": "Сатушы келісуі мүмкін — байқап көріңіз", "mood_bad": "Жеңілдік үлкен — сатушы бас тартуы мүмкін",
             "offer_dial": "Сіздің бағаңыз", "offer_hint": "Жүгірткіні тартыңыз — өз бағаңызды ұсыныңыз",
             "offer_own": "Немесе өз сомаңыз", "offer_save": "үнемдеу %@",
             "offer_over": "Сатушы бағасынан жоғары ұсынудың қажеті жоқ — ол үшін «Қауіпсіз сатып алу» бар",
@@ -179,6 +182,7 @@ enum ListingChatText {
             "deal_open": "Go to the deal", "placeholder": "Write a message…", "buyers": "Buyers",
             "offer_seller_price": "Seller's price:",
             "offer_sub": "Not ready at this price? Offer your own: the amount goes to the seller in chat, you pay after they agree.",
+            "mood_good": "The seller will most likely agree", "mood_mid": "The seller may agree — give it a try", "mood_bad": "Big discount — the seller will likely decline",
             "offer_dial": "Your price", "offer_hint": "Drag the slider to offer your price",
             "offer_own": "Or your own amount", "offer_save": "you save %@",
             "offer_over": "No need to offer more than the seller's price — that's what «Buy safely» is for",
@@ -232,6 +236,7 @@ enum ListingChatText {
             "deal_open": "الانتقال إلى الصفقة", "placeholder": "اكتب رسالة…", "buyers": "المشترون",
             "offer_seller_price": "سعر البائع:",
             "offer_sub": "لست مستعدًا لهذا السعر؟ اقترح سعرك: سيصل المبلغ إلى البائع في الدردشة، والدفع بعد موافقته.",
+            "mood_good": "على الأرجح سيوافق البائع", "mood_mid": "قد يوافق البائع — جرّب", "mood_bad": "خصم كبير — على الأرجح سيرفض البائع",
             "offer_dial": "سعرك", "offer_hint": "اسحب المؤشر لاقتراح سعرك",
             "offer_own": "أو مبلغك الخاص", "offer_save": "توفير %@",
             "offer_over": "لا داعي لعرض أكثر من سعر البائع — لذلك يوجد «اشترِ بأمان»",

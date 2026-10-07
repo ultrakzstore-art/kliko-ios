@@ -20,6 +20,11 @@ import SwiftUI
  Своё предложение уже ждёт ответа (TestFlight, владелец 26.09.2026: «отозвать предложение нет») — над ползунком строка
  «Ваше предложение · N ₸ · Ждём ответа продавца» и «Отозвать предложение»: окно подтверждения и запрос — у чата
  (ЭкранЧатаОбъявления), лист только закрывается. Новое предложение и так заменит прежнее («Заменено новым предложением»).
+
+ Движение (OfferMotion.swift, 07.10.2026): значок «−N%», цена и «экономия …» пересчитываются мягкой сменой цифр за .15s, цвет
+ — тот же шаг; подсказка гаснет; смайлик настроения продавца у цены (СмайликТорга) выгибает рот вслед за ползунком и
+ подпрыгивает на смене настроения; щелчок каждые 5 %, «предупреждение» и встряска поля, когда своя сумма вышла за границы;
+ «успех» на отправке. Логика и запросы торга — прежние.
  */
 struct ЛистПредложенияЦены: View {
     let товар: Listing
@@ -34,6 +39,11 @@ struct ЛистПредложенияЦены: View {
     @State private var забрать = false
     @FocusState private var вПоле: Bool
     @Environment(\.dismiss) private var закрыть
+    /// «Уменьшение движения»: цифры и цвет меняются сразу, смайлик не прыгает (OfferMotion.swift).
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
+    @ObservedObject private var режим = РежимУстройства.shared
+    /// Своя сумма вышла за границы торга — поле встряхивается (mkVarShake).
+    @State private var встряскаПоля = 0
 
     init(товар: Listing, ждущее: ЖдущееПредложениеЦены? = nil, отозвать: (() -> Void)? = nil,
          отправить: @escaping (Int, Int, Bool) -> Void) {
@@ -139,6 +149,14 @@ struct ЛистПредложенияЦены: View {
         .background(Theme.поверхность.ignoresSafeArea())
         .presentationBackground(Theme.поверхность)
         .листПоВысоте()
+        /* Отклик под пальцем: щелчок каждые 5 % и на краях шкалы, толчок на смене настроения смайлика, «предупреждение» —
+           своя сумма ушла за границы торга. */
+        .sensoryFeedback(.selection, trigger: ползунок / 5)
+        .sensoryFeedback(.impact(weight: .light), trigger: СмайликТорга.настроение(скидка))
+        .sensoryFeedback(.warning, trigger: вне) { _, стало in стало }
+        .onChange(of: вне) { _, стало in
+            if стало { встряскаПоля += 1 }
+        }
         .onChange(of: своя) { _, _ in
             /* mkOfferAmt: своя сумма двигает ползунок — на сколько процентов она ниже цены продавца (0…35). */
             let сумма = свояСумма
@@ -203,10 +221,12 @@ struct ЛистПредложенияЦены: View {
                 Text(verbatim: "−" + String(скидка) + "%")
                     .font(.system(size: 14, weight: .heavy))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 2)
                     .background(цветСкидки, in: Capsule())
+                    .animation(движениеЦифр, value: скидка)
             }
             ПолосаСкидкиПредложения(значение: привязкаПолзунка, предел: Double(Self.предел), цвет: цветСкидки)
                 .disabled(база <= 0)
@@ -225,25 +245,50 @@ struct ЛистПредложенияЦены: View {
                 Text(ListingChatText.т("offer_hint"))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.текстВторой)
+                    .transition(.opacity)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(цена > 0 ? ListingCard.тенге(Double(цена)) : "—")
-                    .font(.system(size: 19, weight: .heavy))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Spacer(minLength: 4)
-                if цена > 0 && база > цена {
-                    Text(String(format: ListingChatText.т("offer_save"), ListingCard.тенге(Double(база - цена))))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+            HStack(alignment: .center, spacing: 10) {
+                if база > 0 {
+                    СмайликТорга(скидка: скидка, цвет: цветСкидки)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(цена > 0 ? ListingCard.тенге(Double(цена)) : "—")
+                            .font(.system(size: 19, weight: .heavy))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .foregroundStyle(Theme.текст)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer(minLength: 4)
+                        if цена > 0 && база > цена {
+                            Text(String(format: ListingChatText.т("offer_save"), ListingCard.тенге(Double(база - цена))))
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
+                                .foregroundStyle(Theme.текстВторой)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                    if база > 0 {
+                        /* Подпись настроения: меняется вместе с лицом, мягкой сменой. */
+                        Text(СмайликТорга.подпись(скидка))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(цветСкидки)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .id(СмайликТорга.настроение(скидка))
+                            .transition(.opacity)
+                    }
                 }
             }
             .accessibilityElement(children: .combine)
+            /* Цифры, цвет и подпись меняются на каждом шаге регулятора (transition .15s у .mk-offer-send) — только здесь
+               и у значка: бегунок под пальцем не догоняет. */
+            .animation(движениеЦифр, value: скидка)
+            .animation(движениеЦифр, value: цена)
         }
+        .animation(безДвижения ? nil : ДвижениеСайта.выбор, value: изменено)
         .padding(14)
         .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .overlay {
@@ -280,8 +325,12 @@ struct ЛистПредложенияЦены: View {
                 RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
                     .strokeBorder(вПоле ? Theme.зелёный2 : Color.clear, lineWidth: 2)
             }
+            .встряскаТорга(встряскаПоля, можно: !безДвижения && !режим.лёгкий)
         }
     }
+
+    /// Цифры и цвет регулятора: .15s; «Уменьшение движения» — сразу.
+    private var движениеЦифр: Animation? { безДвижения ? nil : ДвижениеТорга.цвет }
 
     private var пояснениеВне: String {
         if свояСумма > база { return ListingChatText.т("offer_over") }
@@ -323,6 +372,7 @@ struct ЛистПредложенияЦены: View {
             let итоговая = цена
             let вТексте = свояСумма == 0 && ползунок > 0 ? ползунок : 0
             let сам = забрать
+            ОткликСайта.успех()
             закрыть()
             отправить(итоговая, вТексте, сам)
         } label: {
@@ -349,6 +399,8 @@ struct ЛистПредложенияЦены: View {
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
         .disabled(!можно)
+        .animation(движениеЦифр, value: скидка)
+        .animation(движениеЦифр, value: можно)
     }
 
     // MARK: - Цвет скидки (_mkOfferColor)
