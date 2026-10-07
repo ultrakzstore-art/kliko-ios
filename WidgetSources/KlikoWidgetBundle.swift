@@ -1,10 +1,11 @@
 import SwiftUI
 import WidgetKit
 
-/// Точка входа виджет-расширения. Пока один виджет — Live Activity сделки.
+/// Точка входа виджет-расширения: Live Activity сделки и виджет «Kliko» домашнего экрана (KlikoHomeWidget.swift).
 @main
 struct KlikoWidgetBundle: WidgetBundle {
     var body: some Widget {
         DealLiveActivity()
+        KlikoHomeWidget()
     }
 }

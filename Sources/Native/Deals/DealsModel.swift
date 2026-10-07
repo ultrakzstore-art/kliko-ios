@@ -175,6 +175,8 @@ final class СделкиМодель: ObservableObject {
         guard let ответ = try? await КабинетСайта.вызвать("escrow.php?action=my_deals&role=both", ждать: false),
               let j = ответ.json, СделкиAPI.да(j["ok"]), моё == поколение else { return }
         let сырые: [Any] = (j["deals"] as? [Any]) ?? []
+        /* Виджет «Kliko»: активные сделки обеих ролей — из того же ответа (HomeWidgetFeed.swift). */
+        ВиджетKliko.сделки(сырые)
         ждут = сырые.filter { з in
             let статус = СделкиAPI.строка((з as? [String: Any])?["status"])
             return статус == "disputed" || статус == "delivered"

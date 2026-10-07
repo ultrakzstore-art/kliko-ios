@@ -70,6 +70,11 @@ targets:
         # откроет прежнюю страницу сайта apple_auth.php?action=start.
         com.apple.developer.applesignin:
           - Default
+        # ОБЩИЙ КОНТЕЙНЕР С ВИДЖЕТОМ (App Group). Приложение пишет туда снимок для виджета «Kliko» (непрочитанные,
+        # активные сделки — Shared/KlikoWidgetSnapshot.swift), виджет читает. Возможность App Groups у App ID включает
+        # сама сборка (-allowProvisioningUpdates); не включилась — виджет покажет «Войдите в Kliko», остальное работает.
+        com.apple.security.application-groups:
+          - group.kz.kliko.app
     info:
       path: Kliko-Info.plist
       properties:
@@ -161,13 +166,19 @@ targets:
         # для iPad — без него подача не пройдёт валидацию.
         TARGETED_DEVICE_FAMILY: "1,2"
 
-  # ── Виджет-расширение: Live Activity сделки ──
+  # ── Виджет-расширение: Live Activity сделки и виджет «Kliko» ──
   KlikoWidgets:
     type: app-extension
     platform: iOS
     sources:
       - WidgetSources
       - Shared                      # тот же DealActivityAttributes
+    # Тот же App Group, что у приложения: из него виджет «Kliko» читает снимок.
+    entitlements:
+      path: KlikoWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.kz.kliko.app
     info:
       path: KlikoWidgets-Info.plist
       properties:
