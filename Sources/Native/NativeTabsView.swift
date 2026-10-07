@@ -199,6 +199,7 @@ struct NativeTabsView: View {
                         .чатМаршруты(открыть: открыть)
                 }
                 .environment(\.стекСайта, .избранное)
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьИзбранного.append(товар) })
             }
             if вкладка == .сообщения && Config.нативныйЧат {
                 NavigationStack(path: $путьСообщений) {
@@ -215,6 +216,7 @@ struct NativeTabsView: View {
                         .кНачалуПоНажатию(.кабинет)
                 }
                 .environment(\.переходКабинета, { цель in положитьВКабинет(цель) })
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьКабинета.append(товар) })
             }
         }
         .tint(Theme.акцент)
@@ -464,6 +466,8 @@ struct NativeTabsView: View {
                         }
                         .чатМаршруты(открыть: открыть)
                 }
+                /* Долгое нажатие на карточку — «Открыть» и «Написать продавцу» в этот стек (ContextMenus.swift). */
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьИзбранного.append(товар) })
                 .tabItem { Label(FavoritesText.т("title"), systemImage: "heart") }
                 .tag(Вкладка.избранное)
             }
@@ -494,6 +498,7 @@ struct NativeTabsView: View {
                         .кНачалуПоНажатию(.кабинет)
                 }
                 .environment(\.переходКабинета, { цель in положитьВКабинет(цель) })
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьКабинета.append(товар) })
                 .tabItem { Label(TabsText.т("cabinet"), systemImage: "person.crop.circle") }
                 .tag(Вкладка.кабинет)
             } else {
