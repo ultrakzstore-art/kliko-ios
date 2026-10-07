@@ -194,8 +194,34 @@ struct ПолеПерепискиСайта: View {
     var фокус: FocusState<Bool>.Binding
     /// Этап 38: у чата объявления своя подсказка сайта — «Напишите сообщение…» (#mk-chat-inp). nil — «Сообщение…» этапа 3.
     var подсказка: String? = nil
+    /// Kliko AI-подсказки (ChatAIHints.swift): «✨» в поле и варианты над ним. nil — поле как раньше.
+    var ии: ИИПодсказкиЧата? = nil
+    /// cid чата по объявлению или tid личной переписки — для запроса подсказок.
+    var номерИИ: String = ""
+    /// В ленте есть сообщения — сайту есть по чему подсказывать.
+    var естьПерепискаИИ: Bool = false
+    /// Переписка загружена, своих сообщений ещё нет — один раз карточка-знакомство.
+    var новаяИИ: Bool = false
 
     var body: some View {
+        VStack(spacing: 0) {
+            if let ии, Config.подсказкиИИЧата {
+                ПолосаИИПодсказок(ии: ии, новая: новаяИИ, вставить: { выбранный in
+                    текст = выбранный
+                    фокус.wrappedValue = true
+                }, повторить: { ии.нажали(номер: номерИИ, естьПереписка: естьПерепискаИИ) })
+            }
+            строкаВвода
+        }
+        .background(Theme.поверхность)
+        .overlay(alignment: .top) {
+            Theme.линия
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var строкаВвода: some View {
         /* .kc-field: min-height 40, скругление 22, отступы 3 3 3 14; «Отправить» 32 × 32 — внутри поля. */
         HStack(alignment: .bottom, spacing: 2) {
             TextField(подсказка ?? ChatText.т("placeholder"), text: $текст, axis: .vertical)
@@ -204,6 +230,11 @@ struct ПолеПерепискиСайта: View {
                 .lineLimit(1...5)
                 .focused(фокус)
                 .padding(.vertical, 5)
+            if let ии, Config.подсказкиИИЧата {
+                КнопкаИИПодсказок(ии: ии) {
+                    ии.нажали(номер: номерИИ, естьПереписка: естьПерепискаИИ)
+                }
+            }
             Button(action: отправить) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 14, weight: .bold))
@@ -226,12 +257,6 @@ struct ПолеПерепискиСайта: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Theme.поверхность)
-        .overlay(alignment: .top) {
-            Theme.линия
-                .frame(height: 1)
-                .accessibilityHidden(true)
-        }
     }
 }
 

@@ -28,6 +28,8 @@ struct ЭкранЧатаОбъявления: View {
     @ObservedObject private var торг = ТоргПредложений.shared
     @FocusState private var полеВФокусе: Bool
     @Environment(\.dismiss) private var закрыть
+    /// Kliko AI-подсказки ответа (chat.php ai_replies по cid).
+    @StateObject private var ии = ИИПодсказкиЧата(чат: .объявление)
 
     /// Открыт с готовым вопросом (mkChatOpen(id, q) сайта) — после загрузки курсор в строке ввода.
     private let сВопросом: Bool
@@ -248,7 +250,10 @@ struct ЭкранЧатаОбъявления: View {
                     }
                     ПолеПерепискиСайта(текст: $модель.черновик, можно: можноОтправить,
                                        отправить: { Task { await модель.отправить() } }, фокус: $полеВФокусе,
-                                       подсказка: ListingChatText.т("placeholder"))
+                                       подсказка: ListingChatText.т("placeholder"),
+                                       ии: ии, номерИИ: модель.чат ?? "",
+                                       естьПерепискаИИ: !модель.сообщения.isEmpty,
+                                       новаяИИ: модель.загружено && !модель.сообщения.contains(where: { $0.моё }))
                 }
                 .background(Theme.поверхность)
             }
