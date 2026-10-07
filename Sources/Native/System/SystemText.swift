@@ -9,9 +9,9 @@ enum SystemText {
     }
 
     private static let тексты: [String: [String: String]] = [
-        "ru": ["search": "Поиск", "messages": "Сообщения", "favorites": "Избранное"],
-        "kk": ["search": "Іздеу", "messages": "Хабарламалар", "favorites": "Таңдаулылар"],
-        "en": ["search": "Search", "messages": "Messages", "favorites": "Favorites"],
-        "ar": ["search": "بحث", "messages": "الرسائل", "favorites": "المفضلة"]
+        "ru": ["search": "Поиск", "messages": "Сообщения", "favorites": "Избранное", "sell": "Продать", "deals": "Мои сделки"],
+        "kk": ["search": "Іздеу", "messages": "Хабарламалар", "favorites": "Таңдаулылар", "sell": "Сату", "deals": "Менің мәмілелерім"],
+        "en": ["search": "Search", "messages": "Messages", "favorites": "Favorites", "sell": "Sell", "deals": "My deals"],
+        "ar": ["search": "بحث", "messages": "الرسائل", "favorites": "المفضلة", "sell": "بيع", "deals": "صفقاتي"]
     ]
 }
