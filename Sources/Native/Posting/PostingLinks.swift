@@ -130,7 +130,7 @@ extension ПодачаМодель {
      */
     func послеEgov() async {
         switch экран {
-        case .камера, .старт, .шаги: break
+        case .камера, .старт, .шаги, .выбор: break
         default: return
         }
         guard let ответ = try? await КабинетСайта.страницаКабинета(), ответ.состояние.вошёл == true else { return }
