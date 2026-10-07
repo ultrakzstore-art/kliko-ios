@@ -18,6 +18,9 @@ import UIKit
  */
 @MainActor
 enum ПоверхВсего {
+    /// Какое окно просили последним и когда — защита от двойного нажатия в показать.
+    private static var последнееОкно: (тип: ObjectIdentifier, когда: Date)? = nil
+
     /// Верхний контроллер, над которым можно показать окно; nil — что-то ещё уезжает или приезжает.
     static func верхний() -> UIViewController? {
         let окна = UIApplication.shared.connectedScenes
@@ -40,6 +43,12 @@ enum ПоверхВсего {
     static func показать<Содержимое: View>(большой: Bool = true, смахивается: Bool = true,
                                           неВышло: (() -> Void)? = nil,
                                           @ViewBuilder _ содержимое: @escaping (_ закрыть: @escaping () -> Void) -> Содержимое) {
+        /* Двойное нажатие (TestFlight 1.11 (57)): второе такое же окно за секунду не кладём поверх первого — первое
+           ещё приезжает, и раньше по второму нажатию вставало второе такое же окно. */
+        let тип = ObjectIdentifier(Содержимое.self)
+        let сейчас = Date()
+        if let прежнее = последнееОкно, прежнее.тип == тип, сейчас.timeIntervalSince(прежнее.когда) < 1 { return }
+        последнееОкно = (тип: тип, когда: сейчас)
         Task { @MainActor in
             for попытка in 0..<12 {
                 if let верх = ПоверхВсего.верхний() {

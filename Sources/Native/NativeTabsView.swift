@@ -36,6 +36,10 @@ struct NativeTabsView: View {
     @State private var путьИзбранного = NavigationPath()
     /// Стек кабинета — с путём, как остальные: по нему видно, открыто ли что-то поверх (панель сайта прячется).
     @State private var путьКабинета = NavigationPath()
+    /// Что положил в стек кабинета положитьВКабинет и каким стал путь: тот же экран сверху второй раз не кладём.
+    @State private var верхКабинета: ВерхСтекаКабинета? = nil
+    /// До этого времени новые переходы кабинета не принимаем — второе нажатие во время анимации перехода.
+    @State private var кабинетЗанятДо = Date.distantPast
     /// Поле поиска ленты активно — быстрое действие «Поиск» с иконки (этап 10) ставит true, «Отменить» в поле — false.
     @State private var поискЛенты = false
     /// «Поиск» с иконки пришёл, а поле трогать рано: на экране замок Face ID или страница сайта. Ждём их ухода.
@@ -187,6 +191,7 @@ struct NativeTabsView: View {
                 NavigationStack(path: $путьИзбранного) {
                     FavoritesView(открыть: открыть, вЛенту: { вкладка = .лента })
                         .оставитьМестоПодПанелью(местоПодПанелью)
+                        .кНачалуПоНажатию(.избранное)
                         .navigationDestination(for: Listing.self) { товар in
                             ListingDetailView(товар: товар, открыть: открыть)
                                 .местоЭкрана(.объявление(товар.id), вкладка: .избранное)
@@ -199,6 +204,7 @@ struct NativeTabsView: View {
                 NavigationStack(path: $путьСообщений) {
                     ChatListView(модель: чаты, открыть: открыть)
                         .оставитьМестоПодПанелью(местоПодПанелью)
+                        .кНачалуПоНажатию(.сообщения)
                         .чатМаршруты(открыть: открыть)
                 }
             }
@@ -206,7 +212,9 @@ struct NativeTabsView: View {
                 NavigationStack(path: $путьКабинета) {
                     CabinetView(открыть: открыть)
                         .оставитьМестоПодПанелью(местоПодПанелью)
+                        .кНачалуПоНажатию(.кабинет)
                 }
+                .environment(\.переходКабинета, { цель in положитьВКабинет(цель) })
             }
         }
         .tint(Theme.акцент)
@@ -382,21 +390,60 @@ struct NativeTabsView: View {
                 путьЛенты = NavigationPath()
             } else if !вид.главная {
                 найтиВЛенте = ИскомоеЛенты(текст: "", раздел: "")
+            } else {
+                /* Уже на главной — к началу ленты, как повторное нажатие системной вкладки; наверху — ничего. */
+                ЯкорьНачалаВкладки.кНачалу(.лента)
             }
             /* Упрощение для новичка: на главной первая кнопка — тоже «Главная», и окна категорий она больше не
                открывает (окно — «Все категории» под плитками главной и «Категории» полосы разделов). */
         case .избранное:
-            if вкладка == .избранное { путьИзбранного = NavigationPath() } else { вкладка = .избранное }
+            if вкладка != .избранное {
+                вкладка = .избранное
+            } else if !путьИзбранного.isEmpty {
+                путьИзбранного = NavigationPath()
+            } else {
+                ЯкорьНачалаВкладки.кНачалу(.избранное)
+            }
         case .чат:
             guard Config.нативныйЧат else {
                 if let u = Config.url("/cabinet.php?s=messages") { открыть(u) }
                 return
             }
-            if вкладка == .сообщения { путьСообщений = NavigationPath() } else { вкладка = .сообщения }
+            if вкладка != .сообщения {
+                вкладка = .сообщения
+            } else if !путьСообщений.isEmpty {
+                путьСообщений = NavigationPath()
+            } else {
+                ЯкорьНачалаВкладки.кНачалу(.сообщения)
+            }
         case .кабинет:
             /* Без нативного кабинета onChange ниже вернёт прежнюю вкладку и откроет /cabinet.php, как на этапе 4. */
-            if вкладка == .кабинет { путьКабинета = NavigationPath() } else { вкладка = .кабинет }
+            if вкладка != .кабинет {
+                вкладка = .кабинет
+            } else if !путьКабинета.isEmpty {
+                путьКабинета = NavigationPath()
+            } else {
+                ЯкорьНачалаВкладки.кНачалу(.кабинет)
+            }
         }
+    }
+
+    /**
+     Экран в стек «Кабинета» без дублей (владелец, TestFlight 1.11 (57): «Доставки» нажимались несколько раз — и тот же
+     экран открывался снова). Нажатие во время перехода (0,6 с) не считается; тот же экран уже сверху — не кладём его
+     второй раз, а прокручиваем к началу, как повторное нажатие системной вкладки (наверху — ничего не происходит).
+     */
+    private func положитьВКабинет(_ цель: КабинетЦель) {
+        let сейчас = Date()
+        guard сейчас >= кабинетЗанятДо else { return }
+        /* Путь с тех пор не менялся («Назад», ссылка, другой экран) — значит, этот экран всё ещё сверху. */
+        if let верх = верхКабинета, верх.цель == цель, верх.путь == путьКабинета {
+            ЯкорьНачалаВкладки.кНачалу(.кабинет)
+            return
+        }
+        кабинетЗанятДо = сейчас.addingTimeInterval(0.6)
+        путьКабинета.append(цель)
+        верхКабинета = ВерхСтекаКабинета(цель: цель, путь: путьКабинета)
     }
 
     private var вкладкиСистемы: some View {
@@ -410,6 +457,7 @@ struct NativeTabsView: View {
             if Config.избранное {
                 NavigationStack(path: $путьИзбранного) {
                     FavoritesView(открыть: открыть, вЛенту: { вкладка = .лента })
+                        .кНачалуПоНажатию(.избранное)
                         .navigationDestination(for: Listing.self) { товар in
                             ListingDetailView(товар: товар, открыть: открыть)
                                 .местоЭкрана(.объявление(товар.id), вкладка: .избранное)
@@ -423,6 +471,7 @@ struct NativeTabsView: View {
             if Config.нативныйЧат {
                 NavigationStack(path: $путьСообщений) {
                     ChatListView(модель: чаты, открыть: открыть)
+                        .кНачалуПоНажатию(.сообщения)
                         .чатМаршруты(открыть: открыть)
                 }
                 .tabItem { Label(TabsText.т("messages"), systemImage: "bubble.left.and.bubble.right") }
@@ -442,7 +491,9 @@ struct NativeTabsView: View {
                 /* Этап 41: стек с путём и здесь — ссылка ?go=items кладёт в него «Мои объявления». */
                 NavigationStack(path: $путьКабинета) {
                     CabinetView(открыть: открыть)
+                        .кНачалуПоНажатию(.кабинет)
                 }
+                .environment(\.переходКабинета, { цель in положитьВКабинет(цель) })
                 .tabItem { Label(TabsText.т("cabinet"), systemImage: "person.crop.circle") }
                 .tag(Вкладка.кабинет)
             } else {
@@ -637,4 +688,116 @@ enum TabsText {
 extension Notification.Name {
     /// Чип «Категории» в полосе разделов ленты просит открыть экран категорий (он живёт здесь, над лентой).
     static let klikoОткрытьКатегории = Notification.Name("kliko.categories.open")
+}
+
+extension Notification.Name {
+    /// Повторное нажатие выбранной вкладки или уже открытого раздела — к началу экрана (object — NativeTabsView.Вкладка).
+    static let klikoКНачалуВкладки = Notification.Name("kliko.tab.totop")
+}
+
+/// Что положил в стек кабинета NativeTabsView.положитьВКабинет: цель и весь путь стека сразу после неё.
+struct ВерхСтекаКабинета: Equatable {
+    let цель: КабинетЦель
+    let путь: NavigationPath
+}
+
+extension View {
+    /// Корень вкладки: повторное нажатие на её кнопку панели (или на уже открытый раздел) прокручивает к началу экран,
+    /// который сейчас сверху её стека, — как у системных вкладок iOS. Уже наверху — ничего не происходит.
+    func кНачалуПоНажатию(_ вкладка: NativeTabsView.Вкладка) -> some View {
+        background(
+            ЯкорьНачалаВкладки(вкладка: вкладка)
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        )
+    }
+}
+
+/**
+ Невидимый UIView в корне вкладки. По уведомлению своей вкладки находит стек (UINavigationController, на котором стоит
+ NavigationStack), берёт экран сверху и самую крупную видимую вертикальную прокрутку в нём (List — это
+ UICollectionView, ScrollView — UIScrollView) и плавно ведёт её к началу. Так не нужно расставлять якоря прокрутки в
+ каждом экране: лента, избранное, чат и кабинет устроены по-разному.
+ */
+struct ЯкорьНачалаВкладки: UIViewRepresentable {
+    let вкладка: NativeTabsView.Вкладка
+
+    /// Прокрутить к началу экран сверху стека этой вкладки.
+    static func кНачалу(_ вкладка: NativeTabsView.Вкладка) {
+        NotificationCenter.default.post(name: .klikoКНачалуВкладки, object: вкладка)
+    }
+
+    func makeUIView(context: Context) -> ВидЯкоряНачала {
+        let вид = ВидЯкоряНачала()
+        вид.isUserInteractionEnabled = false
+        вид.backgroundColor = .clear
+        вид.вкладка = вкладка
+        return вид
+    }
+
+    func updateUIView(_ uiView: ВидЯкоряНачала, context: Context) {
+        uiView.вкладка = вкладка
+    }
+}
+
+final class ВидЯкоряНачала: UIView {
+    var вкладка: NativeTabsView.Вкладка = .лента
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: .klikoКНачалуВкладки, object: nil)
+        guard window != nil else { return }
+        NotificationCenter.default.addObserver(self, selector: #selector(пришлоКНачалу(_:)),
+                                               name: .klikoКНачалуВкладки, object: nil)
+    }
+
+    @objc(klikoTabToTop:)
+    private func пришлоКНачалу(_ уведомление: Notification) {
+        guard window != nil, let нужна = уведомление.object as? NativeTabsView.Вкладка, нужна == вкладка,
+              let прокрутка = главнаяПрокрутка() else { return }
+        let верх = -прокрутка.adjustedContentInset.top
+        /* Уже наверху — ничего, как у системной вкладки. */
+        guard прокрутка.contentOffset.y > верх + 0.5 else { return }
+        прокрутка.setContentOffset(CGPoint(x: прокрутка.contentOffset.x, y: верх), animated: true)
+    }
+
+    /// Прокрутка экрана сверху стека; стека нет — экрана, в котором стоит якорь.
+    private func главнаяПрокрутка() -> UIScrollView? {
+        var узел: UIResponder? = self
+        var своёОкно: UIViewController? = nil
+        while let текущий = узел {
+            if let стек = текущий as? UINavigationController {
+                guard let экран = (стек.topViewController ?? стек).view else { return nil }
+                return Self.крупнейшая(в: экран)
+            }
+            if своёОкно == nil, let окно = текущий as? UIViewController { своёОкно = окно }
+            узел = текущий.next
+        }
+        guard let корень = своёОкно?.view else { return nil }
+        return Self.крупнейшая(в: корень)
+    }
+
+    /// Самая крупная видимая прокрутка, которую можно листать по вертикали (полосы разделов — вбок — не в счёт).
+    private static func крупнейшая(в корень: UIView) -> UIScrollView? {
+        var лучшая: UIScrollView? = nil
+        var площадь: CGFloat = 0
+        var очередь: [UIView] = [корень]
+        while !очередь.isEmpty {
+            let вид = очередь.removeFirst()
+            if вид.isHidden || вид.alpha < 0.01 { continue }
+            if let прокрутка = вид as? UIScrollView {
+                let вставки = прокрутка.adjustedContentInset
+                let листается = прокрутка.contentSize.height + вставки.top + вставки.bottom > прокрутка.bounds.height + 1
+                let сдвинута = прокрутка.contentOffset.y > -вставки.top + 0.5
+                let своя = прокрутка.bounds.width * прокрутка.bounds.height
+                if (листается || сдвинута) && своя > площадь {
+                    лучшая = прокрутка
+                    площадь = своя
+                }
+            }
+            очередь.append(contentsOf: вид.subviews)
+        }
+        return лучшая
+    }
 }
