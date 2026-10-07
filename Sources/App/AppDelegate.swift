@@ -33,6 +33,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
            при включённом в админке рубильнике perf_telemetry. */
         ЗамерыСкорости.запустить()
         UNUserNotificationCenter.current().delegate = self
+        // Кнопки «Ответить» и «Прочитано» у пуша о сообщении (NotificationReply.swift) — до первого пуша.
+        ОтветИзУведомления.зарегистрировать()
         // Этап 12: обработчик фоновой проверки сохранённых поисков — строго до конца запуска, иначе iOS роняет
         // приложение при первом же фоновом запуске задания.
         ПроверкаПоисков.зарегистрировать()
@@ -77,6 +79,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        // Ответ или «Прочитано» прямо из уведомления — без открытия приложения; completionHandler позовут после запроса.
+        if ОтветИзУведомления.обработать(response, готово: completionHandler) { return }
         let info = response.notification.request.content.userInfo
         сделкаИзПуша(info)
         // Этап 12: своё локальное уведомление о новых по сохранённому поиску узнаём по метке в userInfo и ведём в
