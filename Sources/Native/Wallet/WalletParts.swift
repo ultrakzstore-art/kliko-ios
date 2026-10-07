@@ -17,6 +17,18 @@ enum ДействиеКошелька: String, Hashable {
     case вывести
 }
 
+/**
+ ПОПОЛНЕНИЕ В ПРИЛОЖЕНИИ — ТОЛЬКО НА СДЕЛКИ (App Review 3.1.1). Деньги с карты в кошелёк — это оплата сделок за товары
+ и услуги продавцов, пока работает Безопасная сделка. Гарант на паузе — пополненное тратилось бы только на цифровые услуги
+ Kliko мимо In-App Purchase; поэтому «Пополнить» открывает пополнение, только когда гарант работает ПО СВЕРКЕ
+ (ПаузаГаранта.работаетПоСверке: страницу кабинета читали и паузы на ней нет). На паузе или пока состояние неизвестно
+ (свежая установка, страница не прочиталась) — окно «Пополнение откроется, когда заработает Безопасная сделка», без
+ ссылок на сайт. ПополнениеМодель.пополнить перед оплатой ещё раз сверяет паузу сама.
+ */
+enum ПополнениеВПриложении {
+    static var открыто: Bool { ПаузаГаранта.работаетПоСверке }
+}
+
 // MARK: - Карточка «Кошелёк» (.hero-wallet)
 
 struct КарточкаКошелька: View {
@@ -31,6 +43,8 @@ struct КарточкаКошелька: View {
     }
 
     @Environment(\.colorScheme) private var схема
+    /// «Пополнение откроется, когда заработает Безопасная сделка» (ПополнениеВПриложении).
+    @State private var пополнениеЗакрыто = false
 
     private func т(_ ключ: String) -> String { КошелёкText.т(ключ) }
 
@@ -94,6 +108,22 @@ struct КарточкаКошелька: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
         .теньКарточкиСайта(радиус: Theme.Радиус.md)
+        /* Пауза гаранта — не чаще раза в 10 минут: к нажатию «Пополнить» состояние уже известно. */
+        .task { await ПаузаГаранта.shared.сверить() }
+        .alert(т("topup_wait"), isPresented: $пополнениеЗакрыто) {
+            Button(т("ok"), role: .cancel) {}
+        }
+    }
+
+    /// «Пополнить»: гарант работает по сверке — дальше (лист пополнения или кабинет сайта); на паузе или не сверен —
+    /// окно «Пополнение откроется, когда заработает Безопасная сделка» и ещё одна сверка паузы.
+    private func нажатоПополнить() {
+        guard ПополнениеВПриложении.открыто else {
+            пополнениеЗакрыто = true
+            Task { await ПаузаГаранта.shared.сверить() }
+            return
+        }
+        пополнить()
     }
 
     @ViewBuilder
@@ -137,13 +167,15 @@ struct КарточкаКошелька: View {
     /// .hero-wpay: белая плашка радиуса 10 с тенью, «Пополнить» | «Вывести» (второй — с оттенком).
     private var кнопки: some View {
         HStack(spacing: 0) {
-            кнопка(т("topup"), значок: "plus", оттенок: false, действие: пополнить)
+            кнопка(т("topup"), значок: "plus", оттенок: false,
+                   наСайт: !Config.деньгиКошелька && ПополнениеВПриложении.открыто, действие: { нажатоПополнить() })
             Rectangle()
                 .fill(Color(red: 52 / 255, green: 201 / 255, blue: 151 / 255).opacity(0.22))
                 .frame(width: 1)
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
-            кнопка(т("withdraw"), значок: "arrow.up.right", оттенок: true, действие: вывести)
+            кнопка(т("withdraw"), значок: "arrow.up.right", оттенок: true, наСайт: !Config.деньгиКошелька,
+                   действие: вывести)
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
@@ -151,7 +183,9 @@ struct КарточкаКошелька: View {
         .shadow(color: Color.black.opacity(0.25), radius: 7, x: 0, y: 5)
     }
 
-    private func кнопка(_ подпись: String, значок: String, оттенок: Bool, действие: @escaping () -> Void) -> some View {
+    /// наСайт — нажатие откроет кабинет сайта (стрелка «наружу» и подсказка VoiceOver).
+    private func кнопка(_ подпись: String, значок: String, оттенок: Bool, наСайт: Bool,
+                        действие: @escaping () -> Void) -> some View {
         Button(action: действие) {
             HStack(spacing: 6) {
                 Image(systemName: значок)
@@ -161,7 +195,7 @@ struct КарточкаКошелька: View {
                     .font(.system(size: 12, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                if !Config.деньгиКошелька {
+                if наСайт {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 11))
                         .accessibilityHidden(true)
@@ -173,7 +207,7 @@ struct КарточкаКошелька: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .accessibilityHint(Config.деньгиКошелька ? "" : т("a11y_site"))
+        .accessibilityHint(наСайт ? т("a11y_site") : "")
     }
 }
 

@@ -98,7 +98,8 @@ struct ЭкранКошелька: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 КарточкаКошелька(кошелёк: кошелёк, пополнить: { пополнить() }, вывести: { вывести() })
                 if !Config.деньгиКошелька {
-                    Label(т("site_note"), systemImage: "info.circle")
+                    /* Пополнение закрыто паузой гаранта (ПополнениеВПриложении) — о нём ни слова, только вывод. */
+                    Label(т(ПополнениеВПриложении.открыто ? "site_note" : "site_note_np"), systemImage: "info.circle")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
                         .fixedSize(horizontal: false, vertical: true)
@@ -215,6 +216,8 @@ struct ЭкранКошелька: View {
     }
 
     private func пополнить() {
+        /* Гарант на паузе или не сверен — пополнения нет (App Review 3.1.1): карточка уже показала почему. */
+        guard ПополнениеВПриложении.открыто else { return }
         guard Config.деньгиКошелька else {
             сайт("cabinet.php")
             return
