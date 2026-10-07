@@ -325,7 +325,7 @@ final class FeedModel: ObservableObject {
     func обложкиПосле(_ товар: Listing, сколько: Int) -> [(адрес: URL, целиком: Bool)] {
         guard let место = местоЯчейки[товар.id], место + 1 < лента.count else { return [] }
         let конец = min(лента.count, место + 1 + сколько)
-        return лента[(место + 1)..<конец].compactMap { ячейка in
+        return лента[(место + 1)..<конец].compactMap { ячейка -> (адрес: URL, целиком: Bool)? in
             let т = ячейка.товар
             guard let адрес = т.обложка else { return nil }
             return (адрес: адрес, целиком: т.услуга || т.вертикаль.фотоЦеликом)
