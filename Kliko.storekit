@@ -93,39 +93,24 @@
       "type": "Consumable"
     },
     {
-      "displayPrice": "1990",
+      "displayPrice": "990",
       "familyShareable": false,
       "internalID": "6700000007",
       "localizations": [
         {
           "description": "Больше активных объявлений на 30 дней",
-          "displayName": "+10 слотов на 30 дней",
+          "displayName": "+20 слотов на 30 дней",
           "locale": "ru"
         }
       ],
-      "productID": "kz.kliko.app.slots.10",
-      "referenceName": "+10 слотов на 30 дней",
+      "productID": "kz.kliko.app.slots.20",
+      "referenceName": "+20 слотов на 30 дней",
       "type": "Consumable"
     },
     {
-      "displayPrice": "3990",
+      "displayPrice": "2490",
       "familyShareable": false,
       "internalID": "6700000008",
-      "localizations": [
-        {
-          "description": "Больше активных объявлений на 30 дней",
-          "displayName": "+25 слотов на 30 дней",
-          "locale": "ru"
-        }
-      ],
-      "productID": "kz.kliko.app.slots.25",
-      "referenceName": "+25 слотов на 30 дней",
-      "type": "Consumable"
-    },
-    {
-      "displayPrice": "6990",
-      "familyShareable": false,
-      "internalID": "6700000009",
       "localizations": [
         {
           "description": "Больше активных объявлений на 30 дней",
@@ -138,9 +123,9 @@
       "type": "Consumable"
     },
     {
-      "displayPrice": "11990",
+      "displayPrice": "4490",
       "familyShareable": false,
-      "internalID": "6700000010",
+      "internalID": "6700000009",
       "localizations": [
         {
           "description": "Больше активных объявлений на 30 дней",
@@ -150,6 +135,21 @@
       ],
       "productID": "kz.kliko.app.slots.100",
       "referenceName": "+100 слотов на 30 дней",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "7990",
+      "familyShareable": false,
+      "internalID": "6700000010",
+      "localizations": [
+        {
+          "description": "Больше активных объявлений на 30 дней",
+          "displayName": "+200 слотов на 30 дней",
+          "locale": "ru"
+        }
+      ],
+      "productID": "kz.kliko.app.slots.200",
+      "referenceName": "+200 слотов на 30 дней",
       "type": "Consumable"
     },
     {
