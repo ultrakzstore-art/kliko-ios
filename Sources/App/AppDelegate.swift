@@ -109,6 +109,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// payload: {"aps":{...}, "url":"/cabinet.php?s=messages"} (или полный https-URL).
     private func handlePayload(_ info: [AnyHashable: Any]) {
+        /* Гарантийный талон (warranty_card: «Продавец подписал талон» / «Покупатель просит подписать»): у такого пуша сайт
+           своего адреса не знает (push_url_for_type даёт /cabinet.php) — ведём в карточку сделки, где талон и подпись. */
+        let тип = (info["type"] as? String) ?? ""
+        let сделка = info["deal_id"].map { "\($0)" } ?? ""
+        if тип == "warranty_card" && СделкиAPI.годныйНомер(сделка) {
+            Task { @MainActor in WebBridge.shared.openPath("/cabinet.php?deal=" + сделка) }
+            return
+        }
         guard let url = info["url"] as? String, !url.isEmpty else { return }
         Task { @MainActor in WebBridge.shared.openPath(url) }
     }

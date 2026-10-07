@@ -115,7 +115,7 @@ struct ЭкранСравнения: View {
                             значения: все.map { FeedText.т($0.isNew ? "new" : "used") }),
             СтрокаСравнения(id: "warranty", подпись: CompareText.т("warranty"),
                             значения: все.map { товар in
-                                товар.гарантияДней.map { String(format: CompareText.т("days"), $0) } ?? Self.нет
+                                товар.гарантияДней.map { Listing.срокГарантии($0) } ?? Self.нет
                             })
         ]
         var ключи: [String] = []

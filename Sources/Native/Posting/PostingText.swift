@@ -27,7 +27,10 @@ enum ПодачаText {
         switch язык {
         case "en":
             return число == 1 ? "1" : "2"
-        case "kk", "ar":
+        case "ar":
+            /* Арабский — как warrTerm сайта: 1 · 2–10 · 11 и больше. */
+            return число == 1 ? "1" : (число >= 2 && число <= 10 ? "2" : "5")
+        case "kk":
             return число == 1 ? "1" : "5"
         default:
             let n10 = число % 10
@@ -219,6 +222,9 @@ enum ПодачаText {
         "cfg_what_pay": "оплата", "cfg_what_del": "доставка", "cfg_what_trust": "гарантия и знаки доверия",
         "cfg_replay_fail": "Не применились настройки объявления: {what}. Откройте его в «Моих объявлениях» и сохраните ещё раз",
         "wr_clamped": "Без PRO гарантия — до 7 дней: сохранили 7 дней",
+        "wr_seller_t": "Гарантия продавца", "wr_from_receipt": "срок — с даты получения товара", "wr_range_aria": "Срок гарантии",
+        "wr_talon_note": "После оплаты вы подпишете гарантийный талон через eGov — покупатель получит его в сделке",
+        "wr_scale_7": "7 дн", "wr_scale_1m": "1 мес", "wr_scale_6m": "6 мес", "wr_scale_12m": "12 мес",
         // проверка
         "pc_title": "Проверьте перед публикацией", "pc_sub": "Так объявление увидят покупатели",
         "pc_back": "← Изменить", "pc_publish": "Опубликовать", "pc_no_price": "Без цены · стоимость в чате",
@@ -475,6 +481,9 @@ enum ПодачаText {
         "cfg_what_pay": "төлем", "cfg_what_del": "жеткізу", "cfg_what_trust": "кепілдік және сенім белгілері",
         "cfg_replay_fail": "Хабарландыру баптаулары қолданылмады: {what}. Оны «Менің хабарландыруларымда» ашып, қайта сақтаңыз",
         "wr_clamped": "PRO-сыз кепілдік — 7 күнге дейін: 7 күн сақталды",
+        "wr_seller_t": "Сатушы кепілдігі", "wr_from_receipt": "мерзімі — тауарды алған күннен", "wr_range_aria": "Кепілдік мерзімі",
+        "wr_talon_note": "Төлемнен кейін кепілдік талонына eGov арқылы қол қоясыз — сатып алушы оны мәміледе алады",
+        "wr_scale_7": "7 күн", "wr_scale_1m": "1 ай", "wr_scale_6m": "6 ай", "wr_scale_12m": "12 ай",
         "pc_title": "Жарияламас бұрын тексеріңіз", "pc_sub": "Хабарландыруды сатып алушылар осылай көреді",
         "pc_back": "← Өзгерту", "pc_publish": "Жариялау", "pc_no_price": "Бағасыз · құны чатта",
         "torg_small": "саудаласу", "pc_new": "Жаңа", "pc_photos": "%d фото",
@@ -728,6 +737,9 @@ enum ПодачаText {
         "cfg_what_pay": "payment", "cfg_what_del": "delivery", "cfg_what_trust": "warranty and trust badges",
         "cfg_replay_fail": "Listing settings weren't applied: {what}. Open it in “My listings” and save again",
         "wr_clamped": "Without PRO the warranty is up to 7 days: 7 days saved",
+        "wr_seller_t": "Seller warranty", "wr_from_receipt": "counted from the day the buyer receives the item", "wr_range_aria": "Warranty period",
+        "wr_talon_note": "After payment you sign the warranty card via eGov — the buyer gets it in the deal",
+        "wr_scale_7": "7 d", "wr_scale_1m": "1 mo", "wr_scale_6m": "6 mo", "wr_scale_12m": "12 mo",
         "pc_title": "Check before publishing", "pc_sub": "This is how buyers will see the listing",
         "pc_back": "← Edit", "pc_publish": "Publish", "pc_no_price": "No price · agreed in the chat",
         "torg_small": "negotiable", "pc_new": "New", "pc_photos": "%d photos",
@@ -981,6 +993,9 @@ enum ПодачаText {
         "cfg_what_pay": "الدفع", "cfg_what_del": "التوصيل", "cfg_what_trust": "الضمان وعلامات الثقة",
         "cfg_replay_fail": "لم تُطبق إعدادات الإعلان: {what}. افتحه في «إعلاناتي» واحفظه مرة أخرى",
         "wr_clamped": "بدون PRO الضمان حتى 7 أيام: حُفظت 7 أيام",
+        "wr_seller_t": "ضمان البائع", "wr_from_receipt": "تُحسب المدة من يوم استلام السلعة", "wr_range_aria": "مدة الضمان",
+        "wr_talon_note": "بعد الدفع توقّع بطاقة الضمان عبر eGov — ويحصل عليها المشتري في الصفقة",
+        "wr_scale_7": "7 أيام", "wr_scale_1m": "شهر", "wr_scale_6m": "6 أشهر", "wr_scale_12m": "12 شهرًا",
         "pc_title": "تحقق قبل النشر", "pc_sub": "هكذا سيرى المشترون الإعلان",
         "pc_back": "→ تعديل", "pc_publish": "نشر", "pc_no_price": "بدون سعر · التكلفة في الدردشة",
         "torg_small": "تفاوض", "pc_new": "جديد", "pc_photos": "%d صور",

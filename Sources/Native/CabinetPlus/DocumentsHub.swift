@@ -12,7 +12,18 @@ import UIKit
      вопросом сайта, и документы заказа своим PDF (счёт, накладная, акт, договор — CabinetPlus/BusinessDocs.swift);
    · полученные документы (invoice_list role=buyer): счёт, акт, накладная, договор, доверенность, прайс-лист — нажатие
      открывает свой PDF, как invPrint сайта.
- Сверху — сегменты «Все · Счета · Акты · Договоры» (только виды, что есть в списке) и поиск по номеру, контрагенту и
+ ГАРАНТИЙНЫЕ ТАЛОНЫ (владелец: «гарантия как отдельный документ»). У сайта талон живёт в сделке — строка «Гарантийный
+ талон» в «Деньги и документы» (dealWarrantyDocRow), в списке документов кабинета его нет. Здесь он и отдельным видом
+ «Гарантия»: собирается из своих сделок (escrow.php?action=my_deals&role=both — сделка приходит целиком, со слепком
+ объявления listing_snapshot.warranty_days и warranty_card{signed_at, days, kind}) по правилу сайта: только товар,
+ талон после оплаты (held, shipped, delivered, confirmed) или уже подписанный. Статус — «подписан ЭЦП» (kind "ecp",
+ провайдер НУЦ РК) или «подписан кодом eGov» (простая подпись Kliko.kz), «черновик · ждёт подписи продавца»; у
+ подписанного срок идёт с даты получения (confirmed_at), прошёл — «срок истёк» и в «Неактуальные». Открывается тем же
+ окном документов (ОкноДокумента: GET /escrow.php?action=warranty_card&id=, PDF, «Поделиться», «Печать»). Покупателю у
+ неподписанного — «Попросить продавца подписать» (warranty_ask, не чаще раза в 12 часов — «Уже попросили…»), продавцу —
+ «Подписать в сделке» (подпись кодом eGov — в карточке сделки). В корзину талон не убирается: ключей талонов у правки 109
+ нет.
+ Сверху — сегменты «Все · Счета · Акты · Договоры · Гарантия» (только виды, что есть в списке) и поиск по номеру, контрагенту и
  виду. Сначала «Актуальные» (ждут оплаты, подтверждения или моего шага), ниже свёрнутая группа «Неактуальные»
  (оплаченные и закрытые, отменённые, просроченные, полученные больше 30 дней назад); внутри групп — новые сверху.
  Остальное, что было разбросано по группе, — меню «+» в шапке: реквизиты компании, журнал счетов, коммерческие
@@ -42,7 +53,7 @@ enum СчетаДокументыText {
         "hub_seg_all": "Все", "hub_seg_inv": "Счета", "hub_seg_act": "Акты", "hub_seg_contract": "Договоры",
         "hub_search": "Номер или название", "hub_actual": "Актуальные", "hub_old": "Неактуальные",
         "hub_empty": "Документов пока нет",
-        "hub_empty_s": "Здесь будут счета, акты и договоры — выставленные вами и полученные от поставщиков.",
+        "hub_empty_s": "Здесь будут счета, акты и договоры — выставленные вами и полученные от поставщиков, и гарантийные талоны из сделок.",
         "hub_nothing": "Ничего не найдено", "hub_overdue": "просрочен", "hub_received": "получен",
         "hub_out": "Исходящий", "hub_in": "Входящий", "hub_more": "Создать и настроить",
         "hub_issue_site": "Выставить счёт (на сайте)", "hub_order_docs": "Документы счёта",
@@ -56,14 +67,18 @@ enum СчетаДокументыText {
         "hub_purge_s": "Из вашего списка документ пропадёт совсем, вернуть его будет нельзя. У второй стороны и в журнале счетов он останется.",
         "hub_purge_done": "Удалено навсегда", "hub_trash_clear": "Очистить корзину",
         "hub_in_progress": "Счёт в работе — сначала завершите или отмените его",
-        "hub_not_found": "Документ не найден"
+        "hub_not_found": "Документ не найден",
+        "hub_seg_warranty": "Гарантия", "hub_wc_ecp": "подписан ЭЦП", "hub_wc_pep": "подписан кодом eGov",
+        "hub_wc_draft": "черновик · ждёт подписи продавца", "hub_wc_expired": "срок истёк",
+        "hub_wc_until": "до %@", "hub_wc_from_receipt": "с даты получения", "hub_wc_open_deal": "Открыть сделку",
+        "hub_wc_sign_in_deal": "Подписать в сделке"
     ]
 
     private static let kk: [String: String] = [
         "hub_seg_all": "Барлығы", "hub_seg_inv": "Шоттар", "hub_seg_act": "Актілер", "hub_seg_contract": "Шарттар",
         "hub_search": "Нөмірі немесе атауы", "hub_actual": "Өзекті", "hub_old": "Өзекті емес",
         "hub_empty": "Әзірге құжаттар жоқ",
-        "hub_empty_s": "Мұнда сіз жазған және жеткізушілерден алынған шоттар, актілер мен шарттар болады.",
+        "hub_empty_s": "Мұнда сіз жазған және жеткізушілерден алынған шоттар, актілер мен шарттар, мәмілелердегі кепілдік талондары болады.",
         "hub_nothing": "Ештеңе табылмады", "hub_overdue": "мерзімі өтті", "hub_received": "алынды",
         "hub_out": "Шығыс", "hub_in": "Кіріс", "hub_more": "Жасау және баптау",
         "hub_issue_site": "Шот жазу (сайтта)", "hub_order_docs": "Шот құжаттары",
@@ -77,14 +92,18 @@ enum СчетаДокументыText {
         "hub_purge_s": "Құжат сіздің тізіміңізден мүлде жоғалады, оны қайтару мүмкін болмайды. Екінші тарапта және шоттар журналында ол қалады.",
         "hub_purge_done": "Біржола жойылды", "hub_trash_clear": "Себетті тазалау",
         "hub_in_progress": "Шот жұмыста — алдымен оны аяқтаңыз немесе болдырмаңыз",
-        "hub_not_found": "Құжат табылмады"
+        "hub_not_found": "Құжат табылмады",
+        "hub_seg_warranty": "Кепілдік", "hub_wc_ecp": "ЭЦҚ-мен қол қойылған", "hub_wc_pep": "eGov кодымен қол қойылған",
+        "hub_wc_draft": "жоба · сатушының қолын күтуде", "hub_wc_expired": "мерзімі өтті",
+        "hub_wc_until": "%@ дейін", "hub_wc_from_receipt": "алған күннен", "hub_wc_open_deal": "Мәмілені ашу",
+        "hub_wc_sign_in_deal": "Мәміледе қол қою"
     ]
 
     private static let en: [String: String] = [
         "hub_seg_all": "All", "hub_seg_inv": "Invoices", "hub_seg_act": "Acts", "hub_seg_contract": "Contracts",
         "hub_search": "Number or name", "hub_actual": "Current", "hub_old": "Not current",
         "hub_empty": "No documents yet",
-        "hub_empty_s": "Invoices, acts and contracts you issue or receive from suppliers will appear here.",
+        "hub_empty_s": "Invoices, acts and contracts you issue or receive from suppliers, and warranty cards from your deals will appear here.",
         "hub_nothing": "Nothing found", "hub_overdue": "overdue", "hub_received": "received",
         "hub_out": "Outgoing", "hub_in": "Incoming", "hub_more": "Create and set up",
         "hub_issue_site": "Issue an invoice (on the website)", "hub_order_docs": "Invoice documents",
@@ -98,14 +117,18 @@ enum СчетаДокументыText {
         "hub_purge_s": "The document will disappear from your list for good and can't be brought back. The other party and the invoice journal keep it.",
         "hub_purge_done": "Deleted forever", "hub_trash_clear": "Empty trash",
         "hub_in_progress": "This invoice is in progress — complete or cancel it first",
-        "hub_not_found": "Document not found"
+        "hub_not_found": "Document not found",
+        "hub_seg_warranty": "Warranty", "hub_wc_ecp": "signed with a qualified e-signature", "hub_wc_pep": "signed with an eGov code",
+        "hub_wc_draft": "draft · awaiting the seller's signature", "hub_wc_expired": "expired",
+        "hub_wc_until": "until %@", "hub_wc_from_receipt": "from the day of receipt", "hub_wc_open_deal": "Open the deal",
+        "hub_wc_sign_in_deal": "Sign in the deal"
     ]
 
     private static let ar: [String: String] = [
         "hub_seg_all": "الكل", "hub_seg_inv": "الفواتير", "hub_seg_act": "المحاضر", "hub_seg_contract": "العقود",
         "hub_search": "الرقم أو الاسم", "hub_actual": "الحالية", "hub_old": "غير الحالية",
         "hub_empty": "لا توجد مستندات بعد",
-        "hub_empty_s": "ستظهر هنا الفواتير والمحاضر والعقود التي تصدرها أو تتلقاها من الموردين.",
+        "hub_empty_s": "ستظهر هنا الفواتير والمحاضر والعقود التي تصدرها أو تتلقاها من الموردين، وبطاقات الضمان من صفقاتك.",
         "hub_nothing": "لم يتم العثور على شيء", "hub_overdue": "متأخرة", "hub_received": "مستلمة",
         "hub_out": "صادرة", "hub_in": "واردة", "hub_more": "إنشاء وإعداد",
         "hub_issue_site": "إصدار فاتورة (على الموقع)", "hub_order_docs": "مستندات الفاتورة",
@@ -119,7 +142,11 @@ enum СчетаДокументыText {
         "hub_purge_s": "سيختفي المستند من قائمتك نهائيًا ولا يمكن إرجاعه. يبقى لدى الطرف الآخر وفي سجل الفواتير.",
         "hub_purge_done": "تم الحذف نهائيًا", "hub_trash_clear": "إفراغ السلة",
         "hub_in_progress": "الفاتورة قيد التنفيذ — أكملها أو ألغها أولًا",
-        "hub_not_found": "المستند غير موجود"
+        "hub_not_found": "المستند غير موجود",
+        "hub_seg_warranty": "الضمان", "hub_wc_ecp": "موقّعة بتوقيع إلكتروني معتمد", "hub_wc_pep": "موقّعة برمز eGov",
+        "hub_wc_draft": "مسودة · بانتظار توقيع البائع", "hub_wc_expired": "انتهت المدة",
+        "hub_wc_until": "حتى %@", "hub_wc_from_receipt": "من يوم الاستلام", "hub_wc_open_deal": "فتح الصفقة",
+        "hub_wc_sign_in_deal": "التوقيع في الصفقة"
     ]
 }
 
@@ -187,8 +214,12 @@ struct ДокументСписка: Identifiable {
         case накладная = "waybill"
         case доверенность = "poa"
         case прайс = "pricelist"
+        /// Гарантийный талон сделки (escrow.php?action=warranty_card).
+        case талон = "warranty"
 
-        var название: String { БизнесРазделыText.т("doc_t_" + rawValue) }
+        var название: String {
+            self == .талон ? КабинетПлюсText.т("doc_warranty") : БизнесРазделыText.т("doc_t_" + rawValue)
+        }
 
         var значок: String {
             switch self {
@@ -198,6 +229,7 @@ struct ДокументСписка: Identifiable {
             case .накладная: return "shippingbox"
             case .доверенность: return "person.text.rectangle"
             case .прайс: return "list.bullet.rectangle"
+            case .талон: return "checkmark.shield"
             }
         }
     }
@@ -223,10 +255,17 @@ struct ДокументСписка: Identifiable {
     let исходящий: Bool
     /// «Оплатить до» (valid_until) — у счёта, что ждёт оплаты; иначе пусто.
     let срокТекст: String
+    /// Номер сделки гарантийного талона; у счетов и полученных документов — nil.
+    var сделка: String? = nil
+    /// Строка под контрагентом у талона: товар, срок и период.
+    var подробно: String = ""
+    /// Талон не подписан: покупателю — «Попросить продавца подписать», продавцу — «Подписать в сделке».
+    var ждётПодписи: Bool = false
 
     /// Можно убрать в корзину: есть ключ сервера и это не мой счёт в работе.
     var можноУбрать: Bool {
-        guard !id.hasPrefix("n:") else { return false }
+        /* Талон (w:) — не документ списка сервера: ключей правки 109 у него нет. */
+        guard !id.hasPrefix("n:"), !id.hasPrefix("w:") else { return false }
         return !вРаботе
     }
 
@@ -244,7 +283,7 @@ struct ДокументСписка: Identifiable {
 
     /// Строка для поиска: номер, контрагент, вид, сумма.
     var стог: String {
-        [номер, контрагент, вид.название, заголовок, сумма.map { String($0) } ?? ""].joined(separator: " ").lowercased()
+        [номер, контрагент, вид.название, заголовок, подробно, сумма.map { String($0) } ?? ""].joined(separator: " ").lowercased()
     }
 
     // MARK: Разбор
@@ -346,12 +385,95 @@ struct ДокументСписка: Identifiable {
     }
 }
 
+// MARK: - Гарантийный талон из сделки
+
+extension ДокументСписка {
+    /**
+     dealWarrantyDocRow сайта: сделка my_deals → талон или nil. Только товар (mode, иначе kind не service); срок — из
+     подписи (warranty_card.days), до неё — из слепка объявления (listing_snapshot.warranty_days); неподписанный —
+     только после оплаты (held, shipped, delivered, confirmed), подписанный — всегда.
+     */
+    init?(талонСделки j: [String: Any], сейчас: Date) {
+        typealias A = СделкиAPI
+        let номер = A.строка(j["id"])
+        guard !номер.isEmpty else { return nil }
+        let режим = A.строка(j["mode"]).isEmpty ? (A.строка(j["kind"]) == "service" ? "service" : "goods") : A.строка(j["mode"])
+        let w = (j["warranty_card"] as? [String: Any]) ?? [:]
+        let когдаПодписан = A.строка(w["signed_at"])
+        let подписан = !когдаПодписан.isEmpty && когдаПодписан != "0"
+        let снимок = (j["listing_snapshot"] as? [String: Any]) ?? [:]
+        let дней = подписан ? max(0, A.целое(w["days"])) : (режим == "goods" ? max(0, A.целое(снимок["warranty_days"])) : 0)
+        let статусСделки = A.строка(j["status"])
+        let оплачена = ["held", "shipped", "delivered", "confirmed"].contains(статусСделки)
+        guard дней > 0 || подписан, подписан || оплачена else { return nil }
+
+        let продаю = A.строка(j["my_role"]) == "seller"
+        let собеседник = (j["peer"] as? [String: Any]).map { A.строка($0["name"]) } ?? ""
+        let имяДругого = A.строка(j[продаю ? "buyer_name" : "seller_name"])
+        let получен = Self.датаТалона(A.строка(j["confirmed_at"]))
+        let конец = получен.map { $0.addingTimeInterval(TimeInterval(дней) * 86_400) }
+
+        id = "w:" + номер
+        вид = .талон
+        заказ = nil
+        полученный = nil
+        контрагент = имяДругого.isEmpty ? (собеседник.isEmpty ? "—" : собеседник) : имяДругого
+        self.номер = номер
+        когда = Self.датаТалона(когдаПодписан) ?? получен ?? Self.датаТалона(A.строка(j["created_at"]))
+        датаТекст = Self.показ(когда)
+        сумма = nil
+        исходящий = продаю
+        срокТекст = ""
+        сделка = номер
+        ждётПодписи = !подписан
+
+        let товар = НазваниеСделки.чистое(A.строка(снимок["title"]).isEmpty ? A.строка(j["product_title"]) : A.строка(снимок["title"]),
+                                          бренд: A.строка(j["product_brand"]))
+        var части: [String] = []
+        if !товар.isEmpty { части.append(товар) }
+        if дней > 0 { части.append(СрокГарантии.текст(дней)) }
+        if let конец {
+            части.append(String(format: тД("hub_wc_until"), Self.показ(конец)))
+        } else if дней > 0 {
+            части.append(тД("hub_wc_from_receipt"))
+        }
+        подробно = части.joined(separator: " · ")
+
+        if !подписан {
+            статус = тД("hub_wc_draft")
+            тон = .ждёт
+            актуален = true
+        } else if let конец, конец < сейчас {
+            статус = тД("hub_wc_expired")
+            тон = .инфо
+            актуален = false
+        } else {
+            статус = тД(A.строка(w["kind"]) == "ecp" ? "hub_wc_ecp" : "hub_wc_pep")
+            тон = .хорошо
+            актуален = true
+        }
+    }
+
+    /// Даты сделки — ISO с поясом (now_iso сайта) или «yyyy-MM-dd HH:mm:ss».
+    fileprivate static func датаТалона(_ строка: String) -> Date? {
+        guard !строка.isEmpty, строка != "0" else { return nil }
+        if let д = ISO8601DateFormatter().date(from: строка) { return д }
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "en_US_POSIX")
+        for шаблон in ["yyyy-MM-dd'T'HH:mm:ssXXXXX", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"] {
+            ф.dateFormat = шаблон
+            if let д = ф.date(from: строка) { return д }
+        }
+        return nil
+    }
+}
+
 // MARK: - Модель экрана
 
 @MainActor
 final class СчетаДокументыМодель: ObservableObject {
     enum Сегмент: String, CaseIterable, Identifiable {
-        case все, счета, акты, договоры
+        case все, счета, акты, договоры, гарантия
         var id: String { rawValue }
 
         var название: String {
@@ -360,6 +482,7 @@ final class СчетаДокументыМодель: ObservableObject {
             case .счета: return тД("hub_seg_inv")
             case .акты: return тД("hub_seg_act")
             case .договоры: return тД("hub_seg_contract")
+            case .гарантия: return тД("hub_seg_warranty")
             }
         }
 
@@ -369,6 +492,7 @@ final class СчетаДокументыМодель: ObservableObject {
             case .счета: return .счёт
             case .акты: return .акт
             case .договоры: return .договор
+            case .гарантия: return .талон
             }
         }
     }
@@ -384,6 +508,8 @@ final class СчетаДокументыМодель: ObservableObject {
     @Published private(set) var плашка: String? = nil
 
     private var полученные: [ПолученныйДокумент] = []
+    /// Сделки my_deals&role=both — из них гарантийные талоны.
+    private var сделки: [[String: Any]] = []
 
     // MARK: Загрузка
 
@@ -408,13 +534,22 @@ final class СчетаДокументыМодель: ObservableObject {
         } catch {
             ошибка = БизнесText.т("no_conn")
         }
+        await загрузитьСделки()
         корзина = await КорзинаДокументовAPI.список()
         собрать()
-        if let ошибка, бизнес.заказыПродаю == nil && бизнес.заказыПокупаю == nil {
+        if let ошибка, бизнес.заказыПродаю == nil && бизнес.заказыПокупаю == nil && сделки.isEmpty {
             состояние = .ошибка(ошибка)
         } else {
             состояние = .готово
         }
+    }
+
+    /// Свои сделки целиком (my_deals&role=both, только чтение) — талоны. Не пришло — талоны прежние.
+    private func загрузитьСделки() async {
+        guard let j = try? await СделкиAPI.получить("escrow.php?action=my_deals&role=both"), СделкиAPI.да(j["ok"]) else {
+            return
+        }
+        сделки = (j["deals"] as? [[String: Any]]) ?? []
     }
 
     private func собрать() {
@@ -426,6 +561,9 @@ final class СчетаДокументыМодель: ObservableObject {
         }
         for п in полученные {
             итог.append(ДокументСписка(полученный: п, сейчас: сейчас))
+        }
+        for с in сделки {
+            if let талон = ДокументСписка(талонСделки: с, сейчас: сейчас) { итог.append(талон) }
         }
         документы = итог
         if let в = сегмент.вид, !итог.contains(where: { $0.вид == в }) { сегмент = .все }
@@ -521,6 +659,36 @@ final class СчетаДокументыМодель: ObservableObject {
         }
     }
 
+    // MARK: Гарантийный талон
+
+    /**
+     dealWarrantyAsk сайта: POST /escrow.php?action=warranty_ask {id} (путь от корня). recent — «Уже попросили — повторить
+     можно через 12 часов»; already — продавец уже подписал: талоны заново.
+     */
+    func попроситьТалон(_ д: ДокументСписка) async {
+        guard let номер = д.сделка, занят == nil else { return }
+        занят = д.id
+        defer { занят = nil }
+        do {
+            let j = try await СделкиAPI.отправить("/escrow.php?action=warranty_ask", тело: ["id": номер], отКорня: true)
+            if СделкиAPI.да(j["ok"]) {
+                if СделкиAPI.да(j["already"]) {
+                    показать(СделкиText.т("wc_doc_signed"))
+                    await загрузитьСделки()
+                    собрать()
+                    return
+                }
+                показать(СделкиText.т(СделкиAPI.да(j["recent"]) ? "wc_ask_recent" : "wc_asked"))
+            } else if МоиОбъявленияAPI.нетСессии(j) {
+                показать(CabinetText.т("signed_out"))
+            } else {
+                показать(ТекстыОшибокСделки.ulx(j))
+            }
+        } catch {
+            показать(СделкиText.т("err_no_conn"))
+        }
+    }
+
     func показать(_ текст: String) {
         withAnimation { плашка = текст }
         UIAccessibility.post(notification: .announcement, argument: текст)
@@ -538,7 +706,11 @@ final class СчетаДокументыМодель: ObservableObject {
 enum ОткрытьДокументСписка {
     /// Нажатие на строку: счёт заказа (или другой документ заказа) / полученный документ — своим PDF.
     static func показать(_ д: ДокументСписка, вид: String = "invoice", часть: String? = nil) {
-        if let заказ = д.заказ {
+        if let номер = д.сделка {
+            /* Гарантийный талон — серверный документ сделки, то же окно, что из «Деньги и документы». */
+            ОкнаДокументов.показать(ДокументКабинета(заголовок: КабинетПлюсText.т("doc_warranty"),
+                                                     источник: .путь("/escrow.php?action=warranty_card&id=" + СделкиAPI.вАдрес(номер))))
+        } else if let заказ = д.заказ {
             var данные = ДанныеДокумента(заказ: заказ.сырое, часть: часть)
             данные.вид = вид
             ОкнаДокументов.показать(ДокументКабинета(заголовок: ДокументыБизнеса.заголовок(данные),
@@ -774,7 +946,7 @@ struct ЭкранСчетовИДокументов: View {
         СтрокаДокументаСписка(документ: д, занят: модель.занят == д.id, шаг: { статус in
             guard let заказ = д.заказ else { return }
             Task { await модель.сменить(заказ, статус) }
-        })
+        }, попросить: { Task { await модель.попроситьТалон(д) } })
         .contentShape(Rectangle())
         .onTapGesture { ОткрытьДокументСписка.показать(д) }
         .accessibilityAction { ОткрытьДокументСписка.показать(д) }
@@ -833,6 +1005,8 @@ struct ЭкранСчетовИДокументов: View {
                     Label(БизнесРазделыText.т("b2b_cancel"), systemImage: "xmark.circle")
                 }
             }
+        } else if let номер = д.сделка {
+            менюТалона(д, номер: номер)
         } else {
             Button { ОткрытьДокументСписка.показать(д) } label: {
                 Label(д.заголовок, systemImage: д.вид.значок)
@@ -848,10 +1022,41 @@ struct ЭкранСчетовИДокументов: View {
 
 // MARK: - Строка
 
+@MainActor
+extension ЭкранСчетовИДокументов {
+    /// Талон: открыть, сделка, «Попросить продавца подписать» (покупателю) или «Подписать в сделке» (продавцу).
+    @ViewBuilder
+    func менюТалона(_ д: ДокументСписка, номер: String) -> some View {
+        Button { ОткрытьДокументСписка.показать(д) } label: {
+            Label(КабинетПлюсText.т("doc_warranty"), systemImage: "checkmark.shield")
+        }
+        Button { открытьСделку(номер) } label: {
+            Label(тД("hub_wc_open_deal"), systemImage: "arrow.left.arrow.right")
+        }
+        if д.ждётПодписи && !д.исходящий {
+            Button { Task { await модель.попроситьТалон(д) } } label: {
+                Label(СделкиText.т("wc_ask"), systemImage: "bell")
+            }
+        }
+        if д.ждётПодписи && д.исходящий {
+            Button { открытьСделку(номер) } label: {
+                Label(тД("hub_wc_sign_in_deal"), systemImage: "signature")
+            }
+        }
+    }
+
+    /// Карточка сделки — ?deal=<id> (этап 43: своя карточка, подпись кодом eGov — там).
+    func открытьСделку(_ номер: String) {
+        if let адрес = Config.страницаСайта("cabinet.php?deal=" + СделкиAPI.вАдрес(номер)) { открыть(адрес) }
+    }
+}
+
 struct СтрокаДокументаСписка: View {
     let документ: ДокументСписка
     let занят: Bool
     let шаг: (String) -> Void
+    /// Талон покупателя без подписи: «Попросить продавца подписать» (warranty_ask).
+    var попросить: (() -> Void)? = nil
 
     /// Следующий шаг продавца (_b2bRow): new → confirmed → paid → shipped (товары) / done (услуги), shipped → done.
     static func следующийШаг(_ заказ: ЗаказB2B) -> (String, String)? {
@@ -917,6 +1122,12 @@ struct СтрокаДокументаСписка: View {
                         МеткаБизнеса(текст: БизнесРазделыText.т("b2b_guest_tag"))
                     }
                 }
+                if !документ.подробно.isEmpty {
+                    Text(документ.подробно)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.текстВторой)
+                        .lineLimit(2)
+                }
                 if !позиции.isEmpty {
                     Text(позиции)
                         .font(.system(size: 12.5))
@@ -946,6 +1157,9 @@ struct СтрокаДокументаСписка: View {
                 }
                 if let заказ = документ.заказ, документ.актуален, let ш = Self.следующийШаг(заказ) {
                     КнопкаБизнеса(подпись: ш.1, занято: занят) { шаг(ш.0) }
+                        .padding(.top, 4)
+                } else if документ.ждётПодписи && !документ.исходящий, let попросить {
+                    КнопкаБизнеса(подпись: СделкиText.т("wc_ask"), занято: занят, второстепенная: true) { попросить() }
                         .padding(.top, 4)
                 }
             }

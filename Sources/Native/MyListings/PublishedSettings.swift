@@ -27,6 +27,8 @@ struct НастройкиОпубликованного: Equatable {
     var знаки: [ЗнакДоверия]
     var pro: Bool
     var оплатаРазрешена: Bool
+    /// Гарантийный талон у такого объявления бывает (товар через гарант): подсказка под ползунком срока.
+    var талонБывает: Bool
 
     var рассрочка: Bool
     var режимРассрочки: String
@@ -47,9 +49,10 @@ struct НастройкиОпубликованного: Equatable {
     var отмечено: [String]
 
     /// Запись my_items (showEdit сайта) → настройки окна.
-    init(номер: String, запись з: [String: Any], блоки: [String], знаки: [ЗнакДоверия], pro: Bool) {
+    init(номер: String, запись з: [String: Any], блоки: [String], знаки: [ЗнакДоверия], pro: Bool, талон: Bool = true) {
         typealias A = МоиОбъявленияAPI
         self.номер = номер
+        талонБывает = талон
         название = A.строка(з["title"]).isEmpty ? A.строка(з["model"]) : A.строка(з["title"])
         цена = A.целое(з["price"])
         self.блоки = блоки
@@ -136,9 +139,6 @@ struct ЛистНастроекОбъявления: View {
     @State private var сохраняем = false
     @State private var ошибка: String? = nil
 
-    /// WR_STOPS сайта; без PRO — до 7 дней (WR_FREE_MAX).
-    private static let сроки: [Int] = [0, 3, 7, 14, 30, 60, 90, 180, 270, 365]
-
     init(исходные: НастройкиОпубликованного, готово: @escaping (String) -> Void, закрыть: @escaping () -> Void) {
         self.исходные = исходные
         self.готово = готово
@@ -151,10 +151,18 @@ struct ЛистНастроекОбъявления: View {
     static func показать(модель: ПодачаМодель) {
         let настройки = НастройкиОпубликованного(номер: модель.номерПравки, запись: модель.исходник,
                                                   блоки: модель.строкиДополнительно, знаки: модель.знакиДоверия,
-                                                  pro: модель.страница.pro)
+                                                  pro: модель.страница.pro, талон: Self.талонБывает(модель))
         ПоверхВсего.показать(смахивается: false) { закрыть in
             ЛистНастроекОбъявления(исходные: настройки, готово: { текст in модель.показать(текст) }, закрыть: закрыть)
         }
+    }
+
+    /// openTrust сайта: талон — у товара через гарант (не услуги, работа, авто и жильё; не прокат без цены).
+    @MainActor
+    private static func талонБывает(_ модель: ПодачаМодель) -> Bool {
+        let ф = модель.форма
+        return !["services", "jobs", "transport", "realty"].contains(модель.корень) && ф.гарант
+            && !(ф.аренда && модель.ценаЧислом <= 0)
     }
 
     private func т(_ ключ: String) -> String { НастройкиОбъявленияText.т(ключ) }
@@ -448,65 +456,21 @@ struct ЛистНастроекОбъявления: View {
     private var доверие: some View {
         let срочные = н.знаки.filter { $0.срок }
         let флажки = н.знаки.filter { !$0.срок }
-        let предел = н.pro ? 365 : 7
         return БлокНастроек(заголовок: тП("wr_title"), значок: "checkmark.shield") {
             Text(тП("wr_note"))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
             if let срок = срочные.first {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ПодписьНастройки(срок.подпись == "Гарантия" ? т("wr_seller_t") : срок.подпись)
-                            Text(т("wr_from_receipt"))
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.текстВторой)
-                        }
-                        Spacer(minLength: 4)
-                        Text(Self.срокГарантии(н.гарантия))
-                            .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(н.гарантия > 0 ? Theme.зелёный2 : Theme.текстВторой)
-                    }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 8)], alignment: .leading, spacing: 8) {
-                        ForEach(Self.сроки.filter { $0 <= предел }, id: \.self) { дни in
-                            let вкл = н.гарантия == дни
-                            Button {
-                                н.гарантия = дни
-                            } label: {
-                                Text(Self.срокГарантии(дни))
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(вкл ? Color.white : Theme.текст)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                                    .frame(maxWidth: .infinity, minHeight: 34)
-                                    .background(вкл ? Theme.зелёный2 : Theme.поверхность2, in: Capsule())
-                                    .overlay {
-                                        Capsule().strokeBorder(вкл ? Color.clear : Theme.линия, lineWidth: 1)
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(вкл ? .isSelected : [])
-                        }
-                    }
-                    if !н.pro {
-                        Label(тП("wr_pro_note"), systemImage: "lock")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.текстВторой)
-                    }
-                }
+                /* Ползунок «как громкость» (trsWarInput сайта): без PRO дальше 7 дней не встаёт. */
+                ПолзунокГарантии(дней: $н.гарантия, pro: н.pro,
+                                 заголовок: срок.подпись == "Гарантия" ? т("wr_seller_t") : срок.подпись,
+                                 талон: н.талонБывает)
             }
             if !флажки.isEmpty {
                 Divider()
                 ПодписьНастройки(тП("wr_checks_h"))
-                ForEach(флажки) { знак in
-                    Toggle(isOn: флаг(знак.id)) {
-                        Text(знак.подпись)
-                            .font(.system(size: 14))
-                            .foregroundStyle(Theme.текст)
-                    }
-                    .tint(Theme.зелёный)
-                }
+                ПлиткиЗнаковДоверия(знаки: флажки, отмечено: $н.отмечено)
             }
         }
     }
@@ -518,13 +482,6 @@ struct ЛистНастроекОбъявления: View {
         let число = месяцы > 0 ? месяцы : дни
         let ключ = (месяцы > 0 ? "wr_m" : "wr_d") + ПодачаText.множественное(число)
         return String(число) + " " + ПодачаText.т(ключ)
-    }
-
-    private func флаг(_ ключ: String) -> Binding<Bool> {
-        Binding(get: { н.отмечено.contains(ключ) }, set: { новое in
-            н.отмечено.removeAll { $0 == ключ }
-            if новое { н.отмечено.append(ключ) }
-        })
     }
 
     // MARK: - Сохранение

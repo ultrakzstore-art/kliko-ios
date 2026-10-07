@@ -136,7 +136,14 @@ extension Listing {
     /// mkWarrTerm: 365 дней — «12 месяцев», кратное 30 — месяцы, иначе дни.
     static func срокГарантии(_ дни: Int) -> String {
         let месяцы = дни == 365 ? 12 : (дни >= 30 && дни % 30 == 0 ? дни / 30 : 0)
-        return месяцы > 0 ? ListingPageText.число(месяцы, "month") : ListingPageText.число(дни, "day")
+        let основа = месяцы > 0 ? "month" : "day"
+        let n = месяцы > 0 ? месяцы : дни
+        /* Арабский: 1 · 2–10 (أشهر, أيام) · 11 и больше (شهرًا, يومًا) — как warrTerm кабинета сайта. */
+        if ListingPageText.язык == "ar" {
+            let форма = n == 1 ? "_1" : (n >= 2 && n <= 10 ? "_2" : "_5")
+            return String(n) + " " + ListingPageText.т(основа + форма)
+        }
+        return ListingPageText.число(n, основа)
     }
 
     // MARK: - Совет «… — на что смотреть» (mkBuyTipsKey)

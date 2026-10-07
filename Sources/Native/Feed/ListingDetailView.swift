@@ -293,7 +293,7 @@ struct ListingDetailView: View {
                 HStack(spacing: 8) {
                     чип(FeedText.т(товар.isNew ? "new" : "used"), значок: nil)
                     if let дни = товар.гарантияДней {
-                        чип(String(format: FeedText.т("warranty"), дни), значок: "checkmark.shield")
+                        чип(String(format: DesignText.т("t_warranty"), Listing.срокГарантии(дни)), значок: "checkmark.shield")
                     }
                     if !товар.city.isEmpty { чип(товар.city, значок: "mappin.and.ellipse") }
                 }
