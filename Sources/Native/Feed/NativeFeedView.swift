@@ -1865,8 +1865,10 @@ struct ListingCard: View {
     /// Лента в режиме «Аренда» — цена аренды (ЦенаКарточкиСайта, режимАренды).
     @Environment(\.режимАренды) private var режимАренды
     /// Точка человека — расстояние вместо города до 5 км (mkVitCardHTML) и время в пути (mkEtaFill), FeedGeo.swift.
-    @ObservedObject private var гео = ГеоЛенты.shared
-    @ObservedObject private var пути = ОценкиПути.shared
+    /// Скорость: не ГеоЛенты и ОценкиПути целиком, а только точка и СВОЁ значение — ответ с оценками для других
+    /// карточек эту не перерисовывает.
+    @ObservedObject private var гео = ТочкаДляКарточек.shared
+    @ObservedObject private var путь: ЗначениеПутиКарточки
     /// Лёгкий режим (DeviceMode.swift): под фото техники — сплошная подложка вместо размытой копии.
     @ObservedObject private var устройство = РежимУстройства.shared
     /// Витрина под вертикали (VerticalCards.swift): лента одного корня списком — широкая карточка.
@@ -1880,6 +1882,7 @@ struct ListingCard: View {
         self.товар = товар
         self.вип = вип
         self.вид = КэшВидаКарточек.shared.вид(товар)
+        self._путь = ObservedObject(wrappedValue: ОценкиПути.shared.значение(товар.id))
     }
 
     /// Золотая рамка и подложка: ТОП (.mh-c.is-top) или VIP-блок (.mh-vipg .mh-c).
@@ -2334,7 +2337,7 @@ struct ListingCard: View {
     /// (.mk-vc-geo.near); за ним — время в пути «· 12 мин» (.mk-eta), если сервер его дал.
     private var подвалСайта: some View {
         let место = вид.место(км: гео.км(до: товар))
-        let путь = гео.точка == nil ? nil : пути.оценка(товар.id)
+        let путь = гео.точка == nil ? nil : self.путь.оценка
         return HStack(spacing: 8) {
             if let знак = вид.знак {
                 /* Узкая карточка и длинное место справа: вместо «Гар…» — один значок, текст целиком или никак. */
