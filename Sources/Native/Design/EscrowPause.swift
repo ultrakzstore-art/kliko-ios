@@ -25,6 +25,13 @@ final class ПаузаГаранта: ObservableObject {
     /// кнопка «Купить безопасно», советы). Виды, которым нужно перерисоваться при смене, наблюдают shared.
     nonisolated static var наПаузеСейчас: Bool { UserDefaults.standard.bool(forKey: ключ) }
 
+    /// Гарант работает ПО СВЕРКЕ: страницу кабинета читали хоть раз, и паузы на ней не было. До первой сверки (свежая
+    /// установка — и у проверяющего Apple) состояние неизвестно: обещание «Деньги у Kliko, пока вы не получите товар» на
+    /// экране запуска и в «Что нового» не даём — на паузе оно было бы неправдой (App Review 2.3.1).
+    nonisolated static var работаетПоСверке: Bool {
+        UserDefaults.standard.object(forKey: ключ) != nil && !UserDefaults.standard.bool(forKey: ключ)
+    }
+
     private init() {
         наПаузе = UserDefaults.standard.bool(forKey: Self.ключ)
     }
