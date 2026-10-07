@@ -220,34 +220,104 @@ enum ListingsCache {
             .appendingPathComponent("kliko-listings.json")
     }
 
+    /// Скорость запуска: «первый экран» — первые карточки ленты, уже облегчённые, отдельным маленьким файлом. Его
+    /// FeedModel читает синхронно (миллисекунды) и показывает с первого кадра; полную копию (до 2 МБ) — в фоне.
+    static let карточекПервогоЭкрана = 12
+
+    private static var файлПервого: URL? {
+        try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                     appropriateFor: nil, create: true)
+            .appendingPathComponent("kliko-listings-first.json")
+    }
+
+    /// Вызывать не на главной очереди: запись до 2 МБ и разбор для «первого экрана».
     static func сохранить(_ данные: Data) {
         guard let файл, данные.count <= 2 * 1024 * 1024 else { return }
         do {
             try данные.write(to: файл, options: .atomic)
-            var значения = URLResourceValues()
-            значения.isExcludedFromBackup = true
-            var изменяемый = файл
-            try? изменяемый.setResourceValues(значения)
+            исключитьИзКопии(файл)
         } catch {
             // Диск полон — лента на диске удобство, а не обязанность.
         }
+        сохранитьПервыйЭкран(из: данные)
     }
 
-    static func прочитать() -> [Listing]? {
+    private static func исключитьИзКопии(_ файл: URL) {
+        var значения = URLResourceValues()
+        значения.isExcludedFromBackup = true
+        var изменяемый = файл
+        try? изменяемый.setResourceValues(значения)
+    }
+
+    /// Первые карточки сырого ответа — облегчёнными, как Listing.облегчённая: без описания (desc_cut — карточка
+    /// догрузит полную), без характеристик, не больше восьми фото. Остальные поля ответа (total, has_more) — как есть.
+    private static func сохранитьПервыйЭкран(из данные: Data) {
+        guard let файлПервого,
+              var корень = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any],
+              let все = корень["items"] as? [Any] else { return }
+        var первые: [Any] = []
+        for элемент in все.prefix(карточекПервогоЭкрана) {
+            guard var карточка = элемент as? [String: Any] else {
+                первые.append(элемент)
+                continue
+            }
+            if карточка["description"] != nil {
+                карточка["description"] = nil
+                карточка["desc_cut"] = true
+            }
+            карточка["specs"] = nil
+            карточка["attrs"] = nil
+            if let фото = карточка["images"] as? [Any], фото.count > 8 { карточка["images"] = Array(фото.prefix(8)) }
+            первые.append(карточка)
+        }
+        корень["items"] = первые
+        guard let маленький = try? JSONSerialization.data(withJSONObject: корень) else { return }
+        do {
+            try маленький.write(to: файлПервого, options: .atomic)
+            исключитьИзКопии(файлПервого)
+        } catch {
+            return
+        }
+    }
+
+    /// Файл не старше срока — его данные; иначе nil.
+    private static func свежие(_ файл: URL?) -> Data? {
         guard let файл,
               let свойства = try? файл.resourceValues(forKeys: [.contentModificationDateKey]),
               let когда = свойства.contentModificationDate,
-              Date().timeIntervalSince(когда) <= срок,
-              let данные = try? Data(contentsOf: файл),
+              Date().timeIntervalSince(когда) <= срок else { return nil }
+        return try? Data(contentsOf: файл)
+    }
+
+    /// Полная копия: до 2 МБ разбора — не на главной очереди (FeedModel читает её в фоне).
+    static func прочитать() -> [Listing]? {
+        guard let данные = свежие(файл),
               let страница = try? ListingsAPI.разобрать(данные),
               !страница.items.isEmpty else { return nil }
         return страница.items
+    }
+
+    /// «Первый экран» — маленький файл, можно на главной очереди. Нет его (первый запуск после обновления) — nil.
+    static func прочитатьПервыйЭкран() -> [Listing]? {
+        guard let данные = свежие(файлПервого),
+              let страница = try? ListingsAPI.разобрать(данные),
+              !страница.items.isEmpty else { return nil }
+        return страница.items
+    }
+
+    /// Полная копия есть, а «первого экрана» нет (лента сохранена прежней версией) — сложить его из полной. Не на
+    /// главной очереди.
+    static func дополнитьПервыйЭкран() {
+        guard let файлПервого, !FileManager.default.fileExists(atPath: файлПервого.path),
+              let данные = свежие(файл) else { return }
+        сохранитьПервыйЭкран(из: данные)
     }
 
     static func стереть() {
         /* Скорость: вместе с лентой — копии выдач и полные карточки в памяти: они тоже прежнего человека. */
         КэшВыдачи.стереть()
         ListingsAPI.забытьГотовые()
+        if let файлПервого { try? FileManager.default.removeItem(at: файлПервого) }
         guard let файл else { return }
         try? FileManager.default.removeItem(at: файл)
     }
