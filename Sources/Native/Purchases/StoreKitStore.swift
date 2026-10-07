@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import UIKit
 import CryptoKit
 import Combine
 
@@ -212,6 +213,47 @@ enum ПродуктыApple {
     }
 }
 
+// MARK: - Единое правило точек входа (App Review 2.1)
+
+/**
+ Можно ли показать вход в покупку услуги — одно правило для всех кнопок и замков: «Продвинуть» / «Продлить ТОП»,
+ «Расширить лимит», «Пакет Kliko AI», «В ТОП» резюме, PRO, блоки «Платных услуг», карточка «Покупки через App Store».
+   · есть — товар услуги загружен из App Store (Product.products его вернул): кнопка видна и открывает окно покупки;
+   · грузится — товары ещё грузятся (не дольше ПокупкиApple.срокЗагрузки): короткий индикатор, кнопка не нажимается;
+   · нет — App Store не ответил, ответил ошибкой или товара нет (не заведён в App Store Connect): кнопка скрыта или
+     неактивна с подписью «Покупки временно недоступны» — без ссылок на сайт. Ни пустого окна, ни вечного индикатора,
+     ни кнопки, которая ничего не делает.
+ Товары грузятся с запуска (ПокупкиApple.запустить), повтор — при возврате в приложение, при входе и на экране с
+ точкой входа (подгрузить), не чаще раза в минуту.
+ */
+enum ДоступПокупкиApple: Equatable {
+    case грузится
+    case есть
+    case нет
+}
+
+/// Один ответ на двоих: Product.products и срок. Кто первым — тот и отвечает; второй молчит.
+private final class ОтветТоваровApple: @unchecked Sendable {
+    private let замок = NSLock()
+    private var продолжение: CheckedContinuation<[Product]?, Never>?
+
+    init(_ продолжение: CheckedContinuation<[Product]?, Never>) {
+        self.продолжение = продолжение
+    }
+
+    /// true — ответил этот вызов (первым).
+    @discardableResult
+    func ответить(_ список: [Product]?) -> Bool {
+        замок.lock()
+        let п = продолжение
+        продолжение = nil
+        замок.unlock()
+        guard let п else { return false }
+        п.resume(returning: список)
+        return true
+    }
+}
+
 // MARK: - Покупки
 
 /// StoreKit 2: товары, покупка, слушатель транзакций, передача чека сайту, восстановление.
@@ -238,6 +280,8 @@ final class ПокупкиApple: ObservableObject {
     @Published private(set) var загружено = false
     /// App Store не ответил на запрос товаров.
     @Published private(set) var магазинНедоступен = false
+    /// Запрос товаров идёт прямо сейчас (не дольше срокЗагрузки).
+    @Published private(set) var грузится = false
     /// product id, который сейчас покупается.
     @Published private(set) var покупается: String? = nil
     @Published private(set) var восстанавливаем = false
@@ -246,6 +290,13 @@ final class ПокупкиApple: ObservableObject {
 
     private var слушатель: Task<Void, Never>? = nil
     private var подпискаНаВход: AnyCancellable? = nil
+    private var подпискаНаВозврат: AnyCancellable? = nil
+    /// Когда последний раз спрашивали App Store о товарах — повтор не чаще раза в минуту.
+    private var последняяЗагрузка: Date? = nil
+
+    /// Сколько ждать ответа App Store о товарах, секунд. Дольше — «Покупки временно недоступны», поздний ответ всё равно
+    /// ляжет в товары.
+    static let срокЗагрузки: Double = 10
     /// Транзакции, которые прямо сейчас уходят на сайт: одну и ту же не шлём дважды параллельно.
     private var отправляются: Set<UInt64> = []
 
@@ -282,13 +333,31 @@ final class ПокупкиApple: ObservableObject {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             await ПокупкиApple.shared.повторитьОтложенные()
         }
+        /* Товары — заранее, с запуска: к первому экрану с покупкой кнопки уже знают, показываться ли. Не загрузилось
+           (нет сети на запуске) — ещё раз при возврате в приложение. */
+        Task { @MainActor in
+            await ПокупкиApple.shared.загрузитьТовары()
+        }
+        подпискаНаВозврат = NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { _ in
+                Task { @MainActor in
+                    await ПокупкиApple.shared.подгрузить()
+                }
+            }
     }
 
     // MARK: Товары
 
-    /// Product.products(for:) по всему каталогу и дополнительным id (тарифы слотов сайта).
+    /// Product.products(for:) по всему каталогу и дополнительным id (тарифы слотов сайта) — не дольше срокЗагрузки.
     func загрузитьТовары(дополнительно: [String] = []) async {
         guard Config.цифровыеПокупки else { return }
+        /* Уже грузим (запуск, другой экран) — дождаться того запроса, а не слать второй параллельно. */
+        var ждали = 0
+        while грузится && ждали < 60 {
+            if Task.isCancelled { return }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            ждали += 1
+        }
         var ids = Set(ПродуктыApple.все.map { $0.id })
         for id in дополнительно { ids.insert(id) }
         let нужно = ids.filter { товары[$0] == nil }
@@ -296,16 +365,82 @@ final class ПокупкиApple: ObservableObject {
             загружено = true
             return
         }
-        do {
-            let список = try await Product.products(for: Array(нужно))
-            var словарь = товары
-            for продукт in список { словарь[продукт.id] = продукт }
-            товары = словарь
+        грузится = true
+        последняяЗагрузка = Date()
+        let список = await запроситьТовары(Array(нужно))
+        if let список {
+            добавитьТовары(список)
             магазинНедоступен = false
-        } catch {
+        } else {
             магазинНедоступен = true
         }
+        грузится = false
         загружено = true
+    }
+
+    /// Ещё раз спросить App Store, если товаров нет или не все: не загрузилось, магазин не ответил, товар не заведён.
+    /// Не чаще раза в минуту; всё на месте — ничего. Зовут экраны с точкой входа и возврат в приложение.
+    func подгрузить() async {
+        guard Config.цифровыеПокупки, !грузится else { return }
+        let всеЕсть = ПродуктыApple.все.allSatisfy { товары[$0.id] != nil }
+        if загружено && всеЕсть { return }
+        if загружено, let последняяЗагрузка, Date().timeIntervalSince(последняяЗагрузка) < 60 { return }
+        await загрузитьТовары()
+    }
+
+    /// Вход в покупку услуги — по единому правилу (ДоступПокупкиApple).
+    func доступ(_ вид: ВидУслугиApple) -> ДоступПокупкиApple {
+        guard Config.цифровыеПокупки else { return .нет }
+        if естьТовар(вид) { return .есть }
+        return (грузится || !загружено) ? .грузится : .нет
+    }
+
+    /// Товар услуги загружен — кнопку покупки можно показать.
+    func можноКупить(_ вид: ВидУслугиApple) -> Bool {
+        доступ(вид) == .есть
+    }
+
+    /// Загружен хоть один товар любой услуги (карточка «Покупки через App Store»).
+    var естьЛюбойТовар: Bool {
+        Config.цифровыеПокупки && !товары.isEmpty
+    }
+
+    private func естьТовар(_ вид: ВидУслугиApple) -> Bool {
+        товары.keys.contains { ПродуктыApple.товар($0)?.вид == вид }
+    }
+
+    private func добавитьТовары(_ список: [Product]) {
+        guard !список.isEmpty else { return }
+        var словарь = товары
+        for продукт in список { словарь[продукт.id] = продукт }
+        товары = словарь
+    }
+
+    /**
+     Product.products не дольше срокЗагрузки: App Store молчит (нет сети, магазин недоступен) — nil, как ошибка; пустой
+     список — товаров с такими id нет. Поздний ответ (после срока) всё равно ложится в товары — кнопки появятся сами.
+     */
+    private func запроситьТовары(_ ids: [String]) async -> [Product]? {
+        let срок = UInt64(Self.срокЗагрузки * 1_000_000_000)
+        return await withCheckedContinuation { (продолжение: CheckedContinuation<[Product]?, Never>) in
+            let ответ = ОтветТоваровApple(продолжение)
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let список = try? await Product.products(for: ids)
+                if !ответ.ответить(список), let список, !список.isEmpty {
+                    await self?.принятьПоздние(список)
+                }
+            }
+            Task.detached {
+                try? await Task.sleep(nanoseconds: срок)
+                ответ.ответить(nil)
+            }
+        }
+    }
+
+    /// Ответ App Store пришёл после срока: товары — в список, магазин снова доступен.
+    private func принятьПоздние(_ список: [Product]) {
+        добавитьТовары(список)
+        магазинНедоступен = false
     }
 
     // MARK: Покупка

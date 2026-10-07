@@ -566,11 +566,11 @@ final class МодельСтудииРоликов: ObservableObject {
         return страница.естьФункция("autopost")
     }
 
-    /// showProOffer: подсказка; при Config.цифровыеПокупки — затем окно покупки PRO через App Store. Выключено —
-    /// только подсказка, без перехода на оплату.
+    /// showProOffer: подсказка; при Config.цифровыеПокупки и загруженном товаре PRO (ДоступПокупкиApple) — затем окно
+    /// покупки PRO через App Store. Иначе — только подсказка, без перехода на оплату и без пустого окна.
     private func нуженПРО() {
         показатьТост(т("pro_need"), секунд: 2)
-        guard Config.цифровыеПокупки else { return }
+        guard ПокупкиApple.shared.можноКупить(.про) else { return }
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 900_000_000)
             self?.закрыть?()

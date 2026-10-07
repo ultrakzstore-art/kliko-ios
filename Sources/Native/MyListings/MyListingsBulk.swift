@@ -18,7 +18,8 @@ import UIKit
      warranty_days, ship{free} / ship{days}, wholesale:false, category, payment, shop_section;
    · «По расписанию» — pubq_schedule {ids, from, to, every, batch, dates};
    · «Продвинуть» — у сайта окно оплаты; здесь только покупка App Store (ЛистУслугиApple) и только при
-     Config.цифровыеПокупки. Выключено — кнопки нет, ссылок на оплату на сайте нет никогда.
+     Config.цифровыеПокупки и загруженном товаре продвижения (ДоступПокупкиApple). Иначе кнопки нет, ссылок на оплату на
+     сайте нет никогда.
  Кнопки ряда — как у сайта: без права massedit (proHasClient) — «Таблицей» и «Продвинуть» / «Активировать»,
  «По расписанию»; с ним — ещё «Снять», «Цена», «Ещё». Кнопка «Выбрать» — у PRO (IS_PRO), как у сайта.
 
@@ -525,11 +526,12 @@ final class МассовыйРедактор: ObservableObject {
                 начало = конец
             }
             if нуженПро {
-                /* shopToolsUpsell сайта: PRO — только покупкой App Store и только при Config.цифровыеПокупки. */
+                /* shopToolsUpsell сайта: PRO — только покупкой App Store, только при Config.цифровыеПокупки и
+                   загруженном товаре PRO (ДоступПокупкиApple); иначе — одна подсказка, без пустого окна. */
                 self.ход = nil
                 self.идёт = false
                 self.модель.показать(self.т("need_pro"))
-                if Config.цифровыеПокупки { ЛистУслугиApple.показать(.про) }
+                if ПокупкиApple.shared.можноКупить(.про) { ЛистУслугиApple.показать(.про) }
                 return
             }
             if let ошибка {
@@ -663,7 +665,7 @@ final class МассовыйРедактор: ObservableObject {
 
     /// advBulkPromote: только опубликованные. Одно — сразу окно покупки; несколько — список, покупка по одному.
     func продвинуть() {
-        guard Config.цифровыеПокупки else { return }
+        guard ПокупкиApple.shared.можноКупить(.продвижение) else { return }
         let список = выбранные.filter { $0.статус == "approved" }
         guard !список.isEmpty else {
             модель.показать(т("pick_pub"))

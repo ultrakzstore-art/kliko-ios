@@ -36,6 +36,14 @@ struct ЭкранКомпании: View {
 
     private func т(_ ключ: String) -> String { БизнесText.т(ключ) }
 
+    /// Текст окна «PRO»: товар PRO загружен — что даёт PRO; покупки выключены — текст сайта «недоступна в приложении»;
+    /// товара нет — «Покупки временно недоступны».
+    private var текстПРО: String {
+        if ПокупкиApple.shared.можноКупить(.про) { return т("pro_h2") }
+        let почему = Config.цифровыеПокупки ? ПокупкиAppleText.т("iap_off") : т("no_digital")
+        return т("pro_h2") + "\n" + почему
+    }
+
     var body: some View {
         содержимое
             .background(Theme.фонСтраницы.ignoresSafeArea())
@@ -57,13 +65,14 @@ struct ЭкранКомпании: View {
                 Text(т("split_s3_d"))
             }
             .alert(т("pxd_eyebrow"), isPresented: $нуженПРО) {
-                /* PRO — окно покупки App Store, только при Config.цифровыеПокупки; иначе одни сведения, без оплаты. */
-                if Config.цифровыеПокупки {
+                /* PRO — окно покупки App Store, только при Config.цифровыеПокупки и загруженном товаре PRO (единое
+                   правило ДоступПокупкиApple); иначе одни сведения, без оплаты. */
+                if ПокупкиApple.shared.можноКупить(.про) {
                     Button(т("cab_get_pro")) { ЛистУслугиApple.показать(.про) }
                 }
                 Button(т("close"), role: .cancel) {}
             } message: {
-                Text(Config.цифровыеПокупки ? т("pro_h2") : т("pro_h2") + "\n" + т("no_digital"))
+                Text(текстПРО)
             }
             .overlay(alignment: .bottom) {
                 if let текст = модель.плашка { ПлашкаКошелька(текст: текст) }

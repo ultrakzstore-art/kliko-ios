@@ -77,6 +77,41 @@ struct КнопкаПокупкиApple: View {
     }
 }
 
+/// «Покупки временно недоступны» — точка входа без загруженного товара (ДоступПокупкиApple.нет). Без ссылок на сайт.
+struct НетПокупокApple: View {
+    var body: some View {
+        ЗаметкаБизнеса(ПокупкиAppleText.т("iap_off"), тон: .серый, значок: "bag")
+    }
+}
+
+/// Кнопка входа в покупку по единому правилу (ДоступПокупкиApple): товар загружен — кнопка; грузится — та же кнопка
+/// с колесом, не нажимается; нет — «Покупки временно недоступны». Пока товара нет, ещё раз спрашивает App Store.
+struct ВходПокупкиApple: View {
+    let услуга: ВидУслугиApple
+    let подпись: String
+    let действие: () -> Void
+    @ObservedObject private var покупки = ПокупкиApple.shared
+
+    init(услуга: ВидУслугиApple, подпись: String, действие: @escaping () -> Void) {
+        self.услуга = услуга
+        self.подпись = подпись
+        self.действие = действие
+    }
+
+    var body: some View {
+        switch покупки.доступ(услуга) {
+        case .есть:
+            КнопкаПокупкиApple(подпись: подпись, значок: услуга.значок, действие: действие)
+        case .грузится:
+            КнопкаПокупкиApple(подпись: подпись, значок: услуга.значок, занято: true, действие: {})
+                .task { await ПокупкиApple.shared.подгрузить() }
+        case .нет:
+            НетПокупокApple()
+                .task { await ПокупкиApple.shared.подгрузить() }
+        }
+    }
+}
+
 /// Документы под окном покупки: страницы сайта своими окнами приложения; EULA Apple — системой.
 enum ДокументыПокупокApple {
     static let условияApple = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
@@ -138,9 +173,24 @@ struct КарточкаПокупокApple: View {
     @State private var итог: String? = nil
     @State private var подпискиОткрыты = false
 
+    init() {}
+
     private func т(_ ключ: String) -> String { ПокупкиAppleText.т(ключ) }
 
+    /// Единое правило (ДоступПокупкиApple): карточка — только когда из App Store загружен хоть один товар, или есть
+    /// оплаченные, но ещё не применённые покупки (им нужно «Восстановить покупки»). Иначе её нет вовсе.
     var body: some View {
+        if покупки.естьЛюбойТовар || покупки.естьОтложенные {
+            карточка
+        } else {
+            Color.clear
+                .frame(height: 0)
+                .accessibilityHidden(true)
+                .task { await ПокупкиApple.shared.подгрузить() }
+        }
+    }
+
+    private var карточка: some View {
         КарточкаБизнеса(т("store_card"), значок: "apple.logo") {
             Text(т("pay_note"))
                 .font(.system(size: 13))
@@ -323,10 +373,16 @@ struct ЭкранПокупкиApple: View {
 
     // MARK: Товары
 
+    /// Единое правило (ДоступПокупкиApple): есть загруженные товары — строки; ещё грузятся (не дольше срока загрузки) —
+    /// короткий индикатор; не загрузилось или товаров нет — «Покупки временно недоступны», без кнопок.
     @ViewBuilder
     private var товарыБлок: some View {
         let видимые = строки.filter { покупки.товары[$0.товар.id] != nil }
-        if !покупки.загружено {
+        if !видимые.isEmpty {
+            ForEach(видимые) { строка in
+                строкаТовара(строка)
+            }
+        } else if покупки.грузится || !покупки.загружено {
             HStack(spacing: 10) {
                 SiteSpinner()
                 Text(т("price_loading"))
@@ -335,13 +391,8 @@ struct ЭкранПокупкиApple: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 20)
-        } else if видимые.isEmpty {
-            ЗаметкаБизнеса(покупки.магазинНедоступен ? т("store_unavailable") : т("not_in_store"),
-                           тон: .предупреждение, значок: "bag")
         } else {
-            ForEach(видимые) { строка in
-                строкаТовара(строка)
-            }
+            НетПокупокApple()
         }
     }
 
