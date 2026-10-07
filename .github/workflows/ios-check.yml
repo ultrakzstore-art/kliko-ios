@@ -13,7 +13,15 @@ on:
   push:
     branches-ignore: [main]
   pull_request:
+  # Минуты macOS (владелец 07.10.2026: аккаунт уже ограничивали): на каждый пуш — только сборка (build) и сверка с API
+  # на ubuntu. Съёмка кадров (screens, 20+ минут macOS) — только вручную: Actions → «iOS · проверка сборки» →
+  # Run workflow → галочка «shots».
   workflow_dispatch:
+    inputs:
+      shots:
+        description: "Снять кадры с симулятора (job screens, 20+ минут macOS)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-check-${{ github.ref }}
@@ -126,8 +134,9 @@ jobs:
   # СКРИНШОТЫ С СИМУЛЯТОРА (этап 23). Нативные экраны писались без Mac и без телефона под рукой; раннер может сам
   # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
   # экраны в светлой и тёмной теме. Снимки уходят в ветку ci/screenshots — её можно открыть на GitHub или забрать git.
-  # Не роняет прогон.
+  # Не роняет прогон. Только вручную с галочкой «shots» — не на пуш и не на pull request (минуты macOS).
   screens:
+    if: github.event_name == 'workflow_dispatch' && inputs.shots
     runs-on: macos-26
     timeout-minutes: 60
     continue-on-error: true
