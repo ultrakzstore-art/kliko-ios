@@ -182,4 +182,32 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app.widgets
+  # ── Автотесты ключевых сценариев (XCUITest) ──
+  # Лента, карточка, фильтры, поиск, «Поделиться» → QR и нижняя панель — без входа и без денег, против живого сайта.
+  # Своя схема KlikoUITests ниже: схема Kliko тесты не собирает, и проверка сборки на каждый пуш (ios-check.yml, job
+  # build: xcodebuild build -scheme Kliko) их не трогает. Запуск — вручную, «iOS · автотесты» (ios-uitests.yml).
+  KlikoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Kliko
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kz.kliko.app.uitests
+        TEST_TARGET_NAME: Kliko
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  KlikoUITests:
+    build:
+      targets:
+        Kliko: [running, testing]
+        KlikoUITests: [testing]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - KlikoUITests
 # ATS: наш API по HTTPS — исключений не требуется. Для http-стейджа добавь NSAppTransportSecurity в info-properties.

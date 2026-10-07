@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# АВТОТЕСТЫ КЛЮЧЕВЫХ СЦЕНАРИЕВ (XCUITest, цель KlikoUITests, папка UITests/).
+#
+# Запуск → заставка уходит → лента с карточками; карточка объявления (цена и кнопки); лист «Параметры» фильтров
+# («Раздел ›», «Показать N»); поиск «iphone»; «Поделиться» → «QR-код»; вкладки Главная/Избранное/Чат/Профиль и повторное
+# нажатие без дубля экрана. Без входа в аккаунт и без денег, против живого kliko.kz.
+#
+# Только вручную (Actions → «iOS · автотесты» → Run workflow): минуты macOS дорогие, на каждый пуш — только сборка
+# (ios-check.yml). Итог: упавшие тесты — аннотациями ::error:: с именем теста и причиной, полный xcresult (со снимками
+# экрана в момент падения) — артефактом.
+# ─────────────────────────────────────────────────────────────────────────────
+name: iOS · автотесты
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-uitests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  uitests:
+    runs-on: macos-26          # тот же образ, что у проверки сборки (ios-check.yml)
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Выбрать самый новый Xcode
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
+            [ -n "$v" ] || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          xcodebuild -version
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Сгенерировать проект
+        run: xcodegen generate
+
+      # iPhone 16, если он есть в образе; иначе первый iPhone самой новой iOS (как job screens в ios-check.yml).
+      - name: Симулятор
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"] == "iPhone 16":
+                      print(x["udid"], x["name"], k.split(".")[-1]); raise SystemExit
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone") and "Pro" not in x["name"] and "Plus" not in x["name"]:
+                      print(x["udid"], x["name"], k.split(".")[-1]); raise SystemExit
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"], x["name"], k.split(".")[-1]); raise SystemExit
+          ')
+          [ -n "$udid" ] || { echo "::error::Нет ни одного симулятора iPhone"; xcrun simctl list devices available; exit 1; }
+          echo "Симулятор: $udid"
+          echo "UDID=${udid%% *}" >> "$GITHUB_ENV"
+          xcrun simctl boot "${udid%% *}" || true
+          xcrun simctl bootstatus "${udid%% *}" -b
+
+      # Версия 99.0 — чтобы поверх тестов не вставало «Эта версия устарела» (ForcedUpdate.swift сравнивает с App Store).
+      - name: Прогнать автотесты
+        id: test
+        run: |
+          set -o pipefail
+          rm -rf UITests.xcresult
+          xcodebuild test \
+            -project Kliko.xcodeproj \
+            -scheme KlikoUITests \
+            -configuration Debug \
+            -destination "id=$UDID" \
+            -resultBundlePath UITests.xcresult \
+            -test-timeouts-enabled YES \
+            -maximum-test-execution-time-allowance 300 \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=99.0 CURRENT_PROJECT_VERSION=999 \
+            | tee test.log \
+            | grep -E "error:|Test Case .*(passed|failed)|Executed [0-9]+ test|TEST (SUCCEEDED|FAILED)|BUILD FAILED" || true
+          grep -q "TEST SUCCEEDED" test.log
+
+      # Логи прогона отсюда не читаются — итог виден аннотациями: имя упавшего теста и причина. Сначала из xcresult
+      # (xcresulttool test-results, Xcode 16+), запасной путь — строки «error: -[KlikoUITests…]» журнала xcodebuild.
+      - name: Итоги
+        if: always()
+        run: |
+          echo "## Автотесты" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d UITests.xcresult ]; then
+            xcrun xcresulttool get test-results tests --path UITests.xcresult > tests.json 2>/dev/null || true
+          fi
+          python3 - <<'PY'
+          import json, os, re
+          summary = open(os.environ["GITHUB_STEP_SUMMARY"], "a")
+          def esc(s):
+              return s.replace("%", "%25").replace("\r", "").replace("\n", " ⏎ ")
+          failed, passed, reported = [], [], False
+          try:
+              data = json.load(open("tests.json"))
+              def walk(node, path):
+                  kind = node.get("nodeType", "")
+                  name = node.get("name", "")
+                  if kind == "Test Case":
+                      res = node.get("result", "")
+                      msgs = []
+                      for ch in node.get("children", []) or []:
+                          if ch.get("nodeType") == "Failure Message":
+                              msgs.append(ch.get("name", ""))
+                      (failed if res == "Failed" else passed if res == "Passed" else []).append((name, msgs, res))
+                  for ch in node.get("children", []) or []:
+                      walk(ch, path + [name])
+              for n in data.get("testNodes", []):
+                  walk(n, [])
+              reported = bool(failed or passed)
+          except Exception as e:
+              print("xcresult не прочитан:", e)
+          if not reported and os.path.exists("test.log"):
+              log = open("test.log", errors="ignore").read()
+              for m in re.finditer(r"error: -\[(\S+) (\S+)\] : (.*)", log):
+                  failed.append((m.group(2), [m.group(3)], "Failed"))
+              for m in re.finditer(r"Test Case '-\[(\S+) (\S+)\]' passed", log):
+                  passed.append((m.group(2), [], "Passed"))
+          for name, msgs, _ in failed:
+              print(f"::error title=Упал тест {esc(name)}::{esc('; '.join(msgs) or 'без сообщения')[:900]}")
+          for name, _, _ in passed:
+              print(f"::notice title=Прошёл::{esc(name)}")
+          summary.write(f"Прошло: {len(passed)}, упало: {len(failed)}\n\n")
+          for name, msgs, _ in failed:
+              summary.write(f"- ❌ `{name}` — {'; '.join(msgs)}\n")
+          for name, _, _ in passed:
+              summary.write(f"- ✅ `{name}`\n")
+          if not failed and not passed:
+              print("::error title=Автотесты::Ни одного результата: сборка не прошла или тесты не запустились — см. артефакт test.log")
+          PY
+          if grep -q "BUILD FAILED\|error:" test.log 2>/dev/null && ! grep -q "Test Case" test.log; then
+            grep -E "error:" test.log | head -10 | while read -r l; do echo "::error title=Сборка::${l:0:900}"; done
+          fi
+
+      - name: xcresult и журнал — артефактом
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uitests-${{ github.run_number }}
+          path: |
+            UITests.xcresult
+            test.log
+          retention-days: 14
+          if-no-files-found: warn
