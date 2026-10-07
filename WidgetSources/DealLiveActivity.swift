@@ -8,6 +8,11 @@ private let kGreen = Color(red: 0.10, green: 0.62, blue: 0.41)
 /// Этапы курьера, которые плашка умеет рисовать. Ключи — из deal_live_courier() в inc/deal_live.php.
 private let kCourierPhases: Set<String> = ["search", "to_seller", "at_seller", "to_buyer", "at_buyer", "delivered", "returning"]
 
+/// Этапы посылки перевозчика (deliveryStage) по порядку и их знаки. Ключи — из DeliveryStage.swift приложения.
+private let kDeliveryStages = ["accepted", "in_transit", "in_city", "pickup_point", "delivered"]
+private let kDeliveryStageSymbols = ["tray.and.arrow.down.fill", "box.truck.fill", "building.2.fill",
+                                     "mappin.and.ellipse", "checkmark.seal.fill"]
+
 @available(iOS 16.1, *)
 struct DealLiveActivity: Widget {
     var body: some WidgetConfiguration {
@@ -41,6 +46,11 @@ struct DealLiveActivity: Widget {
                                 Label(car, systemImage: "car.fill")
                                     .font(.caption2).foregroundStyle(.gray).lineLimit(1)
                             }
+                        } else if let этап = deliveryStageIndex(context.state) {
+                            DeliveryStages(index: этап)
+                            if !context.state.etaText.isEmpty {
+                                Text(context.state.etaText).font(.caption2).foregroundStyle(.gray)
+                            }
                         } else {
                             ProgressBar(step: context.state.stepIndex, total: context.state.stepsTotal)
                             if !context.state.etaText.isEmpty {
@@ -67,6 +77,12 @@ struct DealLiveActivity: Widget {
 private func courierPhase(_ s: DealActivityAttributes.ContentState) -> String? {
     guard let p = s.phase, kCourierPhases.contains(p) else { return nil }
     return p
+}
+
+/// Номер этапа посылки (0…4), если он есть и курьера нет.
+private func deliveryStageIndex(_ s: DealActivityAttributes.ContentState) -> Int? {
+    guard courierPhase(s) == nil, let этап = s.deliveryStage, !этап.isEmpty else { return nil }
+    return kDeliveryStages.firstIndex(of: этап)
 }
 
 /// Время прибытия курьера, если оно известно.
@@ -121,6 +137,8 @@ private struct LockScreenView: View {
                 }
                 if let phase {
                     CourierRoute(phase: phase)
+                } else if let этап = deliveryStageIndex(state) {
+                    DeliveryStages(index: этап)
                 } else {
                     ProgressBar(step: state.stepIndex, total: state.stepsTotal)
                 }
@@ -242,6 +260,27 @@ private struct CourierRoute: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(phase == "delivered" ? kGreen : Color.gray)
         }
+    }
+}
+
+// MARK: - Этапы посылки: принята → в пути → в городе → в пункте выдачи → вручена
+private struct DeliveryStages: View {
+    let index: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<kDeliveryStageSymbols.count, id: \.self) { i in
+                if i > 0 {
+                    Capsule()
+                        .fill(i <= index ? kGreen : Color.white.opacity(0.22))
+                        .frame(height: 3)
+                }
+                Image(systemName: kDeliveryStageSymbols[i])
+                    .font(.system(size: i == index ? 13 : 10, weight: .bold))
+                    .foregroundStyle(i <= index ? kGreen : Color.gray)
+            }
+        }
+        .frame(height: 16)
     }
 }
 

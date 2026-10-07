@@ -25,6 +25,11 @@ struct DealActivityAttributes: ActivityAttributes {
         var etaAt: Double?
         /// Машина курьера: «белый Hyundai Solaris».
         var courier: String?
+
+        // ── Доставка перевозчиком (СДЭК и др.; владелец 07.10.2026) ──
+        /// Этап посылки: accepted · in_transit · in_city · pickup_point · delivered. nil или "" — этапов нет (плашка
+        /// рисует шаги сделки). Курьер (phase) важнее: при нём этап не показывается.
+        var deliveryStage: String?
     }
 
     var dealId: String

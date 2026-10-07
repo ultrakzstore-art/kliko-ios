@@ -1091,6 +1091,13 @@ enum ЖиваяСделка {
             данные["phase"] = ж["phase"] ?? ""
             данные["etaAt"] = Double(ж["etaAt"] ?? "") ?? 0
             данные["courier"] = ж["courier"] ?? ""
+            /* Этап посылки: сервер прислал — его, иначе из отслеживания на телефоне (DeliveryStage.swift). */
+            if let этап = ж["deliveryStage"], !этап.isEmpty {
+                данные["deliveryStage"] = этап
+            } else if (ж["phase"] ?? "").isEmpty, let трек = КэшТрека.прочитать(с.id),
+                      let этап = трек.этапДоставкиДляПлашки {
+                данные["deliveryStage"] = этап
+            }
         } else {
             let порядок = с.порядокШагов
             let подписи = с.подписиШагов
@@ -1110,6 +1117,7 @@ enum ЖиваяСделка {
                 if let фаза { данные["phase"] = фаза }
                 if let срок = трек.срокДляПлашки { данные["etaAt"] = срок }
                 if let машина = трек.машинаДляПлашки { данные["courier"] = машина }
+                if let этап = трек.этапДоставкиДляПлашки { данные["deliveryStage"] = этап }
             }
         }
         DealActivityManager.shared.handle(["action": "update", "deal": данные])

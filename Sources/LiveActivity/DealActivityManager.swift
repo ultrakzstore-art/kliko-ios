@@ -110,7 +110,11 @@ final class DealActivityManager {
             etaText:    keep ? (prev?.etaText ?? "") : (d["etaText"] as? String ?? ""),
             phase:      withCourier ? (d["phase"] as? String) : (keep ? prev?.phase : nil),
             etaAt:      withCourier ? positive(d["etaAt"]) : (keep ? prev?.etaAt : nil),
-            courier:    withCourier ? (d["courier"] as? String) : (keep ? prev?.courier : nil)
+            courier:    withCourier ? (d["courier"] as? String) : (keep ? prev?.courier : nil),
+            /* Этап посылки: прислали — его (пусто — этапа нет); не прислали (мост сайта) — прежний, пока этап сделки тот же. */
+            deliveryStage: d.keys.contains("deliveryStage")
+                ? ((d["deliveryStage"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+                : (prev?.status == status ? prev?.deliveryStage : nil)
         )
     }
     /// Время прибытия из моста: число или строка; ноль и мусор — «времени нет».
