@@ -559,44 +559,52 @@ struct СтудияРоликов: View {
 
     // MARK: Автопостинг
 
-    /// «Автопостинг в бизнес-аккаунт ⌄» окна «Поделиться» кабинета: Instagram и TikTok по social_status, за PRO.
+    /// Соцсети, где автопостинг включил администратор (social_status enabled). Выключенные не показываем вовсе — без
+    /// серой кнопки «недоступно» (App Review 2.1); ни одной — нет и «Автопостинга».
+    private var включённыеСоцсети: [(ключ: String, имя: String)] {
+        guard let сети = модель.соцсети else { return [] }
+        return [(ключ: "instagram", имя: "Instagram"), (ключ: "tiktok", имя: "TikTok")]
+            .filter { сети[$0.ключ]?.включено == true }
+    }
+
+    /// «Автопостинг в бизнес-аккаунт ⌄» окна «Поделиться» кабинета: Instagram и TikTok по social_status, за PRO. Состояние
+    /// соцсетей читается сразу, как ролик готов: блок появляется, только если хоть одна включена.
+    @ViewBuilder
     private var автопостинг: some View {
-        VStack(spacing: 8) {
-            Button {
-                withAnimation(ДвижениеСайта.смена) { автопостингОткрыт.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(т("autopost"))
-                        .font(.system(size: 13, weight: .bold))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .rotationEffect(.degrees(автопостингОткрыт ? 180 : 0))
-                }
-                .foregroundStyle(Theme.текстВторой)
-                .frame(maxWidth: .infinity, minHeight: 36)
-            }
-            .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-            if автопостингОткрыт {
-                Group {
-                    if let сети = модель.соцсети {
+        let сети = включённыеСоцсети
+        Group {
+            if сети.isEmpty {
+                Color.clear
+                    .frame(height: 0)
+                    .accessibilityHidden(true)
+            } else {
+                VStack(spacing: 8) {
+                    Button {
+                        withAnimation(ДвижениеСайта.смена) { автопостингОткрыт.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(т("autopost"))
+                                .font(.system(size: 13, weight: .bold))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                                .rotationEffect(.degrees(автопостингОткрыт ? 180 : 0))
+                        }
+                        .foregroundStyle(Theme.текстВторой)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                    }
+                    .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                    if автопостингОткрыт {
                         VStack(spacing: 8) {
-                            строкаАвтопостинга("instagram", "Instagram", сети["instagram"] ?? СоцсетьРолика())
-                            строкаАвтопостинга("tiktok", "TikTok", сети["tiktok"] ?? СоцсетьРолика())
+                            ForEach(сети, id: \.ключ) { сеть in
+                                строкаАвтопостинга(сеть.ключ, сеть.имя, модель.соцсети?[сеть.ключ] ?? СоцсетьРолика())
+                            }
                         }
-                    } else {
-                        HStack(spacing: 8) {
-                            SiteSpinner.мелкий
-                            Text(т("ap_loading"))
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.текстВторой)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .transition(.opacity)
                     }
                 }
-                .transition(.opacity)
-                .task { await модель.загрузитьСоцсети() }
             }
         }
+        .task { await модель.загрузитьСоцсети() }
     }
 
     private func строкаАвтопостинга(_ ключ: String, _ имя: String, _ с: СоцсетьРолика) -> some View {

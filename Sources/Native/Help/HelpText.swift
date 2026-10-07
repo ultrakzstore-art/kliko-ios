@@ -25,7 +25,7 @@ enum СправкаText {
         "loading": "Загрузка…",
         "fail_t": "Не удалось открыть страницу",
         "fail_s": "Проверьте соединение и попробуйте ещё раз.",
-        "empty_t": "Страница пока недоступна",
+        "empty_t": "Страница сейчас недоступна",
         "retry": "Повторить",
         "close": "Закрыть",
         "toc": "Содержание",
@@ -39,7 +39,7 @@ enum СправкаText {
         "nothing_t": "Ничего не найдено",
         "nothing_s": "Попробуйте другое слово или напишите в поддержку.",
         "all_sections": "Все разделы",
-        "section_empty": "В этом разделе пока нет ответов в приложении. Попробуйте поиск или напишите в поддержку.",
+        "section_empty": "В этом разделе нет ответов. Попробуйте поиск или напишите в поддержку.",
     ]
 
     private static let kk: [String: String] = [
@@ -52,7 +52,7 @@ enum СправкаText {
         "loading": "Жүктелуде…",
         "fail_t": "Бетті ашу мүмкін болмады",
         "fail_s": "Байланысты тексеріп, қайта көріңіз.",
-        "empty_t": "Бет әзірге қолжетімсіз",
+        "empty_t": "Бет қазір қолжетімсіз",
         "retry": "Қайталау",
         "close": "Жабу",
         "toc": "Мазмұны",
@@ -66,7 +66,7 @@ enum СправкаText {
         "nothing_t": "Ештеңе табылмады",
         "nothing_s": "Басқа сөзбен іздеп көріңіз немесе қолдау қызметіне жазыңыз.",
         "all_sections": "Барлық бөлімдер",
-        "section_empty": "Бұл бөлімде қосымшада әзірге жауап жоқ. Іздеуді қолданып көріңіз немесе қолдау қызметіне жазыңыз.",
+        "section_empty": "Бұл бөлімде жауап жоқ. Іздеуді қолданып көріңіз немесе қолдау қызметіне жазыңыз.",
     ]
 
     private static let en: [String: String] = [
@@ -79,7 +79,7 @@ enum СправкаText {
         "loading": "Loading…",
         "fail_t": "Couldn't open the page",
         "fail_s": "Check your connection and try again.",
-        "empty_t": "This page isn't available yet",
+        "empty_t": "This page is unavailable right now",
         "retry": "Retry",
         "close": "Close",
         "toc": "Contents",
@@ -93,7 +93,7 @@ enum СправкаText {
         "nothing_t": "Nothing found",
         "nothing_s": "Try another word or contact support.",
         "all_sections": "All sections",
-        "section_empty": "This section has no answers in the app yet. Try search or contact support.",
+        "section_empty": "This section has no answers. Try search or contact support.",
     ]
 
     private static let ar: [String: String] = [
@@ -120,6 +120,6 @@ enum СправкаText {
         "nothing_t": "لم يتم العثور على شيء",
         "nothing_s": "جرّب كلمة أخرى أو اكتب إلى الدعم.",
         "all_sections": "كل الأقسام",
-        "section_empty": "لا توجد إجابات في هذا القسم في التطبيق بعد. جرّب البحث أو اكتب إلى الدعم.",
+        "section_empty": "لا توجد إجابات في هذا القسم. جرّب البحث أو اكتب إلى الدعم.",
     ]
 }

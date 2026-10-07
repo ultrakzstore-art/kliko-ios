@@ -25,7 +25,7 @@ import UIKit
      показать покупателю с экрана или распечатать;
    · «Автопостинг в бизнес-аккаунт ⌄» — раскрывает кнопки Instagram и TikTok по social_status: включено и подключено —
      «Опубликовать в …» (@имя) → social_post; включено — «Подключить …» (один раз — потом постинг в 1 клик) →
-     social_connect.php; выключено — серая «скоро — подключается администратором». Оба действия — за PRO
+     social_connect.php; выключенной соцсети нет вовсе (ни одной — нет и блока). Оба действия — за PRO
      (proGate("autopost"));
    · «Позже».
 
@@ -112,7 +112,7 @@ struct ОкноПоделитьсяКабинета: View {
                     .padding(.bottom, 10)
                 быстрые
                     .padding(.bottom, 10)
-                автопостинг
+                if !включённыеСоцсети.isEmpty { автопостинг }
                 Button(т("later")) { закрыть() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
@@ -422,6 +422,14 @@ struct ОкноПоделитьсяКабинета: View {
         .accessibilityLabel(подпись)
     }
 
+    /// Соцсети, где автопостинг включил администратор (social_status enabled). Выключенные не показываем вовсе — без
+    /// серой кнопки «недоступно» (App Review 2.1); ни одной (или social_status ещё идёт) — блока «Автопостинг» нет.
+    private var включённыеСоцсети: [(ключ: String, имя: String)] {
+        guard let соцсети else { return [] }
+        return [(ключ: "instagram", имя: "Instagram"), (ключ: "tiktok", имя: "TikTok")]
+            .filter { соцсети[$0.ключ]?.включено == true }
+    }
+
     /// .soc-more-t и #soc-btns.
     private var автопостинг: some View {
         VStack(spacing: 8) {
@@ -451,8 +459,9 @@ struct ОкноПоделитьсяКабинета: View {
             if автопостингОткрыт {
                 VStack(spacing: 8) {
                     if let соцсети {
-                        соцсеть("instagram", "Instagram", соцсети["instagram"] ?? СостояниеАвтопостинга())
-                        соцсеть("tiktok", "TikTok", соцсети["tiktok"] ?? СостояниеАвтопостинга())
+                        ForEach(включённыеСоцсети, id: \.ключ) { сеть in
+                            соцсеть(сеть.ключ, сеть.имя, соцсети[сеть.ключ] ?? СостояниеАвтопостинга())
+                        }
                     } else {
                         Text(т("loading"))
                             .font(.system(size: 14))
@@ -615,7 +624,7 @@ struct ОкноПоделитьсяКабинета: View {
     }
 
     /// cabinet.php?action=social_status → {ok, instagram: {enabled, connected, username}, tiktok: {…}}. Сбой — обе
-    /// кнопки серые «скоро», как renderSocialBtns(null) сайта.
+    /// выключены: блока «Автопостинг» нет (у сайта — серые кнопки renderSocialBtns(null)).
     private func загрузитьСоцсети() async {
         typealias A = МоиОбъявленияAPI
         var итог: [String: СостояниеАвтопостинга] = [:]
@@ -826,7 +835,7 @@ enum CabinetShareText {
             "link": "Ссылка", "copied": "Скопировано!", "link_copied": "Ссылка скопирована", "qr": "QR-код",
             "autopost": "Автопостинг в бизнес-аккаунт", "loading": "Загрузка…",
             "post_to": "Опубликовать в %@", "connect": "Подключить %@",
-            "connect_sub": "один раз — потом постинг в 1 клик", "soon": "скоро — подключается администратором",
+            "connect_sub": "один раз — потом постинг в 1 клик", "soon": "недоступно",
             "posting": "Публикуем…", "posted": "Опубликовано ✓", "posted_to": "Опубликовано в %@ ✓",
             "post_fail": "Не удалось опубликовать", "connecting": "Переходим к подключению %@…",
             "no_conn": "Нет соединения с интернетом", "pro_need": "Автопостинг доступен в тарифе PRO",
@@ -844,7 +853,7 @@ enum CabinetShareText {
             "link": "Сілтеме", "copied": "Көшірілді!", "link_copied": "Сілтеме көшірілді", "qr": "QR-код",
             "autopost": "Бизнес-аккаунтқа автопостинг", "loading": "Жүктелуде…",
             "post_to": "%@ желісіне жариялау", "connect": "%@ қосу",
-            "connect_sub": "бір рет — кейін 1 рет басып жариялау", "soon": "жақында — әкімші қосады",
+            "connect_sub": "бір рет — кейін 1 рет басып жариялау", "soon": "қолжетімсіз",
             "posting": "Жариялаудамыз…", "posted": "Жарияланды ✓", "posted_to": "%@ желісінде жарияланды ✓",
             "post_fail": "Жариялау мүмкін болмады", "connecting": "%@ қосуға өтудеміз…",
             "no_conn": "Интернет байланысы жоқ", "pro_need": "Автопостинг PRO тарифінде қолжетімді",
@@ -862,7 +871,7 @@ enum CabinetShareText {
             "link": "Link", "copied": "Copied!", "link_copied": "Link copied", "qr": "QR code",
             "autopost": "Autopost to a business account", "loading": "Loading…",
             "post_to": "Post to %@", "connect": "Connect %@",
-            "connect_sub": "once — then post in 1 tap", "soon": "coming soon — being set up by the admin",
+            "connect_sub": "once — then post in 1 tap", "soon": "unavailable",
             "posting": "Posting…", "posted": "Posted ✓", "posted_to": "Posted to %@ ✓",
             "post_fail": "Could not post", "connecting": "Opening %@ connection…",
             "no_conn": "No internet connection", "pro_need": "Autoposting is part of the PRO plan",
@@ -880,7 +889,7 @@ enum CabinetShareText {
             "link": "الرابط", "copied": "تم النسخ!", "link_copied": "تم نسخ الرابط", "qr": "رمز QR",
             "autopost": "النشر التلقائي في حساب الأعمال", "loading": "جارٍ التحميل…",
             "post_to": "انشر في %@", "connect": "اربط %@",
-            "connect_sub": "مرة واحدة — ثم النشر بلمسة", "soon": "قريبًا — يربطه المسؤول",
+            "connect_sub": "مرة واحدة — ثم النشر بلمسة", "soon": "غير متاح",
             "posting": "جارٍ النشر…", "posted": "تم النشر ✓", "posted_to": "تم النشر في %@ ✓",
             "post_fail": "تعذّر النشر", "connecting": "جارٍ الانتقال لربط %@…",
             "no_conn": "لا يوجد اتصال بالإنترنت", "pro_need": "النشر التلقائي متاح في باقة PRO",
