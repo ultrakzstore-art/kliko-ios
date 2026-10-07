@@ -638,10 +638,19 @@ struct ФормаКатегорий: View {
         guard !идёт, !грузится else { return }
         ошибка = nil
         идёт = true
-        /* Порядок — как галочки на экране (порядок разделов сайта). */
-        let выбранные = корни.map { $0.ключ }.filter { отмечены.contains($0) }
         Task { @MainActor in
             defer { идёт = false }
+            /* Список разделов не загрузился («Нет соединения») — сначала ещё раз за ним: выбор фильтруется по корням, и
+               с пустым списком ушёл бы cats: [] — сохранённые категории стёрлись бы. Не загрузился и теперь — не шлём. */
+            if корни.isEmpty {
+                await загрузить()
+                guard !корни.isEmpty else {
+                    if ошибка == nil { ошибка = тН("err_no_conn") }
+                    return
+                }
+            }
+            /* Порядок — как галочки на экране (порядок разделов сайта). */
+            let выбранные = корни.map { $0.ключ }.filter { отмечены.contains($0) }
             do {
                 let j = try await НастройкиAPI.отправить("cabinet.php?action=save_pref_cats", ["cats": выбранные])
                 if МоиОбъявленияAPI.да(j["ok"]) {
@@ -756,6 +765,8 @@ struct ФормаФото: View {
     let готово: () -> Void
     @State private var скрывать: Bool
     @State private var идёт = false
+    /// Не сохранилось — строкой в самой форме: плашка кабинета под листом (мастер, окно настроек) не видна.
+    @State private var ошибка: String? = nil
 
     init(профиль: ПрофильКабинета, кнопка: String, готово: @escaping () -> Void) {
         self.кнопка = кнопка
@@ -777,6 +788,9 @@ struct ФормаФото: View {
                 вариант(true, заголовок: тН("pr_on_t"), подпись: тН("pr_on_s"), значок: "checkmark.shield")
             } footer: {
                 Text(тН("pr_note"))
+            }
+            if let ошибка {
+                Section { ОшибкаНастройки(текст: ошибка) }
             }
             КнопкаНастройки(подпись: кнопка, идёт: идёт) { сохранить() }
         }
@@ -833,12 +847,13 @@ struct ФормаФото: View {
     private func сохранить() {
         guard !идёт else { return }
         идёт = true
+        ошибка = nil
         let включить = скрывать
         Task { @MainActor in
             defer { идёт = false }
             let j = try? await НастройкиAPI.отправить("cabinet.php?action=save_pref_redact", ["on": включить])
             guard let j, МоиОбъявленияAPI.да(j["ok"]) else {
-                НастройкиМодель.shared.показать(тН("pr_fail"))
+                ошибка = тН("pr_fail")
                 return
             }
             await КабинетСайта.положитьВХранилище("kliko_photo_redact", включить ? "1" : "0")
