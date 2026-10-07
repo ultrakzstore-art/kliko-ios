@@ -151,15 +151,22 @@ struct ШагЦена: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.текстВторой)
             HStack(spacing: 8) {
-                якорь(т("form_price_urgent"), п.низ)
-                якорь(т("form_price_market"), п.середина)
-                якорь(т("form_price_high"), п.верх)
+                якорь(т("form_price_urgent"), п.низ, п)
+                якорь(т("form_price_market"), п.середина, п)
+                якорь(т("form_price_high"), п.верх, п)
+            }
+            /* #f-psug-smp: «Похожие на Kliko.kz: …» — по каким объявлениям посчитано. */
+            if let похожие = модель.похожиеЦены {
+                Text(похожие)
+                    .font(.caption)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func якорь(_ подпись: String, _ цена: Int) -> some View {
-        let выбран = модель.ценаЧислом == цена && цена > 0
+    private func якорь(_ подпись: String, _ цена: Int, _ подсказка: ПодсказкаЦены) -> some View {
+        let выбран = модель.якорьВыбран(цена, подсказка)
         return Button {
             модель.форма.цена = String(цена)
             ОткликСайта.выбор()

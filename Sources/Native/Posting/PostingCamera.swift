@@ -586,15 +586,22 @@ struct ПроверкаКамерыПодачи: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.текстВторой)
             HStack(spacing: 8) {
-                якорь(п("form_price_urgent"), подсказка.низ)
-                якорь(п("form_price_market"), подсказка.середина)
-                якорь(п("form_price_high"), подсказка.верх)
+                якорь(п("form_price_urgent"), подсказка.низ, подсказка)
+                якорь(п("form_price_market"), подсказка.середина, подсказка)
+                якорь(п("form_price_high"), подсказка.верх, подсказка)
+            }
+            /* #f-psug-smp: «Похожие на Kliko.kz: …» — по каким объявлениям посчитано. */
+            if let похожие = модель.похожиеЦены {
+                Text(похожие)
+                    .font(.caption)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func якорь(_ подпись: String, _ цена: Int) -> some View {
-        let выбран = модель.ценаЧислом == цена && цена > 0
+    private func якорь(_ подпись: String, _ цена: Int, _ подсказка: ПодсказкаЦены) -> some View {
+        let выбран = модель.якорьВыбран(цена, подсказка)
         return Button {
             модель.форма.цена = String(цена)
             ОткликСайта.выбор()

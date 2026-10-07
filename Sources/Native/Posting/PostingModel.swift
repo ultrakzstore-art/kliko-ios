@@ -293,12 +293,30 @@ enum ИтогПодачи: Equatable {
     case запрещено(заголовок: String, текст: String)
 }
 
-/// Подсказка цены: «Рынок · N» из price_stats или «Kliko AI-оценка» из recognize — три якоря «Срочно / Рынок / Высокая».
+/// Подсказка цены: «Рынок Kliko.kz · N · …» из market_price, «Kliko AI-оценка» из recognize или «Рынок · N» из
+/// price_stats — три якоря «Срочно / Рынок / Высокая».
 struct ПодсказкаЦены: Equatable {
     let подпись: String
     let низ: Int
     let середина: Int
     let верх: Int
+    /// Посчитана market_price по похожим объявлениям (модель → бренд → раздел): её не перекрывает price_stats.
+    var поОбъявлениям = false
+
+    /// showPriceSuggest сайта: пустые якоря достраиваются от середины (×0,85 и ×1,2), перепутанные — тоже.
+    /// nil — все три нули (сайт прячет блок).
+    static func собрать(подпись: String, низ: Int, середина: Int, верх: Int,
+                        поОбъявлениям: Bool = false) -> ПодсказкаЦены? {
+        var н = max(0, низ), с = max(0, середина), в = max(0, верх)
+        if н <= 0 && с <= 0 && в <= 0 { return nil }
+        if с <= 0 {
+            с = (н + в) / 2
+            if с <= 0 { с = н > 0 ? н : в }
+        }
+        if н <= 0 || н > с { н = Int((Double(с) * 0.85).rounded()) }
+        if в <= 0 || в < с { в = Int((Double(с) * 1.2).rounded()) }
+        return ПодсказкаЦены(подпись: подпись, низ: н, середина: с, верх: в, поОбъявлениям: поОбъявлениям)
+    }
 }
 
 @MainActor
@@ -380,6 +398,8 @@ final class ПодачаМодель: ObservableObject {
     /// Текст price_stats под ценой и его тон (0 — в рынке/зелёный, 1 — дороже/жёлтый).
     @Published var рынок: String? = nil
     @Published var рынокДорого = false
+    /// #f-psug-smp сайта: «Похожие на Kliko.kz: название — цена ₸ · …» (samples из market_price).
+    @Published var похожиеЦены: String? = nil
     /// «Этого уже ждут: {n}».
     @Published var ждут = 0
     @Published var маркиАвто: [String] = []
@@ -428,6 +448,8 @@ final class ПодачаМодель: ObservableObject {
     private var черновикЗадача: Task<Void, Never>? = nil
     private var ценаЗадача: Task<Void, Never>? = nil
     private var последнийРынок = ""
+    /// Что уже спрошено у market_price (раздел|марка|название|состояние|город): цена сама по себе запрос не повторяет.
+    var последняяРыночнаяЦена = ""
     private var последнийОхват = ""
     private var автоНазвание = ""
     private var автоОписание = ""
@@ -884,7 +906,8 @@ final class ПодачаМодель: ObservableObject {
             let период = форма.недвижимость["term"] == "daily" ? "day" : "month"
             if форма.период != период { форма.период = период }
         }
-        if форма.цена != было.цена || форма.раздел != было.раздел || форма.город != было.город {
+        if форма.цена != было.цена || форма.раздел != было.раздел || форма.город != было.город
+            || форма.бренд != было.бренд || форма.название != было.название || форма.состояние != было.состояние {
             запланироватьРынок()
         }
         запланироватьЧерновик()
@@ -1084,6 +1107,8 @@ final class ПодачаМодель: ObservableObject {
         статусИИ = nil
         сброситьПодборРаздела()
         подсказкаЦены = nil
+        похожиеЦены = nil
+        последняяРыночнаяЦена = ""
         /* Сначала выбор «Быстро (30 секунд)» / «Подробно»; быстрый — экран фото, подробный — «Что размещаете?». */
         экран = .выбор
         мастер = nil
@@ -1187,6 +1212,8 @@ final class ПодачаМодель: ObservableObject {
         заполнитьИз(запись)
         экран = .шаги
         шаг = .фото
+        /* showEdit сайта: marketPrice('e') сразу после заполнения полей — подсказка уже ждёт на шаге цены. */
+        запланироватьРынок()
     }
 
     private func заполнитьИз(_ з: [String: Any]) {
@@ -1446,18 +1473,85 @@ final class ПодачаМодель: ObservableObject {
 
     // MARK: - Цена по рынку (/api/price_stats.php, только чтение)
 
-    private func запланироватьРынок() {
+    func запланироватьРынок() {
         ценаЗадача?.cancel()
         let раздел = форма.раздел
         guard !раздел.isEmpty, раздел != "other", !услугаИлиРабота else {
             рынок = nil
+            похожиеЦены = nil
+            if подсказкаЦены?.поОбъявлениям == true { подсказкаЦены = nil }
             return
         }
         ценаЗадача = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 600_000_000)
             guard !Task.isCancelled, let модель = self else { return }
+            /* Сначала цены похожих объявлений (точнее), потом price_stats раздела: та не перекрывает точную. */
+            await модель.узнатьРыночнуюЦену()
+            guard !Task.isCancelled else { return }
             await модель.узнатьРынок()
         }
+    }
+
+    /**
+     marketPrice сайта: POST cabinet.php?action=market_price {csrf, category, brand, title, condition, city, id}.
+     Сервер считает по одобренным объявлениям Kliko.kz того же раздела: модель (≥2) → бренд (≥3) → раздел (≥4), сначала
+     в своём городе, потом по всему Казахстану; выбросы отрезает, отдаёт {ok, count, low, mid, high, level, label,
+     samples[{t, p}]}. Kliko AI не нужен — работает и без оценки по фото. Меньше двух — сайт молчит, и мы молчим
+     (оценка Kliko AI, если была, остаётся). Сбой сети — тоже молча, как у сайта (market_price в списке «молча»).
+     */
+    private func узнатьРыночнуюЦену() async {
+        typealias A = МоиОбъявленияAPI
+        let раздел = форма.раздел
+        guard !раздел.isEmpty, !услугаИлиРабота else { return }
+        let бренд = форма.бренд.trimmingCharacters(in: .whitespaces)
+        let полное = форма.название.trimmingCharacters(in: .whitespaces)
+        let название = полное.isEmpty ? форма.модель.trimmingCharacters(in: .whitespaces) : полное
+        let состояние = состояниеВидно ? форма.состояние : ""
+        let город = форма.город.trimmingCharacters(in: .whitespaces)
+        let ключ = [раздел, бренд, название, состояние, город].joined(separator: "|")
+        guard ключ != последняяРыночнаяЦена else { return }
+        let тело: [String: Any] = ["category": раздел, "brand": бренд, "title": название, "condition": состояние,
+                                   "city": город, "id": правка ? номерПравки : ""]
+        guard let j = try? await A.отправить("cabinet.php?action=market_price", тело: тело),
+              !Task.isCancelled else { return }
+        последняяРыночнаяЦена = ключ
+        let сколько = A.целое(j["count"])
+        guard A.да(j["ok"]), сколько >= 2 else {
+            похожиеЦены = nil
+            if подсказкаЦены?.поОбъявлениям == true { подсказкаЦены = nil }
+            return
+        }
+        /* Подпись сайта «Рынок Kliko.kz · N · по этой модели · Алматы · б/у» — сервер пишет её по-русски, поэтому
+           собираем из level тем же порядком на языке приложения. */
+        var подпись = т("mp_src") + " · " + String(сколько) + " · "
+        switch A.строка(j["level"]) {
+        case "model": подпись += т("mp_model")
+        case "brand": подпись += String(format: т("mp_brand"), бренд)
+        default: подпись += т("mp_cat")
+        }
+        if !город.isEmpty && A.строка(j["label"]).contains(" · " + город) { подпись += " · " + город }
+        if состояние == "new" {
+            подпись += " · " + т("mp_new")
+        } else if состояние == "used" {
+            подпись += " · " + т("mp_used")
+        }
+        guard let подсказка = ПодсказкаЦены.собрать(подпись: подпись, низ: A.целое(j["low"]),
+                                                     середина: A.целое(j["mid"]), верх: A.целое(j["high"]),
+                                                     поОбъявлениям: true) else { return }
+        подсказкаЦены = подсказка
+        let образцы = ((j["samples"] as? [Any]) ?? []).compactMap { $0 as? [String: Any] }
+            .filter { A.целое($0["p"]) > 0 }
+            .map { A.строка($0["t"]) + " — " + Self.деньги(A.целое($0["p"])) + " ₸" }
+        похожиеЦены = образцы.isEmpty ? nil : т("mp_samples") + " " + образцы.joined(separator: " · ")
+    }
+
+    /// priceMarkAnchor сайта: подсвечен ближайший якорь, если цена от него не дальше 5%.
+    func якорьВыбран(_ цена: Int, _ п: ПодсказкаЦены) -> Bool {
+        let своя = ценаЧислом
+        guard своя > 0, цена > 0 else { return false }
+        let якоря = [п.низ, п.середина, п.верх]
+        guard let ближний = якоря.min(by: { abs($0 - своя) < abs($1 - своя) }), ближний == цена else { return false }
+        return Double(abs(своя - цена)) <= max(1, Double(цена) * 0.05)
     }
 
     private func узнатьРынок() async {
@@ -1484,9 +1578,10 @@ final class ПодачаМодель: ObservableObject {
         let низ = МоиОбъявленияAPI.целое(j["mkt_min"])
         let среднее = МоиОбъявленияAPI.целое(j["avg"])
         let верх = МоиОбъявленияAPI.целое(j["mkt_max"])
-        if подсказкаЦены == nil || подсказкаЦены?.подпись.hasPrefix(т("market_word")) == true {
-            подсказкаЦены = ПодсказкаЦены(подпись: т("market_word") + " · " + String(сколько), низ: низ,
-                                          середина: среднее, верх: верх)
+        if подсказкаЦены == nil
+            || (подсказкаЦены?.поОбъявлениям == false && подсказкаЦены?.подпись.hasPrefix(т("market_word")) == true) {
+            подсказкаЦены = ПодсказкаЦены.собрать(подпись: т("market_word") + " · " + String(сколько), низ: низ,
+                                                  середина: среднее, верх: верх)
         }
         var текст = String(format: т("ps_line"), String(сколько), Self.деньги(низ), Self.деньги(верх), Self.деньги(среднее))
         рынокДорого = false
