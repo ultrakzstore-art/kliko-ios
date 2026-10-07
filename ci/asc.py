@@ -442,8 +442,45 @@ def iap_sync(apply=False):
         sys.exit(1)
 
 
+def crashes():
+    """Последние отчёты о падениях из TestFlight (кнопка «Отправить» в окне падения) — аннотациями прогона.
+    Только чтение. Из длинного отчёта — шапка (версия, модель, iOS), тип исключения, причина и кадры упавшего потока."""
+    apps = api("GET", "/v1/apps?filter[bundleId]=" + BUNDLE_ID).get("data", [])
+    if not apps:
+        ann("error", "Приложение " + BUNDLE_ID + " не найдено")
+        return
+    app_id = apps[0]["id"]
+    subs = api("GET", "/v1/apps/%s/betaFeedbackCrashSubmissions?limit=5&sort=-createdDate" % app_id).get("data", [])
+    if not subs:
+        ann("warning", "Отчётов о падениях из TestFlight нет")
+        return
+    for sub in subs[:3]:
+        a = sub.get("attributes", {})
+        head = "%s · %s · iOS %s · %s" % (a.get("createdDate", ""), a.get("deviceModel", ""), a.get("osVersion", ""),
+                                         a.get("comment") or "")
+        try:
+            log = api("GET", "/v1/betaFeedbackCrashSubmissions/%s/crashLog" % sub["id"]).get("data", {})
+            text = (log.get("attributes") or {}).get("logText") or ""
+        except ApiError as e:
+            ann("error", head + " — отчёт не получить: " + str(e))
+            continue
+        lines = text.splitlines()
+        keep = [l for l in lines if l.startswith(("Version:", "Exception Type", "Exception Reason", "Termination Reason",
+                                                  "Crashed Thread", "Exception Codes", "Triggered by Thread"))]
+        crashed = []
+        for i, l in enumerate(lines):
+            if l.startswith("Thread ") and "Crashed" in l:
+                crashed = [x for x in lines[i + 1:i + 40] if x.strip()][:30]
+                break
+        if not crashed and text.lstrip().startswith("{"):
+            crashed = [text[:4000]]
+        ann("error", "ПАДЕНИЕ " + head + " | " + " | ".join(keep))
+        frames = [x for x in crashed if "Kliko" in x or "libswift" in x or "SwiftUI" in x or "Foundation" in x][:18] or crashed[:18]
+        ann("error", "Кадры: " + " | ".join(" ".join(x.split()) for x in frames))
+
+
 if __name__ == "__main__":
-    commands = {"revoke-dev-certs": revoke_dev_certs, "next-build-number": next_build_number}
+    commands = {"revoke-dev-certs": revoke_dev_certs, "next-build-number": next_build_number, "crashes": crashes}
     if len(sys.argv) >= 2 and sys.argv[1] == "iap-sync" and sys.argv[2:] in ([], ["--apply"]):
         iap_sync(apply=sys.argv[2:] == ["--apply"])
     elif len(sys.argv) != 2 or sys.argv[1] not in commands:
