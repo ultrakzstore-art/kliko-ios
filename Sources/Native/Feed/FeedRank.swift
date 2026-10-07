@@ -14,9 +14,9 @@ import SwiftUI
    · mkReportClick — открыли объявление, стоящее в золотом месте: POST туда же {"clk":"id"}.
  По этим imp сервер ставит в золотые места реже показанные ТОП первыми (mkTopsSorted, Feed/FeedRhythm.swift).
 
- Приложение: то же тело и тот же адрес (/kz/<язык>/api/rank_event.php — APP_L сайта), куки веб-сессии из WebKit, Origin
- сайта. csrf в теле сайт не шлёт, и мы не добавляем полей в тело; токен сессии уходит заголовком X-Kliko-Csrf, как у
- прочих запросов приложения (сервер его не требует — карта API, §0). «Вызов наблюдателя» у SwiftUI не бывает — ячейки
+ Приложение: то же тело и тот же адрес (/kz/<язык>/api/rank_event.php — APP_L сайта), куки веб-сессии из WebKit, без
+ Origin. csrf в теле сайт не шлёт, и мы не добавляем полей в тело; токен сессии уходит заголовком X-Kliko-Csrf — после
+ правки сервера 99 именно по нему (вошедшая сессия + её токен) rank_event.php пускает приложение вместо Origin. «Вызов наблюдателя» у SwiftUI не бывает — ячейки
  сообщают о себе по одной; всё, что пришло за 150 мс (кадр-другой прокрутки), уходит одним запросом.
  Видна наполовину: на iOS 18 и новее — onScrollVisibilityChange(threshold: 0.5); на iOS 17 — появление ячейки в сетке.
  */
@@ -71,7 +71,6 @@ final class ОтчётТОП {
         запрос.httpShouldHandleCookies = false
         запрос.timeoutInterval = 20
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        запрос.setValue(Config.apiBase.absoluteString, forHTTPHeaderField: "Origin")
         for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
         if let токен = await токенСессии() { запрос.setValue(токен, forHTTPHeaderField: "X-Kliko-Csrf") }
         запрос.httpBody = данные

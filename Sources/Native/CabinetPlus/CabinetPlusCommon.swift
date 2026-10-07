@@ -299,9 +299,8 @@ enum ФайлыКабинета {
         for (имя, значение) in куки {
             запрос.setValue(значение, forHTTPHeaderField: имя)
         }
-        if let откуда = Config.страницаСайта("cabinet.php") {
-            запрос.setValue(откуда.absoluteString, forHTTPHeaderField: "Referer")
-        }
+        /* Referer не подставляем (владелец: без поддельных Origin/Referer): tax_package и tax_reconcile источник не
+           проверяют. */
         let пара: (Data, URLResponse)
         do {
             пара = try await URLSession.shared.data(for: запрос)

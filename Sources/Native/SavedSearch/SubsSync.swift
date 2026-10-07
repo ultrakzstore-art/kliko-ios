@@ -148,8 +148,7 @@ enum ПодпискиСайта {
         запрос.httpMethod = "POST"
         запрос.httpShouldHandleCookies = false
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        /* Как fetch страницы: POST того же сайта несёт Origin сайта. */
-        запрос.setValue(Config.apiBase.absoluteString, forHTTPHeaderField: "Origin")
+        /* Origin не подставляем (владелец: без поддельных Origin/Referer): subs.php источник не проверяет. */
         for (имя, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: имя) }
         запрос.httpBody = данные
         return await выполнить(запрос)

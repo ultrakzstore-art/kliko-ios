@@ -202,6 +202,8 @@ enum ЧатОбъявленияAPI {
             let нужно = (строка(поля["need"]) ?? "").lowercased()
             let ошибка = строка(поля["error"]) ?? ""
             if нужно == "auth" || ошибка == "auth" || да(поля["need_reg"]) { return .нуженВход(словаСайта) }
+            /* «origin» после правки 97 — сессия не вошла или токен не её: просим войти. */
+            if ошибка == "origin" { return .нуженВход(словаСайта) }
             if нужно == "verify" || ошибка == "verify" || ошибка == "need_verification" {
                 return .нужнаВерификация(словаСайта)
             }
@@ -435,9 +437,10 @@ enum ЧатОбъявленияAPI {
         запрос.httpMethod = "POST"
         запрос.httpShouldHandleCookies = false
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        /* Как fetch страницы: POST того же сайта несёт Origin сайта. */
-        запрос.setValue(Config.apiBase.absoluteString, forHTTPHeaderField: "Origin")
+        /* Правка сервера 97: chat.php пускает POST приложения по вошедшей сессии и её CSRF-токену (заголовок
+           X-Kliko-Csrf) — Origin больше не подставляем. Тело не меняем: оно ровно как у сайта. */
         for (поле, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: поле) }
+        if let токен = await SiteSession.csrf() { запрос.setValue(токен, forHTTPHeaderField: "X-Kliko-Csrf") }
         запрос.httpBody = данные
         return await выполнить(запрос)
     }

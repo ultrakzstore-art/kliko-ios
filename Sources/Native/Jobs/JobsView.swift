@@ -162,7 +162,7 @@ enum ВакансииAPI {
         запрос.httpMethod = "POST"
         запрос.httpShouldHandleCookies = false
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        запрос.setValue(Config.apiBase.absoluteString, forHTTPHeaderField: "Origin")
+        /* Origin не подставляем (владелец: без поддельных Origin/Referer): api/jobs.php источник не проверяет, csrf — в теле. */
         for (поле, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: поле) }
         запрос.httpBody = тело
         guard let пришло = try? await сессия.data(for: запрос) else { return .сеть }

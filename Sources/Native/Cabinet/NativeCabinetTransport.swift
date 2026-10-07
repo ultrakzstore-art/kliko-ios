@@ -8,7 +8,8 @@ import WebKit
    · адрес — тот же путь от корня, на том же хосте, что у страницы под слоем (kliko.kz или www.kliko.kz);
    · метод, тело (JSON строкой, multipart) и заголовки — как у fetch страницы: Referer страницы кабинета, Origin сайта
      у всего, кроме GET (fetch same-origin шлёт его так же), User-Agent самой страницы (navigator.userAgent, с меткой
-     KlikoApp), cache no-store;
+     KlikoApp), cache no-store. Кроме дверей правок сервера 92–94 и 97–99 (broadcast, rentals, exchange, chat, dm,
+     api/chat_hide, api/rank_event): туда без Origin и Referer, с заголовком X-Kliko-Csrf — токеном вошедшей сессии;
    · КУКИ. Перед запросом все куки kliko.kz из WKWebsiteDataStore.default() кладутся в собственное хранилище
      отдельной эфемерной сессии (на каждый запрос своя — параллельные запросы не мешают друг другу, редиректы несут куки
      сами). После ответа то, что сервер поставил или стёр (Set-Cookie, в том числе на редиректах), переносится обратно в
@@ -100,9 +101,17 @@ enum НативныйТранспортКабинета {
         let страница = "https://" + хост + путьКабинета()
         запрос.mainDocumentURL = URL(string: страница)
         запрос.setValue("*/*", forHTTPHeaderField: "Accept")
-        запрос.setValue(страница, forHTTPHeaderField: "Referer")
-        if метод != "GET" && метод != "HEAD" {
-            запрос.setValue("https://" + хост, forHTTPHeaderField: "Origin")
+        // Правки сервера 92–94, 97–99: эти двери пускают приложение по вошедшей сессии и её CSRF (заголовок
+        // X-Kliko-Csrf, inc/app_origin_ok.php) — Origin и Referer туда больше не подставляем. Токена нет (гость,
+        // страница не сказала) — идём прежним путём, через страницу: у её fetch настоящий Origin.
+        if дверьСессииCSRF(адрес.path) {
+            guard let токен = await SiteSession.csrf() else { return .черезСтраницу }
+            запрос.setValue(токен, forHTTPHeaderField: "X-Kliko-Csrf")
+        } else {
+            запрос.setValue(страница, forHTTPHeaderField: "Referer")
+            if метод != "GET" && метод != "HEAD" {
+                запрос.setValue("https://" + хост, forHTTPHeaderField: "Origin")
+            }
         }
         if let ua = await агентСтраницы() {
             запрос.setValue(ua, forHTTPHeaderField: "User-Agent")
@@ -134,6 +143,8 @@ enum НативныйТранспортКабинета {
         /* r.text() fetch-а — всегда UTF-8 с заменой битых байт. */
         let текст = String(decoding: пара.0, as: UTF8.self)
         if сессияНеУзнана(код: код, текст: текст, путь: путь) { return .черезСтраницу }
+        // Дверь 92–99 не приняла токен ({"error":"origin"}) — отказ до записи, повтор страницей безопасен.
+        if дверьСессииCSRF(адрес.path), отказИсточника(текст) { return .черезСтраницу }
         let после = (банка.cookies ?? []).filter { свой($0) }
         await вернутьКуки(до: до, после: после)
         return .ответ(код: код, текст: текст)
@@ -230,6 +241,22 @@ enum НативныйТранспортКабинета {
         guard метод != "GET" else { return false }
         let адрес = путь.lowercased()
         return адрес.contains("pay.php") || адрес.contains("escrow.php")
+    }
+
+    /// Двери, которые после правок сервера 92–94 и 97–99 принимают приложение по сессии + CSRF вместо Origin:
+    /// broadcast.php, rentals.php, exchange.php, chat.php, dm.php, api/chat_hide.php, api/rank_event.php.
+    private static func дверьСессииCSRF(_ дорога: String) -> Bool {
+        let д = дорога.lowercased()
+        let двери = ["/broadcast.php", "/rentals.php", "/exchange.php", "/chat.php", "/dm.php",
+                     "/api/chat_hide.php", "/api/rank_event.php"]
+        return двери.contains { д.hasSuffix($0) }
+    }
+
+    /// Ответ «источник не принят»: {"error":"origin"} (chat.php, dm.php, chat_hide, rank_event) или текст broadcast.php.
+    private static func отказИсточника(_ текст: String) -> Bool {
+        guard let j = объект(текст), !истинно(j["ok"]) else { return false }
+        let ошибка = строка(j["error"])
+        return ошибка == "origin" || ошибка == "Недопустимый источник запроса"
     }
 
     /// Сервер не узнал сессию (см. шапку). Такой ответ не принимаем и его куки в WebKit не пишем.
