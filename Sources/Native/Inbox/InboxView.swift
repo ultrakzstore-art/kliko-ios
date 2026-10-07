@@ -21,6 +21,8 @@ struct ИнбоксЭкран: View {
     @State private var входОткрыт = false
     @State private var запросДанных = false
     @State private var удалить: СтрокаИнбокса? = nil
+    /// «Очистить корзину» — вопрос «Удалить навсегда N переписок?» (N — сколько было при нажатии).
+    @State private var очистить: Int? = nil
     /// .msg-search input:focus — кромка --acc-on.
     @FocusState private var поискВФокусе: Bool
 
@@ -70,6 +72,18 @@ struct ИнбоксЭкран: View {
             } message: { _ in
                 Text(т("purge_q"))
             }
+            .confirmationDialog(т("trash_clear"), isPresented: вопросОчистки, titleVisibility: .visible,
+                                presenting: очистить) { _ in
+                Button(т("purge"), role: .destructive) {
+                    Task {
+                        await модель.очиститьКорзину()
+                        список.пересчитатьИнбокс()
+                    }
+                }
+                Button(т("cancel"), role: .cancel) {}
+            } message: { число in
+                Text(String(format: т("trash_clear_q"), число) + "\n" + т("retention"))
+            }
             .overlay(alignment: .bottom) { ПлашкаИнбокса(текст: модель.плашка) }
     }
 
@@ -87,6 +101,12 @@ struct ИнбоксЭкран: View {
     private var вопросУдаления: Binding<Bool> {
         Binding(get: { удалить != nil }, set: { показан in
             if !показан { удалить = nil }
+        })
+    }
+
+    private var вопросОчистки: Binding<Bool> {
+        Binding(get: { очистить != nil }, set: { показан in
+            if !показан { очистить = nil }
         })
     }
 
@@ -118,6 +138,10 @@ struct ИнбоксЭкран: View {
                 if модель.фильтр == .trash {
                     полосаКорзины
                         .padding(.bottom, 12)
+                    if модель.вКорзинеЧисло > 0 {
+                        кнопкаОчистки
+                            .padding(.bottom, 12)
+                    }
                 }
                 /* Скорость: строки с диска, а связи нет — плашка над ними. */
                 if модель.сКопии && модель.ошибка {
@@ -224,6 +248,36 @@ struct ИнбоксЭкран: View {
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.96))
         .accessibilityLabel(т("trash"))
         .accessibilityAddTraits(включена ? .isSelected : [])
+    }
+
+    /// «Очистить корзину»: все убранные переписки — навсегда, после вопроса с их числом.
+    private var кнопкаОчистки: some View {
+        let число = модель.вКорзинеЧисло
+        let идёт = модель.строки.contains { $0.скрыт && модель.занято.contains($0.номер) }
+        return Button {
+            очистить = число
+        } label: {
+            HStack(spacing: 8) {
+                if идёт {
+                    ProgressView()
+                        .tint(ИнбоксКраска.плохоТекст)
+                } else {
+                    Image(systemName: "trash.slash")
+                        .accessibilityHidden(true)
+                }
+                Text(т("trash_clear") + " (" + String(число) + ")")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(ИнбоксКраска.плохоТекст)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(ИнбоксКраска.плохоФон, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                    .strokeBorder(ИнбоксКраска.плохоКромка, lineWidth: 1)
+            }
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .disabled(идёт)
     }
 
     /// .msg-trashbar: срок хранения и «Запросить данные у поддержки →» (dataReqOpen('')).
