@@ -525,6 +525,7 @@ struct ПроверкаКамерыПодачи: View {
                 открытьРазделы()
             }
             СтрокаОшибки(ошибка)
+            ПодсказкаРазделаПодачи(модель: модель)
             Button { открытьРазделы() } label: {
                 Text(т(пусто ? "cf_pick_cat" : "cf_wrong_cat"))
                     .font(.subheadline.weight(.semibold))
