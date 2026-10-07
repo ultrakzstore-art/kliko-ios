@@ -78,12 +78,12 @@ struct МенюКарточкиОбъявления: ViewModifier {
                 }
                 if товар.адрес != nil {
                     Button {
-                        DispatchQueue.main.async { ЛистПоделитьсяСайта.показать(товар) }
+                        Task { @MainActor in ЛистПоделитьсяСайта.показать(товар) }
                     } label: {
                         Label(т("share"), systemImage: "square.and.arrow.up")
                     }
                     Button {
-                        DispatchQueue.main.async { ОкноQRПоверх.показать(ДанныеОтправкиСайта(товар)) }
+                        Task { @MainActor in ОкноQRПоверх.показать(ДанныеОтправкиСайта(товар)) }
                     } label: {
                         Label(т("qr"), systemImage: "qrcode")
                     }

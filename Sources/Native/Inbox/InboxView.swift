@@ -457,6 +457,7 @@ struct СтрокаИнбоксаВид: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(голос)
             .accessibilityAddTraits(.isButton)
+            .contextMenu { if !занята { пунктыМеню } }
             меню
         }
         .padding(12)
@@ -533,32 +534,39 @@ struct СтрокаИнбоксаВид: View {
 
     private var текстПревью: String { (строка.превьюМоё ? т("you") : "") + строка.превью }
 
+    /// Пункты «⋯» — они же меню долгого нажатия на строку (владелец 07.10.2026: «где есть возможность 3D Touch —
+    /// были функции»): закрепить, в корзину, вернуть, удалить навсегда.
+    @ViewBuilder
+    private var пунктыМеню: some View {
+        if вКорзине {
+            Button {
+                действие(.вернуть)
+            } label: {
+                Label(т("restore"), systemImage: "arrow.uturn.backward")
+            }
+            Button(role: .destructive) {
+                действие(.удалить)
+            } label: {
+                Label(т("purge"), systemImage: "trash.slash")
+            }
+        } else {
+            Button {
+                действие(.закрепить)
+            } label: {
+                Label(т(закреплена ? "unpin" : "pin"), systemImage: закреплена ? "pin.slash" : "pin")
+            }
+            Button(role: .destructive) {
+                действие(.вКорзину)
+            } label: {
+                Label(т("trash_to"), systemImage: "trash")
+            }
+        }
+    }
+
     /// .msg-more: «⋯» справа сверху строки.
     private var меню: some View {
         Menu {
-            if вКорзине {
-                Button {
-                    действие(.вернуть)
-                } label: {
-                    Label(т("restore"), systemImage: "arrow.uturn.backward")
-                }
-                Button(role: .destructive) {
-                    действие(.удалить)
-                } label: {
-                    Label(т("purge"), systemImage: "trash.slash")
-                }
-            } else {
-                Button {
-                    действие(.закрепить)
-                } label: {
-                    Label(т(закреплена ? "unpin" : "pin"), systemImage: закреплена ? "pin.slash" : "pin")
-                }
-                Button(role: .destructive) {
-                    действие(.вКорзину)
-                } label: {
-                    Label(т("trash_to"), systemImage: "trash")
-                }
-            }
+            пунктыМеню
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .bold))
