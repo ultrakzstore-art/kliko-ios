@@ -188,22 +188,22 @@ struct ЭкранСвоегоИИ: View {
     /// «7 ноября 2026 г.» — ISO 8601 сервера; не разобралась — как пришла.
     static func дата(_ строка: String) -> String {
         let чистая = строка.trimmingCharacters(in: .whitespaces)
-        var дата = ISO8601DateFormatter().date(from: чистая)
-        if дата == nil {
+        var найдено = ISO8601DateFormatter().date(from: чистая)
+        if найдено == nil {
             let разбор = DateFormatter()
             разбор.locale = Locale(identifier: "en_US_POSIX")
             разбор.timeZone = TimeZone(identifier: "Asia/Almaty")
-            for шаблон in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd"] where дата == nil {
+            for шаблон in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd"] where найдено == nil {
                 разбор.dateFormat = шаблон
-                дата = разбор.date(from: чистая)
+                найдено = разбор.date(from: чистая)
             }
         }
-        guard let дата else { return чистая }
+        guard let готовая = найдено else { return чистая }
         let вывод = DateFormatter()
         вывод.locale = Locale(identifier: Locale.preferredLanguages.first ?? "ru")
         вывод.dateStyle = .long
         вывод.timeStyle = .none
-        return вывод.string(from: дата)
+        return вывод.string(from: готовая)
     }
 
     // MARK: Подключение (ключа нет)
