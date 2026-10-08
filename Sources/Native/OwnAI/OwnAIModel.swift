@@ -12,10 +12,15 @@ import SwiftUI
  Запросы — все POST cabinet.php?action=<имя>, тело JSON с csrf, только сессией кабинета: тем же транспортом, что
  recognize (МоиОбъявленияAPI.отправить → КабинетСайта.вызвать, токен страницы и один повтор на «csrf»):
    own_ai_state · own_ai_connect {provider, key} · own_ai_models · own_ai_model {model} · own_ai_test ·
-   own_ai_use {on} · own_ai_disconnect · own_ai_or_start → {url}.
+   own_ai_use {on} · own_ai_disconnect.
  own_ai_buy и own_ai_trial (кошелёк сайта) приложение не вызывает никогда: Premium в приложении — только товар App Store
  kz.kliko.app.ownai.month (ПродуктыApple, ВидУслугиApple.свойИИ). Отказ — {ok:false, code, error}: error уже готовый
- текст на языке человека, его и показываем.
+ текст на языке человека, его и показываем. Кроме need_premium / code "premium" и gone: эти тексты у сайта общие
+ (lang/<язык>.php) и могут звать купить Premium с баланса или взять пробный период — в приложении вместо них своя фраза
+ (ОтказСвоегоИИ.фразаПриложения), Premium здесь — только App Store (3.1.1).
+ own_ai_or_start («Войти через OpenRouter») приложение не вызывает: OAuth OpenRouter без state, сайт узнаёт человека по
+ куке браузера, а в SFSafariViewController / ASWebAuthenticationSession сессии кабинета нет (как у соцсетей до app_link).
+ Кнопка появится, когда сервер даст одноразовую ссылку с ott и возврат kliko://own_ai.
 
  🔴 КЛЮЧ. В приложении ключ живёт только в поле ввода экрана и в теле одного запроса own_ai_connect: ни UserDefaults, ни
  файлов, ни журнала; поле очищается сразу после нажатия «Подключить». Сервер отдаёт только tail — 4 последних знака.
@@ -54,7 +59,7 @@ struct ПремиумСвоегоИИ: Equatable {
 struct СостояниеСвоегоИИ: Equatable {
     /// on — раздел включён; false — в приложении ничего не показываем.
     var вкл = false
-    /// login — доступна «Войти через OpenRouter».
+    /// login — у сайта доступна «Войти через OpenRouter». В приложении кнопки нет: вход держится на куке браузера.
     var входOpenRouter = false
     /// connected — ключ сохранён на сервере.
     var подключён = false
@@ -154,8 +159,19 @@ struct ОтказСвоегоИИ: Identifiable, Equatable {
         }
         if код.isEmpty && A.да(j["own_ai_gone"]) { код = "gone" }
         if код.isEmpty && A.строка(j["error"]) == "own_ai" { код = "bad" }
+        if !код.isEmpty && A.да(j["need_premium"]) { код = "premium" }
         guard !код.isEmpty else { return nil }
-        return ОтказСвоегоИИ(код: код, текст: текстОтвета(j))
+        return ОтказСвоегоИИ(код: код, текст: фразаПриложения(код) ?? текстОтвета(j))
+    }
+
+    /// Своя фраза вместо текста сервера: premium и gone у сайта могут звать купить Premium с баланса, назвать цену или
+    /// пробный период — в приложении этого быть не должно (3.1.1). nil — текст сервера годится.
+    static func фразаПриложения(_ код: String) -> String? {
+        switch код {
+        case "premium": return СвойИИText.т("oai_prem_need")
+        case "gone": return СвойИИText.т("oai_gone")
+        default: return nil
+        }
     }
 
     /// Готовый текст сервера: msg, error, text, ai_msg — первый человеческий (не машинный код вроде "own_ai").
@@ -198,8 +214,17 @@ enum СвойИИAPI {
         if A.нетСессии(j) { return .нуженВход }
         let код = A.строка(j["code"])
         let ошибка = A.строка(j["error"]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let текст = ошибка.isEmpty || КабинетСайта.машинныйКод(ошибка) ? СвойИИText.т("oai_fail") : ошибка
-        return .отказ(текст: текст, код: код, нуженПремиум: A.да(j["need_premium"]) || код == "premium")
+        let нуженПремиум = A.да(j["need_premium"]) || код == "premium"
+        let текст: String
+        if нуженПремиум {
+            /* Текст сервера про Premium может назвать цену сайта, баланс или пробный период — своя фраза. */
+            текст = СвойИИText.т("oai_prem_need")
+        } else if let своя = ОтказСвоегоИИ.фразаПриложения(код) {
+            текст = своя
+        } else {
+            текст = ошибка.isEmpty || КабинетСайта.машинныйКод(ошибка) ? СвойИИText.т("oai_fail") : ошибка
+        }
+        return .отказ(текст: текст, код: код, нуженПремиум: нуженПремиум)
     }
 }
 

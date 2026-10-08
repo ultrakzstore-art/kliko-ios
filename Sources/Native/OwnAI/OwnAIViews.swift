@@ -1,7 +1,5 @@
 import SwiftUI
 import UIKit
-import SafariServices
-import AuthenticationServices
 
 /**
  «СВОЙ ИИ» — ЭКРАН И ТОЧКИ ВХОДА (как cabOwnAi() сайта: шестерёнка → «Объявления» → «Свой ИИ»; ссылка в карточке
@@ -11,8 +9,9 @@ import AuthenticationServices
  Kliko AI); плашка последней ошибки (err_text); Premium — «Действует до … · осталось N дн.» или покупка App Store товаром
  kz.kliko.app.ownai.month (кнопка — только когда товар загружен из StoreKit, иначе «Покупки временно недоступны»; ни
  кошелька, ни пробного периода в приложении); подключение — поставщик (own_ai.providers и «Определить автоматически»),
- ключ (SecureField, «Вставить» — системная PasteButton без запроса доступа к буферу), «Подключить», «Войти через
- OpenRouter» (если own_ai.login); подключено — поставщик, маска «•••• abcd», модель (own_ai_models / own_ai_model),
+ ключ (SecureField, «Вставить» — системная PasteButton без запроса доступа к буферу), «Подключить» («Войти через
+ OpenRouter» сайта в приложении нет — вход держится на куке браузера, см. OwnAIModel.swift); подключено — поставщик,
+ маска «•••• abcd» (или «через OpenRouter», если подключали на сайте), модель (own_ai_models / own_ai_model),
  «Использовать свой ИИ», «Проверить подключение», «Отключить» с подтверждением.
  Ключ в приложении не хранится: поле очищается сразу по «Подключить» и при уходе с экрана.
  */
@@ -22,7 +21,7 @@ struct ЭкранСвоегоИИ: View {
     @State private var загружено = false
     @State private var поставщик = "auto"
     @State private var ключ = ""
-    /// Действие, которое сейчас идёт: connect, models, model, test, use, off, or.
+    /// Действие, которое сейчас идёт: connect, models, model, test, use, off.
     @State private var занято: String? = nil
     @State private var итог: String? = nil
     @State private var итогТон: ЗаметкаБизнеса.Тон = .серый
@@ -79,9 +78,8 @@ struct ЭкранСвоегоИИ: View {
         if let с = модель.состояние, с.вкл {
             VStack(alignment: .leading, spacing: 12) {
                 пояснение
-                if !с.ошибка.isEmpty || !с.текстОшибки.isEmpty {
-                    ЗаметкаБизнеса(с.текстОшибки.isEmpty ? т("oai_err_t") : с.текстОшибки, тон: .плохо,
-                                   значок: "exclamationmark.triangle")
+                if let плашка = Self.текстПлашки(с) {
+                    ЗаметкаБизнеса(плашка, тон: .плохо, значок: "exclamationmark.triangle")
                 }
                 блокПремиум(с.премиум)
                     .id("oai_premium")
@@ -101,6 +99,15 @@ struct ЭкранСвоегоИИ: View {
         } else {
             заглушка
         }
+    }
+
+    /// err / err_text. premium — молчим: о Premium своими словами говорит его блок (текст сайта может назвать цену,
+    /// баланс или пробный период — 3.1.1); gone — своя фраза; прочее — готовый текст сервера.
+    static func текстПлашки(_ с: СостояниеСвоегоИИ) -> String? {
+        guard !с.ошибка.isEmpty || !с.текстОшибки.isEmpty else { return nil }
+        if с.ошибка == "premium" { return nil }
+        if let своя = ОтказСвоегоИИ.фразаПриложения(с.ошибка) { return своя }
+        return с.текстОшибки.isEmpty ? СвойИИText.т("oai_err_t") : с.текстОшибки
     }
 
     /// Не загрузилось (сеть) — «Повторить»; загрузилось, а раздела нет (on: false, нет сессии) — одна строка.
@@ -234,14 +241,6 @@ struct ЭкранСвоегоИИ: View {
             полеКлюча
             КнопкаБизнеса(подпись: т("oai_connect"), занято: занято == "connect") { подключить() }
                 .disabled(занято != nil || ключ.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            if с.входOpenRouter {
-                КнопкаБизнеса(подпись: т("oai_or"), занято: занято == "or", второстепенная: true) { войтиOpenRouter() }
-                    .disabled(занято != nil)
-                Text(т("oai_or_note"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             итогБлок
         }
     }
@@ -386,7 +385,7 @@ struct ЭкранСвоегоИИ: View {
         UIAccessibility.post(notification: .announcement, argument: текст)
     }
 
-    /// Отказ: готовый текст сервера; need_premium — выделить Premium.
+    /// Отказ: готовый текст сервера; need_premium — своя фраза (её подставляет СвойИИAPI) и выделить Premium.
     private func разобрать(_ ответ: СвойИИAPI.Ответ) {
         switch ответ {
         case .готово:
@@ -496,28 +495,6 @@ struct ЭкранСвоегоИИ: View {
         }
     }
 
-    /// own_ai_or_start → url → OpenRouter; после закрытия окна — own_ai_state.
-    private func войтиOpenRouter() {
-        guard занято == nil else { return }
-        занято = "or"
-        итог = nil
-        Task { @MainActor in
-            let ответ = await СвойИИAPI.выполнить("own_ai_or_start")
-            занято = nil
-            guard case .готово(let j) = ответ else {
-                разобрать(ответ)
-                return
-            }
-            guard let адрес = ВходOpenRouter.адрес(МоиОбъявленияAPI.строка(j["url"])) else {
-                показатьИтог(т("oai_fail"), .плохо)
-                return
-            }
-            ВходOpenRouter.открыть(адрес) {
-                Task { @MainActor in await СвойИИМодель.shared.обновить() }
-            }
-        }
-    }
-
     /// models: массив строк-id.
     static func строки(_ значение: Any?) -> [String] {
         var итог: [String] = []
@@ -526,107 +503,6 @@ struct ЭкранСвоегоИИ: View {
             if !имя.isEmpty && !итог.contains(имя) { итог.append(имя) }
         }
         return итог
-    }
-}
-
-// MARK: - Вход через OpenRouter
-
-/**
- own_ai_or_start отдаёт адрес OpenRouter. Колбэк в схему приложения (callback_url kliko://…) — ASWebAuthenticationSession
- со схемой kliko; колбэк на сайт (https) — SFSafariViewController: человек входит, сайт сохраняет ключ, «Готово» закрывает
- окно. В обоих случаях после закрытия экран перечитывает own_ai_state — подключилось или нет, скажет сервер.
- */
-@MainActor
-enum ВходOpenRouter {
-    private static var сессия: ASWebAuthenticationSession? = nil
-    private static var якорь: ЯкорьПодключенияСоцсети? = nil
-    private static var посредник: ПосредникOpenRouter? = nil
-    /// Что сделать, когда окно закроется (экран перечитает own_ai_state). Одно окно за раз.
-    private static var послеЗакрытия: (() -> Void)? = nil
-
-    /// Только https: openrouter.ai или сам kliko.kz (если сервер ведёт через свою страницу).
-    static func адрес(_ строка: String) -> URL? {
-        guard let адрес = URL(string: строка.trimmingCharacters(in: .whitespacesAndNewlines)),
-              адрес.scheme?.lowercased() == "https",
-              let хост = адрес.host?.lowercased() else { return nil }
-        let свои = ["openrouter.ai", "kliko.kz"]
-        guard свои.contains(where: { хост == $0 || хост.hasSuffix("." + $0) }) else { return nil }
-        return адрес
-    }
-
-    static func открыть(_ адрес: URL, закрыто: @escaping () -> Void) {
-        послеЗакрытия = закрыто
-        if возвратВПриложение(адрес) {
-            листом(адрес)
-        } else {
-            safari(адрес)
-        }
-    }
-
-    /// Окно закрыто (колбэк, «Отмена», «Готово») — один раз.
-    static func закончить() {
-        сессия = nil
-        якорь = nil
-        посредник = nil
-        let действие = послеЗакрытия
-        послеЗакрытия = nil
-        действие?()
-    }
-
-    /// callback_url (или redirect_uri) в адресе — в схему kliko://.
-    private static func возвратВПриложение(_ адрес: URL) -> Bool {
-        let поля = URLComponents(url: адрес, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        let возврат = поля.first(where: { $0.name == "callback_url" || $0.name == "redirect_uri" })?.value ?? ""
-        return URL(string: возврат)?.scheme?.lowercased() == "kliko"
-    }
-
-    private static func листом(_ адрес: URL) {
-        let окна = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-        guard let окно = окна.first(where: { $0.isKeyWindow }) ?? окна.first else {
-            safari(адрес)
-            return
-        }
-        let лист = ASWebAuthenticationSession(url: адрес, callbackURLScheme: "kliko", completionHandler: обработчик())
-        let я = ЯкорьПодключенияСоцсети(окно: окно)
-        лист.presentationContextProvider = я
-        сессия = лист
-        якорь = я
-        if !лист.start() {
-            сессия = nil
-            якорь = nil
-            safari(адрес)
-        }
-    }
-
-    /// Обработчик вне главного актора: система может позвать его с любой нити — дальше на главной. Ничего не захватывает.
-    nonisolated private static func обработчик() -> @Sendable (URL?, Error?) -> Void {
-        return { _, _ in
-            Task { @MainActor in ВходOpenRouter.закончить() }
-        }
-    }
-
-    private static func safari(_ адрес: URL) {
-        guard let верх = ПоверхВсего.верхний() else {
-            закончить()
-            return
-        }
-        let окно = SFSafariViewController(url: адрес)
-        окно.dismissButtonStyle = .done
-        let п = ПосредникOpenRouter()
-        окно.delegate = п
-        посредник = п
-        верх.present(окно, animated: true)
-    }
-}
-
-/// «Готово» в окне OpenRouter (SFSafariViewController).
-final class ПосредникOpenRouter: NSObject, SFSafariViewControllerDelegate {
-    func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
-        MainActor.assumeIsolated {
-            ВходOpenRouter.закончить()
-        }
     }
 }
 

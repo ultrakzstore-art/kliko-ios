@@ -48,8 +48,6 @@ enum СвойИИText {
         "oai_key_ph": "Вставьте ключ",
         "oai_paste": "Вставить",
         "oai_connect": "Подключить",
-        "oai_or": "Войти через OpenRouter",
-        "oai_or_note": "Откроется OpenRouter. После входа закройте окно — проверим подключение.",
         "oai_conn_t": "Подключение",
         "oai_key_mask": "Ключ",
         "oai_via_or": "через OpenRouter",
@@ -83,6 +81,7 @@ enum СвойИИText {
         "oai_need_login": "Войдите в кабинет, чтобы подключить свой ИИ.",
         "oai_no_conn": "Нет соединения. Попробуйте ещё раз.",
         "oai_fail": "Не удалось — попробуйте ещё раз.",
+        "oai_gone": "Свой ИИ сейчас не действует — проверьте Premium и подключение в настройках своего ИИ.",
     ]
 
     private static let kk: [String: String] = [
@@ -114,8 +113,6 @@ enum СвойИИText {
         "oai_key_ph": "Кілтті қойыңыз",
         "oai_paste": "Қою",
         "oai_connect": "Қосу",
-        "oai_or": "OpenRouter арқылы кіру",
-        "oai_or_note": "OpenRouter ашылады. Кіргеннен кейін терезені жабыңыз — қосылымды тексереміз.",
         "oai_conn_t": "Қосылым",
         "oai_key_mask": "Кілт",
         "oai_via_or": "OpenRouter арқылы",
@@ -149,6 +146,7 @@ enum СвойИИText {
         "oai_need_login": "Өз ЖИ-ді қосу үшін кабинетке кіріңіз.",
         "oai_no_conn": "Байланыс жоқ. Қайталап көріңіз.",
         "oai_fail": "Мүмкін болмады — қайталап көріңіз.",
+        "oai_gone": "Өз ЖИ қазір әрекет етпейді — өз ЖИ баптауларында Premium мен қосылымды тексеріңіз.",
     ]
 
     private static let en: [String: String] = [
@@ -180,8 +178,6 @@ enum СвойИИText {
         "oai_key_ph": "Paste the key",
         "oai_paste": "Paste",
         "oai_connect": "Connect",
-        "oai_or": "Sign in with OpenRouter",
-        "oai_or_note": "OpenRouter will open. After signing in, close the window — we'll check the connection.",
         "oai_conn_t": "Connection",
         "oai_key_mask": "Key",
         "oai_via_or": "via OpenRouter",
@@ -215,6 +211,7 @@ enum СвойИИText {
         "oai_need_login": "Sign in to your account to connect your own AI.",
         "oai_no_conn": "No connection. Please try again.",
         "oai_fail": "Something went wrong — please try again.",
+        "oai_gone": "Your own AI is not active right now — check Premium and the connection in your own AI settings.",
     ]
 
     private static let ar: [String: String] = [
@@ -246,8 +243,6 @@ enum СвойИИText {
         "oai_key_ph": "الصق المفتاح",
         "oai_paste": "لصق",
         "oai_connect": "ربط",
-        "oai_or": "الدخول عبر OpenRouter",
-        "oai_or_note": "سيُفتح OpenRouter. بعد الدخول أغلق النافذة — وسنتحقق من الاتصال.",
         "oai_conn_t": "الاتصال",
         "oai_key_mask": "المفتاح",
         "oai_via_or": "عبر OpenRouter",
@@ -281,5 +276,6 @@ enum СвойИИText {
         "oai_need_login": "سجّل الدخول إلى حسابك لربط ذكائك الاصطناعي.",
         "oai_no_conn": "لا يوجد اتصال. حاول مرة أخرى.",
         "oai_fail": "تعذّر ذلك — حاول مرة أخرى.",
+        "oai_gone": "ذكاؤك الاصطناعي غير فعّال الآن — تحقّق من Premium والاتصال في إعدادات ذكائك الاصطناعي.",
     ]
 }
