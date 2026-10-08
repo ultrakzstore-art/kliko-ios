@@ -55,6 +55,8 @@ final class NativeRouter: ObservableObject {
         case обращение(id: String)
         /// Окно «Сменить пароль» поверх кабинета — /cabinet?open=password (этап 46; ссылка окна «Это были вы?»).
         case пароль
+        /// «Свой ИИ» своим экраном — /cabinet?open=own_ai, ?s=own_ai (ссылки сайта и пушей; покупка — только App Store).
+        case свойИИ
         /// Экран кошелька во вкладке «Кабинет» — /cabinet?go=wallet, ?payout=back (этап 47).
         case кошелёк
         /// «Баллы» во вкладке «Кабинет» — /cabinet?s=points (этап 47).
@@ -89,6 +91,7 @@ final class NativeRouter: ObservableObject {
         case .сделки, .сделка: return Config.нативныеСделки && Config.нативныйКабинет
         case .заявки, .обращение: return Config.нативныеСообщенияКабинета && Config.нативныйКабинет
         case .пароль: return Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
+        case .свойИИ: return Config.нативныйКабинет
         case .кошелёк, .баллы: return Config.нативныйКошелёк && Config.нативныйКабинет
         case .кабинет, .разделКабинета: return Config.нативныйКабинет
         case .вакансии: return Config.нижниеВкладки

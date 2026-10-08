@@ -34,6 +34,7 @@ import Foundation
    · ?s=points                                                — «Баллы» своим экраном (этап 47);
    · ?open=password                                           — окно пароля своим экраном (этап 46,
                                                                 Config.нативныеНастройки);
+   · ?open=own_ai, ?s=own_ai                                  — «Свой ИИ» своим экраном (покупка — App Store);
    · ?go=verify, ?go=egov                                     — верификация: eGov живёт на странице — сайт (46);
    · ?s=appear                                                — полный экран оформления сайта (скины, шрифты) — сайт;
    · ?s=requests, ?go=requests                                — «Заявки рядом» своим экраном (этап 45,
@@ -102,6 +103,9 @@ enum АдресаКабинета {
             guard значение == "1", Config.нативнаяПодача else { return nil }
             return .продажа
         case "open":
+            /* «Свой ИИ» (ultra-site 08.10.2026): ?open=own_ai — свой экран с покупкой App Store, а не веб-раздел, где в
+               приложении оплата закрыта. */
+            if значение == "own_ai" { return Config.нативныйКабинет ? .свойИИ : nil }
             /* Этап 46: ?open=password — openChangePassword сайта: окно пароля поверх кабинета. */
             guard значение == "password", Config.нативныеНастройки && Config.нативныйВход && Config.нативныйКабинет
             else { return nil }
@@ -188,6 +192,7 @@ enum АдресаКабинета {
         case ("s", "company"): return Config.нативныйБизнес ? .разделКабинета(.компания) : nil
         case ("s", "founder"): return Config.нативныйБизнес ? .разделКабинета(.клуб) : nil
         case ("s", "appear"), ("s", "home"): return .кабинет
+        case ("s", "own_ai"): return .свойИИ
         default: return nil
         }
     }
