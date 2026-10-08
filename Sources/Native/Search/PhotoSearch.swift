@@ -410,6 +410,11 @@ struct ОкноПоискаПоФото: View {
     /// Стек окна: объявление открыто (из сетки похожих или из полосы живого поиска) — оно в оформлении телефона,
     /// а не в тёмном камеры.
     @State private var путь = NavigationPath()
+    /// Тема окна приложения (выбор кабинета или iPhone) — её получают похожие и объявление.
+    @Environment(\.colorScheme) private var схемаОкна
+
+    /// Камера, «Ищем похожие…» и ошибка — тёмные; похожие и открытое объявление — в теме приложения.
+    private var тёмный: Bool { модель.шаг != .результаты && путь.isEmpty }
 
     var body: some View {
         NavigationStack(path: $путь) {
@@ -422,7 +427,12 @@ struct ОкноПоискаПоФото: View {
                 }
         }
         .tint(Theme.зелёный2)
-        .preferredColorScheme(модель.шаг == .результаты || !путь.isEmpty ? nil : .dark)
+        /* Тёмная камера — только этому окну. .preferredColorScheme(.dark) красил ВСЁ окно приложения, а возвращая nil,
+           снимал с окна тему, выбранную в кабинете (overrideUserInterfaceStyle, SceneDelegate): после камеры приложение
+           оставалось в теме iPhone — тёмным у кого iPhone тёмный. Строка состояния на тёмных шагах спрятана, как у
+           камеры подачи (PostingGuidedCamera): тёмные часы на чёрном не видны. */
+        .environment(\.colorScheme, тёмный ? .dark : схемаОкна)
+        .statusBarHidden(тёмный)
         .photosPicker(isPresented: $модель.галерея, selection: $модель.элемент, matching: .images)
         .onChange(of: модель.элемент) { _, новый in
             модель.принять(новый)
