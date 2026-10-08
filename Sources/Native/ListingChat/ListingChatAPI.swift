@@ -153,6 +153,59 @@ enum ЧатОбъявленияAPI {
         return загрузка(await получить(адрес))
     }
 
+    // MARK: - Офлайн-режим (08.10.2026): тело ответа для копии на диске
+
+    /// Как загрузить(), и вместе с итогом — тело ответа как пришло (только у ok-ответа): копия чата (OfflineCopies.swift).
+    static func загрузитьСТелом(_ объявление: String) async -> (итог: ИтогЗагрузки, тело: Data?) {
+        guard let адрес = адресЧата("widget_data", [URLQueryItem(name: "pid", value: объявление)]) else {
+            return (.отказ, nil)
+        }
+        let (сырое, тело) = await получитьСТелом(адрес)
+        let итог = загрузка(сырое)
+        if case .готово = итог { return (итог, тело) }
+        return (итог, nil)
+    }
+
+    /// Как опрос(), и тело ok-ответа: из него в копию ложится свежая переписка (chat{}).
+    static func опросСТелом(_ чат: String, после счёт: Int) async -> (итог: ИтогОпроса, тело: Data?) {
+        guard let адрес = адресЧата("poll", [URLQueryItem(name: "cid", value: чат),
+                                          URLQueryItem(name: "since", value: String(счёт))]) else { return (.отказ, nil) }
+        let (сырое, тело) = await получитьСТелом(адрес)
+        switch сырое {
+        case .сеть:
+            return (.сеть, nil)
+        case .неJSON:
+            return (.отказ, nil)
+        case .поля(let поля, _):
+            guard да(поля["ok"]) else {
+                let итог: ИтогОпроса = строка(поля["error"]) == "access" ? .закрыт : .отказ
+                return (итог, nil)
+            }
+            return (.готово(снимок(поля)), тело)
+        }
+    }
+
+    /// Снимок из копии на диске — тем же разбором, что живой ответ; не JSON — nil.
+    static func снимокКопии(_ данные: Data) -> Снимок? {
+        guard let поля = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else { return nil }
+        return снимок(поля)
+    }
+
+    /**
+     Копия чата: тело widget_data (продавец, товар, блокировка) и поверх — chat{} последнего опроса или истории (свежая
+     переписка, статус, согласованная цена). Не JSON — nil.
+     */
+    static func слитьКопию(основа: Data, свежее: Data?) -> Data? {
+        guard var поля = (try? JSONSerialization.jsonObject(with: основа)) as? [String: Any] else { return nil }
+        if let свежее, let сверху = (try? JSONSerialization.jsonObject(with: свежее)) as? [String: Any] {
+            for ключ in ["chat", "blocked", "blocked_by_me", "deal_live", "deal_id", "seller_presence", "seller_online"] {
+                if let значение = сверху[ключ] { поля[ключ] = значение }
+            }
+        }
+        guard JSONSerialization.isValidJSONObject(поля) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: поля)
+    }
+
     /// GET history — вся переписка по номеру чата (mkChatRefetch).
     static func история(_ чат: String) async -> ИтогЗагрузки {
         guard let адрес = адресЧата("history", [URLQueryItem(name: "cid", value: чат)]) else { return .отказ }
@@ -425,10 +478,15 @@ enum ЧатОбъявленияAPI {
     }
 
     private static func получить(_ адрес: URL) async -> Сырое {
+        await получитьСТелом(адрес).0
+    }
+
+    /// GET и тело ответа как пришло (офлайн-копия).
+    private static func получитьСТелом(_ адрес: URL) async -> (Сырое, Data?) {
         var запрос = URLRequest(url: адрес)
         запрос.httpShouldHandleCookies = false
         for (поле, значение) in await SiteSession.куки() { запрос.setValue(значение, forHTTPHeaderField: поле) }
-        return await выполнить(запрос)
+        return await выполнитьСТелом(запрос)
     }
 
     private static func отправить(_ адрес: URL, тело: [String: Any]) async -> Сырое {
@@ -446,12 +504,18 @@ enum ЧатОбъявленияAPI {
     }
 
     private static func выполнить(_ запрос: URLRequest) async -> Сырое {
+        await выполнитьСТелом(запрос).0
+    }
+
+    private static func выполнитьСТелом(_ запрос: URLRequest) async -> (Сырое, Data?) {
         let пришло: (Data, URLResponse)
-        do { пришло = try await сессия.data(for: запрос) } catch { return .сеть }
+        do { пришло = try await сессия.data(for: запрос) } catch { return (.сеть, nil) }
         let код = (пришло.1 as? HTTPURLResponse)?.statusCode ?? 200
         /* JSON разбираем и при 4xx: сайт объясняет отказ полями need/error, а не кодом. */
-        guard let поля = (try? JSONSerialization.jsonObject(with: пришло.0)) as? [String: Any] else { return .неJSON(код) }
-        return .поля(поля, код)
+        guard let поля = (try? JSONSerialization.jsonObject(with: пришло.0)) as? [String: Any] else {
+            return (.неJSON(код), nil)
+        }
+        return (.поля(поля, код), пришло.0)
     }
 
     // MARK: - Терпимое чтение полей

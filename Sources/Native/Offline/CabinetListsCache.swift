@@ -73,14 +73,12 @@ enum КэшКабинета {
     }
 }
 
-/// Плашка над списком, показанным с диска без связи: «Нет связи — показан сохранённый список».
+/// Плашка над списком, показанным с диска без связи. Офлайн-режим (08.10.2026): та же общая плашка, что у остальных
+/// экранов с копией, — «Нет сети — показана сохранённая версия» (ПлашкаБезСети).
 struct ПлашкаСохранённогоСписка: View {
     init() {}
 
     var body: some View {
-        Label(OfflineText.т("list_copy"), systemImage: "clock.arrow.circlepath")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        ПлашкаБезСети()
     }
 }

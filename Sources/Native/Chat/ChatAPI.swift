@@ -57,11 +57,17 @@ enum ChatAPI {
     /// Снимок переписки; сервер заодно помечает её прочитанной (dm.php?action=poll&tid=&me_id=, CAB @1274385).
     /// ждать = false — фоновый опрос: страницу под слоем не ждёт и не уводит на сайт, если она сейчас не там.
     static func переписка(_ tid: String, ждать: Bool = true) async throws -> (ЧатПереписка?, заблокирован: Bool) {
+        let ответ = try await перепискаЦеликом(tid, ждать: ждать)
+        return (ответ.переписка, ответ.заблокирован)
+    }
+
+    /// То же целым ответом — с телом как пришло (ЧатОтвет.тело): офлайн-копия переписки (OfflineCopies.swift) и сверка
+    /// очереди исходящих «не дошло ли» (OutboxQueue.swift).
+    static func перепискаЦеликом(_ tid: String, ждать: Bool = true) async throws -> ЧатОтвет {
         let я = await ИнбоксAPI.номерБыстро()
         var хвост = путь + "?action=poll&tid=" + ИнбоксAPI.вАдрес(tid)
         if !я.isEmpty { хвост += "&me_id=" + ИнбоксAPI.вАдрес(я) }
-        let ответ = try await выполнить(хвост, метод: "GET", тело: nil, ждать: ждать)
-        return (ответ.переписка, ответ.заблокирован)
+        return try await выполнить(хвост, метод: "GET", тело: nil, ждать: ждать)
     }
 
     // MARK: - Запись
@@ -69,9 +75,14 @@ enum ChatAPI {
     /// Открыть (или создать) диалог с собеседником — openDM сайта: {action:"open", me_id, peer_id, listing_id, tid}.
     static func открыть(собеседник: String, объявление: String,
                         номер: String = "") async throws -> (ЧатПереписка?, заблокирован: Bool) {
-        let поля: [String: Any] = ["action": "open", "peer_id": собеседник, "listing_id": объявление, "tid": номер]
-        let ответ = try await записать(поля)
+        let ответ = try await открытьЦеликом(собеседник: собеседник, объявление: объявление, номер: номер)
         return (ответ.переписка, ответ.заблокирован)
+    }
+
+    /// То же целым ответом — с телом как пришло (офлайн-копия переписки).
+    static func открытьЦеликом(собеседник: String, объявление: String, номер: String = "") async throws -> ЧатОтвет {
+        let поля: [String: Any] = ["action": "open", "peer_id": собеседник, "listing_id": объявление, "tid": номер]
+        return try await записать(поля)
     }
 
     /// dmSend сайта: {action:"send", me_id, thread_id, text}.
@@ -144,10 +155,11 @@ enum ChatAPI {
         if код == 401 || код == 403 { throw Ошибка.нуженВход }
         /* JSON разбираем и при 4xx: сайт объясняет отказ полем error («no_peer», «origin», «auth»), а не кодом. */
         let данные = Data(ответ.текст.utf8)
-        guard let разобранный = try? JSONDecoder().decode(ЧатОтвет.self, from: данные) else {
+        guard var разобранный = try? JSONDecoder().decode(ЧатОтвет.self, from: данные) else {
             if !(200..<300).contains(код) { throw Ошибка.статус(код) }
             throw Ошибка.разбор
         }
+        разобранный.тело = данные
         if !разобранный.ok {
             let причина = разобранный.ошибка ?? ""
             if ["auth", "login", "unauthorized", "no_auth"].contains(причина) { throw Ошибка.нуженВход }
