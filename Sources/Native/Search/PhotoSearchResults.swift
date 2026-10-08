@@ -3,7 +3,9 @@ import UIKit
 
 /**
  ПОИСК ПО ФОТО ПОСЛЕ СНИМКА (владелец 29.09.2026): «Ищем похожие…» поверх фото, затем сетка карточек ленты
- «Похожие на ваше фото» с «Снять ещё», или ошибка с «Повторить». Модель и запросы — PhotoSearch.swift.
+ «Похожие на ваше фото» с «Снять ещё», или ошибка с «Повторить». Модель и запросы — PhotoSearch.swift, каскад выдачи —
+ PhotoSearchMatch.swift. Владелец 08.10.2026: капсула «Kliko AI видит: … ✎» — исправить запрос и искать заново; под
+ шапкой — подпись, если выдача не точная (по всей стране, по запросу короче, по разделу).
  */
 
 /// Фото на тёмном фоне, бегущая зелёная полоса по нему и «Ищем похожие…» (Kliko AI) снизу.
@@ -149,10 +151,14 @@ private struct ПолосаПоискаФото: View {
 
 // MARK: - Похожие
 
-/// «Похожие на ваше фото»: фото и что распознал Kliko AI, «Все в ленте», сетка ListingCard; снизу «Снять ещё».
+/// «Похожие на ваше фото»: фото и капсула «Kliko AI видит: … ✎» (исправить запрос), «Все в ленте», под шапкой — чем
+/// выдача отличается от точной, сетка ListingCard; снизу «Снять ещё».
 struct ЭкранПохожихПоФото: View {
     @ObservedObject var модель: ПоискПоФотоСайта
     @Environment(\.dynamicTypeSize) private var размерТекста
+    /// Окно «Исправить запрос» и его текст.
+    @State private var правим = false
+    @State private var правка = ""
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
@@ -161,6 +167,10 @@ struct ЭкранПохожихПоФото: View {
             VStack(alignment: .leading, spacing: 16) {
                 шапка
                     .padding(.horizontal, ListingCard.поле)
+                if let подпись = модель.подписьУровня {
+                    подписьУровня(подпись)
+                        .padding(.horizontal, ListingCard.поле)
+                }
                 if модель.товары.isEmpty {
                     пусто
                 } else {
@@ -195,6 +205,69 @@ struct ЭкранПохожихПоФото: View {
             снятьЕщё
                 .padding(.bottom, 16)
         }
+        .alert(т("ps_fix"), isPresented: $правим) {
+            TextField(т("ps_fix_field"), text: $правка)
+                .textInputAutocapitalization(.sentences)
+            Button(т("cancel"), role: .cancel) {}
+            Button(т("ps_fix_go")) { модель.искатьЗаново(правка) }
+        } message: {
+            Text(т("ps_fix_msg"))
+        }
+    }
+
+    /// Открыть «Исправить запрос» с тем, что видит Kliko AI, в поле.
+    private func исправить() {
+        правка = модель.запрос
+        правим = true
+    }
+
+    /// Текст капсулы: распознанный запрос; догадка Vision (запроса нет, раздел назван подписью ниже) — «Исправить
+    /// запрос», чтобы написать, что на фото.
+    private var текстКапсулы: String {
+        модель.запрос.isEmpty ? т("ps_fix") : String(format: т("ps_ai_sees"), модель.запрос)
+    }
+
+    /// «Kliko AI видит: … ✎» — нажатие открывает «Исправить запрос».
+    private var капсулаЗапроса: some View {
+        Button(action: исправить) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(Theme.зелёный2)
+                    .accessibilityHidden(true)
+                Text(текстКапсулы)
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "pencil")
+                    .foregroundStyle(Theme.зелёный2)
+                    .accessibilityHidden(true)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(minHeight: 44)
+            .background(Theme.оттенокАкцента, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(НажатиеКнопкиФото())
+        .accessibilityLabel(текстКапсулы)
+        .accessibilityHint(т("ps_fix_hint"))
+    }
+
+    /// Под шапкой: выдача не точная — по всей стране, по запросу короче, по разделу или по догадке Vision.
+    private func подписьУровня(_ текст: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(Theme.зелёный2)
+                .accessibilityHidden(true)
+            Text(текст)
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.footnote.weight(.semibold))
+        .accessibilityElement(children: .combine)
     }
 
     private var шапка: some View {
@@ -217,30 +290,25 @@ struct ЭкранПохожихПоФото: View {
                     .foregroundStyle(Theme.текст)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(Theme.зелёный2)
-                        .accessibilityHidden(true)
-                    Text(String(format: т("ps_ai_saw"), модель.запрос))
-                        .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(2)
-                }
-                .font(.subheadline.weight(.semibold))
+                капсулаЗапроса
                 if !модель.товары.isEmpty {
                     HStack(spacing: 10) {
                         Text(String(format: т("ps_count"), модель.всего ?? модель.товары.count))
                             .font(.footnote)
                             .foregroundStyle(Theme.текстВторой)
-                        Button { модель.вЛенту() } label: {
-                            Text(т("ps_in_feed"))
-                                .font(.footnote.weight(.bold))
-                                .foregroundStyle(Theme.зелёный2)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Theme.оттенокАкцента, in: Capsule())
-                                .contentShape(Capsule())
+                        /* Нашлось только по всей стране — лента (свой город) была бы пустой: кнопки нет. */
+                        if модель.вЛентуМожно {
+                            Button { модель.вЛенту() } label: {
+                                Text(т("ps_in_feed"))
+                                    .font(.footnote.weight(.bold))
+                                    .foregroundStyle(Theme.зелёный2)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Theme.оттенокАкцента, in: Capsule())
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(НажатиеКнопкиФото())
                         }
-                        .buttonStyle(НажатиеКнопкиФото())
                     }
                 }
             }
@@ -254,7 +322,8 @@ struct ЭкранПохожихПоФото: View {
         }
     }
 
-    /// Ничего не нашлось: подсказка про ракурс и «Все в ленте» (поиск по тому же запросу в ленте).
+    /// Ничего не нашлось и шире некуда: подсказка про ракурс и «Исправить запрос». «Все в ленте» нет: каскад уже
+    /// искал запрос без раздела по всей стране, а лента в своём городе — только уже.
     private var пусто: some View {
         VStack(spacing: 0) {
             Image(systemName: "magnifyingglass")
@@ -275,12 +344,9 @@ struct ЭкранПохожихПоФото: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 18)
-            if !модель.запрос.isEmpty {
-                ЗелёнаяКнопкаФото(заголовок: т("ps_in_feed"), значок: "list.bullet", контурная: true) {
-                    модель.вЛенту()
-                }
+            ЗелёнаяКнопкаФото(заголовок: т("ps_fix"), значок: "pencil", действие: исправить)
                 .frame(maxWidth: 320)
-            }
+                .accessibilityHint(т("ps_fix_hint"))
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
@@ -316,6 +382,13 @@ struct ЭкранОшибкиПоискаФото: View {
     let текст: String
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
+
+    /// Лимит сайта (20 поисков в час): совет «фото чётче, другой ракурс» тут не к месту — нужно просто подождать.
+    private var лимит: Bool { текст == т("ps_rate_limit") }
+
+    /// «Повторить» — есть фото и это не лимит сайта: повтор при лимите снова ушёл бы в photo_search.php и упёрся бы
+    /// в тот же rate_limit, а текст просит подождать. Тогда главная кнопка — «Снять ещё».
+    private var повторНужен: Bool { модель.превью != nil && !лимит }
 
     var body: some View {
         ZStack {
@@ -362,18 +435,20 @@ struct ЭкранОшибкиПоискаФото: View {
                 .foregroundStyle(Color.white)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 8)
-            Text(т("ps_retry_hint"))
-                .font(.subheadline)
-                .foregroundStyle(Color.white.opacity(0.72))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 24)
-            if модель.превью != nil {
+                .padding(.bottom, лимит ? 24 : 8)
+            if !лимит {
+                Text(т("ps_retry_hint"))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 24)
+            }
+            if повторНужен {
                 ЗелёнаяКнопкаФото(заголовок: т("ps_retry_btn"), значок: "arrow.clockwise") { модель.повторить() }
                     .padding(.bottom, 10)
             }
-            ЗелёнаяКнопкаФото(заголовок: т("ps_again"), значок: "camera.fill", контурная: модель.превью != nil,
+            ЗелёнаяКнопкаФото(заголовок: т("ps_again"), значок: "camera.fill", контурная: повторНужен,
                               наТёмном: true) { модель.снятьЕщё() }
                 .padding(.bottom, 6)
             Button { модель.открытьГалерею() } label: {
