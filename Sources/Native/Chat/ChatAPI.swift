@@ -87,7 +87,16 @@ enum ChatAPI {
 
     /// dmSend сайта: {action:"send", me_id, thread_id, text}.
     static func написать(tid: String, текст: String) async throws -> ЧатПереписка? {
-        try await записать(["action": "send", "thread_id": tid, "text": текст]).переписка
+        try await написатьЦеликом(tid: tid, текст: текст, ждать: true).переписка
+    }
+
+    /**
+     То же целым ответом — для очереди исходящих (OutboxQueue.swift). Ей нужен и отказ blocked: выполнить его не бросает,
+     а отдаёт ответ с ok = false. ждать = false — фоновая отправка: страницу под слоем не ждёт и не уводит на сайт, если
+     она сейчас на шлюзе оплаты или в eGov (страница не на сайте — Ошибка.сеть, запрос не уходил).
+     */
+    static func написатьЦеликом(tid: String, текст: String, ждать: Bool) async throws -> ЧатОтвет {
+        try await записать(["action": "send", "thread_id": tid, "text": текст], ждать: ждать)
     }
 
     // MARK: - Текст отказа
@@ -126,12 +135,12 @@ enum ChatAPI {
     // MARK: - Транспорт
 
     /// POST JSON, как у сайта: без csrf, с me_id. Гость — «нужен вход», dm.php не трогаем.
-    private static func записать(_ поля: [String: Any]) async throws -> ЧатОтвет {
+    private static func записать(_ поля: [String: Any], ждать: Bool = true) async throws -> ЧатОтвет {
         if await SiteSession.состояние().вошёл == false { throw Ошибка.нуженВход }
         var тело = поля
-        let я = await ИнбоксAPI.мойНомер(ждать: true)
+        let я = await ИнбоксAPI.мойНомер(ждать: ждать)
         if !я.isEmpty { тело["me_id"] = я }
-        return try await выполнить(путь, метод: "POST", тело: тело, ждать: true)
+        return try await выполнить(путь, метод: "POST", тело: тело, ждать: ждать)
     }
 
     private static func выполнить(_ хвост: String, метод: String, тело: [String: Any]?,

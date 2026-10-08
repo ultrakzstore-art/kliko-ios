@@ -735,6 +735,13 @@ enum КабинетСайта {
         throw Сбой.сеть
     }
 
+    /// Страница под слоем на сайте и не грузится — запрос с ждать = false пройдёт ею, никуда её не уводя. Фоновые
+    /// записи (очередь исходящих, OutboxQueue.swift) смотрят сюда до отправки: не готова — ждут, попытка не в счёт.
+    static func страницаГотова() -> Bool {
+        guard let web = WebBridge.shared.webView else { return false }
+        return наСайте(web) && !web.isLoading
+    }
+
     private static func наСайте(_ web: WKWebView) -> Bool {
         guard let адрес = web.url, адрес.scheme?.lowercased() == "https",
               let хост = адрес.host?.lowercased() else { return false }
