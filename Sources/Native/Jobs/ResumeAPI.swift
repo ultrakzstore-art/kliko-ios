@@ -196,7 +196,12 @@ enum РезюмеAPI {
     /// _jw2AI: черновик от Kliko AI — должность, «о себе», навыки. nil в ответе — текст ошибки.
     static func собрать(роль: String, опыт: String) async -> (title: String, about: String, skills: [String])? {
         guard let j = try? await A.отправить("/api/jobs.php?action=ai_resume", тело: ["role": роль, "exp": опыт],
-                                            отКорня: true), A.да(j["ok"]) else { return nil }
+                                            отКорня: true) else { return nil }
+        guard A.да(j["ok"]) else {
+            /* «Свой ИИ» (договор §5): error "own_ai", own_ai:"<код>", текст в msg — окно с готовым текстом и действиями. */
+            if let отказ = ОтказСвоегоИИ.из(j) { ОкноСвоегоИИ.показатьОтказ(отказ) }
+            return nil
+        }
         let навыки: [String] = ((j["skills"] as? [Any]) ?? []).map { String(A.строка($0).prefix(50)) }
             .filter { !$0.isEmpty }
         return (A.строка(j["title"]), A.строка(j["about"]), навыки)

@@ -10,7 +10,7 @@ import SwiftUI
    · POST chat.php?action=ai_replies_dm {tid} — личная переписка (_dmTplFetchAi кабинета);
    · ответ {ok: true, replies: [3 строки]} | {ok: false, ai_off: true} (Kliko AI выключен на сайте) | {ok: false,
      limit: 1} (дневной лимит подсказок airep_daily) | {ok: false, busy: true} (чаще раза в 2 секунды) | {error: auth |
-     not_found | access | empty | ai}.
+     not_found | access | empty | ai}; «Свой ИИ» — {ok: false, own_ai: "<код>", error: готовый текст}.
  Транспорт — КабинетСайта (ИнбоксAPI.отправитьБезТокена): fetch самой страницы сайта, как соседние запросы кабинета.
 
  Как у сайта: подсказка только встаёт в поле ввода и ничего не отправляет сама; варианты — тремя чипами над полем
@@ -41,6 +41,8 @@ enum ИИПодсказкиAPI {
         case занято
         /// empty — подсказывать не по чему (сообщений нет).
         case пусто
+        /// Отказ своего ИИ («Свой ИИ», own_ai:"<код>" и готовый текст) — не молча: окно с действиями.
+        case свойИИ(ОтказСвоегоИИ)
         case сбой
     }
 
@@ -66,6 +68,7 @@ enum ИИПодсказкиAPI {
     }
 
     nonisolated static func разобрать(_ j: [String: Any]) -> Итог {
+        if !да(j["ok"]), let отказ = ОтказСвоегоИИ.из(j) { return .свойИИ(отказ) }
         if да(j["ok"]) {
             let строки = (j["replies"] as? [Any] ?? []).compactMap { элемент -> String? in
                 guard let s = элемент as? String else { return nil }
@@ -166,6 +169,9 @@ final class ИИПодсказкиЧата: ObservableObject {
             case .пусто:
                 self.состояние = .нет
                 ИИПодсказкиЧата.показатьОбразец(.знакомство, пусто: true)
+            case .свойИИ(let отказ):
+                self.состояние = .нет
+                ОкноСвоегоИИ.показатьОтказ(отказ)
             case .занято, .сбой:
                 self.состояние = .сбой
             }
