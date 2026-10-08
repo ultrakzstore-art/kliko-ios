@@ -6,7 +6,8 @@ import Foundation
 
  Русские слова — из словаря витрины js/i18n-marketplace-ru.js: sov_* (строки поиска), ps_* (поиск по фото),
  gate_account_title, reg_photo_search, reg_have_account, gate_go (окно регистрации mkRegGate), login_toast, err_no_conn;
- ps_cam_hint … ps_photo, sign_in — свой экран камеры поиска по фото (владелец 29.09.2026), переведены сами.
+ ps_cam_hint … ps_photo, sign_in — свой экран камеры поиска по фото (владелец 29.09.2026), переведены сами;
+ ps_mode*, ps_live_* — режим «Навести камеру» (живой поиск, PhotoSearchLive.swift), тоже свои.
  подсказка поля — placeholder #mk-sov-inp («Поиск по объявлениям»). Словарей kk/en/ar сайта в снимке нет — переведено
  тем же тоном, что прежние тексты приложения. Популярные запросы (MK_TRENDS) — запасные, если страница сайта их не дала.
  */
@@ -59,7 +60,13 @@ enum ПоискСайтаText {
             "ps_no_cam": "Камера недоступна", "ps_no_cam_hint": "Выберите фото из галереи — Kliko AI найдёт похожие",
             "ps_settings": "Открыть Настройки", "ps_gate_title": "Войдите, чтобы искать по фото",
             "ps_gate_text": "Сфотографируйте вещь — Kliko AI найдёт похожие объявления. Для этого нужен аккаунт Kliko.",
-            "sign_in": "Войти", "ps_count": "Найдено: %d", "ps_cancel_search": "Отменить", "ps_photo": "Ваше фото"
+            "sign_in": "Войти", "ps_count": "Найдено: %d", "ps_cancel_search": "Отменить", "ps_photo": "Ваше фото",
+            "ps_mode": "Режим камеры", "ps_mode_live": "Навести камеру", "ps_mode_photo": "Выбрать фото",
+            "ps_live_like": "Похоже на: %@", "ps_live_hint": "Держите камеру ровно — покажем похожие",
+            "ps_live_limit": "Живой поиск отдыхает — снимите кнопкой затвора", "ps_live_strip": "Похожие объявления",
+            "ps_live_sleep": "Камера на паузе",
+            "ps_live_sleep_hint": "Минуту ничего не менялось — камера уснула, чтобы беречь батарею",
+            "ps_live_resume": "Продолжить"
         ],
         "kk": [
             "placeholder": "Хабарландырулар бойынша іздеу", "back": "Жабу", "clear_field": "Тазалау",
@@ -87,7 +94,13 @@ enum ПоискСайтаText {
             "ps_no_cam": "Камера қолжетімсіз", "ps_no_cam_hint": "Галереядан фото таңдаңыз — Kliko AI ұқсастарын табады",
             "ps_settings": "Баптауларды ашу", "ps_gate_title": "Фото бойынша іздеу үшін кіріңіз",
             "ps_gate_text": "Затты суретке түсіріңіз — Kliko AI ұқсас хабарландыруларды табады. Ол үшін Kliko аккаунты қажет.",
-            "sign_in": "Кіру", "ps_count": "Табылды: %d", "ps_cancel_search": "Тоқтату", "ps_photo": "Сіздің фотоңыз"
+            "sign_in": "Кіру", "ps_count": "Табылды: %d", "ps_cancel_search": "Тоқтату", "ps_photo": "Сіздің фотоңыз",
+            "ps_mode": "Камера режимі", "ps_mode_live": "Камераны бағыттау", "ps_mode_photo": "Фото таңдау",
+            "ps_live_like": "Ұқсайды: %@", "ps_live_hint": "Камераны тұрақты ұстаңыз — ұқсастарын көрсетеміз",
+            "ps_live_limit": "Тікелей іздеу демалып тұр — түсіру батырмасын басыңыз",
+            "ps_live_strip": "Ұқсас хабарландырулар", "ps_live_sleep": "Камера кідіртілді",
+            "ps_live_sleep_hint": "Бір минут ештеңе өзгермеді — батареяны үнемдеу үшін камера ұйықтады",
+            "ps_live_resume": "Жалғастыру"
         ],
         "en": [
             "placeholder": "Search listings", "back": "Close", "clear_field": "Clear",
@@ -115,7 +128,13 @@ enum ПоискСайтаText {
             "ps_no_cam": "Camera unavailable", "ps_no_cam_hint": "Choose a photo from your gallery — Kliko AI will find similar ones",
             "ps_settings": "Open Settings", "ps_gate_title": "Sign in to search by photo",
             "ps_gate_text": "Take a photo of an item — Kliko AI will find similar listings. You just need a Kliko account.",
-            "sign_in": "Sign in", "ps_count": "Found: %d", "ps_cancel_search": "Stop", "ps_photo": "Your photo"
+            "sign_in": "Sign in", "ps_count": "Found: %d", "ps_cancel_search": "Stop", "ps_photo": "Your photo",
+            "ps_mode": "Camera mode", "ps_mode_live": "Point camera", "ps_mode_photo": "Choose photo",
+            "ps_live_like": "Looks like: %@", "ps_live_hint": "Hold the camera steady — we'll show similar items",
+            "ps_live_limit": "Live search is resting — use the shutter button", "ps_live_strip": "Similar listings",
+            "ps_live_sleep": "Camera paused",
+            "ps_live_sleep_hint": "Nothing changed for a minute — the camera went to sleep to save battery",
+            "ps_live_resume": "Continue"
         ],
         "ar": [
             "placeholder": "ابحث في الإعلانات", "back": "إغلاق", "clear_field": "مسح",
@@ -143,7 +162,13 @@ enum ПоискСайтаText {
             "ps_no_cam": "الكاميرا غير متاحة", "ps_no_cam_hint": "اختر صورة من المعرض — سيجد Kliko AI ما يشبهها",
             "ps_settings": "فتح الإعدادات", "ps_gate_title": "سجّل الدخول للبحث بالصورة",
             "ps_gate_text": "صوّر الغرض — سيجد Kliko AI إعلانات مشابهة. يلزم فقط حساب Kliko.",
-            "sign_in": "تسجيل الدخول", "ps_count": "تم العثور على: %d", "ps_cancel_search": "إيقاف", "ps_photo": "صورتك"
+            "sign_in": "تسجيل الدخول", "ps_count": "تم العثور على: %d", "ps_cancel_search": "إيقاف", "ps_photo": "صورتك",
+            "ps_mode": "وضع الكاميرا", "ps_mode_live": "توجيه الكاميرا", "ps_mode_photo": "اختيار صورة",
+            "ps_live_like": "يشبه: %@", "ps_live_hint": "ثبّت الكاميرا — سنعرض ما يشبهه",
+            "ps_live_limit": "البحث المباشر في استراحة — استخدم زر الالتقاط", "ps_live_strip": "إعلانات مشابهة",
+            "ps_live_sleep": "الكاميرا متوقفة مؤقتًا",
+            "ps_live_sleep_hint": "لم يتغير شيء لمدة دقيقة — توقفت الكاميرا لتوفير البطارية",
+            "ps_live_resume": "متابعة"
         ]
     ]
 }

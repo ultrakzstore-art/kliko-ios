@@ -38,6 +38,12 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
     /// Поворот кадра — как у интерфейса (на iPhone всегда портрет, 90°).
     private var уголПоворота: CGFloat = 90
     private var готово: (@MainActor (UIImage) -> Void)? = nil
+    /// Живой поиск («Навести камеру», PhotoSearchLive.swift): выход кадров видео и кому их отдавать — только на очереди
+    /// камеры. Приёмника нет — выхода в сессии нет, и сессия снимает как раньше (.photo).
+    private let видеоВыход = AVCaptureVideoDataOutput()
+    private var видеоВСессии = false
+    private weak var приёмникКадров: AVCaptureVideoDataOutputSampleBufferDelegate? = nil
+    private var очередьКадров: DispatchQueue? = nil
 
     override init() {
         super.init()
@@ -102,10 +108,54 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
         }
         сессия.addInput(вход)
         сессия.addOutput(выход)
+        применитьЖивыеКадры()
         сессия.commitConfiguration()
         устройство = камера
         настроена = true
         return true
+    }
+
+    /// «Навести камеру»: кадры видео идут приёмнику на его очереди, сессия — 1280×720 (меньше работы и батареи);
+    /// nil — выход кадров снимается, сессия снова .photo. Сессию не запускает и не останавливает.
+    func живыеКадры(_ приёмник: AVCaptureVideoDataOutputSampleBufferDelegate?, очередь своя: DispatchQueue?) {
+        очередь.async { [weak self] in
+            guard let self else { return }
+            self.приёмникКадров = приёмник
+            self.очередьКадров = приёмник == nil ? nil : своя
+            (приёмник as? АнализКадровПоиска)?.повернуть(self.уголПоворота)
+            guard self.настроена else { return }
+            self.сессия.beginConfiguration()
+            self.применитьЖивыеКадры()
+            self.сессия.commitConfiguration()
+        }
+    }
+
+    /// На очереди камеры, между beginConfiguration и commitConfiguration: выход кадров и размер сессии — по приёмнику.
+    private func применитьЖивыеКадры() {
+        if let приёмник = приёмникКадров, let своя = очередьКадров {
+            if сессия.sessionPreset != .hd1280x720 && сессия.canSetSessionPreset(.hd1280x720) {
+                сессия.sessionPreset = .hd1280x720
+            }
+            if !видеоВСессии && сессия.canAddOutput(видеоВыход) {
+                видеоВыход.alwaysDiscardsLateVideoFrames = true
+                let формат = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                if видеоВыход.availableVideoPixelFormatTypes.contains(формат) {
+                    видеоВыход.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: формат]
+                }
+                сессия.addOutput(видеоВыход)
+                видеоВСессии = true
+            }
+            видеоВыход.setSampleBufferDelegate(приёмник, queue: своя)
+        } else {
+            видеоВыход.setSampleBufferDelegate(nil, queue: nil)
+            if видеоВСессии {
+                сессия.removeOutput(видеоВыход)
+                видеоВСессии = false
+            }
+            if сессия.sessionPreset != .photo && сессия.canSetSessionPreset(.photo) {
+                сессия.sessionPreset = .photo
+            }
+        }
     }
 
     /// Ушли с экрана камеры: фонарик гаснет, сессия останавливается.
@@ -168,7 +218,12 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
 
     /// Поворот превью (главная нить сообщает его и снимку).
     func запомнитьПоворот(_ угол: CGFloat) {
-        очередь.async { [weak self] in self?.уголПоворота = угол }
+        очередь.async { [weak self] in
+            guard let self, self.уголПоворота != угол else { return }
+            self.уголПоворота = угол
+            /* Живой поиск поворачивает кадры сам, по метке ориентации, — ему тоже. */
+            (self.приёмникКадров as? АнализКадровПоиска)?.повернуть(угол)
+        }
     }
 
     /// Затвор: снимок придёт в `готово` на главной нити.
@@ -278,20 +333,43 @@ enum ПоследнееФотоГалереи {
 // MARK: - Экран камеры
 
 /// Тёмный экран камеры: ✕ и фонарик сверху, рамка с уголками и подсказка, снизу галерея и затвор.
+/// Над затвором — режим: «Навести камеру» (живой поиск, PhotoSearchLive.swift) или «Выбрать фото» (снимок и галерея,
+/// как раньше); последний выбор запоминается на телефоне.
 struct ЭкранКамерыПоиска: View {
     @ObservedObject var модель: ПоискПоФотоСайта
     @ObservedObject var камера: КамераПоиска
+    @ObservedObject var живой: ЖивойПоискКамеры
     @Environment(\.accessibilityReduceMotion) private var меньшеДвижения
+    @Environment(\.scenePhase) private var фаза
     @State private var миниатюра: UIImage? = nil
     @State private var вспышка = false
     /// Камеры нет — галерея открывается сама, но один раз.
     @State private var галереяОткрыта = false
+    /// Экран на виду (не ушли к объявлению, к «Ищем похожие…», окно не закрыто) — фон и возврат из фона трогают камеру
+    /// только тогда.
+    @State private var виден = false
+    /// Уходили в фон — по возвращении камеру запустить снова (простое «неактивно» её не трогает).
+    @State private var вФоне = false
+    /// Последний выбранный режим: true — «Навести камеру».
+    @AppStorage("kliko.photosearch.live") private var живойРежим = false
+
+    init(модель: ПоискПоФотоСайта, камера: КамераПоиска, живой: ЖивойПоискКамеры) {
+        self.модель = модель
+        self.камера = камера
+        self.живой = живой
+    }
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
     private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
 
     private var живая: Bool { камера.доступ == .есть || камера.доступ == .неизвестно }
+
+    /// Сейчас живой поиск: режим выбран и камера есть.
+    private var живаяСъёмка: Bool { живойРежим && живая }
+
+    /// Живой поиск уснул — минуту не было движения.
+    private var спит: Bool { живаяСъёмка && живой.спит }
 
     var body: some View {
         ZStack {
@@ -302,27 +380,103 @@ struct ЭкранКамерыПоиска: View {
                 .opacity(вспышка ? 0.8 : 0)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+            if спит {
+                ПаузаЖивогоПоиска { живой.проснуться() }
+                    .transition(.opacity)
+            }
             VStack(spacing: 0) {
                 верх
+                if живаяСъёмка, !живой.спит, let имя = живой.похоже {
+                    ПодписьЖивогоПоиска(имя: имя)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 10)
+                        .transition(.opacity)
+                }
                 Spacer(minLength: 12)
                 if живая {
-                    подсказка
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 18)
+                    низЖивого
                 }
                 низ
             }
         }
         .onAppear {
+            виден = true
+            /* Сначала режим, потом запуск: обе просьбы идут на одну очередь камеры, и сессия сразу собирается 1280×720. */
+            if живаяСъёмка { живой.включить(камера: камера, поиск: модель) }
             камера.запустить()
             ПоследнееФотоГалереи.загрузить { кадр in миниатюра = кадр }
         }
-        .onDisappear { камера.остановить() }
+        .onDisappear {
+            виден = false
+            живой.приостановить()
+            камера.остановить()
+        }
         .onChange(of: камера.доступ) { _, доступ in
             guard доступ == .нетКамеры, !галереяОткрыта else { return }
             галереяОткрыта = true
             модель.открытьГалерею()
         }
+        .onChange(of: модель.галерея) { _, открыта in
+            /* Пока выбирают фото в галерее, живой поиск не шлёт кадры из-под неё. */
+            guard живаяСъёмка, виден, !живой.спит else { return }
+            if открыта {
+                живой.приостановить()
+            } else {
+                живой.включить(камера: камера, поиск: модель)
+            }
+        }
+        .onChange(of: живойРежим) { _, включили in
+            if включили {
+                живой.включить(камера: камера, поиск: модель)
+            } else {
+                let спал = живой.спит
+                живой.выключить()
+                if спал && виден { камера.запустить() }
+            }
+        }
+        .onChange(of: фаза) { _, новая in
+            guard виден else { return }
+            switch новая {
+            case .background:
+                вФоне = true
+                живой.приостановить()
+                камера.остановить()
+            case .active:
+                guard вФоне else { return }
+                вФоне = false
+                guard !спит else { return }
+                if живаяСъёмка { живой.включить(камера: камера, поиск: модель) }
+                камера.запустить()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    /// Над затвором: в живом режиме — полоса похожих (пока не спит), в режиме снимка — подсказка; ниже — переключатель.
+    private var низЖивого: some View {
+        VStack(spacing: 0) {
+            if живойРежим {
+                if !живой.спит {
+                    ПолосаЖивогоПоиска(живой: живой)
+                        .padding(.bottom, 14)
+                        .transition(.opacity)
+                }
+            } else {
+                подсказка
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 18)
+            }
+            ПереключательРежимаКамеры(живой: $живойРежим)
+                .padding(.horizontal, 16)
+        }
+    }
+
+    /// Рамка наведения: в живом режиме уходит, когда внизу уже похожие (не спорит с полосой) или камера спит.
+    private var рамкаНужна: Bool {
+        !(живаяСъёмка && (живой.спит || !живой.товары.isEmpty))
     }
 
     @ViewBuilder
@@ -334,8 +488,11 @@ struct ЭкранКамерыПоиска: View {
                 .opacity(камера.готова ? 1 : 0)
                 .animation(ДвижениеСайта.появление, value: камера.готова)
                 .accessibilityHidden(true)
-            РамкаПоискаФото(тихо: тихо)
-                .allowsHitTesting(false)
+            if рамкаНужна {
+                РамкаПоискаФото(тихо: тихо)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         case .запрещён:
             заглушка(значок: "camera.fill", заголовок: т("ps_denied"), текст: т("ps_denied_hint"), настройки: true)
         case .нетКамеры:
@@ -354,7 +511,7 @@ struct ЭкранКамерыПоиска: View {
                 .minimumScaleFactor(0.7)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            if камера.фонарикЕсть && живая {
+            if камера.фонарикЕсть && живая && !спит {
                 КруглаяКнопкаФото(значок: камера.фонарик ? "flashlight.on.fill" : "flashlight.off.fill",
                                   подпись: камера.фонарик ? т("ps_torch_off") : т("ps_torch_on"),
                                   активна: камера.фонарик) { камера.переключитьФонарик() }
@@ -450,7 +607,7 @@ struct ЭкранКамерыПоиска: View {
         }
         .buttonStyle(НажатиеКнопкиФото(сжатие: 0.9))
         .disabled(!камера.готова || камера.снимаем)
-        .accessibilityLabel(т("ps_shutter"))
+        .accessibilityLabel(живаяСъёмка ? т("shoot") : т("ps_shutter"))
         .accessibilityHint(т("ps_cam_hint"))
     }
 
@@ -463,7 +620,11 @@ struct ЭкранКамерыПоиска: View {
                 withAnimation(.easeOut(duration: 0.3)) { вспышка = false }
             }
         }
+        /* В живом режиме затвор — «Снять»: тот же полный поиск по фото этим снимком; полоса живого — с чистого листа,
+           когда сюда вернутся («Снять ещё»). */
+        let живойСнимок = живаяСъёмка
         камера.снять { снимок in
+            if живойСнимок { живой.забыть() }
             модель.снято(снимок)
         }
     }
