@@ -119,7 +119,9 @@ enum ListingPageText {
             "hours_accepts": "Принимает звонки %@",
             "write_chat": "Написать в чат", "later": "Позже",
             "root_electronics": "Электроника", "root_transport": "Транспорт", "root_realty": "Недвижимость", "root_clothing": "Одежда и обувь", "root_home-garden": "Дом и сад", "root_kids": "Детские товары", "root_sport": "Спорт и отдых", "root_animals": "Животные", "root_jobs": "Работа", "root_services": "Услуги", "root_hobby": "Хобби и творчество", "root_food-farm": "Продукты и фермерство", "root_beauty": "Красота и здоровье",
-            "wa_text": "Здравствуйте! Интересует «%@» за %@. Ещё актуально?"
+            "wa_text": "Здравствуйте! Интересует «%@» за %@. Ещё актуально?",
+            "next_title": "Следующее объявление", "prev_listing": "Предыдущее объявление",
+            "next_hint": "Потяните вверх или нажмите", "next_release": "Отпустите — следующее"
         ],
         "kk": [
             "stock_in_avail": "Қоймада бар", "stock_pcs": "%d дана", "stock_low": "аз қалды",
@@ -193,7 +195,9 @@ enum ListingPageText {
             "hours_accepts": "Қоңырау қабылдайды %@",
             "write_chat": "Чатқа жазу", "later": "Кейін",
             "root_electronics": "Электроника", "root_transport": "Көлік", "root_realty": "Жылжымайтын мүлік", "root_clothing": "Киім мен аяқ киім", "root_home-garden": "Үй және бақ", "root_kids": "Балалар тауарлары", "root_sport": "Спорт және демалыс", "root_animals": "Жануарлар", "root_jobs": "Жұмыс", "root_services": "Қызметтер", "root_hobby": "Хобби және шығармашылық", "root_food-farm": "Азық-түлік және фермерлік", "root_beauty": "Сұлулық және денсаулық",
-            "wa_text": "Сәлеметсіз бе! «%@» %@ бағасына қызықтырады. Әлі өзекті ме?"
+            "wa_text": "Сәлеметсіз бе! «%@» %@ бағасына қызықтырады. Әлі өзекті ме?",
+            "next_title": "Келесі хабарландыру", "prev_listing": "Алдыңғы хабарландыру",
+            "next_hint": "Жоғары тартыңыз немесе басыңыз", "next_release": "Жіберіңіз — келесісі"
         ],
         "en": [
             "stock_in_avail": "In stock", "stock_pcs": "%d pcs", "stock_low": "few left",
@@ -267,7 +271,9 @@ enum ListingPageText {
             "hours_accepts": "Takes calls %@",
             "write_chat": "Write in the chat", "later": "Later",
             "root_electronics": "Electronics", "root_transport": "Vehicles", "root_realty": "Real estate", "root_clothing": "Clothing and shoes", "root_home-garden": "Home and garden", "root_kids": "Kids' goods", "root_sport": "Sports and leisure", "root_animals": "Animals", "root_jobs": "Jobs", "root_services": "Services", "root_hobby": "Hobbies and crafts", "root_food-farm": "Food and farming", "root_beauty": "Beauty and health",
-            "wa_text": "Hello! I'm interested in “%@” for %@. Is it still available?"
+            "wa_text": "Hello! I'm interested in “%@” for %@. Is it still available?",
+            "next_title": "Next listing", "prev_listing": "Previous listing",
+            "next_hint": "Pull up or tap", "next_release": "Release for the next one"
         ],
         "ar": [
             "stock_in_avail": "متوفر", "stock_pcs": "%d قطعة", "stock_low": "الكمية قليلة",
@@ -341,7 +347,9 @@ enum ListingPageText {
             "hours_accepts": "يستقبل المكالمات %@",
             "write_chat": "اكتب في الدردشة", "later": "لاحقًا",
             "root_electronics": "إلكترونيات", "root_transport": "مركبات", "root_realty": "عقارات", "root_clothing": "ملابس وأحذية", "root_home-garden": "المنزل والحديقة", "root_kids": "مستلزمات الأطفال", "root_sport": "رياضة وترفيه", "root_animals": "حيوانات", "root_jobs": "وظائف", "root_services": "خدمات", "root_hobby": "هوايات وإبداع", "root_food-farm": "أغذية وزراعة", "root_beauty": "الجمال والصحة",
-            "wa_text": "مرحبًا! أنا مهتم بـ «%@» بسعر %@. هل ما زال متاحًا؟"
+            "wa_text": "مرحبًا! أنا مهتم بـ «%@» بسعر %@. هل ما زال متاحًا؟",
+            "next_title": "الإعلان التالي", "prev_listing": "الإعلان السابق",
+            "next_hint": "اسحب للأعلى أو اضغط", "next_release": "اترك للانتقال إلى التالي"
         ]
     ]
 
