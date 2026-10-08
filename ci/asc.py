@@ -122,6 +122,7 @@ EN = {
     "kz.kliko.app.ai.week": ("Kliko AI for 7 days", "All Kliko AI features for 7 days"),
     "kz.kliko.app.ai.month": ("Kliko AI for 30 days", "All Kliko AI features for 30 days"),
     "kz.kliko.app.ai.quarter": ("Kliko AI for 90 days", "All Kliko AI features for 90 days"),
+    "kz.kliko.app.ownai.month": ("Own AI — 30 days", "Your own AI key in Kliko for 30 days"),
     "kz.kliko.app.pro.business.month": ("Kliko PRO", "Storefront, growth tools and Kliko AI"),
     "group": ("Kliko PRO", None),
 }

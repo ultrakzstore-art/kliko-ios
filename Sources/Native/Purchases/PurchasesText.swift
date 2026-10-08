@@ -39,6 +39,7 @@ enum ПокупкиAppleText {
         case .комбо: return т("cta_combo")
         case .пакетИИ: return т("cta_ai")
         case .топРезюме: return т("cta_resume")
+        case .свойИИ: return т("cta_own_ai")
         }
     }
 
@@ -101,6 +102,11 @@ enum ПокупкиAppleText {
         "promote_now": "Продвинуть объявление",
         "close": "Закрыть",
         "pending_banner": "Есть оплаченные покупки, которые ещё не применены. Применим автоматически.",
+        "cta_own_ai": "Оформить Premium",
+        "own_ai_title": "Premium «Свой ИИ»",
+        "own_ai_intro": "Подключите свой ключ ИИ — функции Kliko AI в кабинете пойдут через ваш ИИ, без квоты Kliko AI.",
+        "own_ai_row": "Свой ИИ — 30 дней",
+        "own_ai_row_sub": "Свой ключ ИИ в кабинете Kliko на 30 дней",
     ]
 
     private static let kk: [String: String] = [
@@ -162,6 +168,11 @@ enum ПокупкиAppleText {
         "promote_now": "Хабарландыруды жарнамалау",
         "close": "Жабу",
         "pending_banner": "Төленген, бірақ әлі қолданылмаған сатып алулар бар. Автоматты түрде қолданамыз.",
+        "cta_own_ai": "Premium рәсімдеу",
+        "own_ai_title": "Premium «Өз ЖИ»",
+        "own_ai_intro": "Өз ЖИ кілтіңізді қосыңыз — кабинеттегі Kliko AI функциялары Kliko AI квотасынсыз сіздің ЖИ арқылы жүреді.",
+        "own_ai_row": "Өз ЖИ — 30 күн",
+        "own_ai_row_sub": "Kliko кабинетінде өз ЖИ кілті 30 күнге",
     ]
 
     private static let en: [String: String] = [
@@ -223,6 +234,11 @@ enum ПокупкиAppleText {
         "promote_now": "Promote the listing",
         "close": "Close",
         "pending_banner": "Some paid purchases are not applied yet. They will be applied automatically.",
+        "cta_own_ai": "Get Premium",
+        "own_ai_title": "Own AI Premium",
+        "own_ai_intro": "Connect your own AI key — Kliko AI features in your account will run on your AI, without the Kliko AI quota.",
+        "own_ai_row": "Own AI — 30 days",
+        "own_ai_row_sub": "Your own AI key in your Kliko account for 30 days",
     ]
 
     private static let ar: [String: String] = [
@@ -284,5 +300,10 @@ enum ПокупкиAppleText {
         "promote_now": "ترويج الإعلان",
         "close": "إغلاق",
         "pending_banner": "بعض المشتريات المدفوعة لم تُطبَّق بعد. ستُطبَّق تلقائيًا.",
+        "cta_own_ai": "اشترك في Premium",
+        "own_ai_title": "Premium «ذكاؤك الاصطناعي»",
+        "own_ai_intro": "اربط مفتاح الذكاء الاصطناعي الخاص بك — ستعمل ميزات Kliko AI في حسابك عبر ذكائك الاصطناعي دون حصة Kliko AI.",
+        "own_ai_row": "ذكاؤك الاصطناعي — 30 يومًا",
+        "own_ai_row_sub": "مفتاح الذكاء الاصطناعي الخاص بك في حساب Kliko لمدة 30 يومًا",
     ]
 }

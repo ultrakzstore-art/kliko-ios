@@ -232,6 +232,7 @@ function apple_jws_verify(string $jws): array {
 | `kz.kliko.app.ai.week` | Consumable | ai / `week` | `buy_ai_package {pack:"week"}` (7 дн) | — |
 | `kz.kliko.app.ai.month` | Consumable | ai / `month` | `buy_ai_package {pack:"month"}` (30 дн) | — |
 | `kz.kliko.app.ai.quarter` | Consumable | ai / `quarter` | `buy_ai_package {pack:"quarter"}` (90 дн) | — |
+| `kz.kliko.app.ownai.month` | Consumable | own_ai / `month` | Premium «Свой ИИ» на 30 дней (как `own_ai_buy`); ответ `{ok:true, granted:{service:"own_ai", until}}` | — |
 | `kz.kliko.app.pro.business.month` | Auto-Renewable, группа «Kliko PRO», 1 месяц | pro / `business` | `buy_pro {tier:1}`, но **до `expiresDate` из payload**, а не «+30 дней по часам сервера» | — |
 
 Уточнения к таблице:

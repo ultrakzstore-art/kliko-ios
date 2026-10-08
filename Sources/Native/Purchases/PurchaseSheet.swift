@@ -288,6 +288,7 @@ struct ЭкранПокупкиApple: View {
         case .комбо: return сайт("upg_combo_t")
         case .пакетИИ: return сайт("upg_ai_packs")
         case .топРезюме: return т("resume_top_title")
+        case .свойИИ: return т("own_ai_title")
         }
     }
 
@@ -299,6 +300,7 @@ struct ЭкранПокупкиApple: View {
         case .пакетИИ: return сайт("upg_ai_intro2")
         case .продвижение: return сайт("promo_free_bumps")
         case .топРезюме: return nil
+        case .свойИИ: return т("own_ai_intro")
         }
     }
 
@@ -439,6 +441,11 @@ struct ЭкранПокупкиApple: View {
         case .топРезюме:
             return ПродуктыApple.товары(.топРезюме).map { товар -> СтрокаТовараApple in
                 СтрокаТовараApple(товар: товар, заголовок: т("resume_top_title"), подробно: [т("resume_top_detail")])
+            }
+        case .свойИИ:
+            /* Цена сайта (990 ₸) здесь не показывается: только displayPrice App Store; пробного периода в приложении нет. */
+            return ПродуктыApple.товары(.свойИИ).map { товар -> СтрокаТовараApple in
+                СтрокаТовараApple(товар: товар, заголовок: т("own_ai_row"), подробно: [т("own_ai_row_sub")])
             }
         }
     }
@@ -669,6 +676,7 @@ struct ЭкранПокупкиApple: View {
         case .куплено:
             итог = т("done")
             итогТон = .хорошо
+            if вид == .свойИИ { Task { @MainActor in await СвойИИМодель.shared.обновить() } }
             Task { @MainActor in
                 await БизнесМодель.shared.загрузитьСтраницу()
                 await МоиОбъявленияМодель.shared.загрузить(страницу: false)

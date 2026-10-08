@@ -54,6 +54,9 @@ enum ВидУслугиApple: String, CaseIterable {
     case пакетИИ = "ai"
     /// «В ТОП» резюме на 7 дней (/api/jobs.php?action=promote). Нужен target_id — id резюме.
     case топРезюме = "resume_top"
+    /// Premium «Свой ИИ» на 30 дней (свой ключ ИИ в кабинете, own_ai_*). Без target_id; ответ сайта granted.service
+    /// "own_ai" — экран «Свой ИИ» перечитывает own_ai_state.
+    case свойИИ = "own_ai"
 
     /// Услуга привязана к одной записи — объявлению или резюме.
     var нуженОбъект: Bool { self == .продвижение || self == .топРезюме }
@@ -67,6 +70,7 @@ enum ВидУслугиApple: String, CaseIterable {
         case .комбо: return "square.stack.3d.up.fill"
         case .пакетИИ: return "sparkles"
         case .топРезюме: return "arrow.up"
+        case .свойИИ: return "key"
         }
     }
 }
@@ -115,6 +119,7 @@ struct ТоварApple: Identifiable, Equatable {
    kz.kliko.app.ai.week         «Kliko AI на 7 дней»               сайт 4 500 ₸
    kz.kliko.app.ai.month        «Kliko AI на 30 дней»              сайт 13 500 ₸
    kz.kliko.app.ai.quarter      «Kliko AI на 90 дней»              сайт 34 500 ₸
+   kz.kliko.app.ownai.month     «Свой ИИ — 30 дней»                сайт 990 ₸ (Premium «Свой ИИ», own_ai)
  ПОДПИСКА (Auto-Renewable), группа «Kliko PRO»:
    kz.kliko.app.pro.business.month   «Kliko PRO» (PRO_TIERS level 1, key business), 1 месяц   сайт 17 900 ₸ / мес
      Появятся уровни 2 и 3 (PRO_SLOTS знает 1, 2, 3) — kz.kliko.app.pro.<key>.month в той же группе, уровнем выше.
@@ -161,6 +166,7 @@ enum ПродуктыApple {
         ТоварApple(id: префикс + "ai.week", вид: .пакетИИ, ключ: "week", тип: .расходуемый),
         ТоварApple(id: префикс + "ai.month", вид: .пакетИИ, ключ: "month", тип: .расходуемый),
         ТоварApple(id: префикс + "ai.quarter", вид: .пакетИИ, ключ: "quarter", тип: .расходуемый),
+        ТоварApple(id: префикс + "ownai.month", вид: .свойИИ, ключ: "month", тип: .расходуемый),
         ТоварApple(id: префикс + "pro.business.month", вид: .про, ключ: "business", тип: .подписка),
     ]
 
@@ -580,6 +586,12 @@ final class ПокупкиApple: ObservableObject {
         guard A.да(j["ok"]) || A.да(j["finish"]) else { return false }
         await транзакция.finish()
         забыть(номер, продукт: транзакция.productID)
+        /* Premium «Свой ИИ» выдан (granted.service "own_ai") — экран «Свой ИИ» и признак own для recognize берут свежее
+           own_ai_state. Не из init: модель своего ИИ создаётся здесь, по ответу, и сама ПокупкиApple не трогает. */
+        let выдано = (j["granted"] as? [String: Any]) ?? [:]
+        if A.строка(выдано["service"]) == ВидУслугиApple.свойИИ.rawValue || товар?.вид == .свойИИ {
+            Task { @MainActor in await СвойИИМодель.shared.обновить() }
+        }
         return true
     }
 

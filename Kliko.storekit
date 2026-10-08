@@ -241,6 +241,21 @@
       "productID": "kz.kliko.app.ai.quarter",
       "referenceName": "Kliko AI на 90 дней",
       "type": "Consumable"
+    },
+    {
+      "displayPrice": "990",
+      "familyShareable": false,
+      "internalID": "6700000017",
+      "localizations": [
+        {
+          "description": "Свой ключ ИИ в кабинете Kliko на 30 дней",
+          "displayName": "Свой ИИ — 30 дней",
+          "locale": "ru"
+        }
+      ],
+      "productID": "kz.kliko.app.ownai.month",
+      "referenceName": "Свой ИИ — 30 дней",
+      "type": "Consumable"
     }
   ],
   "settings": {

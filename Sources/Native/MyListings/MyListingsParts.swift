@@ -245,9 +245,14 @@ struct КарточкаДоступно: View {
                     .foregroundStyle(Theme.текстВторой)
                     .textCase(.uppercase)
                     .accessibilityAddTraits(.isHeader)
-                if let квота = ии, квота.показать { сегментИИ(квота) }
+                if let квота = ии, квота.показать {
+                    сегментИИ(квота)
+                    /* Ссылка «Свой ИИ» под «Kliko AI-ассистент», как у сайта; только при own_ai.on. */
+                    СсылкаСвоегоИИ()
+                }
                 if let с = слоты { сегментСлотов(с) }
             }
+            .task { await СвойИИМодель.shared.загрузитьЛениво() }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))

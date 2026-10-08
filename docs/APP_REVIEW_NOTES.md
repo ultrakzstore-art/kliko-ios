@@ -35,6 +35,7 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 | `kz.kliko.app.ai.week` | consumable | то же | Kliko AI 7 days | Kliko AI на 7 дней / Kliko AI for 7 days | Removes the Kliko AI limit (photo recognition, listing check) for 7 days. |
 | `kz.kliko.app.ai.month` | consumable | то же | Kliko AI 30 days | Kliko AI на 30 дней / Kliko AI for 30 days | Removes the Kliko AI limit for 30 days. |
 | `kz.kliko.app.ai.quarter` | consumable | то же | Kliko AI 90 days | Kliko AI на 90 дней / Kliko AI for 90 days | Removes the Kliko AI limit for 90 days. |
+| `kz.kliko.app.ownai.month` | consumable | то же | Own AI 30 days | Свой ИИ — 30 дней / Own AI — 30 days | Lets the user connect their own AI provider key in their Kliko account for 30 days; Kliko AI features in the account then run on that key. |
 | `kz.kliko.app.pro.business.month` | auto_renewable | Auto-Renewable Subscription, группа «Kliko PRO», 1 месяц | Kliko PRO Business Monthly | Kliko PRO / Kliko PRO | Monthly business subscription: storefront, higher listing limit, Kliko AI days, price list, analytics, CRM and 1C integrations. Renews automatically. |
 
 Замечания:
