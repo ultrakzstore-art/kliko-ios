@@ -393,6 +393,15 @@ extension ПодачаМодель {
                               })
     }
 
+    /// Черновик ИИ (accept_draft, AIImageChatModel.swift): fields — те же, что у recognize, и ложатся тем же путём.
+    /// condition "" — выбор человека остаётся.
+    func принятьПоляЧерновикаИИ(_ поля: [String: Any]) {
+        var п = поля
+        if МоиОбъявленияAPI.строка(п["condition"]).isEmpty { п["condition"] = форма.состояние }
+        номерРаспознавания += 1
+        разобратьРаспознавание(["ok": true, "fields": п])
+    }
+
     /// «Заполнить вручную» в окне распознавания (airecManual): окно прочь, запуск забыт, с «Фото» — дальше.
     func отменитьРаспознавание() {
         номерРаспознавания += 1
@@ -681,6 +690,11 @@ extension ПодачаМодель {
             пометить("works", т("wrk_need_s"))
             return
         }
+        /* Поля из черновика ИИ (AIImagePosting.swift) — без «Проверил характеристики» не публикуем. */
+        if let текст = ИИФотоПодачи.shared.нужнаГалочка(self) {
+            пометить("ai_check", текст)
+            return
+        }
         if фотоГрузятся {
             показать(т("photos_busy"))
             return
@@ -761,6 +775,8 @@ extension ПодачаМодель {
         } else {
             тело["parts"] = NSNull()
         }
+        /* ai_draft и ai_checked — поля пришли из черновика ИИ и человек их проверил (договор ИИ-фото §9.4). */
+        for (ключ, значение) in ИИФотоПодачи.shared.поляПодачи(self) { тело[ключ] = значение }
         return тело
     }
 
@@ -804,6 +820,7 @@ extension ПодачаМодель {
             }
             if !id.isEmpty { применитьДополнительно(id) }
             if !правка { отметитьПубликацию() }
+            ИИФотоПодачи.shared.послеПубликации(self)
             ПодачаМодель.стеретьЧерновик()
             плашкаПосле = плашки.joined(separator: "\n")
             топПослеПодачи = (j["top_applied"] as? NSNumber)?.boolValue ?? false
@@ -844,6 +861,8 @@ extension ПодачаМодель {
             показать(текст.isEmpty ? т("need_topup") : текст)
             return
         }
+        /* need_real_photo / need_check — правило доверия ИИ-фото (AIImagePosting.swift). */
+        if ИИФотоПодачи.shared.разобратьОтказПодачи(j, подача: self) { return }
         показать(String(format: т("err_prefix"), текстОшибки(j)))
     }
 
@@ -1037,6 +1056,7 @@ extension ПодачаМодель {
         do {
             let j = try await A.отправить("cabinet.php?action=edit_item", тело: телоПравки())
             if A.да(j["ok"]) {
+                ИИФотоПодачи.shared.послеПубликации(self)
                 разобратьПравку(j, id: id)
                 return
             }
@@ -1048,6 +1068,7 @@ extension ПодачаМодель {
                 сообщение = Self.окноЗапрета(j)
                 return
             }
+            if ИИФотоПодачи.shared.разобратьОтказПодачи(j, подача: self) { return }
             показать(String(format: т("err_prefix"), текстОшибки(j)))
         } catch {
             показать(т("no_conn"))
