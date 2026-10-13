@@ -156,6 +156,11 @@ jobs:
           probe "tryon info" GET "$base/api/tryon.php?action=info&lang=ru" "" ""
           probe "apple_iap_notify GET" GET "$base/api/apple_iap_notify.php" "" ""
           probe "photo_search гостем" POST "$base/api/photo_search.php" "application/json" '{}'
+          # Есть ли новые действия кабинета: без сессии все отвечают «нужен вход», а несуществующее — иначе (сравнение).
+          probe "cabinet нет такого" POST "$base/cabinet.php?action=zz_no_such_action" "application/json" '{}'
+          probe "cabinet own_ai_state" POST "$base/cabinet.php?action=own_ai_state" "application/json" '{}'
+          probe "cabinet own_ai_place" POST "$base/cabinet.php?action=own_ai_place" "application/json" '{}'
+          probe "tryon start гостем" POST "$base/api/tryon.php?action=start" "application/json" '{}'
 
   # СКРИНШОТЫ С СИМУЛЯТОРА (этап 23). Нативные экраны писались без Mac и без телефона под рукой; раннер может сам
   # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
