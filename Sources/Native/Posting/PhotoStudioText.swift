@@ -1,0 +1,82 @@
+import Foundation
+
+/// Тексты ИИ-студии фото подачи (PhotoStudio*.swift) на языке телефона (kk/ru/en/ar) — тем же способом, что тексты
+/// подачи (ПодачаText): свой словарь, чтобы не пересекаться с другими направлениями.
+enum СтудияФотоText {
+    static func т(_ ключ: String) -> String {
+        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let словарь = тексты[язык] ?? тексты["ru"]!
+        return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
+    }
+
+    private static let тексты: [String: [String: String]] = [
+        "ru": ["st_title": "Студия", "st_menu": "Студия", "st_open": "Открыть студию",
+               "st_loading": "Открываем фото…", "st_scanning": "Ищем предмет на фото…",
+               "st_lifting": "Ставим на студийный фон…",
+               "st_not_found": "Не нашли предмет на фото — попробуйте снять ближе на ровном фоне",
+               "st_light_only": "Только свет и цвет",
+               "st_error": "Не удалось открыть фото — проверьте интернет и попробуйте ещё раз",
+               "st_close": "Закрыть", "st_before": "До", "st_after": "После",
+               "st_compare": "Сравнение до и после", "st_compare_value": "Видно «после»: %d%%",
+               "st_hint": "Тяните шторку — видно, где было и где стало",
+               "st_bg_own": "Свой", "st_bg_white": "Белый", "st_bg_light": "Светлый", "st_bg_gradient": "Градиент",
+               "st_bg_warm": "Тёплый", "st_bg_dark": "Тёмный", "st_shadow": "Тень", "st_light": "Свет и цвет",
+               "st_on": "Вкл", "st_off": "Выкл", "st_done": "Готово", "st_saving": "Сохраняем…",
+               "st_revert": "Вернуть как было", "st_reverted": "Вернули фото как было",
+               "st_save_fail": "Не получилось сохранить — попробуйте ещё раз",
+               "st_banner_t": "Сделать как в каталоге",
+               "st_banner_s": "Белый фон, мягкая тень и свет — прямо на телефоне",
+               "st_banner_btn": "Студия", "st_hide": "Скрыть"],
+        "kk": ["st_title": "Студия", "st_menu": "Студия", "st_open": "Студияны ашу",
+               "st_loading": "Фото ашылып жатыр…", "st_scanning": "Фотодан затты іздеп жатырмыз…",
+               "st_lifting": "Студиялық фонға қойып жатырмыз…",
+               "st_not_found": "Фотодан зат табылмады — біркелкі фонда жақынырақ түсіріп көріңіз",
+               "st_light_only": "Тек жарық пен түс",
+               "st_error": "Фотоны ашу мүмкін болмады — интернетті тексеріп, қайталап көріңіз",
+               "st_close": "Жабу", "st_before": "Дейін", "st_after": "Кейін",
+               "st_compare": "Дейін және кейін салыстыру", "st_compare_value": "«Кейін» көрінеді: %d%%",
+               "st_hint": "Перденің шегін тартыңыз — бұрынғысы мен қазіргісі көрінеді",
+               "st_bg_own": "Өз фоны", "st_bg_white": "Ақ", "st_bg_light": "Ашық", "st_bg_gradient": "Градиент",
+               "st_bg_warm": "Жылы", "st_bg_dark": "Қараңғы", "st_shadow": "Көлеңке", "st_light": "Жарық пен түс",
+               "st_on": "Қосулы", "st_off": "Өшірулі", "st_done": "Дайын", "st_saving": "Сақтап жатырмыз…",
+               "st_revert": "Бұрынғысын қайтару", "st_reverted": "Фото бұрынғы қалпына келтірілді",
+               "st_save_fail": "Сақтау мүмкін болмады — қайталап көріңіз",
+               "st_banner_t": "Каталогтағыдай жасау",
+               "st_banner_s": "Ақ фон, жұмсақ көлеңке және жарық — тікелей телефонда",
+               "st_banner_btn": "Студия", "st_hide": "Жасыру"],
+        "en": ["st_title": "Studio", "st_menu": "Studio", "st_open": "Open studio",
+               "st_loading": "Opening photo…", "st_scanning": "Looking for the item in the photo…",
+               "st_lifting": "Placing it on a studio background…",
+               "st_not_found": "Couldn't find an item in the photo — try shooting closer on a plain background",
+               "st_light_only": "Light and color only",
+               "st_error": "Couldn't open the photo — check your connection and try again",
+               "st_close": "Close", "st_before": "Before", "st_after": "After",
+               "st_compare": "Before and after comparison", "st_compare_value": "“After” shown: %d%%",
+               "st_hint": "Drag the divider to see before and after",
+               "st_bg_own": "Original", "st_bg_white": "White", "st_bg_light": "Light", "st_bg_gradient": "Gradient",
+               "st_bg_warm": "Warm", "st_bg_dark": "Dark", "st_shadow": "Shadow", "st_light": "Light & color",
+               "st_on": "On", "st_off": "Off", "st_done": "Done", "st_saving": "Saving…",
+               "st_revert": "Restore original", "st_reverted": "Original photo restored",
+               "st_save_fail": "Couldn't save — please try again",
+               "st_banner_t": "Make it catalog-style",
+               "st_banner_s": "White background, soft shadow and light — right on your phone",
+               "st_banner_btn": "Studio", "st_hide": "Hide"],
+        "ar": ["st_title": "الاستوديو", "st_menu": "الاستوديو", "st_open": "فتح الاستوديو",
+               "st_loading": "جارٍ فتح الصورة…", "st_scanning": "نبحث عن المنتج في الصورة…",
+               "st_lifting": "نضعه على خلفية استوديو…",
+               "st_not_found": "لم نعثر على منتج في الصورة — جرّب التصوير عن قرب على خلفية سادة",
+               "st_light_only": "الإضاءة والألوان فقط",
+               "st_error": "تعذّر فتح الصورة — تحقّق من الاتصال وحاول مرة أخرى",
+               "st_close": "إغلاق", "st_before": "قبل", "st_after": "بعد",
+               "st_compare": "مقارنة قبل وبعد", "st_compare_value": "الظاهر من «بعد»: %d%%",
+               "st_hint": "اسحب الفاصل لترى الصورة قبل وبعد",
+               "st_bg_own": "الأصلية", "st_bg_white": "أبيض", "st_bg_light": "فاتح", "st_bg_gradient": "متدرّج",
+               "st_bg_warm": "دافئ", "st_bg_dark": "داكن", "st_shadow": "الظل", "st_light": "الإضاءة والألوان",
+               "st_on": "مفعّل", "st_off": "متوقف", "st_done": "تم", "st_saving": "جارٍ الحفظ…",
+               "st_revert": "استعادة الأصل", "st_reverted": "تمت استعادة الصورة الأصلية",
+               "st_save_fail": "تعذّر الحفظ — حاول مرة أخرى",
+               "st_banner_t": "اجعلها كما في الكتالوج",
+               "st_banner_s": "خلفية بيضاء وظل ناعم وإضاءة — على هاتفك مباشرة",
+               "st_banner_btn": "الاستوديو", "st_hide": "إخفاء"]
+    ]
+}

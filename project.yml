@@ -121,6 +121,17 @@ targets:
           - CFBundleURLName: kz.kliko.app
             CFBundleTypeRole: Editor
             CFBundleURLSchemes: [kliko]
+          # ВХОД ЧЕРЕЗ GOOGLE (ВходGoogle, Sources/Native/Auth/GoogleSignInNative.swift): когда появится ID iOS-клиента,
+          # сюда же — вторая схема, обратный ID клиента (ASWebAuthenticationSession ловит возврат и без неё, это
+          # подстраховка). Пример для ID «123-abc.apps.googleusercontent.com»:
+          #   - CFBundleURLName: google
+          #     CFBundleTypeRole: Editor
+          #     CFBundleURLSchemes: [com.googleusercontent.apps.123-abc]
+        # ID iOS-КЛИЕНТА GOOGLE — рубильник «Продолжить с Google» (Config.входGoogle). Пусто — кнопки нет. Вписывать
+        # ПОСЛЕ того, как сервер научится google_auth.php?action=native (docs/SERVER_NATIVE_AUTH.md, раздел «Вход через
+        # Google»): Google Cloud Console → Credentials → OAuth client ID → iOS, bundle kz.kliko.app. Это не секрет —
+        # ID клиента виден в любом приложении, секрета у iOS-клиента нет (вход по PKCE).
+        KlikoGoogleClientID: ""
         # ЧУЖИЕ СХЕМЫ, КОТОРЫЕ СПРАШИВАЕМ canOpenURL: «Расположение» на странице объявления (SiteListingLocation.swift)
         # открывает маршрут в 2ГИС, Яндекс Картах, Google Maps и такси/курьера в Яндекс Go их приложениями, а если
         # приложения нет — тем же адресом в браузере. Без этого списка canOpenURL всегда отвечает «нет».

@@ -294,16 +294,20 @@ struct МастерРезюме: View {
         Task {
             let итог = await РезюмеAPI.собрать(роль: роль, опыт: ииОпыт)
             ииИдёт = false
-            guard let итог else {
-                показать(т("jw_ai_fail"), хорошо: false)
-                return
+            switch итог {
+            case .отказ(let текст):
+                /* Отказ своего ИИ — его готовый текст (окно с действиями уже показано), иначе msg сервера. */
+                показать(текст, хорошо: false)
+            case .нуженВход:
+                показать(CabinetText.т("signed_out"), хорошо: false)
+            case .готово(let title, let about, let skills, let своимИИ):
+                if !title.isEmpty { запись.должность = title }
+                if !about.isEmpty { запись.оСебе = about }
+                if !skills.isEmpty { запись.навыки = skills.map { НавыкРезюме(название: $0, уровень: "") } }
+                if запись.должность.isEmpty { запись.должность = роль }
+                withAnimation(ДвижениеСайта.шаг) { шаг = 1 }
+                показать(т("jw_ai_ok") + (своимИИ ? " · " + СвойИИText.т("oai_via") : ""), хорошо: true)
             }
-            if !итог.title.isEmpty { запись.должность = итог.title }
-            if !итог.about.isEmpty { запись.оСебе = итог.about }
-            if !итог.skills.isEmpty { запись.навыки = итог.skills.map { НавыкРезюме(название: $0, уровень: "") } }
-            if запись.должность.isEmpty { запись.должность = роль }
-            withAnimation(ДвижениеСайта.шаг) { шаг = 1 }
-            показать(т("jw_ai_ok"), хорошо: true)
         }
     }
 

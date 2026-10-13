@@ -1,8 +1,10 @@
-# Нативный вход через Apple и подключение соцсетей — что нужно от сервера
+# Нативный вход через Apple и Google и подключение соцсетей — что нужно от сервера
 
-Документ для разработчика сайта kliko.kz. Приложение iOS (bundle id `kz.kliko.app`) уже умеет оба сценария
+Документ для разработчика сайта kliko.kz. Приложение iOS (bundle id `kz.kliko.app`) уже умеет эти сценарии
 нативно, но **пока сервер их не поддерживает, приложение само откатывается на прежние страницы сайта** — ничего не
 ломается. Как только эндпоинты ниже появятся на сервере, приложение начнёт ими пользоваться без обновления.
+Исключение — Google (раздел 3): страницы сайта для него нет, поэтому до готовности сервера кнопки Google в
+приложении просто нет.
 
 Сессия приложения — та же, что у сайта: кука сессии (`kliko_cab`) в хранилище WebKit приложения. Ниже «вошедший» —
 это запрос с этой кукой.
@@ -170,7 +172,158 @@ kliko://social_connected?platform=instagram&error=<код или текст>
 
 ---
 
-## 3. Как проверить
+## 3. Вход через Google: `POST /google_auth.php?action=native`
+
+Просьба владельца (13.10.2026): «регистрация по гуглу». В приложении — кнопка «Продолжить с Google» под кнопкой Apple
+(Apple остаётся: правило App Store 4.8). Google SDK не используется.
+
+### Как работает в приложении
+
+1. Приложение генерирует `nonce` (32 случайных байта, hex, 64 символа), PKCE `code_verifier` (32 байта, base64url) и
+   `state`, и открывает системный лист входа (`ASWebAuthenticationSession`) на
+   `https://accounts.google.com/o/oauth2/v2/auth` с параметрами: `client_id` = iOS-клиент Google,
+   `redirect_uri` = `com.googleusercontent.apps.<id>:/oauth2redirect` (обратный ID клиента), `response_type=code`,
+   `scope=openid email profile`, `code_challenge` (S256), `state`, **`nonce` = `hex(sha256(nonce))`** (как у Apple),
+   `prompt=select_account`, `hl` = язык телефона.
+2. Код из возврата приложение **само** меняет на токены: `POST https://oauth2.googleapis.com/token`
+   (`client_id`, `code`, `code_verifier`, `grant_type=authorization_code`, `redirect_uri`). У iOS-клиента секрета нет —
+   это нормально для установленных приложений с PKCE. `access_token` приложение выбрасывает, серверу уходит только
+   `id_token`.
+3. `id_token` и сырой `nonce` уходят на сервер (URLSession, не из страницы).
+
+### Запрос
+
+```
+POST https://kliko.kz/google_auth.php?action=native
+Content-Type: application/json
+Accept: application/json
+Cookie: <все текущие куки kliko.kz из приложения, в т.ч. гостевая сессия, если есть>
+```
+
+`Origin`/`Referer` приложение **не шлёт** (без поддельных источников) — источник для этого эндпоинта не проверять:
+доказательство — подписанный Google токен с `nonce`. Перенаправления приложение не выполняет: любой 3xx — «сервер не
+поддерживает».
+
+Тело (JSON):
+
+| Поле        | Тип    | Описание |
+|-------------|--------|----------|
+| `id_token`  | string | JWT от Google (RS256). Единственное доказательство. |
+| `nonce`     | string | **Сырой** nonce (64 hex-символа). В токене лежит `sha256` от него. |
+| `client_id` | string | ID iOS-клиента, которым получен токен. Только для журнала — сверять `aud` с **своим** списком, не с этим полем. |
+| `bundle_id` | string | `kz.kliko.app`. |
+| `csrf`      | string | CSRF-токен страницы, если приложению удалось его прочитать. Для `action=native` не обязателен. |
+
+Имя и почту приложение **не присылает** — сервер берёт их из проверенного токена (`name`, `given_name`,
+`family_name`, `email`, `email_verified`, `picture`).
+
+### Обязательные проверки на сервере
+
+1. Подпись: `kid` из заголовка JWT → ключ из JWKS Google `https://www.googleapis.com/oauth2/v3/certs` (кешировать по
+   `Cache-Control: max-age`, незнакомый `kid` — перечитать). Только **RS256**; `none`/HS* — отказ.
+2. `iss` ∈ {`https://accounts.google.com`, `accounts.google.com`}.
+3. `aud` == ID iOS-клиента (`GOOGLE_IOS_CLIENT_ID` в конфиге сервера). Если сайт когда-нибудь заведёт веб-вход
+   Google — список разрешённых `aud` = {iOS-клиент, веб-клиент}, и больше ничего. Если в токене есть `azp` — он тоже
+   должен быть из этого списка.
+4. `exp` > сейчас (допуск на часы ≤ 60 с); `iat` не из будущего.
+5. `nonce` в токене == `hex(sha256(nonce из тела))` (строчные hex), сравнение — `hash_equals`. Помнить использованные
+   `nonce` до `exp` — повтор того же токена — отказ `replay`.
+6. Пользователь ищется **по `sub`** — новая колонка `users.google_sub VARCHAR(255) NULL UNIQUE`.
+7. Привязка к существующему аккаунту **по почте** — только если `email_verified === true` **и** Google
+   авторитетен для этой почты (`@gmail.com` или в токене есть `hd` — почта Google Workspace). Иначе по почте не
+   привязывать (чужой аккаунт по совпадению адреса не отдаём) — человек идёт как новый, см. п. 8. При привязке —
+   записать `google_sub` в найденный аккаунт.
+8. `sub` не найден и привязки нет → аккаунт **не создавать сразу**: номер телефона у Kliko обязателен. Положить
+   ожидание в **текущую** сессию: `$_SESSION['google_pending'] = {sub, email, email_verified, name, given_name,
+   family_name, picture, expires: now + 10 мин}` и ответить `need_phone` (ниже). Сессию здесь **не пересоздавать**:
+   если кука сессии пришла с запросом, ID остаётся тем же (страница под приложением продолжит работать со своим
+   CSRF); если куки не было — завести сессию и отдать `Set-Cookie`.
+9. Аккаунт удалён / нужен eGov — те же признаки, что у `cabinet.php?action=login`.
+10. Успех — `session_regenerate_id(true)` и та же кука сессии, что при входе паролем.
+
+### Ответ `action=native`
+
+Всегда `Content-Type: application/json`, код 200 (кроме «не поддерживается»).
+
+| Ответ | Что сделает приложение |
+|-------|------------------------|
+| `{"ok":true,"uid":"u0123456789ab"}` + `Set-Cookie` сессии (`kliko_cab`, `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax`) | Куки — в хранилище WebKit, страница перезагружается вошедшей, витрина/чат/кабинет узнают сразу |
+| `{"ok":false,"need_phone":true,"csrf":"<токен этой сессии>","email":"a@gmail.com","name":"Алия"}` | Шаг «Укажите номер» (ниже). `csrf` обязателен — с ним придёт `action=phone`. `email`/`name` — только показать, каким аккаунтом входят |
+| `{"ok":false,"deleted":true,"reason":"…"}` | Окно «Аккаунт удалён» с причиной |
+| `{"ok":false,"need_egov":true}` | Подтверждение входа через eGov (`cabinet.php?egov_confirm=1`) |
+| `{"ok":false,"error":"Текст для человека"}` | Этот текст у кнопки Google |
+| `{"ok":false,"error":"bad_token"}` (машинный код `^[a-z][a-z0-9_]{1,14}$`) | «Не удалось войти через Google — попробуйте ещё раз» |
+
+Рекомендуемые машинные коды: `bad_token` (подпись/iss/aud/exp), `bad_nonce`, `replay`, `rate_limited`.
+
+**Пробный запрос.** Открывая экран входа, приложение (если в сборке вписан iOS-клиент) один раз за запуск шлёт
+`POST /google_auth.php?action=native` с телом `{}` и без кук. Сервер обязан ответить `200` и
+`{"ok":false,"error":"bad_token"}` (не 500, не HTML) — так приложение узнаёт, что эндпоинт есть, и **только тогда
+показывает кнопку Google**.
+
+**«Не поддерживается»** — HTTP 404, 405, 501, любой 3xx, не-JSON тело или `{"ok":false,"error":"unsupported"}`:
+кнопки Google нет; если это случилось посреди входа — «Вход через Google скоро заработает». Сейчас, пока эндпоинта
+нет, так и происходит. Ответ 5xx без JSON — «Ошибка входа», кнопка остаётся.
+
+### Шаг номера: `POST /google_auth.php?action=phone`
+
+```
+POST https://kliko.kz/google_auth.php?action=phone
+Content-Type: application/json
+Cookie: <куки приложения — та же сессия, где лежит google_pending>
+
+{ "phone": "+7 (777) 123-45-67", "code": "", "csrf": "<csrf из ответа need_phone>", "agree": true }
+```
+
+- `phone` — значение поля с маской, как у `cabinet.php?action=register_quick`. Номер в поле приложение подставляет
+  само: iOS предлагает номер этого iPhone, вставка в любом виде («8 777…», «+7(777)…», «77771234567») приводится к
+  маске до отправки.
+- `code` — пусто или цифры кода из SMS (если сервер его просил, см. `need_code`).
+- `agree: true` — на экране под кнопкой «Продолжая, вы принимаете Пользовательское соглашение и Политику
+  конфиденциальности» (как у кнопок соцвхода сайта). Записать принятие так же, как в `register_quick`.
+
+Проверки:
+
+1. CSRF сессии (`{"ok":false,"error":"csrf"}` — приложение перечитает токен и повторит один раз).
+2. `google_pending` есть и не истёк — иначе `{"ok":false,"error":"expired"}` (приложение попросит войти через Google
+   заново).
+3. Номер Казахстана, код оператора — как `inc/phone_kz.php`; иначе `{"ok":false,"error":"bad_phone"}`.
+4. **Номер уже у другого аккаунта** → `{"ok":false,"exists":true}`. Google к этому аккаунту **не привязывать**:
+   владение Google-аккаунтом не доказывает владение номером. Приложение покажет окно «Номер уже зарегистрирован»
+   (вход по паролю или восстановление через eGov). Привязку Google к существующему аккаунту — позже, из кабинета
+   вошедшего.
+5. **SMS — по желанию сервера.** Если сервер подтверждает номер кодом: первый запрос с пустым `code` → отправить SMS
+   и ответить `{"ok":false,"need_code":true}`; приложение покажет поле кода (iOS подставит код из сообщения сама,
+   поле помечено `oneTimeCode`) и пришлёт тот же запрос с `code`. Неверный код — `{"ok":false,"error":"bad_code"}`,
+   лимит попыток — `rate_limited`. Если сервер SMS не шлёт (как `register_quick` сейчас) — `need_code` не отвечать
+   никогда.
+6. Создать аккаунт: номер, `google_sub`, почта (если `email_verified`), имя. Пароль человеку не показывается —
+   входит он через Google; задать пароль можно в кабинете. Очистить `google_pending`,
+   `session_regenerate_id(true)`, кука сессии как при входе паролем.
+
+Ответы `action=phone`: `{"ok":true,"uid":"…"}` + `Set-Cookie` — вошёл; `need_code`, `exists`, `deleted`,
+`need_egov`, `error` (`expired`, `bad_phone`, `bad_code`, `csrf`, `rate_limited` или текст для человека) — как выше.
+
+### Что вписать владельцу (по порядку)
+
+1. **Сервер:** выложить `google_auth.php?action=native` и `action=phone`, колонку `google_sub`, в конфиг —
+   `GOOGLE_IOS_CLIENT_ID` (п. 3). Проверить пробным запросом (раздел 4).
+2. **Google Cloud Console** → APIs & Services → OAuth consent screen: название Kliko, почта поддержки, домен
+   `kliko.kz`, ссылки на `https://kliko.kz/privacy.php` и `https://kliko.kz/soglashenie.php`, scopes
+   `openid`, `email`, `profile`, статус **In production** (иначе войдут только тестовые аккаунты).
+3. **Google Cloud Console** → Credentials → Create credentials → **OAuth client ID** → тип **iOS** → Bundle ID
+   `kz.kliko.app` → Create. Скопировать **Client ID** вида `1234567890-abcdef….apps.googleusercontent.com`.
+   Секрета у iOS-клиента нет — так и должно быть.
+4. **Приложение — ID вписывается в двух местах `project.yml`** (цель `Kliko`, `info.properties`):
+   - `KlikoGoogleClientID: "1234567890-abcdef….apps.googleusercontent.com"` — это и есть рубильник: пусто — кнопки
+     нет;
+   - в `CFBundleURLTypes` — вторая схема, обратный ID: `com.googleusercontent.apps.1234567890-abcdef…` (пример
+     оставлен там комментарием). Лист входа ловит возврат и без неё, это подстраховка.
+5. Тот же ID — в `GOOGLE_IOS_CLIENT_ID` на сервере (п. 1). Собрать сборку, проверить (раздел 4).
+
+---
+
+## 4. Как проверить
 
 ### Apple
 
@@ -195,3 +348,19 @@ kliko://social_connected?platform=instagram&error=<код или текст>
    «Опубликовать в Instagram (@имя)».
 5. Отказ в OAuth (нажать «Отмена» у Instagram) → возврат `kliko://social_connected?platform=instagram&error=access_denied`,
    приложение ничего не показывает и просто обновляет статус.
+
+### Google
+
+1. Пока `KlikoGoogleClientID` в `project.yml` пустой — кнопки «Продолжить с Google» нет нигде (и запросов к Google и
+   к `google_auth.php` приложение не делает).
+2. Пробный запрос: `curl -i -X POST 'https://kliko.kz/google_auth.php?action=native' -H 'Content-Type: application/json' -d '{}'`
+   → `200` и `{"ok":false,"error":"bad_token"}`. Пока так не отвечает — кнопки нет и со вписанным ID.
+3. Проверки токена — модульными тестами на сервере: чужая подпись, чужой `aud` (например, веб-клиент другого
+   проекта), истёкший `exp`, `iss` не Google, неверный `nonce`, повтор того же токена — все дают `ok:false`.
+4. На устройстве (TestFlight): новый Google-аккаунт → лист Google → шаг «Укажите номер» (над клавиатурой iOS
+   предлагает номер этого iPhone) → «Продолжить» → приложение вошедшее. Выход и повторный вход тем же Google — сразу
+   вошедший (поиск по `sub`), без шага номера.
+5. Шаг номера с номером, который уже есть у другого аккаунта → `exists:true` → окно «Номер уже зарегистрирован»,
+   Google к чужому аккаунту не привязан.
+6. Закрыть шаг номера и подождать 11 минут, повторить `action=phone` → `expired`.
+7. Отмена в листе Google → приложение молча остаётся на экране входа.

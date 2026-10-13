@@ -80,6 +80,8 @@ struct СостояниеСвоегоИИ: Equatable {
     var текстОшибки = ""
     var поставщики: [ПоставщикСвоегоИИ] = []
     var премиум = ПремиумСвоегоИИ()
+    /// places — где ещё можно включить свой ИИ (предложение договора, OwnAIPlaces.swift); старый сервер — пусто.
+    var места: [МестоСвоегоИИ] = []
 
     init() {}
 
@@ -110,6 +112,7 @@ struct СостояниеСвоегоИИ: Equatable {
         }
         поставщики = список
         if let п = j["premium"] as? [String: Any] { премиум = ПремиумСвоегоИИ(п) }
+        места = МестоСвоегоИИ.список(j["places"])
     }
 
     /// «•••• abcd» — ключ целиком не показывается никогда.
@@ -183,6 +186,20 @@ struct ОтказСвоегоИИ: Identifiable, Equatable {
             return текст
         }
         return СвойИИText.т("oai_fail")
+    }
+}
+
+/// Признаки успешного ответа ИИ-функции по договору «Свой ИИ» — без состояния и без главной нити.
+enum ОтветСвоегоИИ {
+    /**
+     own_ai_run: "fast" | "deep" у recognize (§5) — ответ собрал свой ИИ человека; к итогу — метка «через ваш ИИ».
+     У прочих функций поля пока нет (предложение — docs/OWN_AI_COVERAGE.md): нет поля — метки нет, по последнему
+     известному own_ai.active не гадаем.
+     */
+    static func своим(_ j: [String: Any]) -> Bool {
+        if let n = j["own_ai_run"] as? NSNumber { return n.intValue != 0 }
+        let значение = МоиОбъявленияAPI.строка(j["own_ai_run"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !значение.isEmpty && значение != "0" && значение.lowercased() != "false"
     }
 }
 

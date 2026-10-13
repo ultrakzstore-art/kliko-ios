@@ -24,6 +24,16 @@ import UIKit
  «или войдите через» (в карточке под формами): eGov — листом поверх (ОкноEgov), Apple — нативным листом Apple (ВходApple,
  apple_auth.php?action=native); пока сервер его не умеет — прежней страницей сайта apple_auth.php?action=start (§1.2.6).
  Telegram сайт скрыл по правилу App Store 4.8 — его нет и здесь.
+
+ Номер сам (владелец 13.10.2026: «номер который на телефоне вставка»): поле регистрации — .telephoneNumber, и iOS
+ предлагает над клавиатурой номер этого iPhone из «Моей карточки». Вставка и подстановка в любом виде («8 777…»,
+ «+7(777)…», «77771234567», поверх «+7 » в поле) приводятся к маске сайта без второго «+7» (вводНомера); пока поле в
+ фокусе и в буфере есть текст — рядом системная «Вставить» (PasteButton: буфер читается только по нажатию).
+
+ Google (владелец 13.10.2026: «регистрация по гуглу»): «Продолжить с Google» под Apple — нативно, без SDK (ВходGoogle,
+ google_auth.php?action=native). Кнопка есть, только когда вписан iOS-клиент Google (Config.входGoogle) и сервер
+ ответил на пробный запрос; аккаунта ещё нет — шаг «Укажите номер» (ЛистНомераGoogle, google_auth.php?action=phone,
+ при need_code — код из SMS с .oneTimeCode). Apple остаётся (правило 4.8). Договор — docs/SERVER_NATIVE_AUTH.md.
  */
 struct ЭкранВхода: View {
     enum Вкладка: Equatable { case вход, регистрация }
@@ -49,6 +59,15 @@ struct ЭкранВхода: View {
     @State private var ошибкаРег: String? = nil
     /// Ошибка входа через Apple — у кнопки Apple (под формами карточки, как .soc-btns сайта).
     @State private var ошибкаApple: String? = nil
+    /// Ошибка входа через Google и «скоро» — у места кнопки Google.
+    @State private var ошибкаGoogle: String? = nil
+    /// Кнопка Google: iOS-клиент вписан и сервер ответил на пробный запрос (ВходGoogle.готов).
+    @State private var googleГотов = false
+    /// Шаг «Укажите номер» после Google (need_phone).
+    @State private var номерGoogle: ЗапросНомераGoogle? = nil
+    /// В буфере есть текст (hasStrings — без чтения): рядом с полем номера регистрации видна «Вставить».
+    @State private var вБуфереТекст = false
+    @Environment(\.scenePhase) private var фаза
     @State private var идёт = false
     @State private var окно: ОкноВхода? = nil
     @State private var доступ: ДоступАккаунта? = nil
@@ -80,20 +99,31 @@ struct ЭкранВхода: View {
                         .disabled(идёт)
                 }
             }
+            /* Свой лист на ScrollView, а не рядом с листом «Аккаунт создан»: два .sheet на одном виде — ненадёжно. */
+            .sheet(item: $номерGoogle, onDismiss: { ВходGoogle.бросить() }) { запрос in
+                ЛистНомераGoogle(запрос: запрос) { итог, номер in послеНомераGoogle(итог, номер: номер) }
+            }
         }
         .tint(Theme.акцент)
         .interactiveDismissDisabled(идёт)
-        .onChange(of: фокус) { было, стало in префиксНомера(было: было, стало: стало) }
+        .onChange(of: фокус) { было, стало in
+            префиксНомера(было: было, стало: стало)
+            if стало == .номерРег { вБуфереТекст = UIPasteboard.general.hasStrings }
+        }
+        .onChange(of: фаза) { _, стало in
+            if стало == .active && фокус == .номерРег { вБуфереТекст = UIPasteboard.general.hasStrings }
+        }
         .onChange(of: телефон) { было, стало in
-            let верное = Self.ввод(было: было, стало: стало)
+            let верное = Self.вводНомера(было: было, стало: стало)
             if верное != стало { телефон = верное }
             ошибкаНомера = Self.ошибкаКода(верное)
         }
         .onChange(of: номерРег) { было, стало in
-            let верное = Self.ввод(было: было, стало: стало)
+            let верное = Self.вводНомера(было: было, стало: стало)
             if верное != стало { номерРег = верное }
             ошибкаНомераРег = Self.ошибкаКода(верное)
         }
+        .task { await узнатьGoogle() }
         .alert(окно?.заголовок ?? "", isPresented: окноПоказано, presenting: окно) { о in
             кнопкиОкна(о)
         } message: { о in
@@ -187,10 +217,17 @@ struct ЭкранВхода: View {
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
             ПолеВхода(подпись: т("auth_phone"), ошибка: ошибкаНомераРег, вФокусе: фокус == .номерРег) {
-                TextField(т("auth_phone"), text: $номерРег, prompt: Text(verbatim: "+7 (700) 000-00-00"))
-                    .keyboardType(.phonePad)
-                    .textContentType(.username)
-                    .focused($фокус, equals: .номерРег)
+                HStack(spacing: 8) {
+                    /* .telephoneNumber, а не .username: здесь номер новый — iOS сама предложит над клавиатурой номер
+                       этого iPhone («Моя карточка»); подстановка в любом виде приводится к маске (вводНомера). */
+                    TextField(т("auth_phone"), text: $номерРег, prompt: Text(verbatim: "+7 (700) 000-00-00"))
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                        .focused($фокус, equals: .номерРег)
+                    if фокус == .номерРег && вБуфереТекст && НомерКЗ.проверить(номерРег) != .годен {
+                        ВставкаНомераВхода { текст in вставитьНомерРег(текст) }
+                    }
+                }
             }
             СогласиеВхода(принято: $согласие)
             if let ошибка = ошибкаРег { ОшибкаФормы(текст: ошибка) }
@@ -204,7 +241,8 @@ struct ЭкранВхода: View {
     // MARK: - Вход через сервисы
 
     /// «или войдите через» (.soc-btns — в карточке под формами): eGov — листом поверх (ОкноEgov),
-    /// Apple — нативно (откат — страница сайта); ниже — согласие и примечание о номере, как у сайта.
+    /// Apple — нативно (откат — страница сайта), Google — нативно, только когда готов (откат — кнопки нет, «скоро»);
+    /// ниже — согласие и примечание о номере, как у сайта.
     private var способы: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
@@ -232,6 +270,11 @@ struct ЭкранВхода: View {
             if let ошибка = ошибкаApple { ОшибкаФормы(текст: ошибка) }
             КнопкаСервиса(подпись: т("auth_via_apple"), значок: "apple.logo", тёмная: true) {
                 черезApple()
+            }
+            if let ошибка = ошибкаGoogle { ОшибкаФормы(текст: ошибка) }
+            if googleГотов {
+                КнопкаGoogle(подпись: ВходGoogleText.т("g_continue")) { черезGoogle() }
+                    .transition(.opacity)
             }
             Text(т("auth_phone_note"))
                 .font(.system(size: 11))
@@ -400,6 +443,7 @@ struct ЭкранВхода: View {
     private func черезApple() {
         guard !идёт else { return }
         ошибкаApple = nil
+        ошибкаGoogle = nil
         ошибкаВхода = nil
         идёт = true
         Task { @MainActor in
@@ -421,6 +465,88 @@ struct ЭкранВхода: View {
                 наСайт(Config.url("/apple_auth.php?action=start"))
             }
         }
+    }
+
+    /**
+     Вход через Google (ВходGoogle): лист Google, обмен кода на id_token, google_auth.php?action=native. Вошёл — как вход
+     паролем; аккаунта нет — шаг «Укажите номер» (ЛистНомераGoogle); сервер ещё не умеет — кнопка прячется, на её месте
+     «скоро». Страницы сайта для Google нет — уводить некуда.
+     */
+    private func черезGoogle() {
+        guard !идёт else { return }
+        ошибкаGoogle = nil
+        ошибкаApple = nil
+        ошибкаВхода = nil
+        идёт = true
+        Task { @MainActor in
+            let итог = await ВходGoogle.войти()
+            идёт = false
+            switch итог {
+            case .вошёл:
+                вошли()
+                закрыть()
+            case .отменено:
+                break
+            case .нуженНомер(let запрос):
+                номерGoogle = запрос
+            case .удалён(let причина):
+                окно = .удалён(причина: причина)
+            case .нуженEgov:
+                eGov("cabinet.php?egov_confirm=1")
+            case .ошибка(let текст):
+                ошибкаGoogle = текст
+            case .скоро:
+                withAnimation(.easeOut(duration: 0.25)) { googleГотов = false }
+                ошибкаGoogle = ВходGoogleText.т("g_soon")
+            }
+        }
+    }
+
+    /// Кнопка Google — только если вписан iOS-клиент и сервер ответил на пробный запрос (ответ помнится до перезапуска).
+    private func узнатьGoogle() async {
+        guard Config.входGoogle else { return }
+        let готов = await ВходGoogle.готов()
+        guard готов != googleГотов else { return }
+        withAnimation(.easeOut(duration: 0.25)) { googleГотов = готов }
+    }
+
+    /// Итог шага «Укажите номер». Сначала уходит его лист, потом этот (или встаёт окно): два листа разом SwiftUI
+    /// закрывает ненадёжно (как у «Аккаунт создан»).
+    private func послеНомераGoogle(_ итог: ИтогНомераGoogle, номер: String) {
+        номерGoogle = nil
+        if итог == .вошёл { вошли() }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            switch итог {
+            case .вошёл:
+                закрыть()
+            case .номерЗанят:
+                /* Номер уже у другого аккаунта: Google к нему не привязываем — окно сайта «Номер уже зарегистрирован»
+                   (eGov или вход по паролю с этим номером). */
+                номерРег = номер
+                окно = .номерЗанят
+            case .удалён(let причина):
+                окно = .удалён(причина: причина)
+            case .нуженEgov:
+                eGov("cabinet.php?egov_confirm=1")
+            case .истекло:
+                ошибкаGoogle = ВходGoogleText.т("g_expired")
+            case .скоро:
+                withAnimation(.easeOut(duration: 0.25)) { googleГотов = false }
+                ошибкаGoogle = ВходGoogleText.т("g_soon")
+            case .нуженКод, .ошибка:
+                break
+            }
+        }
+    }
+
+    /// «Вставить» у поля номера регистрации: номера в буфере нет — подсказка у поля, поле не трогаем.
+    private func вставитьНомерРег(_ текст: String) {
+        guard let номер = Self.номерИзБуфера(текст) else {
+            ошибкаНомераРег = ВходGoogleText.т("paste_no_phone")
+            return
+        }
+        номерРег = номер
     }
 
     /// Страница сайта вместо этого листа.
@@ -481,6 +607,45 @@ struct ЭкранВхода: View {
             return было
         }
         return канон
+    }
+
+    /**
+     Вставка и подстановка номера (буфер, подсказка iOS над клавиатурой из «Моей карточки», Связка ключей) в любом виде:
+     «8 777 123 45 67», «+7(777)123-45-67», «77771234567», «777 123 4567» — с пробелами, скобками, дефисами, поверх «+7 »
+     в поле. Вставлено десять цифр и больше — это и есть номер: последние десять (после 7/8 или +7), «+7» не двоится.
+     Вставили обрывок, а цифр стало больше одиннадцати: полный номер не трогаем, неполный дописываем до одиннадцати.
+     Остальное (набор по знаку, стирание) — ввод. Готовое значение маски не меняется — onChange не зацикливается.
+     */
+    static func вводНомера(было: String, стало: String) -> String {
+        if стало.isEmpty || стало == НомерКЗ.формат(стало) { return ввод(было: было, стало: стало) }
+        if let номер = номерИзБуфера(вставленное(было: было, стало: стало)) { return номер }
+        let цифрыСтало = НомерКЗ.цифры(стало)
+        if цифрыСтало.count > 11 {
+            if НомерКЗ.цифры(было).count >= 11 { return было }
+            return НомерКЗ.формат("+" + String(цифрыСтало.prefix(11)))
+        }
+        return ввод(было: было, стало: стало)
+    }
+
+    /// Номер из вставленного текста: десять цифр и больше — последние десять с «+7» в маске сайта; меньше — nil.
+    static func номерИзБуфера(_ текст: String) -> String? {
+        let цифры = НомерКЗ.цифры(текст)
+        guard цифры.count >= 10 else { return nil }
+        return НомерКЗ.формат("+7" + String(цифры.suffix(10)))
+    }
+
+    /// Что вставили: новое значение без общего с прежним начала и конца.
+    static func вставленное(было: String, стало: String) -> String {
+        let a = Array(было)
+        let b = Array(стало)
+        var начало = 0
+        while начало < a.count && начало < b.count && a[начало] == b[начало] { начало += 1 }
+        var конец = 0
+        while конец < a.count - начало && конец < b.count - начало &&
+                a[a.count - 1 - конец] == b[b.count - 1 - конец] {
+            конец += 1
+        }
+        return String(b[начало..<(b.count - конец)])
     }
 }
 
@@ -820,6 +985,217 @@ enum ТекстСогласия {
                 return true
             }
             return своё ? .handled : .systemAction
+        }
+    }
+}
+
+// MARK: - Вставка номера и шаг «Укажите номер» после Google
+
+/// Номер из буфера одним касанием — системная «Вставить» (PasteButton): буфер читается только по нажатию, без окна
+/// «Разрешить вставку». Видна, пока поле номера в фокусе, номер не набран, а в буфере есть текст (hasStrings буфер не читает).
+private struct ВставкаНомераВхода: View {
+    let вставить: (String) -> Void
+
+    var body: some View {
+        PasteButton(payloadType: String.self) { строки in
+            let текст = строки.first ?? ""
+            Task { @MainActor in вставить(текст) }
+        }
+        .labelStyle(.iconOnly)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .tint(Theme.зелёный2)
+        .transition(.opacity)
+    }
+}
+
+/**
+ Шаг «Укажите номер» после входа через Google (need_phone): Google человека подтвердил, аккаунта ещё нет, а номер у
+ Kliko обязателен. Поле — как у регистрации: .telephoneNumber (iOS предложит номер этого iPhone над клавиатурой), маска
+ сайта, вставка в любом виде, «Вставить» из буфера. Сервер может прислать SMS (need_code) — тогда поле кода с
+ .oneTimeCode, iOS подставит код из сообщения сама. Ошибки показываются у полей; остальное решает экран входа (итог).
+ */
+private struct ЛистНомераGoogle: View {
+    enum Поле: Hashable { case номер, код }
+
+    let запрос: ЗапросНомераGoogle
+    let итог: (ИтогНомераGoogle, String) -> Void
+
+    @Environment(\.dismiss) private var закрыть
+    @Environment(\.scenePhase) private var фаза
+    @State private var номер = ""
+    @State private var код = ""
+    @State private var нуженКод = false
+    @State private var ошибкаНомера: String? = nil
+    @State private var ошибка: String? = nil
+    @State private var идёт = false
+    @State private var вБуфереТекст = false
+    @FocusState private var фокус: Поле?
+
+    private func т(_ ключ: String) -> String { ВходGoogleText.т(ключ) }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                содержимое
+                    .карточкаВходаСайта()
+                    .padding(20)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(КраскаВходаСайта.фон.ignoresSafeArea())
+            .navigationTitle(т("g_phone_t"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(ВходText.т("close")) { закрыть() }
+                        .disabled(идёт)
+                }
+            }
+        }
+        .tint(Theme.акцент)
+        .interactiveDismissDisabled(идёт)
+        .onChange(of: фокус) { _, стало in
+            if стало == .номер {
+                if номер.isEmpty { номер = "+7 " }
+                вБуфереТекст = UIPasteboard.general.hasStrings
+            } else if НомерКЗ.цифры(номер).count <= 1 {
+                номер = ""
+            }
+        }
+        .onChange(of: фаза) { _, стало in
+            if стало == .active && фокус == .номер { вБуфереТекст = UIPasteboard.general.hasStrings }
+        }
+        .onChange(of: номер) { было, стало in
+            let верное = ЭкранВхода.вводНомера(было: было, стало: стало)
+            if верное != стало { номер = верное }
+            ошибкаНомера = ЭкранВхода.ошибкаКода(верное)
+            /* Код пришёл на прежний номер — сменили номер, код спросим заново. */
+            if нуженКод && НомерКЗ.цифры(верное) != НомерКЗ.цифры(было) {
+                нуженКод = false
+                код = ""
+            }
+        }
+        .task {
+            /* Сразу в поле: над клавиатурой iOS предложит номер этого iPhone. Пауза — пока лист поднимается. */
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            if номер.isEmpty { фокус = .номер }
+        }
+    }
+
+    private var содержимое: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            шапка
+            ПолеВхода(подпись: ВходText.т("auth_phone"), ошибка: ошибкаНомера, вФокусе: фокус == .номер) {
+                HStack(spacing: 8) {
+                    TextField(ВходText.т("auth_phone"), text: $номер, prompt: Text(verbatim: "+7 (700) 000-00-00"))
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                        .focused($фокус, equals: .номер)
+                        .disabled(идёт)
+                    if фокус == .номер && вБуфереТекст && НомерКЗ.проверить(номер) != .годен {
+                        ВставкаНомераВхода { текст in вставить(текст) }
+                    }
+                }
+            }
+            if нуженКод { полеКода }
+            if let ошибка { ОшибкаФормы(текст: ошибка) }
+            КнопкаСайта(подпись: т("g_next"), идёт: идёт) { отправить() }
+            Text(ТекстСогласия.строка(ВходText.т("auth_agree_soc")))
+                .font(.system(size: 12))
+                .lineSpacing(5)
+                .foregroundStyle(Theme.текстВторой)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .fixedSize(horizontal: false, vertical: true)
+                .tint(КраскаВходаСайта.наЗелёный)
+                .environment(\.openURL, ТекстСогласия.открыватель)
+        }
+    }
+
+    /// Каким аккаунтом Google входят и зачем номер.
+    private var шапка: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ЗнакGoogle()
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+                Text(запрос.почта.isEmpty ? "Google" : String(format: т("g_as"), запрос.почта))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Text(т("g_phone_s"))
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Код из SMS — только если сервер его попросил (need_code); .oneTimeCode — iOS подставит его из сообщения.
+    private var полеКода: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(т("g_code_sent"))
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+            ПолеВхода(подпись: т("g_code"), ошибка: nil, вФокусе: фокус == .код) {
+                TextField(т("g_code"), text: $код, prompt: Text(verbatim: "000000"))
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .focused($фокус, equals: .код)
+                    .disabled(идёт)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func вставить(_ текст: String) {
+        guard let новый = ЭкранВхода.номерИзБуфера(текст) else {
+            ошибкаНомера = т("paste_no_phone")
+            return
+        }
+        номер = новый
+    }
+
+    /// Номер (и код, если просили) — один запрос по нажатию; сначала проверка номера, как у регистрации.
+    private func отправить() {
+        guard !идёт else { return }
+        ошибка = nil
+        if let неверно = НомерКЗ.ошибка(номер) {
+            ошибкаНомера = неверно
+            фокус = .номер
+            return
+        }
+        let чистыйКод = НомерКЗ.цифры(код)
+        if нуженКод && чистыйКод.isEmpty {
+            ошибка = т("g_code_need")
+            фокус = .код
+            return
+        }
+        фокус = nil
+        идёт = true
+        let тел = номер
+        let сКодом = нуженКод
+        Task { @MainActor in
+            let ответ = await ВходGoogle.отправитьНомер(тел, код: сКодом ? чистыйКод : "", запрос: запрос)
+            идёт = false
+            switch ответ {
+            case .нуженКод:
+                if сКодом {
+                    ошибка = т("g_code_bad")
+                    код = ""
+                } else {
+                    withAnimation(.easeOut(duration: 0.25)) { нуженКод = true }
+                }
+                /* Поле кода только что встало — фокус после того, как оно появится. */
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                фокус = .код
+            case .ошибка(let текст):
+                ошибка = текст
+            default:
+                итог(ответ, тел)
+            }
         }
     }
 }

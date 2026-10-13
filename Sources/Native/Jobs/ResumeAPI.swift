@@ -193,18 +193,42 @@ enum РезюмеAPI {
         }
     }
 
-    /// _jw2AI: черновик от Kliko AI — должность, «о себе», навыки. nil в ответе — текст ошибки.
-    static func собрать(роль: String, опыт: String) async -> (title: String, about: String, skills: [String])? {
-        guard let j = try? await A.отправить("/api/jobs.php?action=ai_resume", тело: ["role": роль, "exp": опыт],
-                                            отКорня: true) else { return nil }
+    /// Итог _jw2AI: черновик или готовый текст отказа для человека.
+    enum ЧерновикИИ {
+        /// своимИИ — сервер сказал, что черновик собрал свой ИИ человека (own_ai_run, договор «Свой ИИ»).
+        case готово(title: String, about: String, skills: [String], своимИИ: Bool)
+        /// Отказ своего ИИ (его готовый текст), msg сервера, «Не удалось» или «Нет соединения».
+        case отказ(String)
+        case нуженВход
+    }
+
+    /**
+     _jw2AI: черновик от Kliko AI — должность, «о себе», навыки. С действующим «Своим ИИ» тот же запрос идёт через ключ
+     человека (договор §4: только сессией кабинета — так и шлём, КабинетСайта с куками, без Bearer).
+     */
+    static func собрать(роль: String, опыт: String) async -> ЧерновикИИ {
+        let j: [String: Any]
+        do {
+            j = try await A.отправить("/api/jobs.php?action=ai_resume", тело: ["role": роль, "exp": опыт],
+                                      отКорня: true)
+        } catch {
+            return .отказ(т("no_net"))
+        }
         guard A.да(j["ok"]) else {
-            /* «Свой ИИ» (договор §5): error "own_ai", own_ai:"<код>", текст в msg — окно с готовым текстом и действиями. */
-            if let отказ = ОтказСвоегоИИ.из(j) { ОкноСвоегоИИ.показатьОтказ(отказ) }
-            return nil
+            if A.нетСессии(j) { return .нуженВход }
+            /* «Свой ИИ» (договор §5): error "own_ai", own_ai:"<код>", текст в msg — окно с готовым текстом
+               и действиями, а под кнопкой тот же текст, не общее «Не удалось». */
+            if let отказ = ОтказСвоегоИИ.из(j) {
+                ОкноСвоегоИИ.показатьОтказ(отказ)
+                return .отказ(отказ.текст)
+            }
+            let сообщение = A.строка(j["msg"]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return .отказ(сообщение.isEmpty || КабинетСайта.машинныйКод(сообщение) ? т("jw_ai_fail") : сообщение)
         }
         let навыки: [String] = ((j["skills"] as? [Any]) ?? []).map { String(A.строка($0).prefix(50)) }
             .filter { !$0.isEmpty }
-        return (A.строка(j["title"]), A.строка(j["about"]), навыки)
+        return .готово(title: A.строка(j["title"]), about: A.строка(j["about"]), skills: навыки,
+                       своимИИ: ОтветСвоегоИИ.своим(j))
     }
 
     /// Фото 3×4: без водяного знака (как файл сайта), 1280 px, JPEG 0,85; миниатюра 420 px. url || thumb.
