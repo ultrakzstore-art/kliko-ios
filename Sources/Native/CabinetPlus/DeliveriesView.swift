@@ -368,7 +368,8 @@ private struct КарточкаДоставки: View {
                 Text(доставка.товар.isEmpty ? т("dlv_parcel") : доставка.товар)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
-                    .lineLimit(2)
+                    /* Ровная схема (13.10.2026): место под две строки всегда — короткое название не укорачивает карточку. */
+                    .lineLimit(2, reservesSpace: true)
                 if доставка.цена > 0 {
                     Text(ЗапросыКабинета.деньги(доставка.цена) + " ₸")
                         .font(.system(size: 13))

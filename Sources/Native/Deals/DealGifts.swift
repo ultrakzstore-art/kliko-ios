@@ -125,6 +125,12 @@ struct СекцияПодарковМне: View {
 }
 
 /// Строка подарка: фото, название, «От: имя · дата», плашка этапа, перевозчик и трек.
+///
+/// Ровная схема (владелец 13.10.2026: «схема должна быть ровной везде»): у всех строк одни и те же слоты одной высоты —
+/// название, «От: имя · дата» и плашка этапа в одну строку, строка доставки тоже в одну и есть всегда: без трека до
+/// отправки — «Трек появится после отправки», а в пути, вручено или закрыто без трека (самовывоз, курьер без номера) —
+/// пустой слот той же высоты, чтобы строка не спорила с плашкой этапа. Длинное — с многоточием; целиком — на экране
+/// подарка и у VoiceOver.
 struct КарточкаПодаркаМне: View {
     let подарок: ПодарокМне
 
@@ -137,20 +143,23 @@ struct КарточкаПодаркаМне: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.текст)
                         .lineLimit(1)
-                    Text(мета)
+                    Text(мета.isEmpty ? " " : мета)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityHidden(мета.isEmpty)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 ПлашкаПодаркаМне(подарок: подарок)
             }
-            if !подарок.строкаДоставки.isEmpty {
-                Label(подарок.строкаДоставки, systemImage: "shippingbox")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(2)
-            }
+            Label(текстДоставки, systemImage: "shippingbox")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .opacity(доставкаПуста ? 0 : 1)
+                .accessibilityHidden(доставкаПуста)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,6 +181,22 @@ struct КарточкаПодаркаМне: View {
         if !дата.isEmpty { части.append(дата) }
         return части.joined(separator: " · ")
     }
+
+    /// Подарок ещё не отправлен (preparing или этап без названия) — только тогда «Трек появится после отправки».
+    private var доОтправки: Bool {
+        !["on_way", "delivered", "closed"].contains(подарок.этап)
+    }
+
+    /// Отправлен, а перевозчика и трека нет — строка доставки остаётся пустым слотом той же высоты.
+    private var доставкаПуста: Bool {
+        подарок.строкаДоставки.isEmpty && !доОтправки
+    }
+
+    private var текстДоставки: String {
+        let строка = подарок.строкаДоставки
+        if !строка.isEmpty { return строка }
+        return доОтправки ? РовныеКарточкиText.т("gift_no_track") : " "
+    }
 }
 
 struct ПлашкаПодаркаМне: View {
@@ -183,10 +208,12 @@ struct ПлашкаПодаркаМне: View {
             Image(systemName: п.символ)
                 .font(.system(size: 13, weight: .semibold))
                 .accessibilityHidden(true)
+            /* Ровная схема: плашка в одну строку, как плашка статуса сделки, — длинный этап ужимается, а не переносится. */
             Text(п.текст)
                 .font(.system(size: 11, weight: .bold))
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .truncationMode(.tail)
         }
         .foregroundStyle(п.вид.текст)
         .padding(.horizontal, 10)

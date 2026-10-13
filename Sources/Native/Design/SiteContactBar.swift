@@ -217,6 +217,9 @@ struct ПанельСвязиСайта: View {
     /// (?buy=1, ?chat=1 — NativeRouter): его исполняем, когда известно, своё ли объявление.
     private var главнаяЧасть: some View {
         главнаяКнопка
+            /* Подпись растёт с «Размером текста» до accessibility1 и дальше не ломает пилюлю; лист гаранта ниже
+               (.sheet) этим не ограничен — он за пределами модификатора. */
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .task(id: товар.id) {
                 await узнатьЧеловека()
                 /* Намерение ссылки — когда карточка уже въехала (_mkAfterCard сайта ждёт открытую карточку): чат и окна
@@ -242,25 +245,34 @@ struct ПанельСвязиСайта: View {
                 } label: {
                     ПодписьПанелиСвязи(значок: "pencil", заголовок: БезопаснаяСделкаТекст.т("edit"), подпись: nil)
                 }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+                .buttonStyle(НажатиеСПружинкой(сжатие: 0.98))
                 /* klkAppNoDigital сайта: платные услуги в приложении не продаются — «Продвинуть» нет. */
             }
         }
     }
 
-    /// Строка над пилюлей: гарант и «Предложить цену»; нет ни того, ни другого — строки нет.
+    /**
+     Строка над пилюлей: гарант и «Предложить цену»; нет ни того, ни другого — строки нет. Владелец 13.10.2026
+     («модалке кнопки»): кнопки ряда — одной высоты (не ниже 44 pt) и одной ширины. Две не влезли рядом целиком —
+     длинная «Сделка с подписью eGov», длинный язык или крупный «Размер текста» — встают друг под другом во всю ширину:
+     подпись не обрезается многоточием.
+     */
     @ViewBuilder
     private var второстепенные: some View {
         let гарантСейчас = гарант
-        if гарантСейчас == .подписьEDS && можноПредложить {
-            /* «Сделка с подписью eGov» длиннее «Купить безопасно»: рядом с «Предложить цену» не влезла — друг под другом. */
+        if гарантСейчас != nil && можноПредложить {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
                 VStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
             }
+            /* Ровная высота: каждая кнопка тянется до самой высокой в ряду (frame maxHeight в КнопкаВторогоРяда). */
+            .fixedSize(horizontal: false, vertical: true)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .padding(.bottom, 8)
         } else if гарантСейчас != nil || можноПредложить {
             HStack(spacing: 8) { кнопкиВторогоРяда(гарантСейчас) }
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .padding(.bottom, 8)
         }
     }
@@ -491,7 +503,7 @@ struct ПанельСвязиСайта: View {
         } label: {
             ПодписьПанелиСвязи(значок: значок, заголовок: заголовок, подпись: подпись)
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .buttonStyle(НажатиеСПружинкой(сжатие: 0.98))
     }
 
     /**
@@ -578,7 +590,7 @@ struct ПанельСвязиСайта: View {
             .shadow(color: канал == .whatsApp ? Theme.whatsApp.opacity(0.6) : Color.clear, radius: 7, x: 0, y: 5)
             .contentShape(Circle())
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+        .buttonStyle(НажатиеСПружинкой(сжатие: 0.9))
         .disabled(ждём != nil)
         .accessibilityLabel(ListingPageText.т(канал == .звонок ? "call" : "wa"))
     }
@@ -923,27 +935,34 @@ private struct ОкноСвязиСайта: View {
     }
 }
 
-/// Кнопка строки над пилюлей: главная (гарант) — зелёная заливка, иначе — поверхность с рамкой; 40 pt, делят ширину.
+/**
+ Кнопка строки над пилюлей: главная (гарант) — зелёная заливка, иначе — поверхность с рамкой; не ниже 44 pt под палец,
+ делят ширину поровну и тянутся до одной высоты (второстепенные). Подпись растёт с «Размером текста» (до accessibility1
+ — ограничение ставит ряд) и не обрезается: не влезла в ряд — ряд встаёт столбиком; запасное — чуть ужаться.
+ */
 private struct КнопкаВторогоРяда: View {
     let значок: String
     let заголовок: String
     let главная: Bool
     let нажать: () -> Void
+    @ScaledMetric(relativeTo: .footnote) private var кегль: CGFloat = 13
+    @ScaledMetric(relativeTo: .footnote) private var кегльЗначка: CGFloat = 14
 
     var body: some View {
         Button(action: нажать) {
             HStack(spacing: 6) {
                 Image(systemName: значок)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: кегльЗначка, weight: .semibold))
                     .accessibilityHidden(true)
                 Text(заголовок)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: кегль, weight: .bold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
             }
             .foregroundStyle(главная ? Theme.зелёный2 : Theme.текст)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 40)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
             .background(главная ? Theme.зелёный.opacity(0.12) : Theme.поверхность,
                         in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
@@ -952,7 +971,7 @@ private struct КнопкаВторогоРяда: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+        .buttonStyle(НажатиеСПружинкой(сжатие: 0.97))
     }
 }
 
@@ -1016,11 +1035,15 @@ private struct ЛистВходаДляЧата: View {
     }
 }
 
-/// Левая часть пилюли: значок в светлом квадрате 34 pt (.so-ic) и две строки (.so-tx) на своём градиенте.
+/// Левая часть пилюли: значок в светлом квадрате 34 pt (.so-ic) и две строки (.so-tx) на своём градиенте. Подпись растёт
+/// с «Размером текста» (до accessibility1 — ограничение ставит панель) и не обрезается: не влезла в строку — переносится
+/// на вторую, и только потом чуть ужимается.
 private struct ПодписьПанелиСвязи: View {
     let значок: String
     let заголовок: String
     let подпись: String?
+    @ScaledMetric(relativeTo: .subheadline) private var кегль: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption2) private var кегльПодписи: CGFloat = 10
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1037,17 +1060,21 @@ private struct ПодписьПанелиСвязи: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(заголовок)
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.system(size: кегль, weight: .heavy))
                     .tracking(-0.14)
                     .foregroundStyle(Color.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.8)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let строка = подпись {
                     Text(строка)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: кегльПодписи, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.72))
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .minimumScaleFactor(0.8)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)

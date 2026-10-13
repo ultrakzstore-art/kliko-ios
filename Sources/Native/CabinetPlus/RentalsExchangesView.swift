@@ -841,7 +841,8 @@ private struct КарточкаОбмена: View {
             Text(вещь.название.isEmpty ? "—" : вещь.название)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Theme.текст)
-                .lineLimit(2)
+                /* Ровная схема (13.10.2026): место под две строки всегда — подписи двух вещей обмена на одной линии. */
+                .lineLimit(2, reservesSpace: true)
             Text(подпись)
                 .font(.system(size: 11.5))
                 .foregroundStyle(Theme.текстВторой)

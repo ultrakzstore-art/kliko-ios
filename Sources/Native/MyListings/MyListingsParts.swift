@@ -418,21 +418,28 @@ struct СтрокаРаботы: View {
     private func т(_ ключ: String) -> String { МоиОбъявленияText.т(ключ) }
 
     var body: some View {
+        /* Ровная схема (владелец 13.10.2026: «схема должна быть ровной везде»): у всех строк «Работы» одни и те же слоты
+           одной высоты — метки, название, компания (у резюме — должность), «зарплата · город» — каждый ровно в одну
+           строку; нет компании или зарплаты — пустая строка той же высоты, длинное — с многоточием (VoiceOver — целиком). */
         VStack(alignment: .leading, spacing: 6) {
             метки
             Text(заголовок)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.текст)
-            if !подзаголовок.isEmpty {
-                Text(подзаголовок)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-            }
-            if !сведения.isEmpty {
-                Text(сведения)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текстВторой)
-            }
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text(подзаголовок.isEmpty ? " " : подзаголовок)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityHidden(подзаголовок.isEmpty)
+            Text(сведения.isEmpty ? " " : сведения)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityHidden(сведения.isEmpty)
             кнопки
         }
         .padding(12)
@@ -477,6 +484,7 @@ struct СтрокаРаботы: View {
         Text(текст)
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(цвет)
+            .lineLimit(1)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(фон, in: Capsule())

@@ -139,6 +139,10 @@ struct КарточкаКошелька: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .monospacedDigit()
+                /* Главный экран кабинета 13.10.2026: новый баланс — цифры перекатываются на месте; при «Уменьшении
+                   движения» — сразу. */
+                .contentTransition(.numericText(value: Double(с.баланс)))
+                .animation(ДвижениеСайта.смена, value: с.баланс)
                 .accessibilityLabel(кошелёк.скрыто ? т("a11y_hidden") : КошелёкФормат.тенге(с.баланс))
         } else {
             Text("…")

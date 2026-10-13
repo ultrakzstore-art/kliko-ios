@@ -113,17 +113,73 @@ struct СмахнутьНазад: UIViewControllerRepresentable {
 
 // MARK: - Кнопки над фото (.mk-mhead)
 
+/**
+ Мерки кнопок над фото — одни на сердце, «Поделиться», пару стрелок ˄ ˅ и «×» (владелец 13.10.2026: «модалке кнопки»,
+ «схема должна быть ровной»). Видно квадрат 36 pt (.mk-mbtn сайта), а вокруг — невидимое поле 4 pt: палец попадает в
+ 44 pt, соседние кнопки стоят ровно через 8 pt, а от краёв фото — через 16 pt (12 pt ряда и поле), по одной линии с
+ меткой «Б/У» под ними.
+ */
+enum МеркиКнопокНадФото {
+    /// Видимая сторона кнопки.
+    static let сторона: CGFloat = 36
+    /// Невидимое поле вокруг кнопки — до 44 pt под палец.
+    static let поле: CGFloat = 4
+    /// Сегмент пары стрелок шире квадрата: с полем по внешнему краю — те же 44 pt под палец.
+    static let сегмент: CGFloat = 40
+    /// Значок — 16 pt полужирный, у всех кнопок ряда.
+    static let значок: CGFloat = 16
+    /// Ряд кнопок от краёв фото (видимый край — ещё на поле дальше: 16 pt).
+    static let отступРяда: CGFloat = 12
+    /// Ряд от верха фото: видимый верх в 20 pt — на 8 pt ниже полосок-историй и на 10 pt выше метки «Б/У» (66 pt).
+    static let отступСверху: CGFloat = 16
+}
+
 extension View {
-    /// .mk-mhead .mk-mbtn: квадрат 36 pt со скруглением 10, rgba(14,20,17,.45) и размытие под ним, значок белый.
+    /// .mk-mhead .mk-mbtn: квадрат 36 pt со скруглением 10, rgba(14,20,17,.45) и размытие под ним, значок белый;
+    /// вокруг — поле до 44 pt под палец.
     func фонКнопкиНадФото() -> some View {
         self
-            .frame(width: 36, height: 36)
-            .background(Theme.кнопкаНадФото, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .environment(\.colorScheme, .dark)
-            .padding(4)
+            .frame(width: МеркиКнопокНадФото.сторона, height: МеркиКнопокНадФото.сторона)
+            .стеклоНадФото()
+            .padding(МеркиКнопокНадФото.поле)
             .contentShape(Rectangle())
     }
+
+    /// Стекло кнопок над фото без размера — одно у квадратной кнопки и у пары стрелок: тёмный 45 % с размытием,
+    /// скругление 10 и тонкий блик по верхней кромке, чтобы кнопка читалась и на тёмном снимке.
+    func стеклоНадФото() -> some View {
+        self
+            .background(Theme.кнопкаНадФото, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), Color.clear],
+                                                 startPoint: .top, endPoint: .center), lineWidth: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+/**
+ Нажатие кнопок страницы объявления (над фото и в панели связи): под пальцем — короткое сжатие, отпустили — пружинка
+ обратно с лёгким перелётом. «Уменьшение движения» — без движения: кнопка лишь на миг бледнеет.
+ */
+struct НажатиеСПружинкой: ButtonStyle {
+    var сжатие: CGFloat = ДвижениеСайта.сжатиеПанели
+
+    func makeBody(configuration: Configuration) -> some View {
+        let тихо = ДвижениеСайта.тихо
+        let нажата = configuration.isPressed
+        return configuration.label
+            .scaleEffect(нажата && !тихо ? сжатие : 1)
+            .opacity(нажата && тихо ? 0.7 : 1)
+            .animation(нажата || тихо ? ДвижениеСайта.нажатие : Self.отпустили, value: нажата)
+    }
+
+    /// Возврат после нажатия — пружина с небольшим перелётом.
+    private static let отпустили = Animation.spring(response: 0.32, dampingFraction: 0.55)
 }
 
 struct КнопкаНадФото: View {
@@ -134,11 +190,11 @@ struct КнопкаНадФото: View {
     var body: some View {
         Button(action: действие) {
             Image(systemName: значок)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: МеркиКнопокНадФото.значок, weight: .semibold))
                 .foregroundStyle(Color.white)
                 .фонКнопкиНадФото()
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+        .buttonStyle(НажатиеСПружинкой(сжатие: 0.9))
         .accessibilityLabel(подпись)
     }
 }

@@ -348,12 +348,16 @@ struct КарточкаВСпискеСделок: View {
                             .padding(.top, 2)
                         плашкаСтатуса
                     }
-                    Text(номерИДата)
-                        .font(.system(size: 12))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.текстВторой)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 8) {
+                        Text(номерИДата)
+                            .font(.system(size: 12))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.текстВторой)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        трекВСтроке
+                    }
                     Text(роль)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.текстВторой)
@@ -362,16 +366,12 @@ struct КарточкаВСпискеСделок: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            /* Статус доставки из кэша отслеживания (без сети); нет данных — ничего. */
-            ПилюляТрекаСделки(сделка: сделка.id, сНазванием: true)
+            /* Владелец 13.10.2026 («высота карточек с подсказками статуса»): под деньгами — слот состояния ровно в одну
+               строку у каждой карточки. Подсказка по статусу, таймер авто-подтверждения или «Подробнее о сделке» —
+               плашкой одной высоты; длинная подсказка — с многоточием (целиком — в карточке сделки и у VoiceOver).
+               Статус доставки — не отдельной пилюлей, а справа в строке номера: карточка не растёт и от него. */
             строкаДенег
-            if let строкаТаймера = таймер {
-                строкаТаймера
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(КраскаСделокКабинета.плохоТекст)
-                    .padding(.top, -4)
-            }
-            подсказка
+            слотСостояния
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -489,48 +489,115 @@ struct КарточкаВСпискеСделок: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// «Авто-подтверждение через Hч Mм» — delivered, время есть, возврата нет.
-    private var таймер: Text? {
+    /// «Hч Mм» до авто-подтверждения — delivered, время есть, возврата нет; иначе nil.
+    private var остаток: String? {
         guard сделка.статус == "delivered", сделка.осталосьСек > 0, !сделка.возврат else { return nil }
-        return Text(Image(systemName: "alarm")) + Text(" " + т("deal_autoconfirm") + " " + СделкиФормат.часыМинуты(сделка.осталосьСек))
+        return СделкиФормат.часыМинуты(сделка.осталосьСек)
     }
 
-    /// Подсказки deal_hint_* — в том же порядке и при тех же условиях, что у сайта.
-    @ViewBuilder
-    private var подсказка: some View {
-        if сделка.статус == "held" {
-            строкаПодсказки(т(сделка.продавец ? "deal_hint_held_seller" : "deal_hint_held_buyer"),
-                            вид: сделка.продавец ? .хорошо : .инфо, символ: сделка.продавец ? "shippingbox" : "lock")
-        }
-        if сделка.статус == "shipped" {
-            строкаПодсказки(т(сделка.продавец ? "deal_hint_shipped_seller" : "deal_hint_shipped_buyer"),
-                            вид: .предупреждение, символ: "square.and.arrow.up")
-        }
-        if сделка.статус == "delivered" && !сделка.продавец && !сделка.идётВозврат {
-            строкаПодсказки(т("deal_hint_delivered_buyer"), вид: .предупреждение, символ: "exclamationmark.triangle")
-        }
+    /**
+     Подсказки deal_hint_* — при тех же условиях, что у сайта; срочные первыми: возврат, спор, «подтвердите приёмку»,
+     «отправлено», «деньги у Kliko». В слоте видна первая, VoiceOver читает все.
+     */
+    private var подсказки: [(текст: String, вид: ВидСтатусаСделки, символ: String)] {
+        var итог: [(текст: String, вид: ВидСтатусаСделки, символ: String)] = []
         if сделка.идётВозврат {
-            строкаПодсказки(т("deal_hint_return"), вид: .предупреждение, символ: "arrow.uturn.backward")
+            итог.append((текст: т("deal_hint_return"), вид: ВидСтатусаСделки.предупреждение,
+                         символ: "arrow.uturn.backward"))
         }
         if сделка.статус == "disputed" {
-            строкаПодсказки(т("deal_hint_disputed"), вид: .плохо, символ: "exclamationmark.triangle")
+            итог.append((текст: т("deal_hint_disputed"), вид: ВидСтатусаСделки.плохо, символ: "exclamationmark.triangle"))
         }
+        if сделка.статус == "delivered" && !сделка.продавец && !сделка.идётВозврат {
+            итог.append((текст: т("deal_hint_delivered_buyer"), вид: ВидСтатусаСделки.предупреждение,
+                         символ: "exclamationmark.triangle"))
+        }
+        if сделка.статус == "shipped" {
+            итог.append((текст: т(сделка.продавец ? "deal_hint_shipped_seller" : "deal_hint_shipped_buyer"),
+                         вид: ВидСтатусаСделки.предупреждение, символ: "square.and.arrow.up"))
+        }
+        if сделка.статус == "held" {
+            let вид: ВидСтатусаСделки = сделка.продавец ? .хорошо : .инфо
+            итог.append((текст: т(сделка.продавец ? "deal_hint_held_seller" : "deal_hint_held_buyer"), вид: вид,
+                         символ: сделка.продавец ? "shippingbox" : "lock"))
+        }
+        return итог
     }
 
-    private func строкаПодсказки(_ текст: String, вид: ВидСтатусаСделки, символ: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+    /// Высота слота состояния — одна у всех карточек списка.
+    private static let высотаСлота: CGFloat = 30
+
+    /**
+     Слот состояния — плашка ровно в одну строку: первая подсказка по статусу (справа — «⏰ Hч Mм», если идёт таймер
+     авто-подтверждения); подсказки нет — «Авто-подтверждение через Hч Mм»; нет и таймера — «Подробнее о сделке ›».
+     */
+    private var слотСостояния: some View {
+        let все = подсказки
+        let главная = все.first
+        let время = остаток
+        let вид: ВидСтатусаСделки = главная?.вид ?? (время == nil ? .серый : .плохо)
+        let символ = главная?.символ ?? (время == nil ? "info.circle" : "alarm")
+        let текст = главная?.текст
+            ?? (время.map { т("deal_autoconfirm") + " " + $0 } ?? РовныеКарточкиText.т("deal_more"))
+        var голос: [String] = все.map { $0.текст }
+        if let время { голос.append(т("deal_autoconfirm") + " " + время) }
+        if голос.isEmpty { голос.append(текст) }
+        return HStack(spacing: 6) {
             Image(systemName: символ)
-                .font(.system(size: 15))
-                .accessibilityHidden(true)
+                .font(.system(size: 13, weight: .semibold))
             Text(текст)
                 .font(.system(size: 12, weight: .semibold))
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if главная != nil, let время {
+                HStack(spacing: 3) {
+                    Image(systemName: "alarm")
+                        .font(.system(size: 11, weight: .bold))
+                    Text(время)
+                        .font(.system(size: 11, weight: .bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                .foregroundStyle(КраскаСделокКабинета.плохоТекст)
+                .fixedSize()
+            } else if главная == nil && время == nil {
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 11, weight: .semibold))
+            }
         }
         .foregroundStyle(вид.текст)
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Self.высотаСлота, alignment: .leading)
         .background(вид.фон, in: RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-        .padding(.top, -2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(голос.joined(separator: ". "))
+    }
+
+    /**
+     Статус доставки из кэша отслеживания (без сети) — справа в строке номера: значок и короткая подпись цветом статуса
+     («В пути», «Вручено»), у курьера в пути — точка. Не пилюлей отдельной строкой: карточка с треком не выше соседних.
+     VoiceOver — «перевозчик · статус». Нет данных — ничего.
+     */
+    @ViewBuilder
+    private var трекВСтроке: some View {
+        if let д = КэшТрека.прочитать(сделка.id), д.содержательно {
+            HStack(spacing: 4) {
+                Image(systemName: д.статус.символ)
+                    .font(.system(size: 10, weight: .bold))
+                Text(д.статус.коротко)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                if д.живой {
+                    Circle()
+                        .fill(д.статус.вид.цвет)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .foregroundStyle(д.статус.вид.цвет)
+            .fixedSize()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(д.название + " · " + д.статус.коротко)
+        }
     }
 }

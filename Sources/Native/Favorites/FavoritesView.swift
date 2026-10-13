@@ -308,11 +308,12 @@ struct КнопкаИзбранного: View {
             } else if место == .фото {
                 Button { избранное.переключить(товар) } label: {
                     сердце
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: МеркиКнопокНадФото.значок, weight: .semibold))
                         .foregroundStyle(сохранено ? Theme.сердце : Color.white)
                         .фонКнопкиНадФото()
                 }
-                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.92))
+                /* 13.10.2026: то же нажатие с пружинкой, что у «Поделиться», стрелок и «×» в ряду над фото. */
+                .buttonStyle(НажатиеСПружинкой(сжатие: 0.9))
             } else {
                 Button { избранное.переключить(товар) } label: { сердце }
                     .tint(сохранено ? Color.red : Theme.green)
