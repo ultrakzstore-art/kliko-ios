@@ -253,8 +253,8 @@ jobs:
             version="${GITHUB_REF_NAME#v}"          # тег v1.0.0 → 1.0.0
           fi
           # Без версии — та же, что в codemagic.yaml (APP_VERSION): 0.1.0 из project.yml Apple
-          # не примет — в App Store уже одобрена 1.10.
-          [ -n "$version" ] || version="1.11"
+          # не примет — в App Store уже одобрена 1.11 (поезд 1.11 закрыт для новых сборок).
+          [ -n "$version" ] || version="1.12"
           echo "KLIKO_VERSION=$version" >> "$GITHUB_ENV"
           extra=""
           [ -n "$version" ] && extra="MARKETING_VERSION=$version"

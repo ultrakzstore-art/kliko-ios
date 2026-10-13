@@ -84,6 +84,17 @@ struct ПунктНового: Identifiable {
             }
             пункты.append(ПунктНового(id: "v111_city", значок: "mappin.and.ellipse", цвет: Theme.малиновый))
             return пункты
+        case "1.12":
+            var пункты = [
+                ПунктНового(id: "v112_next", значок: "chevron.up.chevron.down", цвет: Theme.зелёный2),
+                ПунктНового(id: "v112_photo", значок: "camera.viewfinder", цвет: Theme.оранжевый)
+            ]
+            /* Студия — только когда она включена: пункт не обещает того, чего нет. */
+            if Config.студияФото {
+                пункты.insert(ПунктНового(id: "v112_studio", значок: "wand.and.stars", цвет: Theme.малиновый), at: 0)
+            }
+            пункты.append(ПунктНового(id: "v112_phone", значок: "phone.fill", цвет: Theme.зелёныйЯркий))
+            return пункты
         default:
             return []
         }
