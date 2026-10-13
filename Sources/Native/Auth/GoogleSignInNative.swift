@@ -82,10 +82,14 @@ enum ВходGoogle {
         return ответ ?? false
     }
 
-    /// Пробный запрос: пустое тело без кук. Договор: ответ 200 и {"ok":false,"error":"bad_token"}.
+    /// Пробный запрос: пустое тело без кук. Договор: ответ 200 и {"ok":false,"error":"bad_token"} — только тогда кнопка.
+    /// Любой другой JSON (403/400, csrf, «Unknown action», заглушка WAF или CDN) — сервер не готов; 5xx и 429 — не
+    /// дозвались, спросим при следующем показе экрана.
     private static func опросить() async -> Bool? {
         switch await послать("/google_auth.php?action=native", тело: [:], сКуками: false) {
-        case .json: return true
+        case .json(let j, let http, _):
+            if http.statusCode >= 500 || http.statusCode == 429 { return nil }
+            return http.statusCode == 200 && !да(j["ok"]) && строка(j["error"]) == "bad_token"
         case .неУмеет: return false
         case .нетСвязи, .сбойСервера: return nil
         }

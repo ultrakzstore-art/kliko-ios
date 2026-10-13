@@ -61,9 +61,14 @@ final class МодельПримерочной: ObservableObject {
 
     var согласиеДано: Bool { UserDefaults.standard.bool(forKey: Self.ключСогласия) }
 
-    /// Кто обработает фото — для согласия: ai из info (свой ИИ — «ваш ИИ — …»), иначе Kliko AI.
+    /**
+     Кто обработает фото — для согласия (App Review 5.1.2(i)): ai из info (свой ИИ — «ваш ИИ — …»). ai пусто или
+     сведения ещё гостевые, а человек уже вошёл (у вошедшего может быть свой ИИ, а повторный info мог не дойти) —
+     честно и общо: «сторонний ИИ-сервис по поручению Kliko», а не «Kliko AI».
+     */
     var ктоОбработает: String {
-        guard let с = ГотовностьПримерочной.shared.сведения, !с.ии.isEmpty else { return т("to_ai_kliko") }
+        guard let с = ГотовностьПримерочной.shared.сведения, !с.ии.isEmpty,
+              с.вошёл || СессияПриложения.shared.вошёл != true else { return т("to_ai_kliko") }
         return с.свойИИ ? String(format: т("to_ai_own"), с.ии) : с.ии
     }
 

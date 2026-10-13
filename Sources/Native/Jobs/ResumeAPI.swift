@@ -211,8 +211,11 @@ enum РезюмеAPI {
         do {
             j = try await A.отправить("/api/jobs.php?action=ai_resume", тело: ["role": роль, "exp": опыт],
                                       отКорня: true)
-        } catch {
+        } catch КабинетСайта.Сбой.сеть {
             return .отказ(т("no_net"))
+        } catch {
+            /* Не JSON (страница 500), нет токена страницы — это сбой сервера, а не связи. */
+            return .отказ(т("jw_ai_fail"))
         }
         guard A.да(j["ok"]) else {
             if A.нетСессии(j) { return .нуженВход }
@@ -222,6 +225,7 @@ enum РезюмеAPI {
                 ОкноСвоегоИИ.показатьОтказ(отказ)
                 return .отказ(отказ.текст)
             }
+            if let своя = отказКвотыИИ(j) { return .отказ(своя) }
             let сообщение = A.строка(j["msg"]).trimmingCharacters(in: .whitespacesAndNewlines)
             return .отказ(сообщение.isEmpty || КабинетСайта.машинныйКод(сообщение) ? т("jw_ai_fail") : сообщение)
         }
@@ -229,6 +233,22 @@ enum РезюмеAPI {
             .filter { !$0.isEmpty }
         return .готово(title: A.строка(j["title"]), about: A.строка(j["about"]), skills: навыки,
                        своимИИ: ОтветСвоегоИИ.своим(j))
+    }
+
+    /**
+     Квота и доступ Kliko AI (need_paid, ai_reason, limit, ai_off) — своя фраза, а не msg сервера: сайт в таких ответах
+     зовёт купить пакет Kliko AI у себя, а в приложении он не продаётся (App Store 3.1.1, 3.1.3) — как в подаче и
+     импорте. Прочие отказы — nil: их msg показывается как есть.
+     */
+    private static func отказКвотыИИ(_ j: [String: Any]) -> String? {
+        let ошибка = A.строка(j["error"])
+        let причина = A.строка(j["ai_reason"])
+        if A.да(j["need_paid"]) || причина == "need_paid" || ["need_paid", "limit", "quota"].contains(ошибка) {
+            return ПодачаText.т("ai_need_paid")
+        }
+        if причина == "need_verify" || ошибка == "need_verify" { return ПодачаText.т("ai_need_verify") }
+        if A.да(j["ai_off"]) || ошибка == "ai_off" || !причина.isEmpty { return т("jw_ai_fail") }
+        return nil
     }
 
     /// Фото 3×4: без водяного знака (как файл сайта), 1280 px, JPEG 0,85; миниатюра 420 px. url || thumb.
