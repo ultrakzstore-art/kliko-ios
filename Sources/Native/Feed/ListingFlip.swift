@@ -401,7 +401,12 @@ final class ЗаготовкаСледующегоОбъявления: Observab
     nonisolated private static func прогретьФото(_ адрес: URL) async {
         var запрос = URLRequest(url: адрес)
         запрос.cachePolicy = .returnCacheDataElseLoad
-        _ = try? await URLSession.shared.data(for: запрос)
+        guard let ответ = try? await URLSession.shared.data(for: запрос), let снимок = UIImage(data: ответ.0) else {
+            return
+        }
+        /* Рамка 16:9 галереи (GalleryFocus.swift): точку умной обрезки — заранее, тогда первое фото следующего
+           встаёт сразу, без ожидания разбора. */
+        _ = await ФокусСнимка.фокус(для: снимок, адрес: адрес)
     }
 }
 

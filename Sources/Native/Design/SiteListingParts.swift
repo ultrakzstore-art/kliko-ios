@@ -202,10 +202,12 @@ struct КнопкаНадФото: View {
 // MARK: - Галерея (.mk-mgal на телефоне)
 
 /**
- Фото от края до края под строкой состояния. Сайт показывает снимок целиком (object-fit: contain, прижат к верху) на
- тёмной подложке #0d1512 (.mk-gslide) — здесь так же. Высота — по пропорции первого снимка, но не выше 4:5, как
- _mkGalFrame сайта; до загрузки — 4:5 (aspect-ratio .mk-mgal). Сверху — затемнение 104 pt (.mk-mgal::before),
- полоски-истории (.mk-gprog: сами листают каждые 3,6 с) и метка состояния (.mk-gbadges) в 66 pt от верха фото.
+ Фото от края до края под строкой состояния. Рамка — одна у всех объявлений: 16:9 по ширине экрана, от снимков не
+ зависит (владелец 14.10.2026: «все должны быть одного вида 16 на 9», РамкаГалереиОбъявления в GalleryFocus.swift).
+ Снимок заполняет рамку целиком, без полос, а кадр сдвинут к главному предмету (ФокусСнимка); целиком, в своей
+ пропорции, снимок видно только на весь экран. Сверху — затемнение (.mk-mgal::before: 104 pt, но не больше 38 %
+ высоты фото), полоски-истории (.mk-gprog: сами листают каждые 3,6 с) и метка состояния (.mk-gbadges) в 66 pt от
+ верха фото.
  Касание левой трети — назад, правой — вперёд, середины — фото на весь экран (mkInitCardSwipe).
  */
 struct ГалереяСайта: View {
@@ -223,8 +225,6 @@ struct ГалереяСайта: View {
     let вИзбранное: (@MainActor () -> Void)?
     /// Двойное касание: растёт — сердце вспыхивает ещё раз.
     @State private var вспышка = 0
-    /// До загрузки первого снимка — 4:5, как aspect-ratio .mk-mgal сайта.
-    @State private var пропорция: CGFloat = 0.8
     /// Палец на фото — истории ждут (mkStoryPause на touchstart/touchend).
     @GestureState private var тянут = false
     @Environment(\.layoutDirection) private var направление
@@ -243,13 +243,18 @@ struct ГалереяСайта: View {
         self.открыть = открыть
     }
 
+    /// Высота фото — одна у всех объявлений (16:9 по ширине), строка состояния — сверх неё.
+    private var высотаФото: CGFloat { РамкаГалереиОбъявления.высотаФото(ширина: ширина) }
+
     var body: some View {
-        let высотаФото = ширина / max(0.8, пропорция)
         let высота = верх + высотаФото
         return ZStack(alignment: .topLeading) {
             слайды(высота: высота)
+            /* 104 pt сайта — под рамку 4:5; у 16:9 это почти половина фото до самого фокуса. Теперь 38 % высоты фото
+               (390 pt ширины — около 83 pt): под полосками и рядом кнопок, у метки «Б/У» уже сходит на нет — у неё
+               свой фон. */
             затемнение
-                .frame(width: ширина, height: верх + 104)
+                .frame(width: ширина, height: верх + min(104, высотаФото * 0.38))
                 .allowsHitTesting(false)
             if адреса.count > 1 {
                 ПолоскиИсторииСайта(всего: адреса.count, страница: $страница, пауза: пауза || тянут, ширина: ширина)
@@ -286,22 +291,19 @@ struct ГалереяСайта: View {
         } else {
             TabView(selection: $страница) {
                 ForEach(Array(адреса.enumerated()), id: \.offset) { номер, адрес in
-                    СлайдФото(адрес: адрес, верх: верх, ширина: ширина, высота: высота) { размер in
-                        guard номер == 0, размер.height > 0 else { return }
-                        пропорция = размер.width / размер.height
-                    }
-                    .contentShape(Rectangle())
-                    .gesture(
-                        SpatialTapGesture(count: 2).onEnded { _ in дважды() }
-                            .exclusively(before: SpatialTapGesture().onEnded { касание in
-                                коснулись(касание.location.x, номер: номер)
-                            })
-                    )
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(String(format: ListingPageText.т("photo"), номер + 1, адреса.count))
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { открыть(номер) }
-                    .tag(номер)
+                    СлайдФото(адрес: адрес, верх: верх, ширина: ширина, высотаФото: высотаФото)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            SpatialTapGesture(count: 2).onEnded { _ in дважды() }
+                                .exclusively(before: SpatialTapGesture().onEnded { касание in
+                                    коснулись(касание.location.x, номер: номер)
+                                })
+                        )
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(String(format: ListingPageText.т("photo"), номер + 1, адреса.count))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { открыть(номер) }
+                        .tag(номер)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -475,44 +477,42 @@ private struct ПолоскиИсторииСайта: View {
     }
 }
 
-/// Один снимок: целиком, по центру, поверх своей размытой копии (пустоты под коротким кадром нет). Картинка своя, а не AsyncImage:
-/// нужен её размер (пропорция галереи), а URLSession.shared кладёт её в общий кэш — оттуда её берёт «Поделиться» (этап 19).
+/// Один снимок: заполняет рамку ширина × высотаФото под строкой состояния (16:9, РамкаГалереиОбъявления), без полос и
+/// размытой подложки, кадр сдвинут к главному предмету (ФокусСнимка, GalleryFocus.swift). Пока снимок или фокус не
+/// готовы — подложка со спиннером: кадр появляется сразу на своём месте, без прыжка из центра. Картинка своя, а не
+/// AsyncImage: нужен её размер (сдвиг кадра), а URLSession.shared кладёт её в общий кэш — оттуда её берёт «Поделиться»
+/// (этап 19).
 private struct СлайдФото: View {
     let адрес: URL
     let верх: CGFloat
     let ширина: CGFloat
-    let высота: CGFloat
-    let размер: (CGSize) -> Void
-    @State private var картинка: UIImage? = nil
+    let высотаФото: CGFloat
+    @State private var кадр: ГотовыйКадр? = nil
     @State private var неудача = false
 
-    init(адрес: URL, верх: CGFloat, ширина: CGFloat, высота: CGFloat, размер: @escaping (CGSize) -> Void) {
+    /// Снимок и его фокус приходят вместе: показываем только оба сразу. Адрес — чей это кадр: строка ленты без фото
+    /// показывает обложку, а с полной карточкой на том же слайде встаёт другой адрес — кадр меняется, а не застревает.
+    private struct ГотовыйКадр {
+        let адрес: URL
+        let картинка: UIImage
+        let фокус: CGPoint
+    }
+
+    init(адрес: URL, верх: CGFloat, ширина: CGFloat, высотаФото: CGFloat) {
         self.адрес = адрес
         self.верх = верх
         self.ширина = ширина
-        self.высота = высота
-        self.размер = размер
+        self.высотаФото = высотаФото
     }
 
     var body: some View {
         ZStack(alignment: .top) {
             Theme.подложкаФото
-            if let снимок = картинка {
-                /* Снимки разной пропорции: высота галереи — по первому, поэтому под короткий кадр подкладываем
-                   его же размытую копию во всю площадь, а сам кадр ставим по центру — чёрной дыры снизу нет. */
-                Image(uiImage: снимок)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: ширина, height: высота)
-                    .clipped()
-                    .blur(radius: 28, opaque: true)
-                    .overlay(Color.black.opacity(0.22))
-                    .accessibilityHidden(true)
-                Image(uiImage: снимок)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: ширина, height: max(1, высота - верх), alignment: .center)
+            if let готово = кадр {
+                /* Рамка одна у всех снимков: вертикальный и горизонтальный выглядят одинаково, целиком — на весь экран. */
+                видСнимка(готово)
                     .padding(.top, верх)
+                    .transition(.opacity)
             } else if неудача {
                 /* .mk-imgretry: «Повторить» зелёным на поверхности 2. */
                 Theme.поверхность2
@@ -531,19 +531,40 @@ private struct СлайдФото: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(maxHeight: .infinity)
+                .frame(width: ширина, height: высотаФото)
+                .padding(.top, верх)
             } else {
                 SiteSpinner.белый
-                    .frame(maxHeight: .infinity)
+                    .frame(width: ширина, height: высотаФото)
+                    .padding(.top, верх)
             }
         }
-        .frame(width: ширина, height: высота)
+        .frame(width: ширина, height: верх + высотаФото, alignment: .top)
         .clipped()
         .task(id: адрес) { await загрузить() }
     }
 
+    /**
+     Снимок заполняет рамку (как scaledToFill), а сдвинут так, чтобы фокус встал в центр, но край снимка внутрь рамки не
+     зашёл (ФокусСнимка.кадр). Все размеры известны заранее — без GeometryReader. Сдвиг — слева направо и в RTL: это
+     снимок, а не текст, зеркалить его нельзя.
+     */
+    private func видСнимка(_ готово: ГотовыйКадр) -> some View {
+        let место = ФокусСнимка.кадр(снимок: готово.картинка.size, рамка: CGSize(width: ширина, height: высотаФото),
+                                     фокус: готово.фокус)
+        return Image(uiImage: готово.картинка)
+            .resizable()
+            .frame(width: место.width, height: место.height)
+            .offset(x: место.minX, y: место.minY)
+            .frame(width: ширина, height: высотаФото, alignment: .topLeading)
+            .clipped()
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
     private func загрузить() async {
-        guard картинка == nil else { return }
+        /* Прежний кадр (другого адреса) стоит, пока не готов новый: без вспышки спиннера. */
+        guard кадр?.адрес != адрес else { return }
+        let начало = ContinuousClock.now
         var запрос = URLRequest(url: адрес)
         запрос.cachePolicy = .returnCacheDataElseLoad
         do {
@@ -554,9 +575,17 @@ private struct СлайдФото: View {
             }
             let готовый = await снимок.byPreparingForDisplay() ?? снимок
             guard !Task.isCancelled else { return }
-            картинка = готовый
-            неудача = false
-            размер(готовый.size)
+            /* Фокус — до показа (обычно десятки миллисекунд, повторно — из памяти): кадр сразу на своём месте. Не дольше
+               0,3 с — первый разбор после запуска грузит модель Vision; не успел — центр, кадр потом не прыгает. */
+            let фокус = await ФокусСнимка.фокус(для: готовый, адрес: адрес, неДольше: 0.3)
+            guard !Task.isCancelled else { return }
+            /* Короткое проявление, без движения кадра, — только если ждали (сеть, Vision); из кэша — сразу. «Уменьшение
+               движения» — тоже сразу. */
+            let ждали = ContinuousClock.now - начало > .milliseconds(60)
+            withAnimation(ждали ? ДвижениеСайта.мягко(.easeOut(duration: 0.18)) : nil) {
+                кадр = ГотовыйКадр(адрес: адрес, картинка: готовый, фокус: фокус)
+                неудача = false
+            }
         } catch {
             if !Task.isCancelled { неудача = true }
         }
