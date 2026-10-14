@@ -66,13 +66,13 @@ struct ШагиПодачи: View {
             .scrollDismissesKeyboard(.interactively)
             /* Под часами — фон подачи: шапка шагов уезжает при прокрутке и не налезает на время (TestFlight 74). */
             .overlay(alignment: .top) {
-                GeometryReader { г in
-                    КраскаПодачи.фон
-                        .frame(height: г.safeAreaInsets.top)
-                }
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                /* Нулевая полоса у верха безопасной зоны, её фон растянут до верха экрана — ровно под часами. (Замер
+                   GeometryReader с ignoresSafeArea давал 0 — прежняя правка ничего не закрывала, TestFlight 76.) */
+                Color.clear
+                    .frame(height: 0)
+                    .background(КраскаПодачи.фон.ignoresSafeArea(edges: .top))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .submitLabel(.next)
             .onSubmit { перейтиКПолю(1) }
