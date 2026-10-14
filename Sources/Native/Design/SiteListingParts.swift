@@ -62,6 +62,12 @@ struct ПереносСтрок: Layout {
  «смахнуть от края — назад». Посредник на время показа страницы становится делегатом этого жеста у своего стека и
  разрешает его, когда есть куда возвращаться; уходя, возвращает прежнего делегата — остальные экраны живут как жили.
  Глобальной подмены UINavigationController нет: она задела бы чат, кабинет и iPad.
+
+ Владелец 14.10.2026: «у некоторых привычка слайдом назад — тоже сделать как надо». Одного делегата мало: палец у края
+ забирали галерея фото (страницы TabView — горизонтальная прокрутка) и одновременные жесты страницы (смахнуть вниз,
+ подтянуть к следующему). Теперь край первый: всё внутри верхнего экрана стека ждёт, пока жест края откажется (палец
+ не у края или идёт вверх-вниз — отказывается сразу), — как у системной панели. Чату, карте и листу разделов это тоже
+ на пользу: у них тот же посредник.
  */
 struct СмахнутьНазад: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Посредник { Посредник() }
@@ -72,20 +78,23 @@ struct СмахнутьНазад: UIViewControllerRepresentable {
         private weak var прежний: UIGestureRecognizerDelegate?
         private var поставлен = false
 
+        /* Каждое появление — заново делегат и isEnabled: пока страница была под окном или листом, жест мог уйти к
+           другому делегату или выключиться. */
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            guard !поставлен, let найден = navigationController, let жест = найден.interactivePopGestureRecognizer else {
+            guard let найден = navigationController, let жест = найден.interactivePopGestureRecognizer else {
                 return
             }
-            стек = найден
-            /* Листание на месте (ListingFlip.swift): новая страница встаёт, пока прежняя ещё на экране, и делегат жеста —
-               посредник прежней. Он уйдёт вместе с ней, поэтому берём не его, а то, что запомнил он сам: иначе, вернувшись
-               к списку, жест остался бы без делегата и на корне стека заморозил бы экран. */
-            if let другой = жест.delegate as? Посредник, другой !== self {
-                прежний = другой.прежний
+            /* Листание на месте (ListingFlip.swift): новая страница встаёт, пока прежняя ещё на экране, и делегат
+               жеста — посредник прежней. Он уйдёт вместе с ней, поэтому берём не его, а то, что запомнил он сам:
+               иначе, вернувшись к списку, жест остался бы без делегата и на корне стека заморозил бы экран. Делегат
+               уже мы — прежний уже запомнен: иначе запомнили бы самих себя. */
+            if let другой = жест.delegate as? Посредник {
+                if другой !== self { прежний = другой.прежний }
             } else {
                 прежний = жест.delegate
             }
+            стек = найден
             жест.delegate = self
             жест.isEnabled = true
             поставлен = true
@@ -104,9 +113,39 @@ struct СмахнутьНазад: UIViewControllerRepresentable {
             }
         }
 
-        /// Корень стека смахивать некуда: жест на нём у UIKit замораживает экран.
+        /// Корень стека смахивать некуда: жест на нём у UIKit замораживает экран. Посреди перехода (стек ещё едет) — тоже
+        /// нет. И только когда палец от края идёт вбок, а не вверх-вниз: вертикальное — прокрутке и «смахнуть вниз».
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            (стек?.viewControllers.count ?? 0) > 1
+            guard let стек, стек.viewControllers.count > 1, стек.transitionCoordinator == nil else { return false }
+            guard let тяга = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            var движение = тяга.velocity(in: тяга.view)
+            if движение == .zero { движение = тяга.translation(in: тяга.view) }
+            return abs(движение.x) > abs(движение.y)
+        }
+
+        /// Край первый: прокрутки (галерея фото, похожие, сама страница) и жесты SwiftUI верхнего экрана стека ждут, пока
+        /// жест края откажется. Касания и долгие нажатия не ждут — у края им мешать нечему.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            жестКраяИЭкрана(gestureRecognizer, otherGestureRecognizer)
+        }
+
+        /// С жестами верхнего экрана — не вместе: край забрал палец — страница под ним не листается и не едет.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            false
+        }
+
+        /// Жест края своего стека и другой распознаватель внутри вида верхнего экрана стека. Возвращаться некуда (корень
+        /// стека, правая колонка iPad) — никто край не ждёт.
+        private func жестКраяИЭкрана(_ край: UIGestureRecognizer, _ другой: UIGestureRecognizer) -> Bool {
+            guard let стек, стек.viewControllers.count > 1, край === стек.interactivePopGestureRecognizer,
+                  другой !== край,
+                  !(другой is UIScreenEdgePanGestureRecognizer),
+                  !(другой is UITapGestureRecognizer),
+                  !(другой is UILongPressGestureRecognizer),
+                  let экран = стек.topViewController?.viewIfLoaded, let вид = другой.view else { return false }
+            return вид.isDescendant(of: экран)
         }
     }
 }

@@ -161,29 +161,29 @@ struct ГеройПодачи: View {
 
 // MARK: - Стартовый экран «Что размещаете?»
 
-/// Высота содержимого стартового экрана подачи (для растяжки плиток на высоких телефонах).
-struct ВысотаСодержимогоСтартаПодачиКлюч: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+/**
+ Старт подачи в схеме главной (владелец 14.10.2026, по скринам: «белые одинаковые высокие плитки с тонкой иконкой,
+ много пустоты, сухо»; «удобно для глаз, ровная схема везде, мощная анимированная подача, летает на всех девайсах»).
 
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
+ Плитки — как плитки разделов главной (ПлиткаРаздела, SiteHome.swift): у каждой краска своего раздела, градиент, круг в
+ углу, название и подпись слева сверху, картинка раздела с сайта справа снизу (ПлиткаСтартаПодачи ниже). Все плитки
+ одной высоты на всех экранах старта, нечётная последняя — во всю ширину, как седьмая плитка главной. Подэкраны («Что за
+ товар?», сделка, вид недвижимости…) — в краске родителя, со значком в круге.
 
-/// Высота сетки плиток стартового экрана подачи.
-struct ВысотаСеткиСтартаПодачиКлюч: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
+ Движение: экран старта сменяется въездом на 28 pt со стороны хода и проявлением, прежний гаснет; плитки встают
+ лесенкой (ПоявлениеЛесенкой) — всё вместе до 0,35 с. Нажатие — 0,97 и щелчок (ОткликСайта). «Уменьшение движения» —
+ без въезда и лесенки. Смахивание от края — то же, что «‹» в шапке (EdgeSwipeBack.swift).
+ Без GeometryReader: прежняя растяжка плиток до 1,4 × по высоте окна и давала «много пустоты».
+ */
 struct СтартПодачи: View {
     @ObservedObject var модель: ПодачаМодель
     let работа: () -> Void
     let перенос: () -> Void
     let закрыть: () -> Void
+    /// Куда идём: плитка — вперёд, новый экран въезжает с края «далее»; «‹» и смахивание — назад, с края «назад».
+    /// Ставится в том же нажатии, что и смена экрана, — переход нового экрана сразу берёт верную сторону.
+    @State private var вперёд = true
+    @Environment(\.layoutDirection) private var направление
 
     init(модель: ПодачаМодель, работа: @escaping () -> Void, перенос: @escaping () -> Void,
          закрыть: @escaping () -> Void) {
@@ -203,84 +203,79 @@ struct СтартПодачи: View {
         let значок: String
     }
 
-    /// Высота окна прокрутки под шапкой.
-    @State private var высотаОкна: CGFloat = 0
-    /// Высота содержимого и одного ряда плиток без растяжки (замер минус текущая добавка).
-    @State private var естСодержимое: CGFloat = 0
-    @State private var естРяд: CGFloat = 0
-
-    /// Сколько прибавить к высоте каждого ряда плиток, чтобы экран был заполнен без пустоты снизу:
-    /// не больше 40 % ряда (плитка до 1,4 ×); не влезает (iPhone SE) — ноль и прокрутка.
-    private var добавка: CGFloat {
-        let рядов = CGFloat((плитки.count + 1) / 2)
-        guard рядов > 0, естРяд > 1, естСодержимое > 1, высотаОкна > 1 else { return 0 }
-        let свободно: CGFloat = высотаОкна - естСодержимое
-        let наРяд: CGFloat = max(0, свободно / рядов)
-        return min(наРяд, естРяд * 0.4).rounded(.down)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             шапка
-            GeometryReader { окно in
-                прокрутка
-                    .onAppear { высотаОкна = окно.size.height }
-                    .onChange(of: окно.size.height) { _, новое in высотаОкна = новое }
+            ZStack(alignment: .top) {
+                экран
+                    .id(ключЭкрана)
+                    .transition(переход)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(ДвижениеСайта.шаг, value: ключЭкрана)
+        }
+        /* Смахнуть от края — то же, что «‹» в шапке; нет её (корень правки, там «+») — нет и жеста. */
+        .смахиваниеНазад(включено: естьНазад) { назад() }
+    }
+
+    /// «‹» в шапке есть везде, кроме корня правки.
+    private var естьНазад: Bool {
+        !(модель.старт == .корень && модель.правка)
+    }
+
+    /// Ключ экрана старта: новый ключ — новый экран (и своя прокрутка с начала).
+    private var ключЭкрана: String {
+        switch модель.старт {
+        case .корень: return "root"
+        case .товар: return "goods"
+        case .одежда: return "clothing"
+        case .животные: return "animals"
+        case .аренда: return "rentgood"
+        case .сделка: return "realty"
+        case .видНедвижимости(let сделка): return "realty-" + сделка
+        case .транспорт: return "auto"
         }
     }
 
-    /// Замер содержимого без растяжки: из высоты вычитается текущая добавка всех рядов.
-    private func замеритьСодержимое(_ высота: CGFloat) {
-        let рядов = CGFloat((плитки.count + 1) / 2)
-        let ест: CGFloat = высота - рядов * добавка
-        if abs(ест - естСодержимое) > 0.5 { естСодержимое = ест }
+    /// Новый экран въезжает на 28 pt со стороны хода и проявляется; прежний гаснет вдвое быстрее — два экрана не стоят
+    /// друг на друге. В арабском стороны зеркальны: offset сам не зеркалится.
+    private var переход: AnyTransition {
+        let сторона: CGFloat = (вперёд ? 1 : -1) * (направление == .rightToLeft ? -1 : 1)
+        return .asymmetric(insertion: AnyTransition.offset(x: 28 * сторона).combined(with: .opacity),
+                           removal: AnyTransition.opacity.animation(ДвижениеСайта.мягко(.easeOut(duration: 0.12))))
     }
 
-    private func замеритьСетку(_ высота: CGFloat) {
-        let рядов = CGFloat((плитки.count + 1) / 2)
-        guard рядов > 0 else { return }
-        let промежутки: CGFloat = (рядов - 1) * 10
-        let ряд: CGFloat = (высота - рядов * добавка - промежутки) / рядов
-        if abs(ряд - естРяд) > 0.5 { естРяд = ряд }
-    }
-
-    private var прокрутка: some View {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(вопрос)
-                        .font(.system(size: 16, weight: .heavy))
-                        .kerning(-0.2)
-                        .foregroundStyle(КраскаПодачи.текст)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(подсказка)
-                        .font(.system(size: 12))
-                        .lineSpacing(3)
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
-                    сетка
-                        .background(
-                            GeometryReader { г in
-                                Color.clear.preference(key: ВысотаСеткиСтартаПодачиКлюч.self, value: г.size.height)
-                            }
-                        )
-                        .padding(.top, 14)
-                    if модель.старт == .аренда { срокАренды }
-                    if модель.старт == .корень { переносСсылкой }
+    /// Экран старта: вопрос, подсказка, плитки; у «Сдать вещь» — срок, у корня — перенос по ссылке.
+    private var экран: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(вопрос)
+                    .font(.system(size: 20, weight: .heavy))
+                    .kerning(-0.3)
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text(подсказка)
+                    .font(.system(size: 13))
+                    .lineSpacing(2)
+                    .foregroundStyle(Theme.текстВторой)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+                сетка
+                    .padding(.top, 16)
+                if модель.старт == .аренда {
+                    срокАренды
+                        .modifier(ПоявлениеЛесенкой(номер: плитки.count))
                 }
-                .padding(EdgeInsets(top: 16, leading: 20, bottom: 20, trailing: 20))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    GeometryReader { г in
-                        Color.clear.preference(key: ВысотаСодержимогоСтартаПодачиКлюч.self, value: г.size.height)
-                    }
-                )
+                if модель.старт == .корень {
+                    переносСсылкой
+                        .modifier(ПоявлениеЛесенкой(номер: плитки.count))
+                }
             }
-            .background(КраскаПодачи.поле)
-            .onPreferenceChange(ВысотаСодержимогоСтартаПодачиКлюч.self) { новое in замеритьСодержимое(новое) }
-            .onPreferenceChange(ВысотаСеткиСтартаПодачиКлюч.self) { новое in замеритьСетку(новое) }
+            .padding(EdgeInsets(top: 18, leading: 20, bottom: 24, trailing: 20))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     // MARK: Шапка .rw2-hd
@@ -306,7 +301,7 @@ struct СтартПодачи: View {
                         .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.94))
                 .accessibilityLabel(т("back"))
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -316,11 +311,7 @@ struct СтартПодачи: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .accessibilityAddTraits(.isHeader)
-                Text(подзаголовок)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                подзаголовокШапки
             }
             Spacer(minLength: 0)
             КнопкаЗакрытьПодачи(действие: закрыть)
@@ -332,6 +323,26 @@ struct СтартПодачи: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(КраскаПодачи.линия).frame(height: 1)
         }
+    }
+
+    /// Подпись шапки: на подэкране — точка краски раздела перед его именем (та же краска, что у плиток ниже).
+    private var подзаголовокШапки: some View {
+        HStack(spacing: 6) {
+            if модель.старт != .корень {
+                Circle()
+                    .fill(Color(uiColor: Theme.hex(краскаЭкрана)))
+                    .frame(width: 7, height: 7)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityHidden(true)
+            }
+            Text(подзаголовок)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .contentTransition(.opacity)
+        }
+        .animation(ДвижениеСайта.смена, value: ключЭкрана)
     }
 
     /// #as-sub: на корне «Выберите, что размещаете», ниже — имя раздела.
@@ -349,62 +360,77 @@ struct СтартПодачи: View {
 
     // MARK: Плитки .rw2-tiles
 
-    /// Сетка 2 × 1fr: плитки одного ряда — одной высоты, как у CSS grid.
+    /// Сетка 2 × 1fr, как .mh-hub главной: плитки одной высоты, нечётная последняя — во всю ширину (седьмая плитка
+    /// главной), без дыры справа.
     private var сетка: some View {
         let все = плитки
         let рядов = (все.count + 1) / 2
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             ForEach(0..<рядов, id: \.self) { р in
                 GridRow {
-                    плитка(все[р * 2])
                     if р * 2 + 1 < все.count {
-                        плитка(все[р * 2 + 1])
+                        плитка(все[р * 2], номер: р * 2)
+                        плитка(все[р * 2 + 1], номер: р * 2 + 1)
                     } else {
-                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        плитка(все[р * 2], номер: р * 2)
+                            .gridCellColumns(2)
                     }
                 }
             }
         }
     }
 
-    private func плитка(_ п: Плитка) -> some View {
-        Button {
+    private func плитка(_ п: Плитка, номер: Int) -> some View {
+        ПлиткаСтартаПодачи(заголовок: п.заголовок, подпись: п.подпись, значок: п.значок, краска: краскаПлитки(п.id),
+                           картинка: картинкаПлитки(п.id)) {
             нажата(п.id)
-        } label: {
-            VStack(spacing: 0) {
-                Image(systemName: п.значок)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(КраскаПодачи.акцентТекст)
-                    .frame(width: 24, height: 24)
-                    .padding(.bottom, 8)
-                    .accessibilityHidden(true)
-                Text(п.заголовок)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(КраскаПодачи.текст)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !п.подпись.isEmpty {
-                    Text(п.подпись)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
-                }
-            }
-            /* Добавка поровну сверху и снизу: значок и текст остаются по центру плитки. */
-            .padding(.vertical, 16 + добавка / 2)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity)
+        .modifier(ПоявлениеЛесенкой(номер: номер))
+    }
+
+    // MARK: Краски и картинки плиток
+
+    /// Плитка корня → раздел главной (РазделГлавной, SiteHome.swift): его краска и картинка /img/cat-<ключ>.webp.
+    /// У одежды и «Сдать вещь» раздела на главной нет.
+    private static let разделыГлавной: [String: String] = [
+        "animals": "animals", "goods": "goods", "realty": "realty", "auto": "transport", "services": "services",
+        "jobs": "jobs"
+    ]
+
+    /// Краска плитки корня — --vc того же раздела на главной; у одежды и «Сдать вещь» — из той же палитры: розовая
+    /// одежда рядом с сиреневыми «Животными», небесная «Сдать вещь» рядом с фиолетовой «Работой» и бирюзовыми «Услугами».
+    private static func краскаКорня(_ id: String) -> UInt32 {
+        if let ключ = разделыГлавной[id], let раздел = РазделГлавной.с(ключом: ключ) { return раздел.краска }
+        switch id {
+        case "clothing": return 0xDB2777
+        case "rentgood": return 0x0284C7
+        default: return КарточкаПереносаПодачи.краска
+        }
+    }
+
+    /// Краска подэкрана — краска плитки корня, с которой пришли.
+    private var краскаЭкрана: UInt32 {
+        switch модель.старт {
+        case .корень: return КарточкаПереносаПодачи.краска
+        case .товар: return Self.краскаКорня("goods")
+        case .одежда: return Self.краскаКорня("clothing")
+        case .животные: return Self.краскаКорня("animals")
+        case .аренда: return Self.краскаКорня("rentgood")
+        case .сделка, .видНедвижимости: return Self.краскаКорня("realty")
+        case .транспорт: return Self.краскаКорня("auto")
+        }
+    }
+
+    /// На корне у каждой плитки своя краска, на подэкранах — краска родителя.
+    private func краскаПлитки(_ id: String) -> UInt32 {
+        модель.старт == .корень ? Self.краскаКорня(id) : краскаЭкрана
+    }
+
+    /// Картинка раздела с сайта — у плиток корня, у которых есть раздел на главной; у прочих — значок в круге.
+    private func картинкаПлитки(_ id: String) -> URL? {
+        guard модель.старт == .корень, let ключ = Self.разделыГлавной[id] else { return nil }
+        return РазделГлавной.с(ключом: ключ)?.картинка
     }
 
     // MARK: «Или сразу укажите срок» (_ASTART_RENT)
@@ -420,12 +446,13 @@ struct СтартПодачи: View {
                 чипСрока(т("as_rent_month"), период: "month")
             }
         }
-        .padding(.top, 16)
+        .padding(.top, 18)
     }
 
     /// .rw2-chip: сразу форма без раздела с этим сроком (_asRentGo('', период)).
     private func чипСрока(_ подпись: String, период: String) -> some View {
         Button {
+            ОткликСайта.выбор()
             модель.применитьСтарт(тип: "rentgood", раздел: "", плитка: т("as_rentgood"), подсказка: "", период: период,
                                   подпись: т("as_rentgood_s"))
         } label: {
@@ -434,7 +461,7 @@ struct СтартПодачи: View {
                 .foregroundStyle(КраскаПодачи.текст)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .frame(minHeight: 46)
                 .background(КраскаПодачи.карточка, in: Capsule())
@@ -447,32 +474,10 @@ struct СтартПодачи: View {
     // MARK: Перенос по ссылке (.li-entry)
 
     private var переносСсылкой: some View {
-        Button(action: перенос) {
-            HStack(spacing: 12) {
-                Image(systemName: "link")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Theme.зелёныйЯркий)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(т("li_entry_t"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(т("li_entry_s"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.текстВторой)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(КраскаПодачи.линия, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            }
-            .contentShape(Rectangle())
+        КарточкаПереносаПодачи(заголовок: т("li_entry_t"), подпись: т("li_entry_s")) {
+            ОткликСайта.выбор()
+            перенос()
         }
-        .buttonStyle(.plain)
         .padding(.top, 14)
     }
 
@@ -585,6 +590,8 @@ struct СтартПодачи: View {
     ]
 
     private func нажата(_ id: String) {
+        ОткликСайта.выбор()
+        вперёд = true
         let подпись = подписьПлитки(id)
         let под = подзаголовокПлитки(id)
         switch модель.старт {
@@ -630,6 +637,7 @@ struct СтартПодачи: View {
     }
 
     private func назад() {
+        вперёд = false
         switch модель.старт {
         case .видНедвижимости:
             модель.старт = .сделка
@@ -639,6 +647,246 @@ struct СтартПодачи: View {
         default:
             модель.старт = .корень
         }
+    }
+}
+
+// MARK: - Плитка старта (в схеме .mh-tile главной)
+
+/**
+ Плитка старта подачи — как светлая плитка раздела главной (ПлиткаРаздела, SiteHome.swift): градиент по краске раздела,
+ круг краски за правым нижним краем, название и подпись слева сверху, картинка раздела справа снизу. Картинки нет (у
+ одежды, «Сдать вещь», на подэкранах), она ещё не пришла или нет сети — на её месте значок в круге краски (КружокСтарта):
+ рамка постоянная, догрузка ничего не сдвигает. Высота одна на всех экранах старта — ровная схема.
+
+ Лёгкая: без тени у картинки и без размытия — градиент, круг, картинка, текст и кромка в 1 pt.
+ */
+private struct ПлиткаСтартаПодачи: View {
+    let заголовок: String
+    let подпись: String
+    let значок: String
+    let краска: UInt32
+    let картинка: URL?
+    let действие: () -> Void
+    @Environment(\.colorScheme) private var схема
+
+    init(заголовок: String, подпись: String, значок: String, краска: UInt32, картинка: URL?,
+         действие: @escaping () -> Void) {
+        self.заголовок = заголовок
+        self.подпись = подпись
+        self.значок = значок
+        self.краска = краска
+        self.картинка = картинка
+        self.действие = действие
+    }
+
+    /// Высота плитки: у нижних плиток главной 88, здесь на 4 больше — под подпись в три строки.
+    private static let высота: CGFloat = 92
+    /// Рамка картинки (и значка в круге) справа снизу; подпись отступает от неё.
+    private static let рамка: CGFloat = 50
+    /// Размер картинки для загрузчика — как у светлой плитки главной (высота 88 × 0,88): КартинкиЛенты хранит её по
+    /// адресу и размеру, и показанная на главной картинка здесь берётся из памяти с первого кадра, без сети.
+    private static let пунктовКартинки: CGFloat = 88 * 0.88
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+        let к = Theme.hex(краска)
+        return Button(action: действие) {
+            ZStack(alignment: .bottomTrailing) {
+                LinearGradient(stops: КраскаПлиткиСтарта.остановки(к, тёмная: тёмная),
+                               startPoint: UnitPoint(x: 0.25, y: 0), endPoint: UnitPoint(x: 0.75, y: 1))
+                /* ::after главной — круг 104 за правым нижним краем: 10 % краски, в тёмной 16 %. */
+                Circle()
+                    .fill(Color(uiColor: к).opacity(тёмная ? 0.16 : 0.1))
+                    .frame(width: 104, height: 104)
+                    .offset(x: 22, y: 30)
+                КартинкаЛенты(картинка, пунктов: Self.пунктовКартинки, заполнить: false) {
+                    КружокСтарта(значок: значок, краска: к)
+                }
+                .frame(width: Self.рамка, height: Self.рамка)
+                .padding(.trailing, 8)
+                .padding(.bottom, 7)
+                .accessibilityHidden(true)
+                подписи(к)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .frame(height: Self.высота)
+            .clipShape(форма)
+            .overlay { форма.strokeBorder(КраскаПлиткиСтарта.кромка(к, тёмная: тёмная), lineWidth: 1) }
+            .contentShape(форма)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(подпись.isEmpty ? заголовок : заголовок + ", " + подпись)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Название — во всю ширину (картинка ниже его строки), подпись — до трёх строк левее картинки: «студия, комнаты,
+    /// новостройка», казахские и арабские подписи в две строки по 86 pt (iPhone SE) не влезают, а по высоте третья строка
+    /// входит (12 + 18 + 3 + 3 × 14 = 75 из 92).
+    private func подписи(_ к: UIColor) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(заголовок)
+                .font(.system(size: 15, weight: .heavy))
+                .kerning(-0.2)
+                .foregroundStyle(КраскаПодачи.текст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.trailing, 10)
+            if !подпись.isEmpty {
+                Text(подпись)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(КраскаПлиткиСтарта.подпись(к, тёмная: тёмная))
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.85)
+                    .padding(.trailing, Self.рамка + 12)
+            }
+        }
+        .padding(.leading, 14)
+        .padding(.top, 12)
+    }
+
+    private var тёмная: Bool { схема == .dark }
+}
+
+/// Значок в круге краски — у плитки без картинки (и пока картинка не пришла) и у карточки переноса: градиент от краски,
+/// подмешанной к белому, к краске, притушенной почти чёрным (как сплошная плитка главной), значок белый.
+private struct КружокСтарта: View {
+    let значок: String
+    let краска: UIColor
+
+    init(значок: String, краска: UIColor) {
+        self.значок = значок
+        self.краска = краска
+    }
+
+    var body: some View {
+        Image(systemName: значок)
+            .symbolVariant(.fill)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .frame(width: 42, height: 42)
+            .background(LinearGradient(colors: [Color(uiColor: Theme.смесь(краска, UIColor.white, 0.86)),
+                                                Color(uiColor: Theme.смесь(краска, Theme.hex(0x0B1F17), 0.8))],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// Краски плиток старта от краски раздела — по образцу светлой плитки главной (ПлиткаРаздела.остановки и цветСчёта).
+/// Поверхность — карточка кабинета (КраскаПодачи.карточка): #fff и #1c1c26 — в тёмной плитка светлее фона страницы.
+private enum КраскаПлиткиСтарта {
+    static func поверхность(тёмная: Bool) -> UIColor {
+        тёмная ? Theme.hex(0x1C1C26) : UIColor.white
+    }
+
+    /// linear-gradient(150deg, …): сверху 22 % краски (в тёмной 26 %), с 70 % (в тёмной 62 %) и до низа — 7 % (14 %).
+    static func остановки(_ к: UIColor, тёмная: Bool) -> [Gradient.Stop] {
+        let п = поверхность(тёмная: тёмная)
+        let конец = Color(uiColor: Theme.смесь(к, п, тёмная ? 0.14 : 0.07))
+        return [
+            Gradient.Stop(color: Color(uiColor: Theme.смесь(к, п, тёмная ? 0.26 : 0.22)), location: 0),
+            Gradient.Stop(color: конец, location: тёмная ? 0.62 : 0.7),
+            Gradient.Stop(color: конец, location: 1)
+        ]
+    }
+
+    /// Подпись и «›»: 55 % краски с чернилами, в тёмной — с белым; на подложке своей краски контраст не ниже 4,5.
+    static func подпись(_ к: UIColor, тёмная: Bool) -> Color {
+        Color(uiColor: Theme.смесь(к, тёмная ? UIColor.white : Theme.hex(0x13211B), 0.55))
+    }
+
+    /// Кромка 1 pt: краска 16 %, в тёмной 30 % — светлый низ плитки не сливается с фоном страницы.
+    static func кромка(_ к: UIColor, тёмная: Bool) -> Color {
+        Color(uiColor: к).opacity(тёмная ? 0.3 : 0.16)
+    }
+}
+
+/// «Уже размещено на другой площадке?» (.li-entry) в схеме плиток: зелёный круг со ссылкой, заголовок, подпись и «›» на
+/// подложке зелёного, пунктирная кромка — как у сайта.
+private struct КарточкаПереносаПодачи: View {
+    let заголовок: String
+    let подпись: String
+    let действие: () -> Void
+    @Environment(\.colorScheme) private var схема
+
+    init(заголовок: String, подпись: String, действие: @escaping () -> Void) {
+        self.заголовок = заголовок
+        self.подпись = подпись
+        self.действие = действие
+    }
+
+    /// Зелёный слайда «Продавайте на Kliko» главной (БаннерГлавной.слайды, «sell»).
+    static let краска: UInt32 = 0x0F7A44
+
+    var body: some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+        let к = Theme.hex(Self.краска)
+        let тёмная = схема == .dark
+        return Button(action: действие) {
+            HStack(spacing: 12) {
+                КружокСтарта(значок: "link", краска: к)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(заголовок)
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(КраскаПодачи.текст)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(подпись)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(КраскаПлиткиСтарта.подпись(к, тёмная: тёмная))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(КраскаПлиткиСтарта.подпись(к, тёмная: тёмная))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient(stops: КраскаПлиткиСтарта.остановки(к, тёмная: тёмная),
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: форма)
+            .overlay {
+                форма.strokeBorder(Color(uiColor: к).opacity(тёмная ? 0.5 : 0.36),
+                                   style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
+            }
+            .contentShape(форма)
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
+    }
+}
+
+/**
+ Лесенка появления на старте: плитка проявляется и подъезжает на 10 pt снизу с масштаба 0,96, с задержкой 0,02 с на номер
+ — восемь плиток и карточка под ними (номер 8) встают целиком за 0,34 с. Только прозрачность, сдвиг и масштаб: без
+ размытия и замеров. «Уменьшение движения» — сразу на месте, без лесенки.
+ */
+private struct ПоявлениеЛесенкой: ViewModifier {
+    let номер: Int
+    @Environment(\.accessibilityReduceMotion) private var безДвижения
+    @State private var видна = false
+
+    /// Явный init: закрытое состояние не должно попадать в поэлементный.
+    init(номер: Int) {
+        self.номер = номер
+    }
+
+    func body(content: Content) -> some View {
+        let наМесте = видна || безДвижения
+        return content
+            .opacity(наМесте ? 1 : 0)
+            .offset(y: наМесте ? 0 : 10)
+            .scaleEffect(наМесте ? 1 : 0.96)
+            .onAppear {
+                guard !видна else { return }
+                guard !безДвижения, !ДвижениеСайта.тихо else {
+                    видна = true
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.18).delay(Double(min(номер, 8)) * 0.02)) { видна = true }
+            }
     }
 }
 

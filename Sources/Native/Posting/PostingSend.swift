@@ -267,7 +267,8 @@ extension ПодачаМодель {
         группыМарок = группы
     }
 
-    /// GET /api/auto_models.php?brand=<марка> → {models:[{name, body, gens:[{name, from, to}]}]}; кэш — как _AW_MODELS.
+    /// GET /api/auto_models.php?brand=<марка> → {models:[{name, body, gens:[{name, from, to, gear?, fuel?, eng?}]}]};
+    /// кэш — как _AW_MODELS. gear и fuel — слова фильтра витрины, eng — объёмы в литрах (мастер отмечает их заранее).
     func моделиМарки(_ марка: String) async -> [МодельАвто] {
         let чистая = марка.trimmingCharacters(in: .whitespaces)
         guard !чистая.isEmpty else { return [] }
@@ -286,13 +287,32 @@ extension ПодачаМодель {
                 guard let г = п as? [String: Any] else { return nil }
                 let название = A.строка(г["name"])
                 guard !название.isEmpty else { return nil }
-                return ПоколениеАвто(имя: название, с: A.целое(г["from"]), по: A.целое(г["to"]))
+                var поколение = ПоколениеАвто(имя: название, с: A.целое(г["from"]), по: A.целое(г["to"]))
+                поколение.коробки = ПодачаМодель.словаПоколения(г["gear"])
+                поколение.топлива = ПодачаМодель.словаПоколения(г["fuel"])
+                var объёмы: [Double] = []
+                for сырой in (г["eng"] as? [Any]) ?? [] {
+                    let литры = A.число(сырой)
+                    if литры > 0 && литры < 20 && !объёмы.contains(литры) { объёмы.append(литры) }
+                }
+                поколение.объёмы = объёмы
+                return поколение
             }
             let кузов = ((м["body"] as? [Any]) ?? []).map { A.строка($0) }.filter { !$0.isEmpty }
             return МодельАвто(имя: имя, поколения: поколения, кузов: кузов)
         }
         кэшМоделейАвто[чистая] = модели
         return модели
+    }
+
+    /// gens[].gear и gens[].fuel: строки без пустых и повторов, по порядку справочника.
+    nonisolated private static func словаПоколения(_ значение: Any?) -> [String] {
+        var итог: [String] = []
+        for сырое in (значение as? [Any]) ?? [] {
+            let слово = МоиОбъявленияAPI.строка(сырое).trimmingCharacters(in: .whitespaces)
+            if !слово.isEmpty && !итог.contains(слово) { итог.append(слово) }
+        }
+        return итог
     }
 
     /// Модели выбранной марки формы (поколения на шаге «Характеристики»).
@@ -779,6 +799,8 @@ extension ПодачаМодель {
         }
         /* ai_draft и ai_checked — поля пришли из черновика ИИ и человек их проверил (договор ИИ-фото §9.4). */
         for (ключ, значение) in ИИФотоПодачи.shared.поляПодачи(self) { тело[ключ] = значение }
+        /* model3d_draft и angles — 3D-обзор переходит к объявлению в той же транзакции (docs/SERVER_3D.md, раздел 6). */
+        for (ключ, значение) in ХранилищеОбзора3DПодачи.shared.поляПодачи(self) { тело[ключ] = значение }
         /* Габариты dim_w · dim_h · dim_d и, пока сервер их не знает, строка в конце описания (PostingDims.swift). */
         дописатьГабариты(&тело)
         return тело
@@ -825,6 +847,8 @@ extension ПодачаМодель {
             if !id.isEmpty { применитьДополнительно(id) }
             if !правка { отметитьПубликацию() }
             ИИФотоПодачи.shared.послеПубликации(self)
+            /* 3D-обзор: attach по id при любом исходе с id (и на проверке, и в ожидании верификации). */
+            if !id.isEmpty { ХранилищеОбзора3DПодачи.shared.послеПубликации(self, объявление: id) }
             ПодачаМодель.стеретьЧерновик()
             плашкаПосле = плашки.joined(separator: "\n")
             топПослеПодачи = (j["top_applied"] as? NSNumber)?.boolValue ?? false
