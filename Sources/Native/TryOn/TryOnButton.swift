@@ -92,7 +92,7 @@ struct КнопкаПримерочной: View {
                     .overlay { Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 1) }
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(способ.заголовок)
+                    Text(способ.заголовокДля(товар))
                         .font(.callout.weight(.heavy))
                         .fixedSize(horizontal: false, vertical: true)
                     Text(способ.подпись(товар))
@@ -121,9 +121,9 @@ struct КнопкаПримерочной: View {
             .shadow(color: Theme.панельСвязиКонец.opacity(0.28), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: ДвижениеСайта.сжатие))
-        .accessibilityLabel(способ.заголовок)
+        .accessibilityLabel(способ.заголовокДля(товар))
         .accessibilityValue(способ.подпись(товар))
-        .accessibilityHint(способ.подсказка)
+        .accessibilityHint(способ.подсказкаДля(товар))
         .task { await пробежатьБлик() }
     }
 
@@ -179,7 +179,7 @@ struct КнопкаПримерочной: View {
                 Image(systemName: способ.значок(товар))
                     .font(.subheadline.weight(.semibold))
                     .accessibilityHidden(true)
-                Text(способ.заголовок)
+                Text(способ.заголовокДля(товар))
                     .font(.subheadline.weight(.bold))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -203,9 +203,9 @@ struct КнопкаПримерочной: View {
             .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: ДвижениеСайта.сжатие))
-        .accessibilityLabel(способ.заголовок)
+        .accessibilityLabel(способ.заголовокДля(товар))
         .accessibilityValue(способ.подпись(товар))
-        .accessibilityHint(способ.подсказка)
+        .accessibilityHint(способ.подсказкаДля(товар))
     }
 }
 

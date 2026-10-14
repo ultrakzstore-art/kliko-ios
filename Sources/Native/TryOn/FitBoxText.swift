@@ -16,6 +16,13 @@ enum ГабаритыText {
         String(format: т(ключ), значение)
     }
 
+    /// Вариант строки «на столе» (ключ_desk: заголовок, «ведите над столом», «коснитесь стола»…); нет — nil, тогда
+    /// обычная строка.
+    static func дляСтола(_ ключ: String) -> String? {
+        let свой = ключ + "_desk"
+        return словарь[свой] ?? ru[свой]
+    }
+
     private static var словарь: [String: String] {
         switch ПримерочнаяText.язык {
         case "kk": return kk
@@ -71,6 +78,13 @@ enum ГабаритыText {
         "fb_src_diag": "Примерно — по диагонали %@″. Точные размеры — у продавца",
         "fb_src_partial": "Нашли не все размеры — допишите недостающие",
         "fb_src_none": "В объявлении размеров не нашли",
+        "fb_src_tpl": "Продавец выбрал типичный размер — точные размеры уточните у продавца",
+        "fb_title_desk": "Как будет на столе?",
+        "fb_scan_desk": "Медленно ведите телефоном над столом",
+        "fb_tap_desk": "Коснитесь стола там, где будет стоять вещь",
+        "fb_dark_desk": "Мало деталей — включите свет или положите на стол книгу",
+        "fb_no_floor_desk": "Здесь стола не видно — коснитесь стола",
+        "fb_desk_found": "Стол найден — коснитесь его",
         "fb_in_cm": "в сантиметрах",
         "fb_bad": "От 0,5 до 1000 см",
         "fb_done": "Готово",
@@ -142,6 +156,13 @@ enum ГабаритыText {
         "fb_src_diag": "Шамамен — %@″ диагональ бойынша. Нақты өлшемдер — сатушыда",
         "fb_src_partial": "Барлық өлшем табылмады — жетпегенін жазыңыз",
         "fb_src_none": "Хабарландырудан өлшемдер табылмады",
+        "fb_src_tpl": "Сатушы әдеттегі өлшемді таңдаған — нақты өлшемдерді сатушыдан сұраңыз",
+        "fb_title_desk": "Үстелде қалай тұрады?",
+        "fb_scan_desk": "Телефонды үстел үстімен баяу жылжытыңыз",
+        "fb_tap_desk": "Зат тұратын жердегі үстелді түртіңіз",
+        "fb_dark_desk": "Бөлшек аз — жарықты қосыңыз немесе үстелге кітап қойыңыз",
+        "fb_no_floor_desk": "Мұнда үстел көрінбейді — үстелді түртіңіз",
+        "fb_desk_found": "Үстел табылды — оны түртіңіз",
         "fb_in_cm": "сантиметрмен",
         "fb_bad": "0,5-тен 1000 см-ге дейін",
         "fb_done": "Дайын",
@@ -213,6 +234,13 @@ enum ГабаритыText {
         "fb_src_diag": "Approximate — based on the %@″ diagonal. Ask the seller for exact dimensions",
         "fb_src_partial": "Not all dimensions were found — fill in the missing ones",
         "fb_src_none": "No dimensions found in the listing",
+        "fb_src_tpl": "The seller picked a typical size — ask the seller for exact dimensions",
+        "fb_title_desk": "How will it look on your desk?",
+        "fb_scan_desk": "Slowly move your phone over the desk",
+        "fb_tap_desk": "Tap the desk where the item will stand",
+        "fb_dark_desk": "Not enough detail — turn on the light or put a book on the desk",
+        "fb_no_floor_desk": "No desk here — tap the desk",
+        "fb_desk_found": "Desk found — tap it",
         "fb_in_cm": "in centimeters",
         "fb_bad": "From 0.5 to 1000 cm",
         "fb_done": "Done",
@@ -284,6 +312,13 @@ enum ГабаритыText {
         "fb_src_diag": "تقريبيًا — حسب القطر %@″. المقاسات الدقيقة لدى البائع",
         "fb_src_partial": "لم نجد كل المقاسات — أكمل الناقص",
         "fb_src_none": "لم نجد مقاسات في الإعلان",
+        "fb_src_tpl": "اختار البائع مقاسًا شائعًا — اسأل البائع عن المقاسات الدقيقة",
+        "fb_title_desk": "كيف سيبدو على مكتبك؟",
+        "fb_scan_desk": "حرّك هاتفك ببطء فوق الطاولة",
+        "fb_tap_desk": "المس الطاولة حيث ستوضع القطعة",
+        "fb_dark_desk": "التفاصيل قليلة — شغّل الإضاءة أو ضع كتابًا على الطاولة",
+        "fb_no_floor_desk": "لا تظهر طاولة هنا — المس الطاولة",
+        "fb_desk_found": "تم العثور على الطاولة — المسها",
         "fb_in_cm": "بالسنتيمتر",
         "fb_bad": "من 0.5 إلى 1000 سم",
         "fb_done": "تم",

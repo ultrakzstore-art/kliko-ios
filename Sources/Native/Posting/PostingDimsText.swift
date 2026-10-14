@@ -1,7 +1,9 @@
 import Foundation
 
-/// Тексты блока «Габариты, см» в подаче (PostingDims*.swift) на языке телефона (kk/ru/en/ar) — тем же способом, что
-/// тексты подачи (ПодачаText): свой словарь, ключи dm_*, чтобы не пересекаться с другими направлениями.
+/// Тексты блока «Размеры — по желанию» (раньше «Габариты, см») в подаче (PostingDims*.swift) на языке телефона
+/// (kk/ru/en/ar) — тем же способом, что тексты подачи (ПодачаText): свой словарь, ключи dm_*, чтобы не пересекаться с
+/// другими направлениями. dm_opt_* — блок по желанию, dm_tpl_* — образцы (PostingSizeView.swift); dm_need*, dm_sub —
+/// когда размеры потребовал сервер (need_dims).
 enum ГабаритыПодачиText {
     static func т(_ ключ: String) -> String {
         let словарь = тексты[язык] ?? тексты["ru"]!
@@ -30,7 +32,16 @@ enum ГабаритыПодачиText {
             "dm_mm_done": "Перевели в сантиметры — проверьте",
             "dm_ai": "Размеры предложил Kliko AI — сверьте с инструкцией или рулеткой",
             "dm_found": "Нашли размеры в объявлении — проверьте",
-            "dm_measure": "Измерить в AR"
+            "dm_measure": "Измерить в AR",
+            "dm_opt_title": "Размеры — по желанию",
+            "dm_opt_sub": "Необязательно. Так покупателю проще представить вещь у себя: «Поместится ли?» поставит её в комнату в настоящем размере",
+            "dm_opt_sub_desk": "Необязательно. Так покупателю проще представить вещь у себя: «Поместится ли?» поставит её на стол в настоящем размере",
+            "dm_opt_partial": "Не хватает: %@ — без всех трёх размеры в объявление не попадут",
+            "dm_tpl_kind": "Что это?",
+            "dm_tpl_box": "Типичные размеры — коснитесь, и мы подставим",
+            "dm_tpl_diag": "Диагональ — коснитесь, и мы подставим размеры",
+            "dm_tpl_note": "Это типичный размер — сверьте со своей вещью. Покупатель увидит пометку «примерно»",
+            "dm_tpl_a11y": "Подставить размеры: %@"
         ],
         "kk": [
             "dm_title": "Габариттер, см",
@@ -51,7 +62,16 @@ enum ГабаритыПодачиText {
             "dm_mm_done": "Сантиметрге аударылды — тексеріңіз",
             "dm_ai": "Өлшемдерді Kliko AI ұсынды — нұсқаулықпен немесе рулеткамен салыстырыңыз",
             "dm_found": "Хабарландырудан өлшемдер табылды — тексеріңіз",
-            "dm_measure": "AR-мен өлшеу"
+            "dm_measure": "AR-мен өлшеу",
+            "dm_opt_title": "Өлшемдері — қалауыңызша",
+            "dm_opt_sub": "Міндетті емес. Сатып алушыға затты өз үйінде елестету оңайырақ болады: «Сыя ма?» оны бөлмеге нақты өлшемінде қояды",
+            "dm_opt_sub_desk": "Міндетті емес. Сатып алушыға затты өз үйінде елестету оңайырақ болады: «Сыя ма?» оны үстелге нақты өлшемінде қояды",
+            "dm_opt_partial": "Жетіспейді: %@ — үшеуі болмаса, өлшемдер хабарландыруға түспейді",
+            "dm_tpl_kind": "Бұл не?",
+            "dm_tpl_box": "Әдеттегі өлшемдер — түртсеңіз, өзіміз қоямыз",
+            "dm_tpl_diag": "Диагональ — түртсеңіз, өлшемдерін өзіміз қоямыз",
+            "dm_tpl_note": "Бұл — әдеттегі өлшем, өз затыңызбен салыстырыңыз. Сатып алушы «шамамен» деген белгіні көреді",
+            "dm_tpl_a11y": "Өлшемдерді қою: %@"
         ],
         "en": [
             "dm_title": "Dimensions, cm",
@@ -72,7 +92,16 @@ enum ГабаритыПодачиText {
             "dm_mm_done": "Converted to centimeters — please check",
             "dm_ai": "Kliko AI suggested these dimensions — check them against the manual or a tape measure",
             "dm_found": "We found dimensions in the listing — please check",
-            "dm_measure": "Measure in AR"
+            "dm_measure": "Measure in AR",
+            "dm_opt_title": "Dimensions — optional",
+            "dm_opt_sub": "Optional. It helps buyers picture the item at home: “Will it fit?” places it in their room at true size",
+            "dm_opt_sub_desk": "Optional. It helps buyers picture the item at home: “Will it fit?” places it on their desk at true size",
+            "dm_opt_partial": "Missing: %@ — without all three, the dimensions won't be added to the listing",
+            "dm_tpl_kind": "What is it?",
+            "dm_tpl_box": "Typical sizes — tap to fill in",
+            "dm_tpl_diag": "Screen size — tap to fill in the dimensions",
+            "dm_tpl_note": "This is a typical size — check it against your item. Buyers will see it marked “approximate”",
+            "dm_tpl_a11y": "Fill in dimensions: %@"
         ],
         "ar": [
             "dm_title": "الأبعاد، سم",
@@ -93,7 +122,16 @@ enum ГабаритыПодачиText {
             "dm_mm_done": "تم التحويل إلى السنتيمتر — تحقّق منها",
             "dm_ai": "اقترح Kliko AI هذه الأبعاد — قارنها بالدليل أو بشريط القياس",
             "dm_found": "وجدنا أبعادًا في الإعلان — تحقّق منها",
-            "dm_measure": "القياس بالواقع المعزز"
+            "dm_measure": "القياس بالواقع المعزز",
+            "dm_opt_title": "الأبعاد — اختياري",
+            "dm_opt_sub": "اختياري. هكذا يسهل على المشتري تخيّل الغرض في بيته: «هل ستتسع؟» تضعه في غرفته بحجمه الحقيقي",
+            "dm_opt_sub_desk": "اختياري. هكذا يسهل على المشتري تخيّل الغرض في بيته: «هل ستتسع؟» تضعه على مكتبه بحجمه الحقيقي",
+            "dm_opt_partial": "ناقص: %@ — بدون الأبعاد الثلاثة لن تُضاف إلى الإعلان",
+            "dm_tpl_kind": "ما هذا؟",
+            "dm_tpl_box": "مقاسات شائعة — المس لتعبئتها",
+            "dm_tpl_diag": "قطر الشاشة — المس لتعبئة الأبعاد",
+            "dm_tpl_note": "هذا مقاس شائع — طابِقه مع غرضك. سيرى المشتري علامة «تقريبي»",
+            "dm_tpl_a11y": "تعبئة الأبعاد: %@"
         ]
     ]
 }

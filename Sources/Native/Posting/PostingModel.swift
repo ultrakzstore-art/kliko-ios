@@ -570,10 +570,10 @@ final class ПодачаМодель: ObservableObject {
         return справочники.корень(ключ) != "animals"
     }
 
-    /// _pwKindFor: вид запчасти по разделу.
+    /// _pwKindFor: вид запчасти по разделу; у дисков в «Шинах и дисках» — свой вид «wheel» (PostingSizeWheels.swift).
     var видЗапчасти: String {
         switch форма.раздел {
-        case "tires-wheels": return "tire"
+        case "tires-wheels": return дискиВПодаче ? "wheel" : "tire"
         case "auto-oils": return "oil"
         case "auto-lighting": return "light"
         case "auto-accessories": return "accessory"

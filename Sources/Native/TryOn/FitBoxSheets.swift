@@ -179,6 +179,8 @@ struct ЛистРазмеровГабаритов: View {
             return найдено.полные != nil ? т("fb_src_form") : т("fb_src_partial")
         case .характеристики:
             return найдено.полные != nil ? т("fb_src_specs") : т("fb_src_partial")
+        case .образец:
+            return найдено.полные != nil ? т("fb_src_tpl") : т("fb_src_partial")
         case .описание:
             return найдено.полные != nil ? т("fb_src_desc") : т("fb_src_partial")
         case .диагональ(let дюймы):
@@ -192,6 +194,7 @@ struct ЛистРазмеровГабаритов: View {
         switch найдено.источник {
         case .подача: return "checkmark.seal.fill"
         case .характеристики: return "checkmark.seal"
+        case .образец: return "ruler"
         case .описание: return "text.quote"
         case .диагональ: return "tv"
         case .нет: return "questionmark.circle"
