@@ -65,10 +65,11 @@ struct ЛистСвязиСПродавцомОкна: View {
             .padding(.horizontal, 20)
             .padding(.top, 24)
             .padding(.bottom, 12)
+            .мерятьВысотуЛиста()
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxWidth: 560)
-        .presentationDetents([.medium, .large])
+        .листПоСодержимому()
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.поверхность)
         .onAppear { видно = true }

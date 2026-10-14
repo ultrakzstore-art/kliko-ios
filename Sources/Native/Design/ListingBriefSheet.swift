@@ -66,11 +66,12 @@ struct ЛистРазбораОбъявления: View {
             .padding(.horizontal, 16)
             .padding(.top, 20)
             .padding(.bottom, 20)
+            .мерятьВысотуЛиста()
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxWidth: 680)
         .background(Theme.фонСтраницы.ignoresSafeArea())
-        .presentationDetents([.large])
+        .листПоСодержимому()
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.фонСтраницы)
         .onAppear { видно = true }
