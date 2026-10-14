@@ -243,6 +243,9 @@ extension Listing {
             части.append(String(format: DesignText.т("rooms"), комнаты))
         } else if комнаты == "studio" {
             части.append(DesignText.т("studio"))
+        } else if комнаты == "room" {
+            /* rooms = "room" — «Комната · 14 м² · 3/9 эт.» (ultra-site 14.10.2026). */
+            части.append(DesignText.т("r_room"))
         }
         if let площадь = Self.числоВНачале(жильё["area"] ?? ""), площадь > 0 {
             части.append(Self.дробь(площадь) + " " + DesignText.т("m2"))
@@ -317,16 +320,16 @@ extension Listing {
     }
 
     /// Порядок полей жилья в чипах ленты — MK_REALTY_ORDER сайта.
-    private static let порядокЖилья = ["rooms", "area", "land_area", "floor", "floors", "term", "renovation", "building",
-                                      "bathroom", "year_built", "land_use", "docs", "mortgage_ok", "utilities",
-                                      "furniture", "parking", "kids", "pets", "owner"]
+    private static let порядокЖилья = ["rooms", "gtype", "area", "land_area", "floor", "floors", "term", "renovation",
+                                      "building", "bathroom", "year_built", "land_use", "docs", "mortgage_ok",
+                                      "utilities", "furniture", "parking", "kids", "pets", "owner"]
     /// Поля-признаки: «да» у них — подпись поля (MK_REALTY_LBL).
     private static let признакиЖилья: Set<String> = ["mortgage_ok", "utilities", "furniture", "parking", "kids", "pets"]
     /// Значения со словом (MK_REALTY_VAL) — ключи текстов «r_<значение>».
     private static let словаЖилья: Set<String> = ["studio", "none", "cosmetic", "euro", "design", "brick", "panel",
                                                   "monolith", "block", "separate", "combined", "two", "private", "share",
                                                   "mortgage", "other", "long", "daily", "owner", "agent", "ijs",
-                                                  "garden", "farm", "commercial"]
+                                                  "garden", "farm", "commercial", "room", "garage", "parking"]
 
     /// Строка характеристик карточки ленты — mkCapSpecs(t, 3): поля жилья, иначе первые четыре specs (без образцов
     /// цвета, значения — значениеСтрокиЛенты), иначе у электроники процессор, видеокарта, память и накопитель. До трёх,
@@ -556,6 +559,50 @@ extension Listing {
 
 // MARK: - Мелкие части
 
+/**
+ Метка «ИИ» на обложке карточки (ultra-site 14.10.2026, «Картинка по описанию, часть 2»): img_ai — первый кадр нарисован
+ ИИ. Тёмная капсула с палочкой в нижнем углу фото — читается на любом снимке, размер карточки не меняет. Старый ответ
+ без поля — метки нет.
+ */
+struct МеткаИИВитрины: View {
+    init() {}
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 9, weight: .bold))
+            Text(ТекстыДействийОкна.т("pm_ai_badge"))
+                .font(.system(size: 10, weight: .heavy))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.black.opacity(0.62), in: Capsule())
+        .overlay { Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5) }
+        .accessibilityHidden(true)
+    }
+}
+
+extension Listing {
+    /// Голос карточки и «Обложка создана ИИ», если обложку нарисовал ИИ: метка на фото скрыта от VoiceOver.
+    var голосСМеткойИИ: String {
+        ииОбложка ? голос + ", " + ТекстыДействийОкна.т("pm_ai_badge_a11y") : голос
+    }
+}
+
+extension View {
+    /// Метка «ИИ» в нижнем углу обложки, если её нарисовал ИИ (img_ai). Слой поверх фото карточки.
+    func меткаИИНаОбложке(_ товар: Listing) -> some View {
+        overlay(alignment: .bottomLeading) {
+            if товар.ииОбложка {
+                МеткаИИВитрины()
+                    .padding(8)
+            }
+        }
+    }
+}
+
 /// «★ ТОП» карточек главной (.mh-top): 24 pt, золото 135°, белые заглавные 10 pt.
 struct МеткаТопГлавной: View {
     init() {}
@@ -663,7 +710,7 @@ struct КарточкаГлавной: View {
         .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(товар.голос)
+        .accessibilityLabel(товар.голосСМеткойИИ)
     }
 
     private var золотая: Bool { товар.isTop || вип }
@@ -687,6 +734,7 @@ struct КарточкаГлавной: View {
                         .padding(8)
                 }
             }
+            .меткаИИНаОбложке(товар)
     }
 
     @ViewBuilder
@@ -1059,6 +1107,7 @@ struct КарточкаНедавнегоСайта: View {
                     }
                 }
                 .clipped()
+                .меткаИИНаОбложке(товар)
             Text(товар.title)
                 .font(.caption)
                 .foregroundStyle(Theme.текст)
@@ -1085,7 +1134,7 @@ struct КарточкаНедавнегоСайта: View {
         .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(товар.голос)
+        .accessibilityLabel(товар.голосСМеткойИИ)
     }
 
     /// _simCard: у услуг цены нет; цена больше нуля — полной суммой (mkMoney), иначе «Договорная».

@@ -350,6 +350,9 @@ extension Listing {
             части.append(String(format: DesignText.т("rooms"), комнаты))
         } else if комнаты == "studio" {
             части.append(DesignText.т("studio"))
+        } else if комнаты == "room" {
+            /* rooms = "room" — «Комната · 14 м² · 3/9 эт.» (ultra-site 14.10.2026). */
+            части.append(DesignText.т("r_room"))
         }
         if let площадь = Self.числоВНачале(жильё["area"] ?? ""), площадь > 0 {
             части.append(Self.дробь(площадь) + " " + DesignText.т("m2"))

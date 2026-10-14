@@ -315,9 +315,11 @@ struct ПунктХарактеристикиВида: Hashable {
 
 extension Listing {
     /// MK_REALTY_ORDER.
-    private static let порядокПолейСтраницы = ["rooms", "area", "land_area", "floor", "floors", "term", "renovation",
-                                               "building", "bathroom", "year_built", "land_use", "docs", "mortgage_ok",
-                                               "utilities", "furniture", "parking", "kids", "pets", "owner"]
+    /// gtype (вид «Гараж, паркинг», ultra-site 14.10.2026) — после комнат: «Тип: Гараж» / «Тип: Паркоместо».
+    private static let порядокПолейСтраницы = ["rooms", "gtype", "area", "land_area", "floor", "floors", "term",
+                                               "renovation", "building", "bathroom", "year_built", "land_use", "docs",
+                                               "mortgage_ok", "utilities", "furniture", "parking", "kids", "pets",
+                                               "owner"]
     /// Поля-признаки: «да» — одна подпись.
     private static let признакиПолейСтраницы: Set<String> = ["mortgage_ok", "utilities", "furniture", "parking", "kids",
                                                              "pets"]
@@ -325,7 +327,8 @@ extension Listing {
     private static let словаПолейСтраницы: Set<String> = ["studio", "none", "cosmetic", "euro", "design", "brick",
                                                           "panel", "monolith", "block", "separate", "combined", "two",
                                                           "private", "share", "mortgage", "other", "long", "daily",
-                                                          "owner", "agent", "ijs", "garden", "farm", "commercial"]
+                                                          "owner", "agent", "ijs", "garden", "farm", "commercial",
+                                                          "room", "garage", "parking"]
     /// SPEC_LBL_MAP.
     private static let подписиХарактеристик: [String: String] = [
         "Коробка": "fac_gearbox", "Топливо": "fac_fuel", "Пробег": "spec_mileage", "Год": "fac_year_short",
@@ -380,6 +383,11 @@ extension Listing {
         for ключ in Self.порядокПолейСтраницы {
             guard let значение = жильё[ключ] else { continue }
             if ключ == "floors" && жильё["floor"] != nil { continue }
+            /* rooms = "room" (ultra-site 14.10.2026) — одно слово «Комната», не «Комнат: Комната». */
+            if ключ == "rooms" && значение == "room" {
+                итог.append(ПунктХарактеристикиВида(текст: DesignText.т("r_room"), значок: nil))
+                continue
+            }
             let подпись = тВида("re_" + ключ)
             if Self.признакиПолейСтраницы.contains(ключ) {
                 if значение == "1" { итог.append(ПунктХарактеристикиВида(текст: подпись, значок: nil)) }
@@ -1238,6 +1246,8 @@ struct СпособыОплатыСайта: View {
     @State private var выбрано = "inst"
     @State private var срокРассрочки = 12
     @State private var срокКредита = 24
+    /// Кто смотрит: у своего объявления «Спросить о рассрочке» нет.
+    @ObservedObject private var сессия = СессияПриложения.shared
 
     private static let срокиРассрочки = [3, 6, 9, 12, 24]
     private static let срокиКредита = [6, 12, 24, 36, 48, 60]
@@ -1265,8 +1275,30 @@ struct СпособыОплатыСайта: View {
             } else {
                 панельКредита
             }
+            /* «Кнопки называют то, что делают» (ultra-site 13.10.2026): у рассрочки — «Спросить о рассрочке», чат с
+               готовым вопросом через панель окна; оформления покупки здесь нет. */
+            if рассрочкаНаЭкране && Config.нативныйЧат && Config.чатОбъявления && !своё {
+                Button {
+                    ВестиОкнаОбъявления.послать(ВестиОкнаОбъявления.чат, товар: товар.id,
+                                                 текст: String(format: ТекстыДействийОкна.т("pay_inst_q"), товар.title))
+                } label: {
+                    Label(ТекстыДействийОкна.т("pay_inst_ask"), systemImage: "bubble.left")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.зелёный2)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                                .strokeBorder(Theme.линия, lineWidth: 1)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
+            }
         }
     }
+
+    private var своё: Bool { !сессия.id.isEmpty && сессия.id == товар.продавецID }
 
     private var вкладки: some View {
         HStack(spacing: 0) {
@@ -1576,6 +1608,11 @@ struct БлокАрендыСайта: View {
 
     // MARK: Низ: своё, форма, вход или верификация
 
+    /**
+     Окно объявления (ultra-site 13.10.2026): в новой раскладке заявка — листом «Арендовать» панели (условия, дата и срок,
+     «Запросить аренду»), здесь — кнопка «Арендовать», которая его открывает. rent_bookable: false — владельцу заявки
+     через площадку не открыты: вместо формы «Написать владельцу» (чат), и в прежней раскладке тоже.
+     */
     @ViewBuilder
     private var низ: some View {
         if своё {
@@ -1583,6 +1620,15 @@ struct БлокАрендыСайта: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.текстВторой)
                 .padding(.vertical, 8)
+        } else if товар.арендаЗаявкой == false {
+            кнопкаБлока(значок: "bubble.left.and.bubble.right", заголовок: ТекстыДействийОкна.т("rs_write_owner")) {
+                ВестиОкнаОбъявления.послать(ВестиОкнаОбъявления.чат, товар: товар.id,
+                                             текст: String(format: ТекстыДействийОкна.т("rs_hello"), товар.title))
+            }
+        } else if Config.кнопкиОкнаV2 {
+            кнопкаБлока(значок: "calendar", заголовок: ТекстыДействийОкна.т("ma_rent")) {
+                ВестиОкнаОбъявления.послать(ВестиОкнаОбъявления.аренда, товар: товар.id)
+            }
         } else if сессия.вошёл == true && сессия.продавецПодтверждён {
             if отправлено {
                 Label(тВида("rent_sent"), systemImage: "checkmark.circle")
@@ -1636,6 +1682,30 @@ struct БлокАрендыСайта: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// Зелёная кнопка блока во всю ширину — как «Запросить аренду» формы.
+    private func кнопкаБлока(значок: String, заголовок: String, нажать: @escaping () -> Void) -> some View {
+        Button(action: нажать) {
+            HStack(spacing: 10) {
+                Image(systemName: значок)
+                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(заголовок)
+                    .font(.system(size: 16, weight: .heavy))
+                    .tracking(0.16)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .padding(16)
+            .background(LinearGradient(colors: [Theme.зелёный2, Color(uiColor: Theme.hex(0x149A52)), Theme.зелёный],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
     }
 
     private var форма: some View {
@@ -1809,6 +1879,8 @@ struct БлокАрендыСайта: View {
             switch итог {
             case .готово:
                 withAnimation(ДвижениеСайта.смена) { отправлено = true }
+            case .владелецНеПринимает(let текстОшибки):
+                ошибка = текстОшибки ?? тВида("rent_error")
             case .ошибка(let текстОшибки):
                 ошибка = текстОшибки ?? тВида("rent_error")
             case .нетСессии:
@@ -1884,7 +1956,11 @@ private struct ПолеДатыАренды: View {
 /// вошедшей сессии (ДоставкаТКAPI.csrfСессииЗапроса): по нему сервер пропускает запрос без Origin (правка 93).
 enum АрендаОбъявленияAPI {
     enum Итог {
-        case готово
+        /// Запрос принят: номер аренды (id) и до какого момента ответит владелец (respond_by, ultra-site 13.10.2026).
+        /// Старый сервер их не шлёт — пусто.
+        case готово(номер: String, ответДо: String)
+        /// code: owner_not_bookable — владельцу заявки через площадку не открыты: вести в чат; текст сервера.
+        case владелецНеПринимает(String?)
         case ошибка(String?)
         case нетСессии
         case сеть
@@ -1923,7 +1999,12 @@ enum АрендаОбъявленияAPI {
               let j = (try? JSONSerialization.jsonObject(with: результат.0)) as? [String: Any] else {
             return .сеть
         }
-        if ДоставкаТКAPI.да(j["ok"]) { return .готово }
+        if ДоставкаТКAPI.да(j["ok"]) {
+            return .готово(номер: ДоставкаТКAPI.строка(j["id"]) ?? "", ответДо: ДоставкаТКAPI.строка(j["respond_by"]) ?? "")
+        }
+        if ДоставкаТКAPI.строка(j["code"]) == "owner_not_bookable" {
+            return .владелецНеПринимает(ДоставкаТКAPI.строка(j["error"]))
+        }
         return .ошибка(ДоставкаТКAPI.строка(j["error"]))
     }
 }

@@ -10,6 +10,8 @@ import Foundation
  «Продавец утверждает» — TRUST_LABELS, советы «… — на что смотреть» — MK_BUY_TIPS (js/mk-refs-ru.js), «Новостройка» и
  «Вторичный рынок» — mkCond в js/marketplace.min.js. Текст для WhatsApp — mkRevealWa сайта («Здравствуйте! Интересует
  «…» за … ₸. Ещё актуально?»).
+ cov_w2_d (ultra-site 13.10.2026, сделки после оплаты): деньги у Kliko до получения товара, затем срок на проверку — как
+ fz_m окна сделки (Deals/DealMoneyText.swift); прежнее «пока вы не подтвердите, что исправен» обещало не то.
  */
 enum ListingPageText {
     static func т(_ ключ: String) -> String {
@@ -360,7 +362,7 @@ enum ListingPageText {
             "info_title": "Безопасная покупка", "info_sub": "Знаки доверия, гарантия и доставка",
             "cov_warr_title": "Гарантия продавца — %@", "cov_asis_title": "Продаётся как есть",
             "cov_w1_l": "Гарантия %@", "cov_w1_d": "Откажет в этот срок — продавец обязан вернуть деньги или заменить. Срок идёт с даты получения.",
-            "cov_w2_l": "Оформляйте через Безопасную сделку", "cov_w2_d": "Деньги у Kliko, пока вы не подтвердите, что товар исправен — это ваша страховка.", "cov_w2_l_np": "Договоритесь о проверке до оплаты", "cov_w2_d_np": "Осмотрите и проверьте товар до оплаты — так надёжнее.",
+            "cov_w2_l": "Оформляйте через Безопасную сделку", "cov_w2_d": "Деньги у Kliko до получения товара. После получения есть срок на проверку — потом деньги уйдут продавцу. Что-то не так — откройте спор.", "cov_w2_l_np": "Договоритесь о проверке до оплаты", "cov_w2_d_np": "Осмотрите и проверьте товар до оплаты — так надёжнее.",
             "cov_w3_l": "Сохраните переписку и чек", "cov_w3_d": "Условия и срок гарантии подтверждаются вашим диалогом в чате и чеком.",
             "cov_w3_l2": "Гарантийный талон в сделке", "cov_w3_d2": "В безопасной сделке продавец может подписать гарантийный талон через eGov — талон хранится в сделке вместе с перепиской.",
             "cov_a1_l": "Без гарантии после покупки", "cov_a1_d": "Обычно так у б/у: продавец не отвечает за поломки после сделки — поэтому важно проверить заранее.",
@@ -390,7 +392,7 @@ enum ListingPageText {
             "info_title": "Қауіпсіз сатып алу", "info_sub": "Сенім белгілері, кепілдік және жеткізу",
             "cov_warr_title": "Сатушы кепілдігі — %@", "cov_asis_title": "Қалай бар, солай сатылады",
             "cov_w1_l": "Кепілдік %@", "cov_w1_d": "Осы мерзімде істен шықса — сатушы ақшаны қайтаруға немесе ауыстыруға міндетті. Мерзім алған күннен басталады.",
-            "cov_w2_l": "Қауіпсіз мәміле арқылы рәсімдеңіз", "cov_w2_d": "Тауардың дұрыс екенін растағанша ақша Kliko-да тұрады — бұл сіздің сақтандыруыңыз.", "cov_w2_l_np": "Төлемге дейін тексеруге келісіңіз", "cov_w2_d_np": "Төлемге дейін тауарды қарап, тексеріңіз — осылай сенімдірек.",
+            "cov_w2_l": "Қауіпсіз мәміле арқылы рәсімдеңіз", "cov_w2_d": "Тауарды алғанша ақша Kliko-да болады. Алғаннан кейін тексеруге уақыт беріледі — содан соң ақша сатушыға кетеді. Бірдеңе дұрыс болмаса — дау ашыңыз.", "cov_w2_l_np": "Төлемге дейін тексеруге келісіңіз", "cov_w2_d_np": "Төлемге дейін тауарды қарап, тексеріңіз — осылай сенімдірек.",
             "cov_w3_l": "Хат алмасу мен чекті сақтаңыз", "cov_w3_d": "Кепілдік шарттары мен мерзімі чаттағы диалогыңызбен және чекпен расталады.",
             "cov_w3_l2": "Мәміледегі кепілдік талоны", "cov_w3_d2": "Қауіпсіз мәміледе сатушы кепілдік талонына eGov арқылы қол қоя алады — талон мәміледе хат алмасумен бірге сақталады.",
             "cov_a1_l": "Сатып алғаннан кейін кепілдік жоқ", "cov_a1_d": "Қолданылған тауарда әдетте солай: мәміледен кейінгі ақауға сатушы жауап бермейді — сондықтан алдын ала тексеріңіз.",
@@ -420,7 +422,7 @@ enum ListingPageText {
             "info_title": "Safe purchase", "info_sub": "Trust signs, warranty and delivery",
             "cov_warr_title": "Seller warranty — %@", "cov_asis_title": "Sold as is",
             "cov_w1_l": "Warranty %@", "cov_w1_d": "If it fails within this period, the seller must refund or replace it. The period starts on the day you receive it.",
-            "cov_w2_l": "Use the Safe deal", "cov_w2_d": "Kliko holds the money until you confirm the item works — that's your insurance.", "cov_w2_l_np": "Agree on a check before paying", "cov_w2_d_np": "Inspect and check the item before paying — it's safer that way.",
+            "cov_w2_l": "Use the Safe deal", "cov_w2_d": "Kliko holds the money until you receive the item. After receipt you get time to inspect it — then the money goes to the seller. Something wrong? Open a dispute.", "cov_w2_l_np": "Agree on a check before paying", "cov_w2_d_np": "Inspect and check the item before paying — it's safer that way.",
             "cov_w3_l": "Keep the chat and the receipt", "cov_w3_d": "The warranty terms are confirmed by your chat and the receipt.",
             "cov_w3_l2": "Warranty card in the deal", "cov_w3_d2": "In a safe deal the seller can sign a warranty card via eGov — it is stored in the deal together with the chat.",
             "cov_a1_l": "No warranty after purchase", "cov_a1_d": "Usual for used items: the seller isn't responsible for breakdowns after the deal — so check it in advance.",
@@ -450,7 +452,7 @@ enum ListingPageText {
             "info_title": "شراء آمن", "info_sub": "علامات الثقة والضمان والتوصيل",
             "cov_warr_title": "ضمان البائع — %@", "cov_asis_title": "يُباع كما هو",
             "cov_w1_l": "ضمان %@", "cov_w1_d": "إذا تعطّل خلال هذه المدة فعلى البائع إعادة المال أو الاستبدال. تبدأ المدة من يوم الاستلام.",
-            "cov_w2_l": "أتمّ الشراء عبر الصفقة الآمنة", "cov_w2_d": "يحتفظ Kliko بالمال حتى تؤكد أن المنتج سليم — هذا تأمينك.", "cov_w2_l_np": "اتفق على الفحص قبل الدفع", "cov_w2_d_np": "عاين السلعة وافحصها قبل الدفع — هكذا أكثر أمانًا.",
+            "cov_w2_l": "أتمّ الشراء عبر الصفقة الآمنة", "cov_w2_d": "يبقى المال لدى Kliko حتى تستلم السلعة. بعد الاستلام لديك مهلة للفحص — ثم يذهب المال إلى البائع. هناك مشكلة؟ افتح نزاعًا.", "cov_w2_l_np": "اتفق على الفحص قبل الدفع", "cov_w2_d_np": "عاين السلعة وافحصها قبل الدفع — هكذا أكثر أمانًا.",
             "cov_w3_l": "احتفظ بالمحادثة والإيصال", "cov_w3_d": "شروط الضمان ومدته تثبتها محادثتك في الدردشة والإيصال.",
             "cov_w3_l2": "بطاقة الضمان في الصفقة", "cov_w3_d2": "في الصفقة الآمنة يمكن للبائع توقيع بطاقة الضمان عبر eGov — وتُحفظ في الصفقة مع المحادثة.",
             "cov_a1_l": "بلا ضمان بعد الشراء", "cov_a1_d": "هذا معتاد في المستعمل: لا يتحمل البائع الأعطال بعد الصفقة — لذا افحصه مسبقًا.",

@@ -138,6 +138,17 @@ struct Listing: Identifiable, Hashable {
     /// nil — поля нет, null или не разобралось (ни usdz, ни двух ракурсов): значка и кнопки 3D на странице нет.
     var модельОбъёма: МодельОбъёмаОбъявления? = nil
 
+    // ── Окно объявления как у сайта (ultra-site 13–14.10.2026): только добавления, старый ответ без них — как раньше ──
+    /// rent_bookable: площадка принимает заявку на аренду для этого владельца. false — вместо формы заявки «Написать
+    /// владельцу» (чат). nil — поля нет или null: форма как раньше, решит сервер (отказ owner_not_bookable).
+    var арендаЗаявкой: Bool? = nil
+    /// img_ai: первый кадр (обложка) нарисован ИИ — метка «ИИ» на обложке карточки. Без поля — по photo_marks[0].gen.
+    var ииОбложка = false
+    /// photos_real: сколько кадров — настоящие фото. nil — поля нет (строки «Настоящих фото нет» тоже нет).
+    var настоящихКадров: Int? = nil
+    /// photo_marks: запись о каждом кадре в порядке images — обработка (fx) и рисунок ИИ (gen). Нет записей — пусто.
+    var отметкиФото: [ОтметкаФотоОбъявления] = []
+
     struct Характеристика: Hashable {
         let ключ: String
         let значение: String
@@ -418,7 +429,58 @@ extension Listing: Decodable {
 
         /* 3D-обзор: model3d — объект или null; сломанный или пустой — как будто его нет, объявление от этого не падает. */
         модельОбъёма = try? c.decode(МодельОбъёмаОбъявления.self, forKey: Ключ("model3d"))
+
+        /* Окно объявления (ultra-site 13–14.10.2026). rent_bookable — только явное значение; нет или null — nil. */
+        if c.contains(Ключ("rent_bookable")), (try? c.decodeNil(forKey: Ключ("rent_bookable"))) != true {
+            арендаЗаявкой = да("rent_bookable")
+        }
+        /// Элемент photo_marks: {"fx": [...], "gen": {...}}; неизвестные виды fx и ключи пропускаются, не объект — пусто.
+        struct СыраяОтметкаФото: Decodable {
+            let отметка: ОтметкаФотоОбъявления
+            init(from decoder: Decoder) throws {
+                var итог = ОтметкаФотоОбъявления()
+                if let к = try? decoder.container(keyedBy: Ключ.self) {
+                    let виды = (try? к.decode([String].self, forKey: Ключ("fx"))) ?? []
+                    итог.обработка = виды
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                        .filter { ОтметкаФотоОбъявления.известныеВиды.contains($0) }
+                    if let рисунок = try? к.nestedContainer(keyedBy: Ключ.self, forKey: Ключ("gen")) {
+                        итог.рисунокИИ = true
+                        if let b = try? рисунок.decode(Bool.self, forKey: Ключ("cover")) {
+                            итог.обложка = b
+                        } else if let i = try? рисунок.decode(Int.self, forKey: Ключ("cover")) {
+                            итог.обложка = i != 0
+                        }
+                    }
+                }
+                отметка = итог
+            }
+        }
+        отметкиФото = ((try? c.decode([СыраяОтметкаФото].self, forKey: Ключ("photo_marks"))) ?? []).map(\.отметка)
+        if c.contains(Ключ("img_ai")), (try? c.decodeNil(forKey: Ключ("img_ai"))) != true {
+            ииОбложка = да("img_ai")
+        } else {
+            ииОбложка = отметкиФото.first?.рисунокИИ ?? false
+        }
+        if let настоящие = число("photos_real"), настоящие.isFinite, abs(настоящие) < 1e9 {
+            настоящихКадров = max(0, Int(настоящие))
+        }
     }
+}
+
+/// Запись о кадре объявления — элемент photo_marks (ultra-site 14.10.2026, «Фото обработано» и «Картинка по описанию»).
+struct ОтметкаФотоОбъявления: Hashable {
+    /// Виды обработки сайта по порядку ответа: bg, frame, light, adjust, text, redact. Пусто — кадр не обрабатывали.
+    var обработка: [String] = []
+    /// gen — кадр нарисован ИИ: это не фото товара.
+    var рисунокИИ = false
+    /// gen.cover — обложка объявления, собранная без рисунка.
+    var обложка = false
+
+    /// Виды fx, которые знает приложение; прочие пропускаются, как велит сайт.
+    static let известныеВиды: Set<String> = ["bg", "frame", "light", "adjust", "text", "redact"]
+
+    init() {}
 }
 
 /// Ответ на один товар: {ok, item:{…}}.
