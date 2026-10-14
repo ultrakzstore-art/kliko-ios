@@ -64,6 +64,16 @@ struct ШагиПодачи: View {
                 .padding(.bottom, 16)
             }
             .scrollDismissesKeyboard(.interactively)
+            /* Под часами — фон подачи: шапка шагов уезжает при прокрутке и не налезает на время (TestFlight 74). */
+            .overlay(alignment: .top) {
+                GeometryReader { г in
+                    КраскаПодачи.фон
+                        .frame(height: г.safeAreaInsets.top)
+                }
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
             .submitLabel(.next)
             .onSubmit { перейтиКПолю(1) }
             .onChange(of: фокус) { _, ключ in
@@ -686,27 +696,39 @@ struct ШагФото: View {
     }
 
     private var маленькаяПлитка: some View {
+        /* Квадрат на всю клетку сетки, как плитки фото (владелец, TestFlight 74: «кнопки добавить ппц выглядят» — плитка
+           была квадратом по своей подписи: мельче фото и сплющенная «Доба…»). Основа — фигура: она гибкая и сама
+           занимает всю ширину клетки, содержимое — поверх неё. */
         PhotosPicker(selection: $выбор, maxSelectionCount: max(1, модель.местоФото), selectionBehavior: .ordered,
                      matching: .images) {
-            VStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(т("add_photo_short"))
-                    .font(.system(size: 12, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(КраскаПодачи.хорошоТекст)
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(КраскаПодачи.линия, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-            }
-            .contentShape(Rectangle())
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .fill(КраскаПодачи.хорошоФон)
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay {
+                    VStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.зелёный, in: Circle())
+                            .accessibilityHidden(true)
+                        Text(т("add_photo_short"))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(КраскаПодачи.хорошоТекст)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .padding(.horizontal, 6)
+                    }
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(КраскаПодачи.хорошоТекст.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .accessibilityLabel(т("add_photo_big"))
     }
 
