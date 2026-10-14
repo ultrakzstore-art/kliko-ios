@@ -44,6 +44,10 @@ struct Listing: Identifiable, Hashable {
     var гарантияДней: Int?
     /// Характеристики «название → значение», только заполненные, в порядке показа.
     var характеристики: [Характеристика] = []
+    /// Габариты по соглашению (docs/SERVER_DIMENSIONS.md, раздел 5): «dim_w» · «dim_h» · «dim_d» → сантиметры — из
+    /// плоских полей ответа или пунктов specs с key dim_*. Не для показа (на странице — характеристики): их читает
+    /// «Поместится ли?» (РазборГабаритов.Исходник) — по ключу, а не по подписи на языке сайта.
+    var габаритыПолей: [String: Double] = [:]
     /// Раздел объявления из поля category — по нему карточка просит похожие (этап 7, cat=). Нет — нет и похожих.
     var категория: String?
 
@@ -234,6 +238,8 @@ extension Listing: Decodable {
            берём. Если массив есть, плоские поля ниже не добавляем: сайт уже положил туда то же самое (у мебели
            «Размер 190×110» лежит и в specs, и в storage — вышло бы «Накопитель 190×110»). */
         struct ПунктХарактеристик: Decodable {
+            /// key — машинный ключ пункта (dim_w…), если сайт его отдал.
+            let key: String?
             let label: String?
             let value: String?
             /// Этап 49: образец цвета (swatch) — у сайта такие пункты в строке характеристик карточки не участвуют.
@@ -243,6 +249,7 @@ extension Listing: Decodable {
 
             init(from decoder: Decoder) throws {
                 let к = try decoder.container(keyedBy: Ключ.self)
+                key = try? к.decode(String.self, forKey: Ключ("key"))
                 label = try? к.decode(String.self, forKey: Ключ("label"))
                 if let строка = try? к.decode(String.self, forKey: Ключ("value")) {
                     value = строка
@@ -256,8 +263,20 @@ extension Listing: Decodable {
                 значок = (try? к.decode(String.self, forKey: Ключ("emoji"))).flatMap { Listing.значокФактаПоSVG($0) }
             }
         }
+        /* Габариты по соглашению: плоские dim_w · dim_h · dim_d (числа или строки), потом key пунктов specs. */
+        var габариты: [String: Double] = [:]
+        for ключ in ["dim_w", "dim_h", "dim_d"] {
+            if let см = число(ключ), см.isFinite, см > 0 { габариты[ключ] = см }
+        }
         if let пункты = try? c.decode([ПунктХарактеристик].self, forKey: Ключ("specs")) {
             for п in пункты {
+                if let ключ = п.key?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                   ["dim_w", "dim_h", "dim_d"].contains(ключ), габариты[ключ] == nil,
+                   let текст = непусто(п.value),
+                   let см = Double(текст.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: ".")),
+                   см.isFinite, см > 0 {
+                    габариты[ключ] = см
+                }
                 if let к = непусто(п.label), let з = непусто(п.value) {
                     х.append(Характеристика(ключ: к, значение: з))
                     характеристикиКарточки.append(ПунктКарточки(ключ: к, значение: з, образец: п.образец,
@@ -277,6 +296,7 @@ extension Listing: Decodable {
             if let з = непусто(строка(поле)) { х.append(Характеристика(ключ: FeedText.т("spec_" + подпись), значение: з)) }
         }
         характеристики = х
+        габаритыПолей = габариты
         категория = непусто(строка("category"))
             ?? непусто((try? c.decode([String].self, forKey: Ключ("category")))?.first)
 

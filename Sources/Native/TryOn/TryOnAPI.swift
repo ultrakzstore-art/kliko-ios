@@ -13,7 +13,9 @@ import Vision
  умеет изображения) на сервере ultra-site по договору docs/SERVER_TRYON.md:
    · GET  /api/tryon.php?action=info → {ok, on, auth, ai, own, left, limit, kinds, sections} — есть ли примерочная,
      каких видов, где она и кто обработает фото (его называет согласие перед первой отправкой, App Review 5.1.2(i));
-   · POST action=start {csrf, listing_id, kind, photo, photo_index, own, lang} → {ok, job} | {ok:false, code, error};
+   · POST action=start {csrf, listing_id, kind, photo, photo_index, own, lang[, item_cutout, item_box]} → {ok, job} |
+     {ok:false, code, error}; item_cutout — вещь с фото photo_index, уже без фона (вырезка ИИ-студии на телефоне),
+     item_box — где она на том фото; оба необязательны (ФотоПримерочной.вырезка, docs/SERVER_TRYON.md, раздел 2а);
    · POST action=status {csrf, job, lang} → {ok, state: queued|working|done|failed, progress, image, error};
    · POST action=delete {csrf, job} → {ok}.
  Транспорт — как у остальных действий кабинета: МоиОбъявленияAPI.отправить (fetch изнутри страницы сайта под слоем, её
@@ -35,6 +37,13 @@ extension Config {
     /// false — ни кнопок ИИ, ни запросов. Тексты разрешений в project.yml (App Review 5.1.1(ii)) о примерке уже говорят:
     /// камера — «примерить вещь на себя или посмотреть, поместится ли она в комнате», Фото — «результат примерки».
     static let примерочная = true
+
+    /// item_cutout в start ИИ-примерки: вещь с фото объявления, вырезанная на телефоне той же вырезкой, что ИИ-студия
+    /// подачи (ВырезкаПредмета), и её место на фото (item_box). Поле необязательное (docs/SERVER_TRYON.md, раздел 2а):
+    /// сервер может взять её вместо своего удаления фона, сверив с фото объявления, или пропустить. Шлётся только
+    /// когда info ответил cutout:true (СведенияПримерочной.вырезка): сервер принял договор и поднял предел тела start.
+    /// false — start уходит без неё, как раньше.
+    static let вырезкаВещиИИ = true
 }
 
 // MARK: - Разделы
@@ -124,6 +133,9 @@ struct СведенияПримерочной: Equatable {
     var разделыВидов: [String: Set<String>] = [:]
     /// kinds — какие виды умеет сервер. Нет поля — person и виды из sections-объекта (старый сервер — только одежда).
     var виды: Set<String> = [ВидИИПримерки.человек.rawValue]
+    /// cutout — сервер принимает item_cutout и item_box в start (и тело start до 4–6 МБ, docs/SERVER_TRYON.md, раздел
+    /// 2а). Только явное cutout:true: нет поля — поля не шлём (большое тело старый сервер мог бы отбить 413).
+    var вырезка = false
 
     init() {}
 
@@ -133,6 +145,7 @@ struct СведенияПримерочной: Equatable {
         вошёл = j["auth"] == nil || A.да(j["auth"])
         ии = A.строка(j["ai"]).trimmingCharacters(in: .whitespacesAndNewlines)
         свойИИ = A.да(j["own"])
+        вырезка = A.да(j["cutout"])
         if j["left"] != nil { осталось = max(0, A.целое(j["left"])) }
         if j["limit"] != nil { лимит = max(0, A.целое(j["limit"])) }
         func ключи(_ значение: Any?) -> Set<String> {
@@ -280,12 +293,17 @@ enum ПримерочнаяAPI {
     }
 
     /// POST start. own — у человека включён «Свой ИИ» (как own:1 у recognize); решает сервер. kind — что рисовать:
-    /// person (человек в вещи), car (машина с дисками), room (комната с вещью).
+    /// person (человек в вещи), car (машина с дисками), room (комната с вещью). вырезка — item_cutout и item_box: вещь
+    /// с фото номерФото без фона; nil — полей нет (не вышла, на фото человек, рубильник).
     static func начать(товар: String, фото: String, номерФото: Int, свой: Bool,
-                       вид: ВидИИПримерки = .человек) async -> Ответ {
+                       вид: ВидИИПримерки = .человек, вырезка: ФотоПримерочной.Вырезка? = nil) async -> Ответ {
         var тело: [String: Any] = ["listing_id": товар, "kind": вид.rawValue, "photo": фото, "photo_index": номерФото,
                                    "lang": ПримерочнаяText.язык]
         if свой { тело["own"] = 1 }
+        if Config.вырезкаВещиИИ, let вырезка {
+            тело["item_cutout"] = вырезка.адрес
+            тело["item_box"] = вырезка.рамка
+        }
         return await выполнить("start", тело)
     }
 
@@ -372,8 +390,58 @@ enum ФотоПримерочной {
         case сбой
     }
 
+    /// item_cutout и item_box для start (docs/SERVER_TRYON.md, раздел 2а).
+    struct Вырезка: Sendable {
+        /// «data:image/png;base64,…»: вещь без фона (прозрачность), обрезана по ней с полем 3 %, сторона ≤ 1024 px.
+        let адрес: String
+        /// Где вырезка лежит на фото объявления (повёрнутом прямо): x, y, ширина, высота — доли, начало сверху слева.
+        let рамка: [Double]
+    }
+
+    /// Предел строки item_cutout (байты data URL): вместе с фото (до ~1 МБ в base64) тело start остаётся меньше 4 МБ.
+    private static let пределВырезки = 1_400_000
+
     /// Без кук и без кэша на диске: результат — фото человека, ему нечего делать в URLCache.
     private static let сессия = URLSession(configuration: .ephemeral)
+
+    /**
+     Фото вещи из объявления → item_cutout: та же вырезка, что у ИИ-студии подачи (ВырезкаПредмета, поле 3 %), PNG с
+     прозрачностью. Не больше пределВырезки: крупнее — ужимается до трёх раз по 0,75. nil — рубильник выключен, на фото
+     лицо (вещь на человеке: вырезался бы человек, а не вещь), предмет не отделился, задачу отменили. Не на главной
+     нити — её зовут из Task.detached.
+     */
+    static func вырезка(_ фото: UIImage) -> Вырезка? {
+        guard Config.вырезкаВещиИИ, let кадр = ВырезкаЖивойПримерки.кадр(фото), !Task.isCancelled,
+              !ВырезкаЖивойПримерки.естьЛицо(кадр), !Task.isCancelled,
+              let вырезанное = ВырезкаПредмета.вырезатьСРамкой(кадр, поле: 0.03) else { return nil }
+        let ш = вырезанное.размер.width
+        let в = вырезанное.размер.height
+        guard ш > 0, в > 0 else { return nil }
+        func доля(_ значение: CGFloat, _ из: CGFloat) -> Double { (Double(значение / из) * 10_000).rounded() / 10_000 }
+        let р = вырезанное.рамка
+        let рамка = [доля(р.minX, ш), доля(р.minY, в), доля(р.width, ш), доля(р.height, в)]
+        var картинка = вырезанное.картинка
+        for _ in 0..<4 {
+            guard !Task.isCancelled, let png = UIImage(cgImage: картинка).pngData() else { return nil }
+            let адрес = "data:image/png;base64," + png.base64EncodedString()
+            if адрес.utf8.count <= пределВырезки { return Вырезка(адрес: адрес, рамка: рамка) }
+            guard let меньше = ужать(картинка, доля: 0.75) else { return nil }
+            картинка = меньше
+        }
+        return nil
+    }
+
+    /// Картинка с прозрачностью, меньше в `доля` раз по каждой стороне.
+    private static func ужать(_ картинка: CGImage, доля: CGFloat) -> CGImage? {
+        let w = max(1, Int((CGFloat(картинка.width) * доля).rounded()))
+        let h = max(1, Int((CGFloat(картинка.height) * доля).rounded()))
+        guard let пространство = CGColorSpace(name: CGColorSpace.sRGB),
+              let к = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: пространство,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        к.interpolationQuality = .high
+        к.draw(картинка, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return к.makeImage()
+    }
 
     /// Снимок или файл галереи → длинная сторона ≤ 1280, белая подложка, JPEG 0,82. Рисуется заново: поворот учтён,
     /// EXIF и место съёмки не уходят. Слишком маленькое или битое — nil. вид — кого искать Vision: человека во весь рост

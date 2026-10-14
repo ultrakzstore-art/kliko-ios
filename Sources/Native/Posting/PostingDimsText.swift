@@ -1,0 +1,99 @@
+import Foundation
+
+/// Тексты блока «Габариты, см» в подаче (PostingDims*.swift) на языке телефона (kk/ru/en/ar) — тем же способом, что
+/// тексты подачи (ПодачаText): свой словарь, ключи dm_*, чтобы не пересекаться с другими направлениями.
+enum ГабаритыПодачиText {
+    static func т(_ ключ: String) -> String {
+        let словарь = тексты[язык] ?? тексты["ru"]!
+        return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
+    }
+
+    static var язык: String { String((Locale.preferredLanguages.first ?? "ru").prefix(2)) }
+
+    private static let тексты: [String: [String: String]] = [
+        "ru": [
+            "dm_title": "Габариты, см",
+            "dm_sub": "Нужны для «Поместится ли?»: покупатель поставит вещь в свою комнату в AR и сразу увидит, встанет ли она",
+            "dm_sizes": "Ширина × высота × глубина",
+            "dm_w": "Ширина", "dm_h": "Высота", "dm_d": "Глубина",
+            "dm_w_s": "Ш", "dm_h_s": "В", "dm_d_s": "Г",
+            "dm_cm": "см", "dm_in_cm": "в сантиметрах",
+            "dm_where": "Где взять: в инструкции или на наклейке (сзади или внутри двери). Нет — измерьте рулеткой по самым выступающим точкам, с ручками и ножками.",
+            "dm_carpet": "У ковра ширину и длину впишите в «Ширину» и «Глубину», высота — толщина (обычно 1 см).",
+            "dm_screen": "Телевизор и монитор с подставкой — мерьте вместе с ней, если продаёте с ней.",
+            "dm_need": "Укажите габариты: ширину, высоту и глубину в сантиметрах — без них объявление не опубликовать",
+            "dm_need_one": "Не хватает: %@",
+            "dm_bad": "Каждый размер — целое число от 1 до 1000 см",
+            "dm_big": "Слишком много для этого раздела (больше %@ см). Похоже на миллиметры — переведите в сантиметры",
+            "dm_small": "Маловато для этого раздела — проверьте, что это сантиметры: 1 м = 100 см",
+            "dm_mm_fix": "Это миллиметры — перевести в см",
+            "dm_mm_done": "Перевели в сантиметры — проверьте",
+            "dm_ai": "Размеры предложил Kliko AI — сверьте с инструкцией или рулеткой",
+            "dm_found": "Нашли размеры в объявлении — проверьте",
+            "dm_measure": "Измерить в AR"
+        ],
+        "kk": [
+            "dm_title": "Габариттер, см",
+            "dm_sub": "«Сыя ма?» үшін керек: сатып алушы затты AR арқылы өз бөлмесіне қойып, сыятынын бірден көреді",
+            "dm_sizes": "Ені × биіктігі × тереңдігі",
+            "dm_w": "Ені", "dm_h": "Биіктігі", "dm_d": "Тереңдігі",
+            "dm_w_s": "Е", "dm_h_s": "Б", "dm_d_s": "Т",
+            "dm_cm": "см", "dm_in_cm": "сантиметрмен",
+            "dm_where": "Қайдан алуға болады: нұсқаулықта немесе жапсырмада (артында не есік ішінде). Болмаса — рулеткамен ең шығыңқы нүктелер бойынша өлшеңіз, тұтқалары мен аяқтарымен бірге.",
+            "dm_carpet": "Кілемнің ені мен ұзындығын «Ені» мен «Тереңдігі» өрістеріне жазыңыз, биіктігі — қалыңдығы (әдетте 1 см).",
+            "dm_screen": "Теледидар мен монитор тұғырымен сатылса — тұғырымен бірге өлшеңіз.",
+            "dm_need": "Габариттерді көрсетіңіз: енін, биіктігін және тереңдігін сантиметрмен — оларсыз хабарландыруды жариялау мүмкін емес",
+            "dm_need_one": "Жетіспейді: %@",
+            "dm_bad": "Әр өлшем — 1-ден 1000 см-ге дейінгі бүтін сан",
+            "dm_big": "Бұл бөлім үшін тым көп (%@ см-ден артық). Миллиметрге ұқсайды — сантиметрге аударыңыз",
+            "dm_small": "Бұл бөлім үшін аздау — сантиметр екенін тексеріңіз: 1 м = 100 см",
+            "dm_mm_fix": "Бұл миллиметр — см-ге аудару",
+            "dm_mm_done": "Сантиметрге аударылды — тексеріңіз",
+            "dm_ai": "Өлшемдерді Kliko AI ұсынды — нұсқаулықпен немесе рулеткамен салыстырыңыз",
+            "dm_found": "Хабарландырудан өлшемдер табылды — тексеріңіз",
+            "dm_measure": "AR-мен өлшеу"
+        ],
+        "en": [
+            "dm_title": "Dimensions, cm",
+            "dm_sub": "Needed for “Will it fit?”: buyers place the item in their room in AR and see right away whether it fits",
+            "dm_sizes": "Width × height × depth",
+            "dm_w": "Width", "dm_h": "Height", "dm_d": "Depth",
+            "dm_w_s": "W", "dm_h_s": "H", "dm_d_s": "D",
+            "dm_cm": "cm", "dm_in_cm": "in centimeters",
+            "dm_where": "Where to find them: in the manual or on the label (on the back or inside the door). No label? Measure with a tape at the outermost points, including handles and legs.",
+            "dm_carpet": "For a rug, enter width and length as “Width” and “Depth”; height is the thickness (usually 1 cm).",
+            "dm_screen": "Selling a TV or monitor with its stand? Measure it with the stand.",
+            "dm_need": "Add the dimensions: width, height and depth in centimeters — the listing can't be published without them",
+            "dm_need_one": "Missing: %@",
+            "dm_bad": "Each dimension must be a whole number from 1 to 1000 cm",
+            "dm_big": "Too large for this category (over %@ cm). Looks like millimeters — convert to centimeters",
+            "dm_small": "Rather small for this category — make sure these are centimeters: 1 m = 100 cm",
+            "dm_mm_fix": "These are millimeters — convert to cm",
+            "dm_mm_done": "Converted to centimeters — please check",
+            "dm_ai": "Kliko AI suggested these dimensions — check them against the manual or a tape measure",
+            "dm_found": "We found dimensions in the listing — please check",
+            "dm_measure": "Measure in AR"
+        ],
+        "ar": [
+            "dm_title": "الأبعاد، سم",
+            "dm_sub": "مطلوبة لميزة «هل ستتسع؟»: يضع المشتري الغرض في غرفته بالواقع المعزز ويرى فورًا إن كان يتسع",
+            "dm_sizes": "العرض × الارتفاع × العمق",
+            "dm_w": "العرض", "dm_h": "الارتفاع", "dm_d": "العمق",
+            "dm_w_s": "عرض", "dm_h_s": "ارتفاع", "dm_d_s": "عمق",
+            "dm_cm": "سم", "dm_in_cm": "بالسنتيمتر",
+            "dm_where": "من أين تأخذها: من دليل الاستخدام أو من الملصق (في الخلف أو داخل الباب). لا يوجد؟ قِس بشريط القياس عند أبرز النقاط، مع المقابض والأرجل.",
+            "dm_carpet": "للسجادة: أدخل العرض والطول في «العرض» و«العمق»، والارتفاع هو السماكة (عادةً 1 سم).",
+            "dm_screen": "تبيع التلفاز أو الشاشة مع الحامل؟ قِسها مع الحامل.",
+            "dm_need": "أدخل الأبعاد: العرض والارتفاع والعمق بالسنتيمتر — لا يمكن نشر الإعلان بدونها",
+            "dm_need_one": "ناقص: %@",
+            "dm_bad": "كل بُعد عدد صحيح من 1 إلى 1000 سم",
+            "dm_big": "كبير جدًا لهذا القسم (أكثر من %@ سم). يبدو أنها بالمليمتر — حوّلها إلى السنتيمتر",
+            "dm_small": "صغير نوعًا ما لهذا القسم — تأكد أنها بالسنتيمتر: 1 م = 100 سم",
+            "dm_mm_fix": "هذه بالمليمتر — حوّل إلى سم",
+            "dm_mm_done": "تم التحويل إلى السنتيمتر — تحقّق منها",
+            "dm_ai": "اقترح Kliko AI هذه الأبعاد — قارنها بالدليل أو بشريط القياس",
+            "dm_found": "وجدنا أبعادًا في الإعلان — تحقّق منها",
+            "dm_measure": "القياس بالواقع المعزز"
+        ]
+    ]
+}

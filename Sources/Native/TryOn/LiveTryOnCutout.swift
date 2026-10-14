@@ -1,22 +1,27 @@
 import UIKit
 import Vision
 import CoreImage
-import CoreVideo
 import Photos
 
 /**
- ЖИВАЯ ПРИМЕРКА — ВЕЩЬ С ФОТО ОБЪЯВЛЕНИЯ И СНИМОК (владелец 13.10.2026: «нужнее охват всего»).
+ ЖИВАЯ ПРИМЕРКА — ВЕЩЬ С ФОТО ОБЪЯВЛЕНИЯ И СНИМОК (владелец 13.10.2026: «нужнее охват всего»; 14.10.2026: «через студию
+ для примерочной должен обрезаться»).
 
- Вырезка — один раз на фото, не на главной нити (Task.detached), результат — PNG с прозрачностью:
-   1. фото поворачивается прямо и ужимается до 1024 px;
+ Вырезка — один раз на фото, не на главной нити (Task.detached), результат — картинка с прозрачностью:
+   1. фото поворачивается прямо и ужимается до 1024 px — кадр(_:); его же показывает шаг «Вещь» и рамка «Обрезать
+      вручную» (LiveTryOnItem.swift);
    2. на фото есть лицо (вещь надета на человека или манекен) — честно «нужна фотография самой вещи»: иначе на лицо
       легло бы чужое лицо;
-   3. VNGenerateForegroundInstanceMaskRequest (iOS 17) — предмет переднего плана; у серёг — два самых крупных
-      предмета (левая и правая), у остального — все заметные предметы вместе;
+   3. вырезка ИИ-студии подачи — ВырезкаПредмета (PhotoStudioEngine.swift): Vision, главный предмет и всё рядом с ним,
+      без мелочи и водяного знака Kliko; предмет почти во весь кадр — не вышло;
    4. Vision не справился (симулятор, тонкая оправа на белом) — запасной путь: однотонный фон по краям фото заливкой от
       краёв (белый каталог, прозрачный PNG); внутренние «дырки» цвета фона (белый циферблат) остаются;
-   5. ничего не вышло — «Не получилось отделить вещь от фона на этом фото», выбор другого фото.
- У серёг одна вырезка на двоих: широкая — режется пополам по самому пустому столбцу, иначе вторая — зеркальная.
+   5. ничего не вышло — «Не получилось отделить вещь от фона на этом фото»: другое фото или «Обрезать вручную».
+ Ручная рамка: то же самое, но только внутри рамки и без отказа из-за лица; в рамке лицо (Vision вырезал бы человека)
+ или не вышло ни то, ни другое — вещь = сама рамка, как её выбрал человек.
+ У серёг со всего фото — два экземпляра Vision по отдельности (ВырезкаПредмета.вырезатьПару: вторая — настоящая, как
+ бы они ни лежали); не вышло (одна вырезка на двоих, ручная рамка) — широкая и с пустым промежутком посередине режется
+ пополам по самому пустому столбцу, иначе вторая — зеркальная.
 
  Снимок — кадр камеры (тот, что был на экране: заполнение и края — как у превью) и вещь поверх тем же расчётом, что
  у слоя вещи. Сохраняется в Фото только на добавление (NSPhotoLibraryAddUsageDescription).
@@ -24,8 +29,9 @@ import Photos
 enum ВырезкаЖивойПримерки {
     /// Картинки неизменяемы — переходят из фоновой задачи на главную нить как есть.
     enum Итог: @unchecked Sendable {
-        /// Вырезки с прозрачностью: одна, у серёг — две (левая и правая).
-        case готово([UIImage])
+        /// Вырезки с прозрачностью: одна, у серёг — две (левая и правая). рамка — где вещь на фото (доли кадра, начало
+        /// сверху слева): с неё начинается рамка «Обрезать вручную»; nil — не знаем.
+        case готово([UIImage], рамка: CGRect?)
         /// Предмет не отделился от фона.
         case фон
         /// На фото — человек.
@@ -33,21 +39,45 @@ enum ВырезкаЖивойПримерки {
     }
 
     private static let длиннаяСторона: CGFloat = 1024
-    private static let контекст = CIContext(options: [.cacheIntermediates: false])
 
-    /// пара — серьги (две вырезки); стоя — часы и браслет: лежащий поперёк кадра ремешок или цепочку ставим стоя
-    /// (на экране высота картинки идёт поперёк руки).
-    /// Задачу отменили (другое фото, экран закрыт) — между шагами выходим: итог всё равно выбросят, а Vision и заливка
-    /// отбирали бы ресурс у живого анализа лица и руки.
-    static func вырезать(_ исходная: UIImage, пара: Bool, стоя: Bool) -> Итог {
-        guard let кадр = прямой(исходная), !Task.isCancelled else { return .фон }
-        if естьЛицо(кадр) { return .человек }
-        if Task.isCancelled { return .фон }
-        var куски = черезVision(кадр, пара: пара) ?? []
-        if Task.isCancelled { return .фон }
-        if куски.isEmpty, let однотонный = черезФон(кадр) { куски = [однотонный] }
-        guard !куски.isEmpty, !Task.isCancelled else { return .фон }
-        if пара && куски.count == 1 { куски = разделитьПару(куски[0]) }
+    /**
+     Вырезка вещи. рамка nil — со всего фото (с отказом, если на фото человек); иначе — внутри ручной рамки (доли кадра,
+     начало сверху слева), и тогда вещь есть всегда. пара — серьги (две вырезки); стоя — часы и браслет: лежащий поперёк
+     кадра ремешок или цепочку ставим стоя (на экране высота картинки идёт поперёк руки).
+     Задачу отменили (другое фото, экран закрыт) — между шагами выходим: итог всё равно выбросят.
+     */
+    static func вырезать(кадр: CGImage, пара: Bool, стоя: Bool, рамка: CGRect? = nil) -> Итог {
+        guard !Task.isCancelled else { return .фон }
+        var куски: [CGImage]
+        var где: CGRect?
+        if let рамка {
+            guard let часть = обрезать(кадр, рамка) else { return .фон }
+            куски = [внутриРамки(часть)]
+            где = рамка
+        } else {
+            if естьЛицо(кадр) { return .человек }
+            if Task.isCancelled { return .фон }
+            /* Серьги: два экземпляра по отдельности — вторая настоящая, как бы они ни лежали на фото. */
+            if пара, let две = ВырезкаПредмета.вырезатьПару(кадр) {
+                guard !Task.isCancelled else { return .фон }
+                let готовые = две.куски.compactMap(вPNG)
+                guard готовые.count == 2 else { return .фон }
+                return .готово(готовые, рамка: доли(две.рамка, кадр))
+            }
+            if Task.isCancelled { return .фон }
+            /* Впритык, без поля: ширина картинки — ширина вещи на лице или руке (посадка, LiveTryOnFit.swift). */
+            if let вырезанное = ВырезкаПредмета.вырезатьСРамкой(кадр, поле: 0) {
+                куски = [вырезанное.картинка]
+                где = доли(вырезанное.рамка, кадр)
+            } else if !Task.isCancelled, let однотонный = черезФон(кадр) {
+                куски = [однотонный.картинка]
+                где = однотонный.рамка
+            } else {
+                return .фон
+            }
+        }
+        guard !Task.isCancelled else { return .фон }
+        if пара { куски = разделитьПару(куски[0]) }
         if стоя {
             куски = куски.map { (кусок: CGImage) -> CGImage in
                 guard Double(кусок.width) > Double(кусок.height) * 1.3, let стоячий = Self.наБок(кусок) else { return кусок }
@@ -56,13 +86,14 @@ enum ВырезкаЖивойПримерки {
         }
         let готовые = куски.compactMap(вPNG)
         guard готовые.count == куски.count, !готовые.isEmpty else { return .фон }
-        return .готово(готовые)
+        return .готово(готовые, рамка: где)
     }
 
     // MARK: Подготовка
 
-    /// Прямо (без метки поворота) и не больше 1024 px по длинной стороне, 8 бит sRGB.
-    private static func прямой(_ картинка: UIImage) -> CGImage? {
+    /// Фото вещи прямо (без метки поворота), не больше 1024 px по длинной стороне, 8 бит sRGB. nil — меньше 32 px.
+    /// Его зовёт и ИИ-примерка (item_cutout, TryOnAPI.swift).
+    static func кадр(_ картинка: UIImage) -> CGImage? {
         let w = картинка.size.width * картинка.scale
         let h = картинка.size.height * картинка.scale
         guard w >= 32, h >= 32 else { return nil }
@@ -78,8 +109,9 @@ enum ВырезкаЖивойПримерки {
         }.cgImage
     }
 
-    /// Заметное лицо на фото вещи (выше 10 % высоты кадра).
-    private static func естьЛицо(_ кадр: CGImage) -> Bool {
+    /// Заметное лицо на фото вещи: выше доли `порог` высоты кадра (вещь надета на человека или манекен). Его зовёт и
+    /// ИИ-примерка: с таким фото item_cutout не уходит.
+    static func естьЛицо(_ кадр: CGImage, порог: CGFloat = 0.1) -> Bool {
         let запрос = VNDetectFaceRectanglesRequest()
         let обработчик = VNImageRequestHandler(cgImage: кадр, orientation: .up, options: [:])
         do {
@@ -87,79 +119,37 @@ enum ВырезкаЖивойПримерки {
         } catch {
             return false
         }
-        return (запрос.results ?? []).contains { $0.boundingBox.height > 0.1 && $0.confidence > 0.6 }
+        return (запрос.results ?? []).contains { $0.boundingBox.height > порог && $0.confidence > 0.6 }
     }
 
-    // MARK: Vision
-
-    private struct Предмет {
-        var площадь = 0
-        var суммаX = 0
+    /// Пиксели прямого кадра (начало сверху слева) → доли кадра.
+    private static func доли(_ р: CGRect, _ кадр: CGImage) -> CGRect {
+        let ш = CGFloat(max(1, кадр.width))
+        let в = CGFloat(max(1, кадр.height))
+        return CGRect(x: р.minX / ш, y: р.minY / в, width: р.width / ш, height: р.height / в)
     }
 
-    private static func черезVision(_ кадр: CGImage, пара: Bool) -> [CGImage]? {
-        let запрос = VNGenerateForegroundInstanceMaskRequest()
-        let обработчик = VNImageRequestHandler(cgImage: кадр, orientation: .up, options: [:])
-        do {
-            try обработчик.perform([запрос])
-        } catch {
-            return nil
-        }
-        guard let наблюдение = запрос.results?.first, !наблюдение.allInstances.isEmpty else { return nil }
-        let маска = наблюдение.instanceMask
-        let предметы = посчитать(маска)
-        let всего = max(1, CVPixelBufferGetWidth(маска) * CVPixelBufferGetHeight(маска))
-        let свои = предметы.filter { наблюдение.allInstances.contains($0.key) }
-        guard let крупнейший = свои.values.map(\.площадь).max(), крупнейший > 0 else { return nil }
-        /* Весь кадр — «предмет»: отделить не вышло. */
-        if Double(свои.values.map(\.площадь).reduce(0, +)) / Double(всего) > 0.9 { return nil }
-        let заметные = свои.filter { Double($0.value.площадь) >= Double(крупнейший) * 0.03 }
-        if пара {
-            func центр(_ п: Предмет) -> Double { Double(п.суммаX) / Double(max(1, п.площадь)) }
-            let два = Array(заметные.sorted { $0.value.площадь > $1.value.площадь }.prefix(2))
-            if два.count == 2, Double(два[1].value.площадь) >= Double(крупнейший) * 0.25 {
-                let поПорядку = два.sorted { центр($0.value) < центр($1.value) }
-                let куски = поПорядку.compactMap { Self.маскированная(наблюдение, IndexSet(integer: $0.key), обработчик) }
-                if куски.count == 2 { return куски }
-            }
-        }
-        guard let один = маскированная(наблюдение, IndexSet(заметные.keys), обработчик) else { return nil }
-        return [один]
+    // MARK: Ручная рамка
+
+    /// Ручная рамка (доли кадра, начало сверху слева) → кусок кадра; меньше 12 px — nil.
+    private static func обрезать(_ кадр: CGImage, _ рамка: CGRect) -> CGImage? {
+        let ш = CGFloat(кадр.width)
+        let в = CGFloat(кадр.height)
+        let пиксели = CGRect(x: рамка.minX * ш, y: рамка.minY * в, width: рамка.width * ш, height: рамка.height * в)
+            .integral
+            .intersection(CGRect(x: 0, y: 0, width: ш, height: в))
+        guard !пиксели.isNull, пиксели.width >= 12, пиксели.height >= 12 else { return nil }
+        return кадр.cropping(to: пиксели)
     }
 
-    /// Площадь и сумма x каждого предмета по маске (значение пикселя — номер предмета, 0 — фон).
-    private static func посчитать(_ маска: CVPixelBuffer) -> [Int: Предмет] {
-        CVPixelBufferLockBaseAddress(маска, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(маска, .readOnly) }
-        guard let начало = CVPixelBufferGetBaseAddress(маска) else { return [:] }
-        let w = CVPixelBufferGetWidth(маска)
-        let h = CVPixelBufferGetHeight(маска)
-        let строка = CVPixelBufferGetBytesPerRow(маска)
-        let байты = начало.assumingMemoryBound(to: UInt8.self)
-        var итог: [Int: Предмет] = [:]
-        for y in 0..<h {
-            let ряд = байты + y * строка
-            for x in 0..<w {
-                let номер = Int(ряд[x])
-                guard номер > 0 else { continue }
-                var п = итог[номер] ?? Предмет()
-                п.площадь += 1
-                п.суммаX += x
-                итог[номер] = п
-            }
-        }
-        return итог
-    }
-
-    private static func маскированная(_ наблюдение: VNInstanceMaskObservation, _ набор: IndexSet,
-                                      _ обработчик: VNImageRequestHandler) -> CGImage? {
-        guard !набор.isEmpty,
-              let буфер = try? наблюдение.generateMaskedImage(ofInstances: набор, from: обработчик,
-                                                              croppedToInstancesExtent: true) else { return nil }
-        let изображение = CIImage(cvPixelBuffer: буфер)
-        guard изображение.extent.width >= 12, изображение.extent.height >= 12 else { return nil }
-        let пространство = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        return контекст.createCGImage(изображение, from: изображение.extent, format: .RGBA8, colorSpace: пространство)
+    /// Вещь внутри ручной рамки: лица в рамке нет — вырезка студии, потом однотонный фон; иначе (или не вышло) — сама
+    /// рамка, как её выбрал человек. Без предела «почти весь кадр»: рамку и просят ставить плотно по вещи, и предмет в
+    /// ней законно занимает больше 90 % (с пределом вышел бы прямоугольник вместе с фоном).
+    private static func внутриРамки(_ часть: CGImage) -> CGImage {
+        guard !естьЛицо(часть, порог: 0.15), !Task.isCancelled else { return часть }
+        if let вырезанный = ВырезкаПредмета.вырезать(часть, поле: 0, предел: 1) { return вырезанный }
+        if !Task.isCancelled, let однотонный = черезФон(часть) { return однотонный.картинка }
+        return часть
     }
 
     // MARK: Однотонный фон
@@ -200,9 +190,9 @@ enum ВырезкаЖивойПримерки {
     /**
      Фон по краям однотонный (75 % краёв — одного цвета) или прозрачный — заливаем его от краёв; что не залилось —
      предмет. У границы предмета, где цвет близок к фону, — полупрозрачно (мягкий край). Предмет меньше 1 % или больше
-     96 % кадра — не вышло.
+     96 % кадра — не вышло. рамка — где предмет на кадре (доли, начало сверху слева).
      */
-    private static func черезФон(_ кадр: CGImage) -> CGImage? {
+    private static func черезФон(_ кадр: CGImage) -> (картинка: CGImage, рамка: CGRect)? {
         guard var р = растр(кадр, предел: 800), р.w >= 32, р.h >= 32 else { return nil }
         let w = р.w
         let h = р.h
@@ -279,7 +269,11 @@ enum ВырезкаЖивойПримерки {
         }
         let доля = Double(предмет) / Double(w * h)
         guard доля > 0.01, доля < 0.96, максX > минX, максY > минY, let целиком = картинка(р) else { return nil }
-        return целиком.cropping(to: CGRect(x: минX, y: минY, width: максX - минX + 1, height: максY - минY + 1))
+        let обрезка = CGRect(x: минX, y: минY, width: максX - минX + 1, height: максY - минY + 1)
+        guard let вырезанный = целиком.cropping(to: обрезка) else { return nil }
+        let рамка = CGRect(x: обрезка.minX / CGFloat(w), y: обрезка.minY / CGFloat(h),
+                           width: обрезка.width / CGFloat(w), height: обрезка.height / CGFloat(h))
+        return (вырезанный, рамка)
     }
 
     private static func залить(_ i: Int, _ метки: inout [UInt8], _ стопка: inout [Int], _ фоновый: (Int) -> Bool) {
@@ -311,6 +305,8 @@ enum ВырезкаЖивойПримерки {
         return [кусок, зеркальная]
     }
 
+    /// Пополам — только если посередине есть промежуток: самый пустой столбец средней трети прозрачнее четверти самого
+    /// плотного (у ручной рамки без вырезки, сплошь непрозрачной, промежутка нет — тогда зеркало).
     private static func пополам(_ кусок: CGImage) -> [CGImage]? {
         guard let р = растр(кусок, предел: max(кусок.width, кусок.height)) else { return nil }
         let от = р.w / 3
@@ -318,14 +314,17 @@ enum ВырезкаЖивойПримерки {
         guard до > от else { return nil }
         var лучший = от
         var меньше = Int.max
-        for x in от..<до {
+        var больше = 0
+        for x in 0..<р.w {
             var сумма = 0
             for y in 0..<р.h { сумма += Int(р.байты[(y * р.w + x) * 4 + 3]) }
-            if сумма < меньше {
+            больше = max(больше, сумма)
+            if x >= от && x < до && сумма < меньше {
                 меньше = сумма
                 лучший = x
             }
         }
+        guard больше > 0, меньше * 4 <= больше else { return nil }
         guard let левая = кусок.cropping(to: CGRect(x: 0, y: 0, width: лучший, height: кусок.height)),
               let правая = кусок.cropping(to: CGRect(x: лучший, y: 0, width: кусок.width - лучший, height: кусок.height)),
               let левая2 = обрезатьПустое(левая), let правая2 = обрезатьПустое(правая) else { return nil }

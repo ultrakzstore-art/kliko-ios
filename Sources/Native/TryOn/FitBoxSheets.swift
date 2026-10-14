@@ -175,6 +175,8 @@ struct ЛистРазмеровГабаритов: View {
 
     private var текстИсточника: String {
         switch найдено.источник {
+        case .подача:
+            return найдено.полные != nil ? т("fb_src_form") : т("fb_src_partial")
         case .характеристики:
             return найдено.полные != nil ? т("fb_src_specs") : т("fb_src_partial")
         case .описание:
@@ -188,6 +190,7 @@ struct ЛистРазмеровГабаритов: View {
 
     private var значокИсточника: String {
         switch найдено.источник {
+        case .подача: return "checkmark.seal.fill"
         case .характеристики: return "checkmark.seal"
         case .описание: return "text.quote"
         case .диагональ: return "tv"
@@ -306,7 +309,8 @@ struct ЛистСнимкаГабаритов: View {
                         .resizable()
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-                        .accessibilityLabel(габариты.map { ГабаритыText.т("fb_shot_img", $0.озвучка) }
+                        .accessibilityLabel(снимок.озвучка
+                                            ?? габариты.map { ГабаритыText.т("fb_shot_img", $0.озвучка) }
                                             ?? т("fb_shot_title"))
                     кнопки
                     if let итог {

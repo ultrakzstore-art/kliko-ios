@@ -1,6 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import CoreVideo
+import ImageIO
 import UIKit
 import Vision
 
@@ -19,6 +20,10 @@ import Vision
      у любого фото подачи); JPEG, миниатюру и знак делает ОбработкаФото.подготовить — тем же путём.
  Всё здесь — чистые функции без главного потока: их зовут из Task.detached, на входе и выходе — CGImage (через
  ящики @unchecked Sendable: CGImage неизменяем).
+
+ Поиск предмета и вырезка (Vision, отбор экземпляров, мягкий край) — общие со всей примерочной: ВырезкаПредмета ниже
+ (владелец 14.10.2026: «через студию для примерочной должен обрезаться»). Студия берёт из неё маску на весь кадр, живая
+ и ИИ-примерка — вырезанную вещь (LiveTryOnCutout.swift, TryOnAPI.swift).
  */
 extension Config {
     /// ИИ-студия фото в подаче: «Студия» в меню плитки фото и плашка «Сделать как в каталоге» над фото техники. Всё на
@@ -142,12 +147,12 @@ enum ДвижокСтудииФото {
         let холст = CGRect(x: 0, y: 0, width: CGFloat(кадр.width), height: CGFloat(кадр.height))
         guard let светлый = отрисовать(подправить(вход, холст), холст) else { return nil }
         if Task.isCancelled { return nil }
-        guard let найдено = найтиПредмет(кадр) else {
+        guard let найдено = ВырезкаПредмета.найти(кадр) else {
             return АнализСтудииФото(исходник: кадр, светлый: светлый, предмет: nil, предметСветлый: nil, рамка: .zero)
         }
         if Task.isCancelled { return nil }
-        let предмет = вырезать(вход, найдено.маска, холст)
-        let предметСветлый = вырезать(CIImage(cgImage: светлый), найдено.маска, холст)
+        let предмет = ВырезкаПредмета.наложить(вход, маска: найдено.маска, холст: холст)
+        let предметСветлый = ВырезкаПредмета.наложить(CIImage(cgImage: светлый), маска: найдено.маска, холст: холст)
         return АнализСтудииФото(исходник: кадр, светлый: светлый, предмет: предмет, предметСветлый: предметСветлый,
                                 рамка: найдено.рамка)
     }
@@ -179,10 +184,232 @@ enum ДвижокСтудииФото {
         return (резкость.outputImage ?? итог).cropped(to: холст)
     }
 
-    // MARK: - Предмет (Vision)
+    // MARK: - Сборка
 
-    /// Маска предмета на весь кадр и его рамка (снизу слева, в пикселях кадра). nil — предмета нет.
-    private static func найтиПредмет(_ кадр: CGImage) -> (маска: CIImage, рамка: CGRect)? {
+    /// Вырезанный предмет, перенесённый с исходного места на место каталога.
+    private static func предметНаМесте(_ а: АнализСтудииФото, _ н: НастройкиСтудииФото) -> CIImage? {
+        guard let вырезанный = а.предметДля(н) else { return nil }
+        let к = а.масштаб
+        let место = а.место
+        let рамка = а.рамка
+        let перенос = CGAffineTransform(a: к, b: 0, c: 0, d: к, tx: место.minX - рамка.minX * к,
+                                        ty: место.minY - рамка.minY * к)
+        return CIImage(cgImage: вырезанный).transformed(by: перенос).cropped(to: а.холст)
+    }
+
+    private static func фонСТенью(_ а: АнализСтудииФото, _ н: НастройкиСтудииФото) -> CIImage {
+        let фон = фонКартинка(н.фон, а.холст)
+        guard н.тень, let предмет = предметНаМесте(а, н) else { return фон }
+        return тень(предмет, место: а.место, холст: а.холст, тёмный: н.фон == .тёмный).composited(over: фон)
+            .cropped(to: а.холст)
+    }
+
+    /**
+     Мягкая тень: силуэт предмета, чёрный, сдвинут чуть вниз и сильно размыт, плюс пятно касания — сплющенный круг под
+     низом предмета. На тёмном фоне тень гуще — иначе её не видно.
+     */
+    private static func тень(_ предмет: CIImage, место: CGRect, холст: CGRect, тёмный: Bool) -> CIImage {
+        let м = min(холст.width, холст.height)
+        let сила: CGFloat = тёмный ? 0.5 : 0.24
+        let силуэт = предмет.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: сила),
+            "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 0)
+        ])
+        let мягкая = силуэт
+            .transformed(by: CGAffineTransform(translationX: 0, y: -м * 0.018))
+            .applyingGaussianBlur(sigma: Double(м * 0.024))
+        let пятно = CIFilter.radialGradient()
+        пятно.center = .zero
+        пятно.radius0 = 0
+        пятно.radius1 = Float(max(1, место.width * 0.5))
+        пятно.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: тёмный ? 0.55 : 0.3)
+        пятно.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 0)
+        guard let круг = пятно.outputImage else { return мягкая.cropped(to: холст) }
+        let сплющить = CGAffineTransform(scaleX: 1, y: 0.085)
+            .concatenating(CGAffineTransform(translationX: место.midX, y: место.minY + м * 0.006))
+        return круг.transformed(by: сплющить).cropped(to: холст).composited(over: мягкая).cropped(to: холст)
+    }
+
+    private static func цвет(_ код: UInt32) -> CIColor {
+        CIColor(red: CGFloat((код >> 16) & 0xFF) / 255, green: CGFloat((код >> 8) & 0xFF) / 255,
+                blue: CGFloat(код & 0xFF) / 255)
+    }
+
+    /// Студийный фон: ровный, сверху вниз или круглым пятном света.
+    private static func фонКартинка(_ вид: ФонСтудииФото, _ холст: CGRect) -> CIImage {
+        let (первый, второй) = вид.цвета
+        if первый == второй {
+            return CIImage(color: цвет(первый)).cropped(to: холст)
+        }
+        if вид.круглый {
+            let г = CIFilter.radialGradient()
+            г.center = CGPoint(x: холст.midX, y: холст.minY + холст.height * 0.56)
+            г.radius0 = Float(min(холст.width, холст.height) * 0.08)
+            г.radius1 = Float(max(холст.width, холст.height) * 0.82)
+            г.color0 = цвет(первый)
+            г.color1 = цвет(второй)
+            return (г.outputImage ?? CIImage(color: цвет(второй))).cropped(to: холст)
+        }
+        let г = CIFilter.linearGradient()
+        г.point0 = CGPoint(x: холст.midX, y: холст.maxY)
+        г.point1 = CGPoint(x: холст.midX, y: холст.minY)
+        г.color0 = цвет(первый)
+        г.color1 = цвет(второй)
+        return (г.outputImage ?? CIImage(color: цвет(первый))).cropped(to: холст)
+    }
+
+    /// Отрисовка в 8-битный sRGB с прозрачностью (у предмета вокруг пусто).
+    private static func отрисовать(_ картинка: CIImage, _ холст: CGRect) -> CGImage? {
+        контекст.createCGImage(картинка, from: холст, format: .RGBA8, colorSpace: пространство)
+    }
+}
+
+// MARK: - Вырезка предмета (общая со всей примерочной)
+
+/**
+ ВЫРЕЗКА ПРЕДМЕТА — ОДНА НА СТУДИЮ И ПРИМЕРОЧНУЮ (владелец 14.10.2026: «через студию для примерочной должен обрезаться»).
+
+ Vision VNGenerateForegroundInstanceMaskRequest (iOS 17.0) и отбор экземпляров студии: главный (самый крупный) и всё
+ рядом с ним; мелочь (меньше 0,2 % кадра) и дальние небольшие пятна (водяной знак Kliko у края, соринка) — не предмет;
+ предмет меньше 0,4 % кадра — «не нашли». Край маски чуть смягчён.
+
+ Кто зовёт:
+   · студия подачи — маска на весь кадр (найти) и предмет на своём месте (наложить): ДвижокСтудииФото.разобрать;
+   · живая примерка — вещь с фото объявления, обрезанная по ней (вырезать): ВырезкаЖивойПримерки, LiveTryOnCutout.swift;
+   · ИИ-примерка — та же вещь для поля item_cutout и её место на фото (вырезатьСРамкой): ФотоПримерочной.вырезка,
+     TryOnAPI.swift.
+ Неизолированные чистые функции: их зовут из Task.detached; отмену задачи проверяют между шагами (вышли — nil).
+ */
+enum ВырезкаПредмета {
+    /// Найденный предмет: маска на весь кадр и его рамка — пиксели кадра, начало снизу слева (как у CoreImage); доля —
+    /// сколько кадра предмет занимает (0…1).
+    struct Найдено: @unchecked Sendable {
+        let маска: CIImage
+        let рамка: CGRect
+        let доля: Double
+    }
+
+    /// Вырезанный предмет: RGBA с прозрачностью, обрезан по предмету (с полем). рамка — где эта картинка лежит в прямом
+    /// кадре (пиксели, начало сверху слева), размер — размер прямого кадра.
+    struct Вырезанное: @unchecked Sendable {
+        let картинка: CGImage
+        let рамка: CGRect
+        let размер: CGSize
+    }
+
+    /// Свой CIContext: потокобезопасен, создаётся один раз.
+    private static let контекст = CIContext(options: [.cacheIntermediates: false])
+    private static let пространство = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+    /// Предмет занимает больше этой доли кадра — это весь кадр (крупный план ткани, сплошной узор): вырезать нечего.
+    /// Только для вырезать(…) со всего фото: студии «весь кадр» не мешает, а в ручной рамке вещь и должна занимать почти
+    /// всё (там предел — 1, LiveTryOnCutout.swift).
+    static let предельнаяДоля = 0.9
+
+    /**
+     Главный вход для примерочной: предмет с фото — RGBA с прозрачностью, обрезанный по предмету. ориентация — метка
+     поворота кадра (снимок с камеры): .up — как есть, иначе кадр сначала поворачивается прямо. поле — запас вокруг
+     предмета в долях его большей стороны (по умолчанию 2 %, 0 — впритык). предел — доля кадра, больше которой предмет
+     считается «всем кадром» (по умолчанию предельнаяДоля). nil — предмета нет, он почти весь кадр или задачу отменили.
+     */
+    static func вырезать(_ картинка: CGImage, ориентация: CGImagePropertyOrientation = .up, поле: CGFloat = 0.02,
+                         предел: Double = ВырезкаПредмета.предельнаяДоля) -> CGImage? {
+        вырезатьСРамкой(картинка, ориентация: ориентация, поле: поле, предел: предел)?.картинка
+    }
+
+    /// То же, что вырезать(…), и где вырезанное лежит на прямом кадре (для сверки сервером — item_box).
+    static func вырезатьСРамкой(_ картинка: CGImage, ориентация: CGImagePropertyOrientation = .up, поле: CGFloat = 0.02,
+                                предел: Double = ВырезкаПредмета.предельнаяДоля) -> Вырезанное? {
+        guard let кадр = прямой(картинка, ориентация), !Task.isCancelled,
+              let найдено = найти(кадр), найдено.доля <= предел, !Task.isCancelled else { return nil }
+        let ширина = CGFloat(кадр.width)
+        let высота = CGFloat(кадр.height)
+        let холст = CGRect(x: 0, y: 0, width: ширина, height: высота)
+        let запас = max(найдено.рамка.width, найдено.рамка.height) * max(0, поле)
+        let обрезка = найдено.рамка.insetBy(dx: -запас, dy: -запас).intersection(холст).integral
+        guard !обрезка.isNull, обрезка.width >= 2, обрезка.height >= 2,
+              let слой = вырезанныйСлой(CIImage(cgImage: кадр), найдено.маска, холст),
+              let готовая = контекст.createCGImage(слой, from: обрезка, format: .RGBA8, colorSpace: пространство)
+        else { return nil }
+        let сверху = CGRect(x: обрезка.minX, y: высота - обрезка.maxY, width: обрезка.width, height: обрезка.height)
+        return Вырезанное(картинка: готовая, рамка: сверху, размер: CGSize(width: ширина, height: высота))
+    }
+
+    /// Предмет на своём месте (края чуть смягчены), вокруг прозрачно; холст — весь кадр. Так его берёт студия.
+    static func наложить(_ кадр: CIImage, маска: CIImage, холст: CGRect) -> CGImage? {
+        guard let слой = вырезанныйСлой(кадр, маска, холст) else { return nil }
+        return контекст.createCGImage(слой, from: холст, format: .RGBA8, colorSpace: пространство)
+    }
+
+    /// Кадр без метки поворота: .up — как есть, иначе — повёрнутый заново (CoreImage), начало — в нуле.
+    private static func прямой(_ картинка: CGImage, _ ориентация: CGImagePropertyOrientation) -> CGImage? {
+        guard ориентация != .up else { return картинка }
+        let повёрнутый = CIImage(cgImage: картинка).oriented(ориентация)
+        let ровный = повёрнутый.transformed(by: CGAffineTransform(translationX: -повёрнутый.extent.minX,
+                                                                  y: -повёрнутый.extent.minY))
+        return контекст.createCGImage(ровный, from: ровный.extent, format: .RGBA8, colorSpace: пространство)
+    }
+
+    /// Кадр по маске (края смягчены), вокруг — прозрачно, на весь холст.
+    private static func вырезанныйСлой(_ кадр: CIImage, _ маска: CIImage, _ холст: CGRect) -> CIImage? {
+        let мягкая = маска.clampedToExtent().applyingGaussianBlur(sigma: 0.7).cropped(to: холст)
+        let смесь = CIFilter.blendWithMask()
+        смесь.inputImage = кадр
+        смесь.backgroundImage = CIImage(color: CIColor.clear).cropped(to: холст)
+        смесь.maskImage = мягкая
+        return смесь.outputImage?.cropped(to: холст)
+    }
+
+    /// Маска предмета на весь кадр, его рамка (снизу слева, в пикселях кадра) и доля кадра. nil — предмета нет.
+    static func найти(_ кадр: CGImage) -> Найдено? {
+        guard let разбор = экземпляры(кадр) else { return nil }
+        let отобранные = отобрать(разбор.наблюдение)
+        guard !отобранные.isEmpty else { return nil }
+        return маска(разбор.наблюдение, отобранные, разбор.обработчик, кадр)
+    }
+
+    /**
+     Пара (серьги): два крупнейших отобранных экземпляра по отдельности — левый и правый (по центру рамки), каждый обрезан
+     впритык по себе: вторая серьга — настоящая, а не зеркальная, как бы они ни лежали (рядом, одна над другой, по
+     диагонали). рамка — общая рамка обоих на прямом кадре (пиксели, начало сверху слева). nil — экземпляров меньше
+     двух, второй меньше четверти первого, вместе — почти весь кадр, задачу отменили: тогда — одна вырезка на двоих.
+     */
+    static func вырезатьПару(_ кадр: CGImage) -> (куски: [CGImage], рамка: CGRect)? {
+        guard let разбор = экземпляры(кадр), !Task.isCancelled else { return nil }
+        let отобранные = отобрать(разбор.наблюдение)
+        guard отобранные.count >= 2 else { return nil }
+        var найденные: [Найдено] = []
+        for номер in отобранные {
+            guard !Task.isCancelled else { return nil }
+            if let н = маска(разбор.наблюдение, IndexSet(integer: номер), разбор.обработчик, кадр) { найденные.append(н) }
+        }
+        let два = Array(найденные.sorted { $0.доля > $1.доля }.prefix(2))
+        guard два.count == 2, два[1].доля >= два[0].доля * 0.25, два[0].доля + два[1].доля <= предельнаяДоля else {
+            return nil
+        }
+        let высота = CGFloat(кадр.height)
+        let холст = CGRect(x: 0, y: 0, width: CGFloat(кадр.width), height: высота)
+        let исходник = CIImage(cgImage: кадр)
+        var куски: [CGImage] = []
+        for н in два.sorted(by: { $0.рамка.midX < $1.рамка.midX }) {
+            guard !Task.isCancelled else { return nil }
+            let обрезка = н.рамка.intersection(холст).integral
+            guard !обрезка.isNull, обрезка.width >= 2, обрезка.height >= 2,
+                  let слой = вырезанныйСлой(исходник, н.маска, холст),
+                  let готовая = контекст.createCGImage(слой, from: обрезка, format: .RGBA8, colorSpace: пространство)
+            else { return nil }
+            куски.append(готовая)
+        }
+        let общая = два[0].рамка.union(два[1].рамка).intersection(холст)
+        return (куски, CGRect(x: общая.minX, y: высота - общая.maxY, width: общая.width, height: общая.height))
+    }
+
+    /// Запрос Vision по кадру: экземпляры переднего плана и обработчик (по нему строятся маски). nil — не вышло.
+    private static func экземпляры(_ кадр: CGImage)
+        -> (наблюдение: VNInstanceMaskObservation, обработчик: VNImageRequestHandler)? {
         let запрос = VNGenerateForegroundInstanceMaskRequest()
         let обработчик = VNImageRequestHandler(cgImage: кадр, orientation: .up, options: [:])
         do {
@@ -191,22 +418,27 @@ enum ДвижокСтудииФото {
             return nil
         }
         guard let наблюдение = запрос.results?.first else { return nil }
-        let отобранные = отобрать(наблюдение)
+        return (наблюдение, обработчик)
+    }
+
+    /// Маска выбранных экземпляров на весь кадр, её рамка (снизу слева) и доля кадра. nil — пусто или почти ничего.
+    private static func маска(_ наблюдение: VNInstanceMaskObservation, _ отобранные: IndexSet,
+                              _ обработчик: VNImageRequestHandler, _ кадр: CGImage) -> Найдено? {
         guard !отобранные.isEmpty,
               let буфер = try? наблюдение.generateScaledMaskForImage(forInstances: отобранные, from: обработчик),
               let границы = границыМаски(буфер), границы.доля >= 0.004 else { return nil }
         let ширина = CGFloat(кадр.width)
         let высота = CGFloat(кадр.height)
-        var маска = CIImage(cvPixelBuffer: буфер)
-        let размер = маска.extent.size
+        var карта = CIImage(cvPixelBuffer: буфер)
+        let размер = карта.extent.size
         if размер.width > 0, размер.height > 0, (размер.width != ширина || размер.height != высота) {
-            маска = маска.transformed(by: CGAffineTransform(scaleX: ширина / размер.width, y: высота / размер.height))
+            карта = карта.transformed(by: CGAffineTransform(scaleX: ширина / размер.width, y: высота / размер.height))
         }
         let кx = ширина / CGFloat(границы.ширина)
         let кy = высота / CGFloat(границы.высота)
         let р = границы.рамка
         let рамка = CGRect(x: р.minX * кx, y: высота - р.maxY * кy, width: р.width * кx, height: р.height * кy)
-        return (маска, рамка)
+        return Найдено(маска: карта, рамка: рамка, доля: границы.доля)
     }
 
     /**
@@ -313,98 +545,5 @@ enum ДвижокСтудииФото {
         let рамка = CGRect(x: минX, y: минY, width: максX - минX + шаг, height: максY - минY + шаг).intersection(весь)
         guard !рамка.isNull, !рамка.isEmpty else { return nil }
         return (рамка, Double(внутри) / Double(max(1, всего)), ширина, высота)
-    }
-
-    /// Предмет по маске (края чуть смягчены), вокруг — прозрачно. Холст — весь кадр: предмет на своём месте.
-    private static func вырезать(_ кадр: CIImage, _ маска: CIImage, _ холст: CGRect) -> CGImage? {
-        let мягкая = маска.clampedToExtent().applyingGaussianBlur(sigma: 0.7).cropped(to: холст)
-        let смесь = CIFilter.blendWithMask()
-        смесь.inputImage = кадр
-        смесь.backgroundImage = CIImage(color: CIColor.clear).cropped(to: холст)
-        смесь.maskImage = мягкая
-        guard let выход = смесь.outputImage else { return nil }
-        return отрисовать(выход.cropped(to: холст), холст)
-    }
-
-    // MARK: - Сборка
-
-    /// Вырезанный предмет, перенесённый с исходного места на место каталога.
-    private static func предметНаМесте(_ а: АнализСтудииФото, _ н: НастройкиСтудииФото) -> CIImage? {
-        guard let вырезанный = а.предметДля(н) else { return nil }
-        let к = а.масштаб
-        let место = а.место
-        let рамка = а.рамка
-        let перенос = CGAffineTransform(a: к, b: 0, c: 0, d: к, tx: место.minX - рамка.minX * к,
-                                        ty: место.minY - рамка.minY * к)
-        return CIImage(cgImage: вырезанный).transformed(by: перенос).cropped(to: а.холст)
-    }
-
-    private static func фонСТенью(_ а: АнализСтудииФото, _ н: НастройкиСтудииФото) -> CIImage {
-        let фон = фонКартинка(н.фон, а.холст)
-        guard н.тень, let предмет = предметНаМесте(а, н) else { return фон }
-        return тень(предмет, место: а.место, холст: а.холст, тёмный: н.фон == .тёмный).composited(over: фон)
-            .cropped(to: а.холст)
-    }
-
-    /**
-     Мягкая тень: силуэт предмета, чёрный, сдвинут чуть вниз и сильно размыт, плюс пятно касания — сплющенный круг под
-     низом предмета. На тёмном фоне тень гуще — иначе её не видно.
-     */
-    private static func тень(_ предмет: CIImage, место: CGRect, холст: CGRect, тёмный: Bool) -> CIImage {
-        let м = min(холст.width, холст.height)
-        let сила: CGFloat = тёмный ? 0.5 : 0.24
-        let силуэт = предмет.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: сила),
-            "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 0)
-        ])
-        let мягкая = силуэт
-            .transformed(by: CGAffineTransform(translationX: 0, y: -м * 0.018))
-            .applyingGaussianBlur(sigma: Double(м * 0.024))
-        let пятно = CIFilter.radialGradient()
-        пятно.center = .zero
-        пятно.radius0 = 0
-        пятно.radius1 = Float(max(1, место.width * 0.5))
-        пятно.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: тёмный ? 0.55 : 0.3)
-        пятно.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 0)
-        guard let круг = пятно.outputImage else { return мягкая.cropped(to: холст) }
-        let сплющить = CGAffineTransform(scaleX: 1, y: 0.085)
-            .concatenating(CGAffineTransform(translationX: место.midX, y: место.minY + м * 0.006))
-        return круг.transformed(by: сплющить).cropped(to: холст).composited(over: мягкая).cropped(to: холст)
-    }
-
-    private static func цвет(_ код: UInt32) -> CIColor {
-        CIColor(red: CGFloat((код >> 16) & 0xFF) / 255, green: CGFloat((код >> 8) & 0xFF) / 255,
-                blue: CGFloat(код & 0xFF) / 255)
-    }
-
-    /// Студийный фон: ровный, сверху вниз или круглым пятном света.
-    private static func фонКартинка(_ вид: ФонСтудииФото, _ холст: CGRect) -> CIImage {
-        let (первый, второй) = вид.цвета
-        if первый == второй {
-            return CIImage(color: цвет(первый)).cropped(to: холст)
-        }
-        if вид.круглый {
-            let г = CIFilter.radialGradient()
-            г.center = CGPoint(x: холст.midX, y: холст.minY + холст.height * 0.56)
-            г.radius0 = Float(min(холст.width, холст.height) * 0.08)
-            г.radius1 = Float(max(холст.width, холст.height) * 0.82)
-            г.color0 = цвет(первый)
-            г.color1 = цвет(второй)
-            return (г.outputImage ?? CIImage(color: цвет(второй))).cropped(to: холст)
-        }
-        let г = CIFilter.linearGradient()
-        г.point0 = CGPoint(x: холст.midX, y: холст.maxY)
-        г.point1 = CGPoint(x: холст.midX, y: холст.minY)
-        г.color0 = цвет(первый)
-        г.color1 = цвет(второй)
-        return (г.outputImage ?? CIImage(color: цвет(первый))).cropped(to: холст)
-    }
-
-    /// Отрисовка в 8-битный sRGB с прозрачностью (у предмета вокруг пусто).
-    private static func отрисовать(_ картинка: CIImage, _ холст: CGRect) -> CGImage? {
-        контекст.createCGImage(картинка, from: холст, format: .RGBA8, colorSpace: пространство)
     }
 }

@@ -25,6 +25,10 @@ import simd
  Делегат сессии приходит на главную очередь; из него наружу — только значения (ПлоскостьГабаритов), самих ARFrame не
  держим и не копируем. В симуляторе ARKit не работает, а часть API ARView в нём не собирается — эти места под
  #if !targetEnvironment(simulator); кнопки там и нет (ОкноГабаритов.доступно).
+
+ Линейка (владелец 14.10.2026, FitBoxRuler.swift): режим «Линейка» живёт в той же сессии и том же ARView — модель
+ только прячет коробку и её подписи (жесты коробки в линейке молчат: точки ставит «+»), пересылает линейке слежение,
+ размеры и сброс сцены. На устройствах с лидаром смена режима перенастраивает сессию (линейке — глубина и сетка сцены).
  */
 
 /// Плоскость ARKit значениями — из делегата сессии на главную нить.
@@ -49,10 +53,12 @@ enum СлежениеГабаритов: Equatable, Sendable {
     case нет
 }
 
-/// Готовый снимок с коробкой.
+/// Готовый снимок с коробкой или с отрезками линейки.
 struct СнимокГабаритов: Identifiable {
     let id = UUID()
     let картинка: UIImage
+    /// Подпись картинки для VoiceOver; nil — по размерам коробки (ЛистСнимкаГабаритов).
+    var озвучка: String? = nil
 }
 
 @MainActor
@@ -73,6 +79,9 @@ final class МодельГабаритов: NSObject, ObservableObject {
 
     let товар: Listing
     let найдено: НайденныеГабариты
+    /// «Измерить в AR» из подачи (ОкноГабаритов.открытьЗамер): только линейка, без коробки и сравнения; «Готово» отдаёт
+    /// первые три отрезка как ширину, высоту и глубину вещи.
+    let замерВещи: Bool
 
     /// Размеры коробки; nil — ещё не указали (открыт лист размеров).
     @Published private(set) var габариты: ГабаритыВещи? = nil
@@ -93,6 +102,10 @@ final class МодельГабаритов: NSObject, ObservableObject {
     @Published private(set) var снимаем = false
     /// Короткое сообщение поверх камеры (сама гаснет).
     @Published private(set) var сообщение: String? = nil
+    /// Коробка или линейка (переключатель сверху).
+    @Published private(set) var режим: РежимГабаритов = .коробка
+    /// Линейка AR — в той же сессии (FitBoxRuler.swift).
+    let линейка: ЛинейкаГабаритов
 
     private(set) var вид: ARView?
     private var корень: AnchorEntity?
@@ -119,11 +132,18 @@ final class МодельГабаритов: NSObject, ObservableObject {
     private var задачаСообщения: Task<Void, Never>? = nil
     private var задачаПодписей: Task<Void, Never>? = nil
 
-    init(товар: Listing, найдено: НайденныеГабариты) {
+    init(товар: Listing, найдено: НайденныеГабариты, замерВещи: Bool = false) {
         self.товар = товар
         self.найдено = найдено
+        self.замерВещи = замерВещи
+        линейка = ЛинейкаГабаритов(замерВещи: замерВещи)
         super.init()
-        габариты = найдено.надёжно ? найдено.полные : nil
+        if замерВещи {
+            режим = .линейка
+        } else {
+            габариты = найдено.надёжно ? найдено.полные : nil
+            линейка.задатьГабариты(габариты)
+        }
     }
 
     private func т(_ ключ: String) -> String { ГабаритыText.т(ключ) }
@@ -134,14 +154,15 @@ final class МодельГабаритов: NSObject, ObservableObject {
 
     func появился() {
         виден = true
-        guard габариты == nil else {
+        /* Линейке размеры вещи не нужны (замер для подачи, ниша без размеров) — камера сразу. */
+        guard габариты == nil && режим == .коробка else {
             запустить()
             return
         }
         /* Размеров нет или они сомнительны — сначала лист (когда окно доедет: лист поверх едущего окна не встаёт). */
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 450_000_000)
-            guard let self, self.виден, self.габариты == nil, !self.листРазмеров else { return }
+            guard let self, self.виден, self.габариты == nil, self.режим == .коробка, !self.листРазмеров else { return }
             self.листРазмеров = true
         }
     }
@@ -166,6 +187,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
     private func разобрать() {
         подписка?.cancel()
         подписка = nil
+        линейка.отключить()
         guard let вид else { return }
         #if !targetEnvironment(simulator)
         вид.session.delegate = nil
@@ -202,6 +224,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
     func задать(_ новые: ГабаритыВещи) {
         let прежние = габариты
         габариты = новые
+        линейка.задатьГабариты(новые)
         if корпус != nil && прежние != новые { перестроить() }
         запустить()
     }
@@ -225,6 +248,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
         показатьПодписи(false)
         полы.removeAll()
         стены.removeAll()
+        линейка.сброситьСцену()
         прижато = false
         стенаПрижатия = nil
         if естьСтена { естьСтена = false }
@@ -257,6 +281,9 @@ final class МодельГабаритов: NSObject, ObservableObject {
             return подпись
         }
         обновитьТекстыПодписей()
+        линейка.подключить(к: новый)
+        линейка.включить(режим == .линейка)
+        линейка.слежениеПришло(слежение)
         /* Обновление сцены RealityKit приходит на главной нити. */
         подписка = новый.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -272,8 +299,10 @@ final class МодельГабаритов: NSObject, ObservableObject {
         return новый
     }
 
+    /// Коробке нужны размеры вещи, линейке — нет: в линейке камера идёт и без них (померить нишу у старого объявления).
     private func запустить() {
-        guard ОкноГабаритов.доступно, виден, !вФоне, !идёт, снимок == nil, габариты != nil, вид != nil else { return }
+        guard ОкноГабаритов.доступно, виден, !вФоне, !идёт, снимок == nil, габариты != nil || режим == .линейка,
+              вид != nil else { return }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .denied, .restricted:
             камера = .запрещена
@@ -282,11 +311,24 @@ final class МодельГабаритов: NSObject, ObservableObject {
             break
         }
         #if !targetEnvironment(simulator)
+        let настройка = настройкаСессии()
+        if первыйЗапуск { сброситьСцену() }
+        let параметры: ARSession.RunOptions = первыйЗапуск ? [.resetTracking, .removeExistingAnchors] : []
+        вид?.session.run(настройка, options: параметры)
+        #endif
+        первыйЗапуск = false
+        идёт = true
+        if камера != .идёт { камера = .идёт }
+    }
+
+    #if !targetEnvironment(simulator)
+    private func настройкаСессии() -> ARWorldTrackingConfiguration {
         let настройка = ARWorldTrackingConfiguration()
         настройка.planeDetection = Config.габаритыСтена ? [.horizontal, .vertical] : [.horizontal]
         настройка.environmentTexturing = .none
         /* Коробка стоит неподвижно — хватит 30 кадров в секунду (обычный формат — 60): тот же размер кадра или меньше,
-           не 4K. Такого формата нет — остаётся обычный. */
+           не 4K. Такого формата нет — остаётся обычный. С лидаром — всегда обычный: линейка перенастраивает сессию
+           (сетка сцены), и смена режима не должна менять формат видео на ходу. */
         let обычный = настройка.videoFormat.imageResolution
         func площадь(_ формат: ARConfiguration.VideoFormat) -> CGFloat {
             формат.imageResolution.width * формат.imageResolution.height
@@ -297,14 +339,71 @@ final class МодельГабаритов: NSObject, ObservableObject {
                     && формат.imageResolution.height <= обычный.height
             }
             .max { площадь($0) < площадь($1) }
-        if let тише { настройка.videoFormat = тише }
-        if первыйЗапуск { сброситьСцену() }
-        let параметры: ARSession.RunOptions = первыйЗапуск ? [.resetTracking, .removeExistingAnchors] : []
-        вид?.session.run(настройка, options: параметры)
+        if let тише, !ЛинейкаГабаритов.лидар { настройка.videoFormat = тише }
+        if режим == .линейка { ЛинейкаГабаритов.точнее(настройка) }
+        return настройка
+    }
+    #endif
+
+    /// Режим сменился на идущей сессии: с лидаром — та же сессия с новой настройкой (без сброса, якоря на месте).
+    private func перенастроить() {
+        guard идёт, ЛинейкаГабаритов.лидар else { return }
+        #if !targetEnvironment(simulator)
+        вид?.session.run(настройкаСессии(), options: [])
         #endif
-        первыйЗапуск = false
-        идёт = true
-        if камера != .идёт { камера = .идёт }
+    }
+
+    // MARK: Режим
+
+    /**
+     «Коробка / Линейка»: одна сессия на оба режима. Коробка в линейке прячется (место и поворот помнит), подписи её
+     гаснут; отрезки линейки в коробке — тоже. Касания по сцене в линейке коробку не двигают.
+     */
+    func сменитьРежим(_ новый: РежимГабаритов) {
+        guard новый != режим, !замерВещи, Config.габаритыЛинейка || новый == .коробка else { return }
+        режим = новый
+        let коробка = новый == .коробка
+        корпус?.isEnabled = коробка
+        показатьПодписи(коробка && этап == .стоит)
+        линейка.включить(!коробка)
+        перенастроить()
+        /* Линейка без размеров вещи: камера могла ещё не идти (лист размеров закрыли пустым). */
+        запустить()
+        ОткликСайта.выбор()
+        UIAccessibility.post(notification: .announcement,
+                             argument: ЛинейкаГабаритовText.т(коробка ? "fr_mode_box_on" : "fr_mode_ruler_on"))
+        /* В коробку без размеров — сначала лист размеров (закроют пустым — обратно в линейку, безРазмеров()). */
+        if коробка && габариты == nil { листРазмеров = true }
+    }
+
+    /**
+     Лист размеров закрыли, а размеров нет: коробку ставить не с чего, но линейке они не нужны — окно остаётся в режиме
+     линейки (померить нишу или проём). false — линейки нет (рубильник, нет AR): окно закрывают.
+     */
+    func безРазмеров() -> Bool {
+        guard Config.габаритыЛинейка, ОкноГабаритов.доступно, габариты == nil else { return false }
+        if режим == .линейка {
+            запустить()
+        } else {
+            сменитьРежим(.линейка)
+            показать(ЛинейкаГабаритовText.т("fr_no_dims"))
+        }
+        return true
+    }
+
+    /// «Снимок» в линейке: кадр с отрезками — в тот же лист снимка (сессия на паузе, пока он открыт).
+    func снятьЛинейку() {
+        guard режим == .линейка else { return }
+        линейка.снять { [weak self] готовый in
+            guard let self else { return }
+            guard let готовый else {
+                self.показать(self.т("fb_shot_fail"))
+                return
+            }
+            guard self.виден else { return }
+            ОткликСайта.успех()
+            self.снимок = готовый
+        }
     }
 
     private func остановить() {
@@ -329,7 +428,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
         }
         if этап == .ищемПол && !полы.isEmpty {
             этап = .можноСтавить
-            UIAccessibility.post(notification: .announcement, argument: т("fb_tap"))
+            if режим == .коробка { UIAccessibility.post(notification: .announcement, argument: т("fb_tap")) }
         }
         let стена = Config.габаритыСтена && !стены.isEmpty
         if стена != естьСтена { естьСтена = стена }
@@ -337,6 +436,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
 
     fileprivate func слежениеПришло(_ новое: СлежениеГабаритов) {
         if слежение != новое { слежение = новое }
+        линейка.слежениеПришло(новое)
     }
 
     fileprivate func сессияПрервана(_ прервана: Bool) {
@@ -649,13 +749,13 @@ final class МодельГабаритов: NSObject, ObservableObject {
 
     @objc(klikoFitBoxTap:)
     private func жестКасания(_ жест: UITapGestureRecognizer) {
-        guard let вид, жест.state == .ended else { return }
+        guard режим == .коробка, let вид, жест.state == .ended else { return }
         поставить(в: жест.location(in: вид))
     }
 
     @objc(klikoFitBoxPan:)
     private func жестТяги(_ жест: UIPanGestureRecognizer) {
-        guard let вид, let корпус else { return }
+        guard режим == .коробка, let вид, let корпус else { return }
         let пол = корпус.position.y
         let точка = жест.location(in: вид)
         switch жест.state {
@@ -683,7 +783,7 @@ final class МодельГабаритов: NSObject, ObservableObject {
 
     @objc(klikoFitBoxRotate:)
     private func жестВращения(_ жест: UIRotationGestureRecognizer) {
-        guard let корпус else { return }
+        guard режим == .коробка, let корпус else { return }
         switch жест.state {
         case .began:
             отпуститьСтену()
@@ -706,7 +806,9 @@ final class МодельГабаритов: NSObject, ObservableObject {
         подписи[2].текст = т("fb_d_short") + " " + ГабаритыВещи.число(г.глубина) + " " + см
     }
 
-    private func показатьПодписи(_ да: Bool) {
+    private func показатьПодписи(_ показ: Bool) {
+        /* В линейке подписи коробки не видны, даже если «вырастание» досчиталось уже после смены режима. */
+        let да = показ && режим == .коробка
         подписиВидны = да
         let подписи = self.подписи
         if да && !тихо {
@@ -804,9 +906,9 @@ final class МодельГабаритов: NSObject, ObservableObject {
         }
     }
 
-    /// Кадр + подписи у рёбер + плашка «Kliko.kz · Ш × В × Г см» внизу. Не на главной нити.
-    nonisolated private static func собрать(_ кадр: UIImage, метки: [(картинка: UIImage, место: CGRect)],
-                                            строка: String, к: CGFloat) -> UIImage {
+    /// Кадр + подписи у рёбер (или у отрезков линейки) + плашка «Kliko.kz · …» внизу. Не на главной нити.
+    nonisolated static func собрать(_ кадр: UIImage, метки: [(картинка: UIImage, место: CGRect)],
+                                    строка: String, к: CGFloat) -> UIImage {
         let размер = кадр.size
         let формат = UIGraphicsImageRendererFormat()
         формат.scale = кадр.scale
@@ -821,13 +923,20 @@ final class МодельГабаритов: NSObject, ObservableObject {
                 .font: шрифт,
                 .foregroundColor: UIColor.white
             ])
-            let поле = текст.size()
+            /* Строка линейки со сравнением («Kliko.kz · Ниша 1 м 25 см · вещь (ширина) 1 м 30 см · не хватает 5 см ✗»)
+               шире кадра телефона: плашка не шире кадра, текст переносится — итог справа не уходит за край. */
             let отступ = 16 * к
+            let предел = max(отступ, размер.width - отступ * 2 - отступ * 1.2)
+            let варианты: NSStringDrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+            let поле = текст.boundingRect(with: CGSize(width: предел, height: .greatestFiniteMagnitude),
+                                          options: варианты, context: nil).integral
             let плашка = CGRect(x: отступ, y: размер.height - поле.height - отступ * 2.4,
                                 width: поле.width + отступ * 1.2, height: поле.height + отступ * 0.8)
             UIColor(white: 0, alpha: 0.55).setFill()
-            UIBezierPath(roundedRect: плашка, cornerRadius: плашка.height / 2).fill()
-            текст.draw(at: CGPoint(x: плашка.minX + отступ * 0.6, y: плашка.minY + отступ * 0.4))
+            UIBezierPath(roundedRect: плашка, cornerRadius: min(плашка.height / 2, отступ * 1.2)).fill()
+            текст.draw(with: CGRect(x: плашка.minX + отступ * 0.6, y: плашка.minY + отступ * 0.4, width: поле.width,
+                                    height: поле.height),
+                       options: варианты, context: nil)
         }
     }
 }
