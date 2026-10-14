@@ -146,8 +146,9 @@ jobs:
               out=$(curl -sS -m 20 -A "$ua" -H 'Accept: application/json' -D hdr -o body -w '%{http_code}' "$url" || echo "000")
             fi
             cookie=$(grep -ci '^set-cookie:' hdr || true)
-            body=$(head -c 160 body | tr '\n\r' '  ' | sed 's/::/: :/g')
-            echo "::notice title=$name::HTTP $out · Set-Cookie: $cookie · $body"
+            body=$(head -c 140 body | tr '\n\r' '  ' | sed 's/::/: :/g')
+            # GitHub показывает не больше 10 аннотаций на шаг — строки копим и выдаём пачками.
+            echo "[$name] HTTP $out · cookie $cookie · $body" >> probe.txt
           }
           probe "google native {}" POST "$base/google_auth.php?action=native" "application/json" '{}'
           probe "google native text/plain" POST "$base/google_auth.php?action=native" "text/plain" '{"id_token":"x","nonce":"y"}'
@@ -161,6 +162,15 @@ jobs:
           probe "cabinet own_ai_state" POST "$base/cabinet.php?action=own_ai_state" "application/json" '{}'
           probe "cabinet own_ai_place" POST "$base/cabinet.php?action=own_ai_place" "application/json" '{}'
           probe "tryon start гостем" POST "$base/api/tryon.php?action=start" "application/json" '{}'
+          probe "ai_image info" GET "$base/api/ai_image.php?action=info&lang=ru" "" ""
+          probe "autofit car" GET "$base/api/autofit.php?action=car&make=Toyota&model=Camry&year=2018&lang=ru" "" ""
+          # По 3 строки в одной аннотации (разделитель « ‖ »), всего не больше 6 аннотаций.
+          i=0; chunk=""
+          while IFS= read -r line; do
+            chunk="${chunk:+$chunk ‖ }$line"; i=$((i+1))
+            if [ $((i % 3)) -eq 0 ]; then echo "::notice title=probe $i::$chunk"; chunk=""; fi
+          done < probe.txt
+          [ -n "$chunk" ] && echo "::notice title=probe $i::$chunk" || true
 
   # СКРИНШОТЫ С СИМУЛЯТОРА (этап 23). Нативные экраны писались без Mac и без телефона под рукой; раннер может сам
   # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
