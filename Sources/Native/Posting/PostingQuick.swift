@@ -64,92 +64,18 @@ struct ВыборРежимаПодачи: View {
         self.закрыть = закрыть
     }
 
-    private func т(_ ключ: String) -> String { БыстраяПодачаText.т(ключ) }
-
     var body: some View {
         let прошлый = ПамятьРежимаПодачи.последний
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                ГеройПодачи(правка: false, закрыть: закрыть)
-                Text(т("qm_title"))
-                    .font(.title3.weight(.heavy))
-                    .foregroundStyle(КраскаПодачи.текст)
-                    .padding(.top, 4)
-                    .accessibilityAddTraits(.isHeader)
-                /* «Создать объявление с ИИ» (AIImagePosting.swift): только при Config.ииРедакторФото и ответе info. */
-                КарточкаИИВыбораПодачи(модель: модель)
-                карточка(значок: "bolt.fill", заголовок: т("qm_quick"), подпись: т("qm_quick_s"),
-                         прошлый: прошлый == "quick", главная: прошлый != "full") {
-                    модель.выбратьБыструюПодачу()
-                }
-                карточка(значок: "list.number", заголовок: т("qm_full"), подпись: т("qm_full_s"),
-                         прошлый: прошлый == "full", главная: прошлый == "full") {
-                    модель.выбратьПодробнуюПодачу()
-                }
-                Text(т("qm_hint"))
-                    .font(.footnote)
-                    .foregroundStyle(Theme.текстВторой)
-                    .fixedSize(horizontal: false, vertical: true)
+        /* Вид — ЭкранВыбораПодачи (PostingChooser.swift): шапка, карточка ИИ, «Быстро» и «Подробно» со схемой шагов,
+           «Как продать быстрее» и подсказка. Выбор — прежний: выбратьБыструюПодачу и выбратьПодробнуюПодачу. */
+        return ЭкранВыбораПодачи(модель: модель, прошлый: прошлый, закрыть: закрыть,
+                                 быстро: { модель.выбратьБыструюПодачу() },
+                                 подробно: { модель.выбратьПодробнуюПодачу() })
+            .task {
+                /* ИИ-фото: чистая форма — прежний диалог новой подачи прочь; есть ли генератор — лениво (info). */
+                ИИФотоПодачи.shared.начатьЗаново(модель)
+                await ГотовностьИИФото.shared.проверить()
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
-        }
-        .task {
-            /* ИИ-фото: чистая форма — прежний диалог новой подачи прочь; есть ли генератор — лениво (info). */
-            ИИФотоПодачи.shared.начатьЗаново(модель)
-            await ГотовностьИИФото.shared.проверить()
-        }
-    }
-
-    private func карточка(значок: String, заголовок: String, подпись: String, прошлый: Bool, главная: Bool,
-                          действие: @escaping () -> Void) -> some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-        return Button(action: действие) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: значок)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(КраскаПодачи.хорошоТекст)
-                    .frame(width: 48, height: 48)
-                    .background(КраскаПодачи.хорошоФон, in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(заголовок)
-                            .font(.headline.weight(.heavy))
-                            .foregroundStyle(КраскаПодачи.текст)
-                        if прошлый {
-                            Text(т("qm_last"))
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(КраскаПодачи.хорошоТекст)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(КраскаПодачи.хорошоФон, in: Capsule())
-                        }
-                    }
-                    Text(подпись)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.текстВторой)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .padding(.top, 4)
-                    .accessibilityHidden(true)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(КраскаПодачи.карточка, in: форма)
-            .overlay {
-                форма.strokeBorder(главная ? КраскаПодачи.хорошоТекст : КраскаПодачи.линия, lineWidth: главная ? 2 : 1)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.98))
-        .accessibilityHint(подпись)
     }
 }
 
