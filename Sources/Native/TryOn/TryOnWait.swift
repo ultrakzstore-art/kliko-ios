@@ -31,7 +31,7 @@ struct ШагОжиданияПримерочной: View {
                 .frame(maxWidth: 460)
                 .frame(height: 320)
                 .accessibilityHidden(true)
-            Text(т("to_wait_t"))
+            Text(модель.вид.заголовокОжидания)
                 .font(.title3.weight(.heavy))
                 .foregroundStyle(Color.white)
                 .padding(.top, 18)

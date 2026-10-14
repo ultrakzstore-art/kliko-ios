@@ -93,6 +93,35 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 
 ---
 
+## 3а. Примерочная и проверки на странице объявления (для Review Notes)
+
+Владелец 13.10.2026: «нужнее охват всего». Все способы — на странице объявления, под ценой и хлебными крошками: одна
+зелёная кнопка, а если способов у раздела несколько — первая большая, остальные рядом под ней (код —
+`Sources/Native/TryOn/`, хаб — `TryOnHub.swift`). Ничего не продаётся: ни цен, ни покупок, лимит ИИ — своей фразой.
+
+| Кнопка | Где найти (раздел объявления) | Где работает | Что уходит с телефона |
+|---|---|---|---|
+| «Примерить вживую» | Одежда › Аксессуары › Очки; Украшения и часы (серьги, колье, часы, браслеты, кольца); Шапки и головные уборы; Смарт-часы | **Телефон**: камера и Vision (лицо, рука), вещь вырезается из фото объявления | Ничего: кадры камеры не сохраняются и не отправляются |
+| «Поместится ли?» | Дом и сад › Мебель (диван, шкаф, стол, кровать…), Бытовая техника (холодильник, стиральная, плита…), Телевизоры, Мониторы, Ковры, Тренажёры, Детская мебель | **Телефон**: ARKit — коробка реальных размеров из объявления на полу комнаты. На устройстве без AR (симулятор, Mac) кнопки нет | Ничего |
+| «Подойдут ли?» | Транспорт › Автозапчасти › Шины и диски | **Телефон**: сверка с машиной человека (PCD, ET, DIA, диаметр; размер шины, ошибка спидометра, клиренс) | Только марка, модель и год машины — в справочник kliko.kz (`/api/autofit.php`, без входа), чтобы узнать её штатные параметры; машина запоминается на телефоне. Справочник не ответил — параметры человек вводит сам |
+| «Примерить на себя» | Одежда, обувь, сумки, аксессуары (кроме детских) | **Сервер** Kliko AI, `kind: person` | Фото человека — после согласия, удаляется сразу по «Удалить фото»/закрытию окна, не позже 24 ч |
+| «На свою машину» | Шины и диски (диски и колёса в сборе) | **Сервер**, `kind: car` | Фото машины сбоку (людей в кадре размывают или фото не принимают), те же 24 ч |
+| «В моей комнате» | Мебель, телевизоры, ковры, шторы, декор, светильники | **Сервер**, `kind: room` | Фото комнаты (без людей), те же 24 ч |
+
+- Способы на телефоне — за рубильниками `Config.живаяПримерка`, `Config.габаритыAR`, `Config.автоПодбор` (все `true`).
+- Способы ИИ — `Config.примерочная = true`, но **кнопки видны, только когда сервер ответил `on: true`** в
+  `/api/tryon.php?action=info` (docs/SERVER_TRYON.md). Если к проверке сервер не готов — кнопок ИИ нет, способы на
+  телефоне работают; в Review Notes тогда ИИ-способы не упоминать.
+- Перед первой отправкой фото — экран согласия: кто обработает фото (поставщик ИИ из ответа сервера), 24 часа, не для
+  обучения, «Согласен, примерить» (5.1.2(i)). Гостю окно сначала предлагает войти.
+- Разрешения спрашиваются только по нажатию: камера — при открытии съёмки, живой примерки или AR; «Фото» (только
+  добавление) — по «Сохранить в Фото». Тексты в `project.yml` упоминают примерку и «поместится ли».
+- Что показать проверяющему: любое объявление очков или часов → «Примерить вживую»; дивана или холодильника →
+  «Поместится ли?»; дисков → «Подойдут ли?»; одежды → «Примерить на себя» (если сервер включён). Демо-аккаунт — тот же,
+  что для покупок (раздел 4).
+
+---
+
 ## 4. Текст App Review Notes (вставить в App Store Connect → App Review Information → Notes)
 
 ```
@@ -122,6 +151,20 @@ Sellers can verify their identity through eGov (Kazakhstan's government digital 
 seller" badge and higher limits. It opens the official eGov flow in a web view; it is optional for buyers and is not
 required to review the app. Sign in with Apple is available on the sign-in screen.
 
+TRY-ON AND FIT CHECKS (listing page, under the price)
+- "Try on live" (sunglasses, hats, earrings, necklaces, watches, bracelets, rings): runs entirely on the device
+  (camera + Vision). Camera frames are neither stored nor uploaded.
+- "Will it fit?" (furniture, large appliances, TVs, carpets): ARKit places a box with the item's real dimensions on
+  your floor. On-device only.
+- "Will they fit?" (tires and wheels): checks bolt pattern, offset, center bore, diameter and tire size against the
+  user's car. The check runs on the device; only the car's make, model and year are sent to our server to look up its
+  stock wheel specs (no sign-in, no personal data).
+- "Try it on" (clothing), "On my car" (wheels) and "In my room" (furniture): an AI image generated on our server from a
+  photo the user takes. Shown only after a consent screen that names the AI provider; photos are deleted when the user
+  closes the screen or taps "Delete photos", and in any case within 24 hours; never used for training. Requires sign-in.
+  These AI buttons appear only while our server has the feature enabled.
+Camera and "Add to Photos" permissions are requested only when the user starts one of these features or saves a result.
+
 ACCOUNT DELETION
 Cabinet > Settings > Delete account (in-app, step-by-step).
 
@@ -147,9 +190,9 @@ The demo account has published listings so "Promote" is visible. Purchases in re
 | Товары не отправлены вместе со сборкой / товар «Missing Metadata» | 2.1 | — | Отправить товары вместе с первой сборкой с `цифровыеПокупки = true`; у каждого — скриншот и описание |
 | Удаление аккаунта только на сайте | 5.1.1(v) | ✅ «Удалить аккаунт» — своим листом шагов в Настройках (`ЛистУдаленияАккаунта`) | Проверить, что удаление доходит до конца без перехода в браузер |
 | Сторонний вход без Sign in with Apple | 4.8 | ✅ Вход через Apple — нативный лист (`ВходApple`); eGov — государственная идентификация, не соцвход | Проверить, что `apple_auth.php?action=native` работает на проде (иначе откат на страницу сайта). Когда впишут `KlikoGoogleClientID` (вход через Google, `docs/SERVER_NATIVE_AUTH.md` §3), дописать в Review Notes: «Google — нативно; Sign in with Apple равнозначен и стоит выше» |
-| Строки назначения разрешений | 5.1.1 | ✅ В `project.yml`: NSCameraUsageDescription, NSMicrophoneUsageDescription, NSPhotoLibraryUsageDescription, NSPhotoLibraryAddUsageDescription, NSLocationWhenInUseUsageDescription, NSFaceIDUsageDescription — с примерами | При включении `Config.примерочная` — тем же коммитом дописать камеру («сфотографировать себя для примерки») и сохранение результата примерки, а в Review Notes — где функция (объявление одежды → «Примерить на себя») и что фото удаляется через 24 ч. Разрешения просить только по действию человека (не при запуске) — проверить пуши: `requestPushAuthorization()` в `AppDelegate` вызывается при запуске; лучше спрашивать после входа или по действию |
+| Строки назначения разрешений | 5.1.1 | ✅ В `project.yml`: NSCameraUsageDescription, NSMicrophoneUsageDescription, NSPhotoLibraryUsageDescription, NSPhotoLibraryAddUsageDescription, NSLocationWhenInUseUsageDescription, NSFaceIDUsageDescription — с примерами; камера — ещё «примерить вещь на себя или посмотреть, поместится ли она в комнате», Фото — «результат примерки» | В Review Notes — раздел TRY-ON AND FIT CHECKS (раздел 3а): где каждый способ, что на телефоне, что на сервере, 24 ч. Разрешения просить только по действию человека (не при запуске) — проверить пуши: `requestPushAuthorization()` в `AppDelegate` вызывается при запуске; лучше спрашивать после входа или по действию |
 | Манифест конфиденциальности (Required Reason API: UserDefaults, дата файла, время загрузки системы) | 5.1.2, ITMS-91053 | ⚠️ `PrivacyInfo.xcprivacy` в проекте нет | Добавить `PrivacyInfo.xcprivacy` в цель Kliko (UserDefaults — CA92.1) и в виджет; иначе App Store Connect пришлёт предупреждение/отказ при загрузке |
-| Скрытые функции, удалённые рубильники | 2.3.1, 2.5.2 | ✅ Рубильники `Config.*` — константы времени сборки, с сервера не переключаются; код не скачивается | Первую сборку с покупками отправлять уже с `true`, не включать покупки «потом» без новой проверки |
+| Скрытые функции, удалённые рубильники | 2.3.1, 2.5.2 | ✅ Рубильники `Config.*` — константы времени сборки, с сервера не переключаются; код не скачивается. ⚠️ Исключение — кнопки ИИ-примерки (раздел 3а): видны, только пока сервер отвечает `on: true`; весь код уже в сборке, сервер лишь включает или выключает услугу | Первую сборку с покупками отправлять уже с `true`, не включать покупки «потом» без новой проверки. ИИ-примерку описывать в Review Notes, только если к проверке она включена на сервере; появится позже — упомянуть в следующей сборке |
 | Метки приватности (App Privacy / nutrition labels) | 5.1.2 | — | Указать: контакты (телефон, имя, e-mail), идентификаторы (id пользователя), местоположение (примерное/точное — при «Рядом»), фото и видео (объявления), сообщения (чат), покупки (история IAP), финансовая информация (платёжные данные сделок у провайдера), данные верификации (eGov). Трекинга нет — ATT не нужен, если нет рекламных SDK |
 | Экспорт шифрования | — | ✅ `ITSAppUsesNonExemptEncryption: false` (только системный HTTPS) | — |
 | Минимальная функциональность «сайт в обёртке» | 4.2 | ✅ Основные экраны нативные (SwiftUI); веб — только запасные страницы | Не допускать, чтобы проверяющий попадал в веб-кабинет с кнопками покупки |

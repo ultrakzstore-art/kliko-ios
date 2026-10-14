@@ -24,9 +24,9 @@ struct ШагИтогаПримерочной: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаПримерочной(заголовок: т("to_title"), закрыть: закрыть)
+            ШапкаПримерочной(заголовок: модель.вид.заголовок, закрыть: закрыть)
             if let итог = модель.итог {
-                ШторкаПримерочной(до: модель.фотоЧеловека, после: итог)
+                ШторкаПримерочной(до: модель.фотоЧеловека, после: итог, вид: модель.вид)
                     .frame(maxWidth: 520, maxHeight: .infinity)
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
@@ -34,7 +34,7 @@ struct ШагИтогаПримерочной: View {
             } else {
                 Spacer(minLength: 0)
             }
-            Text(т("to_result_note"))
+            Text(модель.вид.примечаниеИтога)
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.6))
                 .multilineTextAlignment(.center)
@@ -111,13 +111,16 @@ struct ШагИтогаПримерочной: View {
 struct ШторкаПримерочной: View {
     let до: UIImage?
     let после: UIImage
+    /// Вид ИИ-примерки: метки «Вы / В вещи» у человека, «Было / Стало» у машины и комнаты.
+    let вид: ВидИИПримерки
     @State private var доля: CGFloat = 1
     @State private var показана = false
     @Environment(\.accessibilityReduceMotion) private var меньшеДвижения
 
-    init(до: UIImage?, после: UIImage) {
+    init(до: UIImage?, после: UIImage, вид: ВидИИПримерки = .человек) {
         self.до = до
         self.после = после
+        self.вид = вид
     }
 
     private func т(_ ключ: String) -> String { ПримерочнаяText.т(ключ) }
@@ -175,8 +178,8 @@ struct ШторкаПримерочной: View {
         .shadow(color: Theme.зелёныйЯркий.opacity(0.18), radius: 24, x: 0, y: 8)
         .environment(\.layoutDirection, .leftToRight)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(т("to_compare_a11y"))
-        .accessibilityValue(String(format: т("to_compare_value"), Int((доля * 100).rounded())))
+        .accessibilityLabel(вид.сравнениеA11y)
+        .accessibilityValue(String(format: вид.сравнениеЗначение, Int((доля * 100).rounded())))
         .accessibilityHint(т("to_compare_hint"))
         .accessibilityAdjustableAction { куда in
             switch куда {
@@ -191,13 +194,13 @@ struct ШторкаПримерочной: View {
         .onAppear { открыть() }
     }
 
-    /// «Вы» слева вверху, «В вещи» справа вверху; метка гаснет, когда её половину закрыла шторка.
+    /// «Вы» («Было») слева вверху, «В вещи» («Стало») справа вверху; метка гаснет, когда её половину закрыла шторка.
     private func метки(ширина: CGFloat) -> some View {
         HStack {
-            метка(т("to_you"))
+            метка(вид.подписьДо)
                 .opacity(доля > 0.18 ? 1 : 0)
             Spacer(minLength: 8)
-            метка(т("to_in_item"))
+            метка(вид.подписьПосле)
                 .opacity(доля < 0.82 ? 1 : 0)
         }
         .padding(12)

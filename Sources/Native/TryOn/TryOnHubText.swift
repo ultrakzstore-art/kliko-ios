@@ -1,0 +1,200 @@
+import Foundation
+
+/**
+ Тексты хаба «Примерить / проверить» (владелец 13.10.2026: «нужнее охват всего»). Ключи th_*; языки ru, kk, en, ar,
+ прочие — русский (язык — тот же, что у примерочной: ПримерочнаяText.язык). Свой файл и свой словарь — чтобы не
+ пересекаться с ПримерочнаяText и с экранами живой примерки, габаритов и автоподбора.
+ Здесь подписи пяти новых способов на странице объявления («Примерить на себя» — прежние to_btn* из ПримерочнаяText) и
+ всё, чем «На свою машину» и «В моей комнате» отличаются от примерки одежды: заголовки, подсказки и советы камеры, шаг
+ «Ваше фото», ожидание и итог. Ни цен, ни покупок.
+ */
+enum ХабПримеркиText {
+    static func т(_ ключ: String) -> String {
+        словарь[ключ] ?? ru[ключ] ?? ключ
+    }
+
+    private static var словарь: [String: String] {
+        switch ПримерочнаяText.язык {
+        case "kk": return kk
+        case "en": return en
+        case "ar": return ar
+        default: return ru
+        }
+    }
+
+    private static let ru: [String: String] = [
+        "th_group_a11y": "Примерить и проверить",
+        "th_live": "Примерить вживую",
+        "th_live_sub": "В камере телефона, сразу — фото никуда не уходит",
+        "th_live_hint": "Откроет камеру и покажет вещь на вас в реальном времени",
+        "th_fit": "Поместится ли?",
+        "th_fit_sub": "Коробка настоящего размера у вас в комнате (AR)",
+        "th_fit_hint": "Откроет камеру и поставит на пол коробку с размерами вещи",
+        "th_auto": "Подойдут ли?",
+        "th_auto_sub": "Сверим параметры с вашей машиной",
+        "th_auto_sub_rims": "Сверим разболтовку, вылет, отверстие и диаметр с вашей машиной",
+        "th_auto_sub_tires": "Сверим размер с вашей машиной и посчитаем ошибку спидометра",
+        "th_auto_hint": "Выберите свою машину — и увидите, подходят ли параметры",
+        "th_car": "На свою машину",
+        "th_car_sub": "ИИ поставит диски на фото вашей машины",
+        "th_car_hint": "Снимите машину сбоку — и увидите её с этими дисками",
+        "th_room": "В моей комнате",
+        "th_room_sub": "ИИ поставит вещь на фото вашей комнаты",
+        "th_room_hint": "Снимите комнату — и увидите в ней эту вещь",
+        "th_cam_car": "Поставьте машину боком в контур — оба колеса целиком",
+        "th_cam_room": "Снимите угол или стену, куда хотите поставить вещь",
+        "th_tip_side": "Машина боком",
+        "th_tip_wheels": "Колёса целиком",
+        "th_tip_corner": "Угол или стена",
+        "th_tip_nopeople": "Без людей",
+        "th_no_cam_car": "Выберите фото из галереи: машина целиком сбоку, оба колеса видно, светло.",
+        "th_no_cam_room": "Выберите фото комнаты из галереи: угол или стена, светло, без людей.",
+        "th_check_car": "Фото машины",
+        "th_check_room": "Фото комнаты",
+        "th_item_t_car": "Какое фото дисков поставить",
+        "th_item_t_room": "Какое фото вещи поставить",
+        "th_item_car": "Диски",
+        "th_people_yes": "В кадре люди — лучше переснять без них: людей размоют или фото не примут",
+        "th_people_no": "Людей в кадре нет",
+        "th_wait_car": "Ставим диски…",
+        "th_wait_room": "Ставим в комнату…",
+        "th_before": "Было",
+        "th_after": "Стало",
+        "th_compare_a11y": "Сравнение: было и стало",
+        "th_compare_value": "Видно исходное фото: %d процентов",
+        "th_note_car": "Картинку сделал ИИ: размер и вид дисков могут отличаться от настоящих.",
+        "th_note_room": "Картинку сделал ИИ: размер и цвет вещи могут отличаться от настоящих."
+    ]
+
+    private static let kk: [String: String] = [
+        "th_group_a11y": "Киіп көру және тексеру",
+        "th_live": "Тікелей киіп көру",
+        "th_live_sub": "Телефон камерасында, бірден — фото ешқайда жіберілмейді",
+        "th_live_hint": "Камераны ашып, затты сіздің үстіңізден нақты уақытта көрсетеді",
+        "th_fit": "Сыя ма?",
+        "th_fit_sub": "Бөлмеңізде нақты өлшемдегі қорап (AR)",
+        "th_fit_hint": "Камераны ашып, еденге зат өлшеміндегі қорапты қояды",
+        "th_auto": "Сәйкес келе ме?",
+        "th_auto_sub": "Параметрлерді көлігіңізбен салыстырамыз",
+        "th_auto_sub_rims": "PCD, ET, орталық тесік пен диаметрді көлігіңізбен салыстырамыз",
+        "th_auto_sub_tires": "Өлшемді көлігіңізбен салыстырып, спидометр қатесін есептейміз",
+        "th_auto_hint": "Көлігіңізді таңдаңыз — параметрлер сәйкес келетінін көресіз",
+        "th_car": "Өз көлігіңізге",
+        "th_car_sub": "ЖИ дискілерді көлігіңіздің фотосына қояды",
+        "th_car_hint": "Көлікті бүйірінен түсіріңіз — оны осы дискілермен көресіз",
+        "th_room": "Менің бөлмемде",
+        "th_room_sub": "ЖИ затты бөлмеңіздің фотосына қояды",
+        "th_room_hint": "Бөлмені түсіріңіз — осы затты сонда көресіз",
+        "th_cam_car": "Көлікті контурға бүйірімен қойыңыз — екі доңғалақ толық көрінсін",
+        "th_cam_room": "Затты қойғыңыз келетін бұрышты немесе қабырғаны түсіріңіз",
+        "th_tip_side": "Көлік бүйірінен",
+        "th_tip_wheels": "Доңғалақтар толық",
+        "th_tip_corner": "Бұрыш не қабырға",
+        "th_tip_nopeople": "Адамсыз",
+        "th_no_cam_car": "Галереядан фото таңдаңыз: көлік бүйірінен толық, екі доңғалақ көрінеді, жарық.",
+        "th_no_cam_room": "Галереядан бөлме фотосын таңдаңыз: бұрыш не қабырға, жарық, адамсыз.",
+        "th_check_car": "Көлік фотосы",
+        "th_check_room": "Бөлме фотосы",
+        "th_item_t_car": "Дискілердің қай фотосын қою",
+        "th_item_t_room": "Заттың қай фотосын қою",
+        "th_item_car": "Дискілер",
+        "th_people_yes": "Кадрда адамдар бар — оларсыз қайта түсірген дұрыс: адамдар бұлдыратылады немесе фото қабылданбайды",
+        "th_people_no": "Кадрда адам жоқ",
+        "th_wait_car": "Дискілерді қойып жатырмыз…",
+        "th_wait_room": "Бөлмеге қойып жатырмыз…",
+        "th_before": "Бұрын",
+        "th_after": "Кейін",
+        "th_compare_a11y": "Салыстыру: бұрын және кейін",
+        "th_compare_value": "Бастапқы фото көрінеді: %d пайыз",
+        "th_note_car": "Суретті ЖИ жасады: дискілердің өлшемі мен түрі шынайыдан өзгеше болуы мүмкін.",
+        "th_note_room": "Суретті ЖИ жасады: заттың өлшемі мен түсі шынайыдан өзгеше болуы мүмкін."
+    ]
+
+    private static let en: [String: String] = [
+        "th_group_a11y": "Try on and check",
+        "th_live": "Try on live",
+        "th_live_sub": "In your phone's camera, instantly — no photo leaves your phone",
+        "th_live_hint": "Opens the camera and shows the item on you in real time",
+        "th_fit": "Will it fit?",
+        "th_fit_sub": "A true-size box in your room (AR)",
+        "th_fit_hint": "Opens the camera and places a box with the item's dimensions on your floor",
+        "th_auto": "Will they fit?",
+        "th_auto_sub": "We check the specs against your car",
+        "th_auto_sub_rims": "We check bolt pattern, offset, center bore and diameter against your car",
+        "th_auto_sub_tires": "We check the size against your car and calculate the speedometer error",
+        "th_auto_hint": "Choose your car to see whether the specs match",
+        "th_car": "On my car",
+        "th_car_sub": "AI puts these wheels on a photo of your car",
+        "th_car_hint": "Take a side photo of your car and see it with these wheels",
+        "th_room": "In my room",
+        "th_room_sub": "AI places the item in a photo of your room",
+        "th_room_hint": "Take a photo of your room and see the item in it",
+        "th_cam_car": "Fit the car side-on into the outline — both wheels fully visible",
+        "th_cam_room": "Shoot the corner or wall where you want to put the item",
+        "th_tip_side": "Side view",
+        "th_tip_wheels": "Whole wheels",
+        "th_tip_corner": "Corner or wall",
+        "th_tip_nopeople": "No people",
+        "th_no_cam_car": "Pick a photo from your gallery: the whole car from the side, both wheels visible, good light.",
+        "th_no_cam_room": "Pick a room photo from your gallery: a corner or wall, good light, no people.",
+        "th_check_car": "Car photo",
+        "th_check_room": "Room photo",
+        "th_item_t_car": "Which wheel photo to use",
+        "th_item_t_room": "Which item photo to use",
+        "th_item_car": "Wheels",
+        "th_people_yes": "There are people in the frame — better retake without them: people will be blurred or the photo rejected",
+        "th_people_no": "No people in the frame",
+        "th_wait_car": "Fitting the wheels…",
+        "th_wait_room": "Placing it in your room…",
+        "th_before": "Before",
+        "th_after": "After",
+        "th_compare_a11y": "Comparison: before and after",
+        "th_compare_value": "Original photo shown: %d percent",
+        "th_note_car": "This image is AI-generated: wheel size and look may differ from reality.",
+        "th_note_room": "This image is AI-generated: the item's size and color may differ from reality."
+    ]
+
+    private static let ar: [String: String] = [
+        "th_group_a11y": "التجربة والتحقق",
+        "th_live": "جرّبه مباشرةً",
+        "th_live_sub": "في كاميرا هاتفك فورًا — لا تغادر أي صورة هاتفك",
+        "th_live_hint": "يفتح الكاميرا ويعرض القطعة عليك في الوقت الفعلي",
+        "th_fit": "هل ستتسع؟",
+        "th_fit_sub": "صندوق بالحجم الحقيقي في غرفتك (الواقع المعزز)",
+        "th_fit_hint": "يفتح الكاميرا ويضع على الأرض صندوقًا بأبعاد القطعة",
+        "th_auto": "هل تناسب سيارتي؟",
+        "th_auto_sub": "نطابق المواصفات مع سيارتك",
+        "th_auto_sub_rims": "نطابق توزيع البراغي والإزاحة والثقب المركزي والقطر مع سيارتك",
+        "th_auto_sub_tires": "نطابق المقاس مع سيارتك ونحسب خطأ عدّاد السرعة",
+        "th_auto_hint": "اختر سيارتك لترى إن كانت المواصفات مناسبة",
+        "th_car": "على سيارتي",
+        "th_car_sub": "يضع الذكاء الاصطناعي الجنوط على صورة سيارتك",
+        "th_car_hint": "صوّر سيارتك من الجانب وشاهدها بهذه الجنوط",
+        "th_room": "في غرفتي",
+        "th_room_sub": "يضع الذكاء الاصطناعي القطعة في صورة غرفتك",
+        "th_room_hint": "صوّر غرفتك وشاهد القطعة فيها",
+        "th_cam_car": "ضع السيارة من الجانب داخل الإطار — مع ظهور العجلتين كاملتين",
+        "th_cam_room": "صوّر الزاوية أو الجدار حيث تريد وضع القطعة",
+        "th_tip_side": "من الجانب",
+        "th_tip_wheels": "العجلات كاملة",
+        "th_tip_corner": "زاوية أو جدار",
+        "th_tip_nopeople": "بلا أشخاص",
+        "th_no_cam_car": "اختر صورة من المعرض: السيارة كاملة من الجانب، والعجلتان ظاهرتان، بإضاءة جيدة.",
+        "th_no_cam_room": "اختر صورة للغرفة من المعرض: زاوية أو جدار، بإضاءة جيدة، بلا أشخاص.",
+        "th_check_car": "صورة السيارة",
+        "th_check_room": "صورة الغرفة",
+        "th_item_t_car": "أي صورة للجنوط تريد استخدامها",
+        "th_item_t_room": "أي صورة للقطعة تريد استخدامها",
+        "th_item_car": "الجنوط",
+        "th_people_yes": "يوجد أشخاص في الإطار — من الأفضل إعادة التصوير بدونهم: سيُموَّه الأشخاص أو تُرفض الصورة",
+        "th_people_no": "لا يوجد أشخاص في الإطار",
+        "th_wait_car": "نركّب الجنوط…",
+        "th_wait_room": "نضعها في غرفتك…",
+        "th_before": "قبل",
+        "th_after": "بعد",
+        "th_compare_a11y": "مقارنة: قبل وبعد",
+        "th_compare_value": "تظهر الصورة الأصلية: %d بالمئة",
+        "th_note_car": "هذه الصورة من إنشاء الذكاء الاصطناعي: قد يختلف حجم الجنوط وشكلها عن الواقع.",
+        "th_note_room": "هذه الصورة من إنشاء الذكاء الاصطناعي: قد يختلف حجم القطعة ولونها عن الواقع."
+    ]
+}

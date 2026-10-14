@@ -11,6 +11,11 @@ import UIKit
  «Однотонный фон». Внизу — «Галерея» (PhotosPicker), большой затвор и «Другая камера»; сверху — ✕ и таймер 3 с (чтобы
  снять себя на переднюю камеру с вытянутой руки или со штатива — крупный отсчёт 3-2-1). Нет доступа или камеры — заглушка
  с «Выбрать из галереи» (и «Открыть Настройки»). При «Уменьшении движения» всё неподвижно.
+
+ Вид примерки (модель.вид, ВидИИПримерки) меняет контур, советы и заголовок: «На свою машину» — силуэт машины сбоку с
+ колёсами («Машина боком», «Колёса целиком», «Светло»), «В моей комнате» — рамка комнаты с местом на полу («Угол или
+ стена», «Светло», «Без людей»). У машины и комнаты — только задняя камера (с неё камера и начинает) и без таймера: себя
+ там снимать не нужно.
  */
 struct ШагСъёмкиПримерочной: View {
     @ObservedObject var модель: МодельПримерочной
@@ -135,7 +140,7 @@ struct ШагСъёмкиПримерочной: View {
                 .opacity(камера.готова ? 1 : 0)
                 .animation(ДвижениеСайта.появление, value: камера.готова)
                 .accessibilityHidden(true)
-            КонтурПримерочной(тихо: тихо)
+            КонтурПримерочной(тихо: тихо, вид: модель.вид)
                 .padding(.top, 130)
                 .padding(.bottom, 200)
                 .padding(.horizontal, 24)
@@ -143,7 +148,7 @@ struct ШагСъёмкиПримерочной: View {
         case .запрещён:
             заглушка(заголовок: т("to_denied"), текст: т("to_denied_hint"), настройки: true)
         case .нетКамеры:
-            заглушка(заголовок: т("to_no_cam"), текст: т("to_no_cam_hint"), настройки: false)
+            заглушка(заголовок: т("to_no_cam"), текст: модель.вид.безКамеры, настройки: false)
         }
     }
 
@@ -153,7 +158,7 @@ struct ШагСъёмкиПримерочной: View {
         HStack(spacing: 12) {
             КруглаяКнопкаФото(значок: "xmark", подпись: т("to_close"), действие: закрыть)
             Spacer(minLength: 0)
-            Text(т("to_title"))
+            Text(модель.вид.заголовок)
                 .font(.headline)
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
@@ -161,7 +166,7 @@ struct ШагСъёмкиПримерочной: View {
                 .shadow(color: Color.black.opacity(0.5), radius: 3)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            if живая {
+            if живая && модель.вид == .человек {
                 КруглаяКнопкаФото(значок: "timer", подпись: т("to_timer"), активна: таймер) {
                     ОткликСайта.выбор()
                     таймер.toggle()
@@ -186,11 +191,12 @@ struct ШагСъёмкиПримерочной: View {
         }
     }
 
-    @ViewBuilder
+    /// Советы вида: у человека — «В полный рост», «Светло», «Однотонный фон»; у машины и комнаты — свои.
     private var фишки: some View {
-        ФишкаСоветаПримерочной(значок: "figure.stand", текст: т("to_tip_full"), номер: 0, тихо: тихо)
-        ФишкаСоветаПримерочной(значок: "sun.max.fill", текст: т("to_tip_light"), номер: 1, тихо: тихо)
-        ФишкаСоветаПримерочной(значок: "square.fill", текст: т("to_tip_bg"), номер: 2, тихо: тихо)
+        ForEach(Array(модель.вид.советы.enumerated()), id: \.offset) { пара in
+            ФишкаСоветаПримерочной(значок: пара.element.значок, текст: пара.element.текст, номер: пара.offset,
+                                   тихо: тихо)
+        }
     }
 
     private var подсказка: some View {
@@ -199,7 +205,7 @@ struct ШагСъёмкиПримерочной: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.зелёныйЯркий)
                 .accessibilityHidden(true)
-            Text(т("to_cam_hint"))
+            Text(модель.вид.подсказкаКамеры)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.white)
                 .multilineTextAlignment(.center)
@@ -219,7 +225,7 @@ struct ШагСъёмкиПримерочной: View {
             Spacer(minLength: 8)
             затвор
             Spacer(minLength: 8)
-            if живая && камера.естьПередняя {
+            if живая && камера.естьПередняя && модель.вид == .человек {
                 кнопкаНиза(значок: "arrow.triangle.2.circlepath.camera", подпись: т("to_flip"), доступна: камера.готова) {
                     ОткликСайта.выбор()
                     камера.переключитьКамеру()
@@ -357,7 +363,7 @@ struct ШагСъёмкиПримерочной: View {
     private func заглушка(заголовок: String, текст: String, настройки: Bool) -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                Image(systemName: "figure.stand")
+                Image(systemName: модель.вид.значок)
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(Theme.зелёныйЯркий)
                     .frame(width: 80, height: 80)
@@ -446,28 +452,52 @@ struct ФишкаСоветаПримерочной: View {
     }
 }
 
-// MARK: - Контур человека
+// MARK: - Контур
 
-/// Контур человека в полный рост поверх камеры: мягкое зелёное свечение, белый пунктир, тихое «дыхание» и линия
-/// сканера, бегущая сверху вниз только внутри фигуры. При «Уменьшении движения» — неподвижен.
+/// Контур поверх камеры: человек в полный рост, машина сбоку или рамка комнаты — мягкое зелёное свечение, белый
+/// пунктир, тихое «дыхание» и линия сканера, бегущая сверху вниз только внутри фигуры. При «Уменьшении движения» —
+/// неподвижен.
 struct КонтурПримерочной: View {
     let тихо: Bool
+    let вид: ВидИИПримерки
     @State private var дышит = false
     @State private var бег = false
 
-    init(тихо: Bool) {
+    init(тихо: Bool, вид: ВидИИПримерки = .человек) {
         self.тихо = тихо
+        self.вид = вид
+    }
+
+    private var фигура: AnyShape {
+        switch вид {
+        case .человек: return AnyShape(СилуэтПримерочной())
+        case .машина: return AnyShape(СилуэтМашиныПримерочной())
+        case .комната: return AnyShape(РамкаКомнатыПримерочной())
+        }
+    }
+
+    /// Где бежит линия сканера: внутри человека или машины, у комнаты — во всей рамке.
+    private var маска: AnyShape {
+        вид == .комната ? AnyShape(Rectangle()) : фигура
+    }
+
+    private func местоФигуры(в место: CGSize) -> CGRect {
+        switch вид {
+        case .человек: return СилуэтПримерочной.рамка(в: место)
+        case .машина: return СилуэтМашиныПримерочной.рамка(в: место)
+        case .комната: return РамкаКомнатыПримерочной.рамка(в: место)
+        }
     }
 
     var body: some View {
         GeometryReader { место in
-            let рамка = СилуэтПримерочной.рамка(в: место.size)
+            let рамка = местоФигуры(в: место.size)
             ZStack {
-                СилуэтПримерочной()
+                фигура
                     .stroke(Theme.зелёныйЯркий.opacity(0.45),
                             style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
                     .blur(radius: 7)
-                СилуэтПримерочной()
+                фигура
                     .stroke(Color.white.opacity(0.92),
                             style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round, dash: [9, 7]))
                 if !тихо {
@@ -477,7 +507,7 @@ struct КонтурПримерочной: View {
                         .frame(height: 34)
                         .offset(y: бег ? рамка.height / 2 : -рамка.height / 2)
                         .frame(width: рамка.width, height: рамка.height)
-                        .mask { СилуэтПримерочной().fill(Color.white) }
+                        .mask { маска.fill(Color.white) }
                         .opacity(0.8)
                 }
             }
@@ -544,6 +574,103 @@ struct СилуэтПримерочной: Shape {
         путь.addQuadCurve(to: т(23, 52), control: т(12, 60))
         путь.addQuadCurve(to: т(43, 45), control: т(36, 46))
         путь.addLine(to: т(44, 38))
+        return путь
+    }
+}
+
+/**
+ Машина сбоку в поле 240 × 104: кузов от заднего бампера по крыше к переднему, низ с двумя арками, окна и линия двери,
+ два колеса со ступицами — колёса и есть то, что поменяет ИИ, поэтому они обведены целиком.
+ */
+struct СилуэтМашиныПримерочной: Shape {
+    /// Ширина к высоте поля рисунка.
+    static let пропорция: CGFloat = 240.0 / 104.0
+
+    /// Место контура в поле `место`: вся ширина (или вся высота, если поле низкое), по центру.
+    static func рамка(в место: CGSize) -> CGRect {
+        let ширина = max(0, min(место.width, место.height * пропорция))
+        let высота = ширина / пропорция
+        return CGRect(x: (место.width - ширина) / 2, y: (место.height - высота) / 2, width: ширина, height: высота)
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let мx = rect.width / 240
+        let мy = rect.height / 104
+        func т(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * мx, y: rect.minY + y * мy) }
+        func круг(_ x: CGFloat, _ y: CGFloat, _ р: CGFloat) -> CGRect {
+            CGRect(x: rect.minX + (x - р) * мx, y: rect.minY + (y - р) * мy, width: 2 * р * мx, height: 2 * р * мy)
+        }
+        var путь = Path()
+        /* кузов: задний бампер → багажник → заднее стекло → крыша → лобовое → капот → передний бампер → низ с арками */
+        путь.move(to: т(6, 78))
+        путь.addLine(to: т(4, 60))
+        путь.addQuadCurve(to: т(16, 46), control: т(4, 48))
+        путь.addLine(to: т(58, 42))
+        путь.addQuadCurve(to: т(88, 18), control: т(70, 22))
+        путь.addLine(to: т(150, 16))
+        путь.addQuadCurve(to: т(180, 40), control: т(168, 18))
+        путь.addLine(to: т(222, 48))
+        путь.addQuadCurve(to: т(236, 62), control: т(234, 50))
+        путь.addLine(to: т(236, 78))
+        путь.addLine(to: т(214, 78))
+        путь.addQuadCurve(to: т(166, 78), control: т(190, 44))
+        путь.addLine(to: т(78, 78))
+        путь.addQuadCurve(to: т(30, 78), control: т(54, 44))
+        путь.closeSubpath()
+        /* окна и дверь */
+        путь.move(to: т(70, 40))
+        путь.addQuadCurve(to: т(92, 22), control: т(78, 26))
+        путь.addLine(to: т(146, 21))
+        путь.addQuadCurve(to: т(170, 40), control: т(160, 24))
+        путь.closeSubpath()
+        путь.move(to: т(122, 22))
+        путь.addLine(to: т(122, 74))
+        /* колёса и ступицы */
+        путь.addEllipse(in: круг(54, 82, 17))
+        путь.addEllipse(in: круг(54, 82, 7))
+        путь.addEllipse(in: круг(190, 82, 17))
+        путь.addEllipse(in: круг(190, 82, 7))
+        return путь
+    }
+}
+
+/**
+ Рамка комнаты в поле 100 × 120: дальняя стена прямоугольником, от её углов к углам кадра — линии пола, потолка и
+ стен (как внутри коробки), на полу — овал, куда встанет вещь.
+ */
+struct РамкаКомнатыПримерочной: Shape {
+    /// Ширина к высоте поля рисунка.
+    static let пропорция: CGFloat = 100.0 / 120.0
+
+    /// Место рамки в поле `место`: вся высота (или вся ширина, если поле узкое), по центру.
+    static func рамка(в место: CGSize) -> CGRect {
+        let высота = max(0, min(место.height, место.width / пропорция))
+        let ширина = высота * пропорция
+        return CGRect(x: (место.width - ширина) / 2, y: (место.height - высота) / 2, width: ширина, height: высота)
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let мx = rect.width / 100
+        let мy = rect.height / 120
+        func т(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * мx, y: rect.minY + y * мy) }
+        var путь = Path()
+        /* дальняя стена */
+        путь.move(to: т(24, 16))
+        путь.addLine(to: т(76, 16))
+        путь.addLine(to: т(76, 76))
+        путь.addLine(to: т(24, 76))
+        путь.closeSubpath()
+        /* рёбра комнаты к углам кадра */
+        путь.move(to: т(24, 16))
+        путь.addLine(to: т(2, 2))
+        путь.move(to: т(76, 16))
+        путь.addLine(to: т(98, 2))
+        путь.move(to: т(24, 76))
+        путь.addLine(to: т(2, 118))
+        путь.move(to: т(76, 76))
+        путь.addLine(to: т(98, 118))
+        /* место вещи на полу */
+        путь.addEllipse(in: CGRect(x: rect.minX + 28 * мx, y: rect.minY + 89 * мy, width: 44 * мx, height: 14 * мy))
         return путь
     }
 }

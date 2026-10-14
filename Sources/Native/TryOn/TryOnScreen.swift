@@ -7,16 +7,17 @@ import UIKit
  Студия всегда тёмная (как камера поиска и подачи): глубокий зелёно-чёрный фон с мягким свечением, белый текст, зелёный
  акцент. Шаги сменяются плавно (ДвижениеСайта.шаг); при «Уменьшении движения» — сразу. Состояние держит
  МодельПримерочной; здесь — корень, «Ваше фото» (проверка и согласие) и экраны «Войдите», «Скоро», «Не получилось».
- Съёмка — TryOnCamera.swift, ожидание — TryOnWait.swift, итог со шторкой — TryOnResult.swift.
+ Съёмка — TryOnCamera.swift, ожидание — TryOnWait.swift, итог со шторкой — TryOnResult.swift. вид — что рисует ИИ
+ (человек, машина, комната, ВидИИПримерки): от него подписи шагов и смысл отметки «люди в кадре».
  */
 struct ЭкранПримерочной: View {
     let закрыть: () -> Void
     @StateObject private var модель: МодельПримерочной
     @StateObject private var камера = КамераПоиска()
 
-    init(товар: Listing, номерФото: Int, закрыть: @escaping () -> Void) {
+    init(товар: Listing, номерФото: Int, вид: ВидИИПримерки = .человек, закрыть: @escaping () -> Void) {
         self.закрыть = закрыть
-        _модель = StateObject(wrappedValue: МодельПримерочной(товар: товар, номерФото: номерФото))
+        _модель = StateObject(wrappedValue: МодельПримерочной(товар: товар, номерФото: номерФото, вид: вид))
     }
 
     var body: some View {
@@ -147,7 +148,7 @@ struct ШагПроверкиПримерочной: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаПримерочной(заголовок: т("to_check_t"), закрыть: закрыть)
+            ШапкаПримерочной(заголовок: модель.вид.заголовокПроверки, закрыть: закрыть)
             ScrollView {
                 VStack(spacing: 16) {
                     снимок
@@ -194,7 +195,7 @@ struct ШагПроверкиПримерочной: View {
                 RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             }
-            .accessibilityLabel(т("to_check_t"))
+            .accessibilityLabel(модель.вид.заголовокПроверки)
             if let вещь = модель.фотоВещи {
                 Image(uiImage: вещь)
                     .resizable()
@@ -210,20 +211,22 @@ struct ШагПроверкиПримерочной: View {
                     .rotationEffect(.degrees(появилось ? 4 : 16))
                     .offset(x: появилось ? 10 : 70, y: появилось ? 10 : 40)
                     .opacity(появилось ? 1 : 0)
-                    .accessibilityLabel(т("to_item"))
+                    .accessibilityLabel(модель.вид.подписьВещи)
             }
         }
         .frame(maxWidth: .infinity)
     }
 
+    /// Отметка Vision: у человека «Человек в кадре» — хорошо; у машины и комнаты люди в кадре — предупреждение.
     @ViewBuilder
     private var отметка: some View {
-        if let есть = модель.человекВКадре {
+        if let люди = модель.человекВКадре {
+            let итог = модель.вид.отметка(люди: люди)
             HStack(spacing: 8) {
-                Image(systemName: есть ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(есть ? Theme.зелёныйЯркий : Theme.оранжевый)
+                Image(systemName: итог.хорошо ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(итог.хорошо ? Theme.зелёныйЯркий : Theme.оранжевый)
                     .accessibilityHidden(true)
-                Text(т(есть ? "to_human_ok" : "to_human_no"))
+                Text(итог.текст)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.white)
                     .fixedSize(horizontal: false, vertical: true)
@@ -239,7 +242,7 @@ struct ШагПроверкиПримерочной: View {
     /// Какое фото вещи примерить — миниатюры объявления, выбранная — в зелёной рамке.
     private var полосаВещи: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(т("to_item_t"))
+            Text(модель.вид.заголовокФотоВещи)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.white.opacity(0.86))
                 .accessibilityAddTraits(.isHeader)
@@ -371,7 +374,7 @@ struct ШагОтказаПримерочной: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаПримерочной(заголовок: т("to_title"), закрыть: закрыть)
+            ШапкаПримерочной(заголовок: модель.вид.заголовок, закрыть: закрыть)
             ScrollView {
                 VStack(spacing: 0) {
                     Image(systemName: значок)
