@@ -91,7 +91,9 @@ struct ДействияСделки: View {
     @ViewBuilder
     private var деньгиЗаморожены: some View {
         if сделка.продавец {
-            let хвост = сделка.задаток ? т("dl_held_seller_deposit") : т("dl_held_seller_c")
+            /* dl_held_seller_c — про срок проверки товарной сделки; у аренды его нет — прежние слова. */
+            let хвост = сделка.задаток ? т("dl_held_seller_deposit")
+                : (сделка.аренда ? ЗаморозкаСделкиText.т("held_seller_rent") : т("dl_held_seller_c"))
             let деньги = т("dl_buyer_money_a") + " (" + сумма + ") " + т("dl_buyer_money_b")
             ЗаметкаСделки(Text(деньги).bold() + Text("\n" + хвост), вид: .хорошо, символ: "lock")
             пояснениеПередачи
@@ -358,11 +360,12 @@ struct КнопкаПравкиОценки: View {
 
 // MARK: - Таймер авто-подтверждения (g в renderDeal)
 
+/// Срок уже показан блоком «чей ход» (deal.next с отсчётом, DealNext.swift) — второй таймер того же срока не рисуем.
 struct ТаймерСделки: View {
     let сделка: Сделка
 
     var body: some View {
-        if сделка.статус == "delivered" && сделка.осталосьСек > 0 && !сделка.продавец {
+        if сделка.статус == "delivered" && сделка.осталосьСек > 0 && !сделка.продавец && сделка.ход?.срок == nil {
             ЗаметкаСделки(Text(СделкиText.т("deal_autoconfirm") + " " + СделкиФормат.часыМинуты(сделка.осталосьСек)).bold()
                           + Text("\n" + СделкиText.т("dl_timer_note")).font(.system(size: 13)),
                           вид: .предупреждение, символ: "alarm")

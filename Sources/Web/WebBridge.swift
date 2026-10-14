@@ -114,6 +114,8 @@ final class WebBridge: ObservableObject {
         let полный = адрес.absoluteURL
         let схема = (полный.scheme ?? "").lowercased()
         if схема == Config.scheme {
+            /* kliko://own-ai — возврат входа через OpenRouter («Свой ИИ»): экран «Свой ИИ», а не главная. */
+            if ВходOpenRouterСвоегоИИ.перехватить(полный) { return }
             if let наш = Config.deepLink(полный) { перейти(наш) }
             return
         }

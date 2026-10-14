@@ -29,6 +29,10 @@ import WebKit
  1 через 5, на главной — разделы по кругу) расставляет сервер, карточки приходят со slot; ТОП перемешан посевом seed.
  Старый сервер без slot — лента ставит ритм у себя (ЗолотойРитм, FeedRhythm.swift). Ссылка ?sort=new — date_desc сайта,
  «новые подряд» без ТОП: sort=new.
+
+ Поиск по фото (правка сайта 14.10.2026): Запрос.qa — написания из ответа photo_search, параметр qa=слово1|слово2|…;
+ следующие страницы похожих (ЛистаниеПохожихФото, Search/PhotoSearchItems.swift). В ответ сервер добавляет поле qa —
+ принятые написания (написанияОтвета); нет поля — сервер старый и искал по q. Без qa запрос и ответ прежние.
  */
 enum ListingsAPI {
     enum Ошибка: Error {
@@ -55,11 +59,15 @@ enum ListingsAPI {
         var seed: Int?
         /// где — место SEO-страницы каталога (ВыборГорода.местоСсылки), а не выбор человека.
         var поМестуСсылки = false
+        /// Написания «слово1|слово2|…» из ответа поиска по фото (поле qa photo_search, правка сайта 14.10.2026): сервер
+        /// ищет «ИЛИ» по ним, выше — где совпало больше; q при этом текст не отбирает. Пусто — не шлём, запрос прежний.
+        var qa = ""
 
         /// Ленту по умолчанию кладём на диск; поиск, разделы и фильтры — нет, они быстро устаревают и нужны реже. Место
         /// ссылки каталога — тоже нет: лента на диске — выбранного города (ВыборГорода.применить стирает её при смене).
         var поУмолчанию: Bool {
-            page == 1 && cat.isEmpty && q.isEmpty && фильтры == ФильтрыЛенты() && !аренда && !поМестуСсылки
+            page == 1 && cat.isEmpty && q.isEmpty && qa.isEmpty && фильтры == ФильтрыЛенты() && !аренда
+                && !поМестуСсылки
         }
     }
 
@@ -115,11 +123,16 @@ enum ListingsAPI {
     static func адрес(_ з: Запрос) -> URL {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"),
                               resolvingAgainstBaseURL: false)!
-        var поля = [URLQueryItem(name: "sort", value: з.фильтры.сортировка.параметр),    // «Новые» — reco, как у сайта
-                    URLQueryItem(name: "page", value: String(з.page)),
-                    URLQueryItem(name: "per", value: String(з.per))]
+        let сортировка = з.фильтры.сортировка.параметр                // «Новые» — reco, как у сайта
+        var поля: [URLQueryItem] = []
+        /* С qa (поиск по фото) порядок «где совпало больше написаний» продолжает первые карточки photo_search, и адрес
+           следующих страниц у сайта — без sort: reco не шлём. Явная сортировка (price, price_d, new) уходит как обычно. */
+        if з.qa.isEmpty || сортировка != "reco" { поля.append(URLQueryItem(name: "sort", value: сортировка)) }
+        поля.append(URLQueryItem(name: "page", value: String(з.page)))
+        поля.append(URLQueryItem(name: "per", value: String(з.per)))
         поля.append(contentsOf: Self.параметрыРаздела(з.cat))   // этап 49: «Товары» — cats=, как vs=goods у сайта
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
+        if !з.qa.isEmpty { поля.append(URLQueryItem(name: "qa", value: з.qa)) }        // написания поиска по фото
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
         поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, brands, models,
                                                           // gear, fuel, ymin, ymax, rooms
@@ -184,6 +197,22 @@ enum ListingsAPI {
 
     static func разобрать(_ данные: Data) throws -> ListingsPage {
         do { return try JSONDecoder().decode(ListingsPage.self, from: данные) } catch { throw Ошибка.разбор }
+    }
+
+    /// Поле qa ответа ленты (правка сайта 14.10.2026): написания, которые сервер принял, — признак, что он искал по ним.
+    /// Строка «слово1|слово2|…» (на всякий случай и массив строк). Поля нет — сервер старый и искал по q: nil.
+    static func написанияОтвета(_ данные: Data) -> [String]? {
+        guard let корень = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any],
+              let поле = корень["qa"] else { return nil }
+        let части: [String]
+        if let строка = поле as? String {
+            части = строка.split(separator: "|").map(String.init)
+        } else if let список = поле as? [Any] {
+            части = список.compactMap { $0 as? String }
+        } else {
+            return nil
+        }
+        return части.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     }
 
     /// MK_VSETS.goods главной (home.html, 26.09.2026): из чего состоит «Товары».

@@ -171,6 +171,8 @@ struct СделкаКратко: Identifiable, Equatable {
     var имяПродавца: String = ""
     /// Объявление сделки (product_id) — закрылась сделка, его перечитывают экраны (DealListingBack.swift).
     var товар: String = ""
+    /// next (ultra-site 13.10.2026): чей ход, готовые слова и срок; nil — прежние подписи (DealNext.swift).
+    var ход: ХодСделки? = nil
 
     init?(_ j: [String: Any]) {
         typealias A = СделкиAPI
@@ -196,6 +198,7 @@ struct СделкаКратко: Identifiable, Equatable {
         let собеседник = (j["peer"] as? [String: Any]).map { A.строка($0["name"]) } ?? ""
         let продавецИмя = A.строка(j["seller_name"])
         имяПродавца = продавецИмя.isEmpty ? собеседник : продавецИмя
+        ход = ХодСделки(j["next"])
     }
 
     /// cancelled|canceled|refunded|expired — «сделка не состоялась» в строке денег.
@@ -575,6 +578,8 @@ struct Сделка: Equatable, Identifiable {
     var талонПодписан: Bool = false
     /// deal.live — данные Live Activity от сервера (§4.16); nil — считаем сами, как сайт.
     var живое: [String: String]? = nil
+    /// deal.next (ultra-site 13.10.2026): чей ход, готовые слова и срок; nil — прежние подписи (DealNext.swift).
+    var ход: ХодСделки? = nil
     /// Этап 44: то, что читают только денежные блоки (код продавца, застой, возврат товара, заявка курьера).
     var деньги = ДанныеДенегСделки()
 
@@ -605,6 +610,7 @@ struct Сделка: Equatable, Identifiable {
         разобратьПередачу(j)
         разобратьДоставку(j)
         деньги = ДанныеДенегСделки(j)
+        ход = ХодСделки(j["next"])
     }
 
     private mutating func разобратьТовар(_ j: [String: Any]) {
@@ -956,7 +962,7 @@ enum СделкиФормат {
 
 // MARK: - Шаги мастера и заголовок статуса
 
-/// dealStepModel сайта: подписи пяти шагов, текущий, «все пройдены», надпись паузы.
+/// dealStepModel сайта: подписи шагов (товар — четыре, прочие — пять), текущий, «все пройдены», надпись паузы.
 struct ШагиСделки: Equatable {
     let подписи: [String]
     let текущий: Int
@@ -965,10 +971,27 @@ struct ШагиСделки: Equatable {
 }
 
 extension Сделка {
-    /// Порядок статусов мастера: товар (и задаток, и аренда) — pending…confirmed; услуга — proposed…confirmed.
+    /**
+     Товарная сделка (не услуга, не задаток, не аренда). С 13.10.2026 у неё четыре шага, как у сайта и плашки экрана
+     блокировки: Оплата · Передача · Проверка · Готово (было пять: Оплата · Заморозка · Отправка · Получение · Готово).
+     */
+    var четыреШага: Bool { !услуга && !задаток && !аренда }
+
+    /// Порядок статусов мастера: товар — pending, held, delivered, confirmed (shipped — тот же шаг, что held); задаток и
+    /// аренда — pending…confirmed по пяти шагам; услуга — proposed…confirmed.
     var порядокШагов: [String] {
-        услуга ? ["proposed", "accepted", "held", "delivered", "confirmed"]
-               : ["pending", "held", "shipped", "delivered", "confirmed"]
+        if услуга { return ["proposed", "accepted", "held", "delivered", "confirmed"] }
+        if четыреШага { return ["pending", "held", "delivered", "confirmed"] }
+        return ["pending", "held", "shipped", "delivered", "confirmed"]
+    }
+
+    /**
+     Номер шага (с нуля) для статуса или nil, если статуса нет в порядке. У товара «отправлено» — всё ещё «Передача»:
+     stepIndex сервера — pending 1, held 2, shipped 2, delivered 3, confirmed 4.
+     */
+    func номерШага(_ статус: String) -> Int? {
+        if четыреШага && статус == "shipped" { return 1 }
+        return порядокШагов.firstIndex(of: статус)
     }
 
     var подписиШагов: [String] {
@@ -982,25 +1005,26 @@ extension Сделка {
         if аренда {
             return [т("dstep_pay"), т("dstep_pledge"), т("dstep_handover"), т("dstep_return"), т("dstep_ready")]
         }
-        return [т("dstep_pay"), т("dstep_freeze"), т("dstep_ship"), т("dstep_receive"), т("dstep_ready")]
+        return [т("dstep_pay"), т("dstep_handover"), ХодСделкиText.т("dstep_check"), т("dstep_ready")]
     }
 
     /**
-     dealStepModel: вызванный курьер у товара двигает мастер на «Отправку»; спор — шаг 4 с надписью «Спор — шаги
+     dealStepModel: вызванный курьер у задатка и аренды двигает мастер на третий шаг (у товара курьер — это и есть
+     «Передача», второй шаг); спор — шаг «Проверка» товара (у пяти шагов — четвёртый) с надписью «Спор — шаги
      приостановлены»; возврат — «Возврат — деньги придержаны». expired сайт ставит на шаг 1 (indexOf −1 → 0), хотя в
      теле пишет «Сделка завершена» — здесь, как confirmed, все шаги пройдены (§4.21).
      */
     var шаги: ШагиСделки {
         let подписи = подписиШагов
-        var i = max(0, порядокШагов.firstIndex(of: статус) ?? 0)
+        var i = max(0, номерШага(статус) ?? 0)
         var готово = false
         var пауза = ""
-        if !услуга && курьерВызван && i < 2 && статус != "disputed" { i = 2 }
+        if !услуга && !четыреШага && курьерВызван && i < 2 && статус != "disputed" { i = 2 }
         if статус == "confirmed" || статус == "resolved" || статус == "expired" {
             i = подписи.count - 1
             готово = true
         } else if статус == "disputed" {
-            i = 3
+            i = четыреШага ? 2 : 3
             пауза = СделкиText.т("dw_frozen")
         } else if возврат {
             пауза = СделкиText.т("dw_return")
@@ -1099,9 +1123,11 @@ enum ЖиваяСделка {
                 данные["deliveryStage"] = этап
             }
         } else {
-            let порядок = с.порядокШагов
+            /* Шаги считаются здесь — те же, что у карточки: товар — четыре (stepsTotal 4), прочие — пять. Номер — из
+               с.шаги, как у мастера карточки: спор — «Проверка» (у пяти шагов — четвёртый), вызванный курьер задатка и
+               аренды — третий; номерШага("disputed") дал бы nil и «Оплата 1/4». */
             let подписи = с.подписиШагов
-            let i = max(0, порядок.firstIndex(of: с.статус) ?? 0)
+            let i = min(max(0, с.шаги.текущий), max(0, подписи.count - 1))
             данные["status"] = с.статус
             данные["statusText"] = i < подписи.count ? подписи[i] : ""
             данные["stepIndex"] = i + 1

@@ -15,12 +15,13 @@ import SwiftUI
    own_ai_use {on} · own_ai_disconnect.
  own_ai_buy и own_ai_trial (кошелёк сайта) приложение не вызывает никогда: Premium в приложении — только товар App Store
  kz.kliko.app.ownai.month (ПродуктыApple, ВидУслугиApple.свойИИ). Отказ — {ok:false, code, error}: error уже готовый
- текст на языке человека, его и показываем. Кроме need_premium / code "premium" и gone: эти тексты у сайта общие
- (lang/<язык>.php) и могут звать купить Premium с баланса или взять пробный период — в приложении вместо них своя фраза
- (ОтказСвоегоИИ.фразаПриложения), Premium здесь — только App Store (3.1.1).
- own_ai_or_start («Войти через OpenRouter») приложение не вызывает: OAuth OpenRouter без state, сайт узнаёт человека по
- куке браузера, а в SFSafariViewController / ASWebAuthenticationSession сессии кабинета нет (как у соцсетей до app_link).
- Кнопка появится, когда сервер даст одноразовую ссылку с ott и возврат kliko://own_ai.
+ текст на языке человека, его и показываем. Кроме need_premium / code "premium" (в приложении сервер добавляет к ним
+ app_store:true), gone и relink: тексты premium и gone у сайта общие (lang/<язык>.php) и могут звать купить Premium с
+ баланса или взять пробный период — в приложении вместо них своя фраза (ОтказСвоегоИИ.фразаПриложения), Premium здесь —
+ только App Store (3.1.1); relink — своя фраза «Подключите свой ИИ заново».
+ own_ai_or_start {app:1} («Войти через OpenRouter», ultra-site 14.10.2026): сервер узнаёт человека по одноразовой метке
+ state, а не по куке браузера, и возвращает kliko://own-ai?ok=1|0 — вход идёт эфемерным ASWebAuthenticationSession
+ (OwnAIOpenRouter.swift). Кнопка — только при own_ai.login_app.
 
  🔴 КЛЮЧ. В приложении ключ живёт только в поле ввода экрана и в теле одного запроса own_ai_connect: ни UserDefaults, ни
  файлов, ни журнала; поле очищается сразу после нажатия «Подключить». Сервер отдаёт только tail — 4 последних знака.
@@ -59,8 +60,10 @@ struct ПремиумСвоегоИИ: Equatable {
 struct СостояниеСвоегоИИ: Equatable {
     /// on — раздел включён; false — в приложении ничего не показываем.
     var вкл = false
-    /// login — у сайта доступна «Войти через OpenRouter». В приложении кнопки нет: вход держится на куке браузера.
+    /// login — у сайта доступна «Войти через OpenRouter» (кнопка сайта; в приложении смотрим login_app).
     var входOpenRouter = false
+    /// login_app — «Войти через OpenRouter» можно показать в приложении (own_ai_or_start {app:1}); старый сервер — false.
+    var входПриложения = false
     /// connected — ключ сохранён на сервере.
     var подключён = false
     /// active — свой ИИ реально используется сейчас.
@@ -91,6 +94,7 @@ struct СостояниеСвоегоИИ: Equatable {
         typealias A = МоиОбъявленияAPI
         вкл = A.да(j["on"])
         входOpenRouter = A.да(j["login"])
+        входПриложения = A.да(j["login_app"])
         подключён = A.да(j["connected"])
         активен = A.да(j["active"])
         использовать = A.да(j["use"])
@@ -136,8 +140,13 @@ struct СостояниеСвоегоИИ: Equatable {
    · ai_service, ai_resume: error:"own_ai", own_ai:"<код>", текст в msg;
    · ai_style, photo_search, translate: own_ai:"<код>", текст в error; consult: own_ai:"<код>", текст в text;
    · ai_job_chunk: ai_msg.
- Коды key, funds, model, gone — ключ сломан, денег у поставщика нет, модели нет, свой ИИ пропал: кроме «Настройки своего
- ИИ» предлагаем и «Выключить свой ИИ» (own_ai_use {on:false}) — функции вернутся на Kliko AI.
+ С 14.10.2026 (ultra-site, «Свой ИИ» во всех местах, пункт 2) вид один: {ok:false, own_ai:"<код>", error:"<фраза>"};
+ shot_read — ещё off:true, kp_generate — ещё ai_unavailable и quota, consult — фраза и в text, ai_import и ai_job_chunk —
+ own_ai рядом с ai_msg при ok:true. Коды: key, funds, rate, limit, day, model, down, empty, bad, gone (+ own_ai_gone),
+ relink. Тихое error:"ai" подсказок ответа — это Kliko AI, не свой ИИ.
+ Коды key, funds, model, gone, relink — ключ сломан, денег у поставщика нет, модели нет, свой ИИ пропал, ключ больше не
+ читается: кроме «Настройки своего ИИ» предлагаем и «Выключить свой ИИ» (own_ai_use {on:false}) — функции вернутся на
+ Kliko AI. day — суточный потолок (100 запросов, запросы с Bearer-токеном): ждать до завтра, выключать нечего.
  */
 struct ОтказСвоегоИИ: Identifiable, Equatable {
     let id = UUID()
@@ -149,7 +158,7 @@ struct ОтказСвоегоИИ: Identifiable, Equatable {
         self.текст = текст
     }
 
-    var можноВыключить: Bool { ["key", "funds", "model", "gone"].contains(код) }
+    var можноВыключить: Bool { ["key", "funds", "model", "gone", "relink"].contains(код) }
 
     /// nil — это не отказ своего ИИ (успех, сессия, лимит, Kliko AI выключен — как раньше).
     static func из(_ j: [String: Any]) -> ОтказСвоегоИИ? {
@@ -164,27 +173,35 @@ struct ОтказСвоегоИИ: Identifiable, Equatable {
         if код.isEmpty && A.строка(j["error"]) == "own_ai" { код = "bad" }
         if !код.isEmpty && A.да(j["need_premium"]) { код = "premium" }
         guard !код.isEmpty else { return nil }
-        return ОтказСвоегоИИ(код: код, текст: фразаПриложения(код) ?? текстОтвета(j))
+        return ОтказСвоегоИИ(код: код, текст: фразаПриложения(код) ?? текстОтвета(j, код: код))
     }
 
     /// Своя фраза вместо текста сервера: premium и gone у сайта могут звать купить Premium с баланса, назвать цену или
-    /// пробный период — в приложении этого быть не должно (3.1.1). nil — текст сервера годится.
+    /// пробный период — в приложении этого быть не должно (3.1.1); relink — «Подключите свой ИИ заново» (ключ на сервере
+    /// больше не читается, поможет только новое подключение). nil — текст сервера годится.
     static func фразаПриложения(_ код: String) -> String? {
         switch код {
         case "premium": return СвойИИText.т("oai_prem_need")
         case "gone": return СвойИИText.т("oai_gone")
+        case "relink": return СвойИИВходText.т("oair_relink")
         default: return nil
         }
     }
 
     /// Готовый текст сервера: msg, error, text, ai_msg — первый человеческий (не машинный код вроде "own_ai").
     static func текстОтвета(_ j: [String: Any]) -> String {
+        текстОтвета(j, код: "")
+    }
+
+    /// То же, но без текста сервера — запасная фраза по коду (day — «до завтра»), иначе общая.
+    static func текстОтвета(_ j: [String: Any], код: String) -> String {
         for поле in ["msg", "error", "text", "ai_msg"] {
             let текст = МоиОбъявленияAPI.строка(j[поле]).trimmingCharacters(in: .whitespacesAndNewlines)
             if текст.isEmpty { continue }
             if текст.range(of: "^[a-z][a-z0-9_:]{1,24}$", options: .regularExpression) != nil { continue }
             return текст
         }
+        if код == "day" { return СвойИИВходText.т("oair_day") }
         return СвойИИText.т("oai_fail")
     }
 }
@@ -192,14 +209,27 @@ struct ОтказСвоегоИИ: Identifiable, Equatable {
 /// Признаки успешного ответа ИИ-функции по договору «Свой ИИ» — без состояния и без главной нити.
 enum ОтветСвоегоИИ {
     /**
-     own_ai_run: "fast" | "deep" у recognize (§5) — ответ собрал свой ИИ человека; к итогу — метка «через ваш ИИ».
-     У прочих функций поля пока нет (предложение — docs/OWN_AI_COVERAGE.md): нет поля — метки нет, по последнему
-     известному own_ai.active не гадаем.
+     own_ai_run — ответ собрал свой ИИ человека; к итогу — метка «через ваш ИИ». У recognize — "fast" | "deep" (§5);
+     с 14.10.2026 (ultra-site, «Свой ИИ» во всех местах, пункт 1) — own_ai_run: 1 во всех успешных ответах consult,
+     ai_replies, ai_replies_dm, ai_service, photo_search, shot_read, ai_style, ai_import, ai_job_chunk, kp_generate,
+     ai_resume, translate и распознавания реквизитов. Отвечал Kliko AI — поля нет, метки нет; по последнему известному
+     own_ai.active не гадаем.
      */
     static func своим(_ j: [String: Any]) -> Bool {
         if let n = j["own_ai_run"] as? NSNumber { return n.intValue != 0 }
         let значение = МоиОбъявленияAPI.строка(j["own_ai_run"]).trimmingCharacters(in: .whitespacesAndNewlines)
         return !значение.isEmpty && значение != "0" && значение.lowercased() != "false"
+    }
+
+    /// «через ваш ИИ» — если ответ собрал свой ИИ, иначе nil. Для подписи итога строкой («Готово · через ваш ИИ»).
+    static func подпись(_ j: [String: Any]) -> String? {
+        своим(j) ? СвойИИText.т("oai_via") : nil
+    }
+
+    /// Текст итога с пометкой « · через ваш ИИ», когда ответ собрал свой ИИ; иначе текст как есть.
+    static func сПометкой(_ текст: String, _ j: [String: Any]) -> String {
+        guard let пометка = подпись(j) else { return текст }
+        return текст.isEmpty ? пометка : текст + " · " + пометка
     }
 }
 
@@ -231,6 +261,9 @@ enum СвойИИAPI {
         if A.нетСессии(j) { return .нуженВход }
         let код = A.строка(j["code"])
         let ошибка = A.строка(j["error"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        /* Premium нужен — только need_premium:true или code "premium". app_store:true (режим app_no_digital у дверей
+           own_ai_connect, own_ai_model, own_ai_place, own_ai_or_start) — лишь знак, что error без цены и оплаты: сам по
+           себе он не «нужен Premium», иначе настоящая причина (code "place", неверный ключ) сменилась бы фразой о Premium. */
         let нуженПремиум = A.да(j["need_premium"]) || код == "premium"
         let текст: String
         if нуженПремиум {
@@ -261,6 +294,11 @@ final class СвойИИМодель: ObservableObject {
     private var поколение = 0
     /// Отказы, о которых уже сказали окном в этот запуск (живой поиск по фото, кадры съёмки — не засыпать окнами).
     private var сказано: Set<String> = []
+    /// Итог входа через OpenRouter, пришедший мимо экрана (kliko://own-ai из Safari): экран «Свой ИИ» показывает его
+    /// заметкой и забирает (взятьИтогВхода).
+    @Published private(set) var итогВхода: ИтогВходаOpenRouter? = nil
+    /// Сколько экранов «Свой ИИ» открыто: возврат из Safari не кладёт второй экран поверх первого.
+    private(set) var открытоЭкранов = 0
 
     /// Пустой: ни запросов, ни обращений к другим синглтонам.
     private init() {}
@@ -330,6 +368,26 @@ final class СвойИИМодель: ObservableObject {
         ОкноСвоегоИИ.показатьОтказ(отказ)
     }
 
+    /// Итог входа через OpenRouter для экрана (открытого или того, что сейчас откроется).
+    func сообщитьИтогВхода(_ итог: ИтогВходаOpenRouter) {
+        итогВхода = итог
+    }
+
+    /// Забрать итог входа — показать один раз.
+    func взятьИтогВхода() -> ИтогВходаOpenRouter? {
+        guard let итог = итогВхода else { return nil }
+        итогВхода = nil
+        return итог
+    }
+
+    func экранПоявился() {
+        открытоЭкранов += 1
+    }
+
+    func экранУшёл() {
+        открытоЭкранов = max(0, открытоЭкранов - 1)
+    }
+
     /// Выход из аккаунта: состояние ушедшего не показываем, ответ после выхода не примется.
     func стереть() {
         поколение += 1
@@ -339,6 +397,7 @@ final class СвойИИМодель: ObservableObject {
         неЗагрузилось = false
         когдаЗагружено = nil
         сказано = []
+        итогВхода = nil
     }
 }
 

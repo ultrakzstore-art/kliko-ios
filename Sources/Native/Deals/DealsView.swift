@@ -103,7 +103,7 @@ struct МоиСделкиЭкран: View {
                     .padding(.bottom, 2)
                 /* Подарки, отправленные вошедшему, — над вкладками: они не «продавец» и не «покупатель». */
                 СекцияПодарковМне(модель: подарки)
-                ВкладкиСделок(выбрана: модель.роль, выбрать: { модель.выбрать($0) })
+                ВкладкиСделок(выбрана: модель.роль, выбрать: { модель.выбрать($0) }, счётчики: модель.вРаботе)
                     .padding(.bottom, 2)
                     /* edsListInject(role): сделки с подписью eGov выбранной вкладки. */
                     .task(id: модель.роль) { await СписокСделокEDS.shared.загрузить(модель.роль) }
@@ -228,9 +228,11 @@ struct ШапкаСделок: ViewModifier {
 // MARK: - Вкладки
 
 /// #dtab-seller / #dtab-buyer — две отдельные кнопки (dealsTab): выбранная — зелёный градиент, другая — серая в рамке.
+/// Число справа от названия — незавершённые сделки роли (counts ответа my_deals, ultra-site 13.10.2026); нет — без числа.
 struct ВкладкиСделок: View {
     let выбрана: РольСделок
     let выбрать: (РольСделок) -> Void
+    var счётчики: [РольСделок: Int] = [:]
 
     var body: some View {
         HStack(spacing: 6) {
@@ -242,34 +244,49 @@ struct ВкладкиСделок: View {
 
     private func кнопка(_ роль: РольСделок) -> some View {
         let активна = выбрана == роль
+        let число = счётчики[роль] ?? 0
         return Button {
             выбрать(роль)
         } label: {
-            Text(роль.название)
-                .font(.system(size: 13, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .foregroundStyle(активна ? Color.white : Theme.текстВторой)
-                .padding(10)
-                .frame(maxWidth: .infinity, minHeight: 37)
-                .background {
-                    if активна {
-                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                            .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
-                                                 endPoint: .bottomTrailing))
-                            .shadow(color: КраскаСделокКабинета.теньКнопки, radius: 4, x: 0, y: 5)
-                    } else {
-                        RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                            .fill(Theme.поверхность2)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
-                                    .strokeBorder(Theme.линия, lineWidth: 1.5)
-                            }
-                    }
+            HStack(spacing: 6) {
+                Text(роль.название)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if число > 0 {
+                    Text(String(число))
+                        .font(.system(size: 11, weight: .heavy))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .foregroundStyle(активна ? КраскаСделокКабинета.хорошоТекст : Color.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(активна ? Color.white : КраскаСделокКабинета.хорошоТекст, in: Capsule())
+                        .fixedSize()
                 }
+            }
+            .foregroundStyle(активна ? Color.white : Theme.текстВторой)
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 37)
+            .background {
+                if активна {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                        .fill(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .topLeading,
+                                             endPoint: .bottomTrailing))
+                        .shadow(color: КраскаСделокКабинета.теньКнопки, radius: 4, x: 0, y: 5)
+                } else {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                        .fill(Theme.поверхность2)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                                .strokeBorder(Theme.линия, lineWidth: 1.5)
+                        }
+                }
+            }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(format: СделкиText.т("a11y_tab"), роль.название))
+        .accessibilityLabel(String(format: СделкиText.т("a11y_tab"), роль.название)
+                            + (число > 0 ? ", " + String(format: ХодСделкиText.т("a11y_open"), число) : ""))
         .accessibilityAddTraits(активна ? .isSelected : [])
     }
 }
@@ -371,7 +388,7 @@ struct КарточкаВСпискеСделок: View {
                плашкой одной высоты; длинная подсказка — с многоточием (целиком — в карточке сделки и у VoiceOver).
                Статус доставки — не отдельной пилюлей, а справа в строке номера: карточка не растёт и от него. */
             строкаДенег
-            слотСостояния
+            слот
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -526,6 +543,19 @@ struct КарточкаВСпискеСделок: View {
 
     /// Высота слота состояния — одна у всех карточек списка.
     private static let высотаСлота: CGFloat = 30
+
+    /**
+     Слот под деньгами: сервер прислал next (ultra-site 13.10.2026) — его lead и text, «Ваш ход» и отсчёт до срока
+     (СлотХодаСделки); нет — прежние подсказки по статусу и таймер.
+     */
+    @ViewBuilder
+    private var слот: some View {
+        if let ход = сделка.ход {
+            СлотХодаСделки(ход: ход)
+        } else {
+            слотСостояния
+        }
+    }
 
     /**
      Слот состояния — плашка ровно в одну строку: первая подсказка по статусу (справа — «⏰ Hч Mм», если идёт таймер

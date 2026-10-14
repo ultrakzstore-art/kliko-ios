@@ -118,6 +118,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         guard let url = info["url"] as? String, !url.isEmpty else { return }
+        /* Аренда (ultra-site 13.10.2026): пуш rent и rental… ведёт на /cabinet.php?go=rentals&rent=<номер> — свой экран
+           «Мои аренды» сразу на этой карточке (RentalsRespond.swift); своего экрана нет — адрес как есть. Пуш
+           rental_noanswer (/marketplace.php?item=<номер>) идёт общим путём ниже — карточка объявления. */
+        if let аренда = ФокусАренды.номер(из: url) {
+            Task { @MainActor in ФокусАренды.открыть(аренда, запасной: url) }
+            return
+        }
         Task { @MainActor in WebBridge.shared.openPath(url) }
     }
 }

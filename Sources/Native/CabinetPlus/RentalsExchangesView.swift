@@ -13,7 +13,10 @@ import UIKit
    · договор: «Открыть договор» — свой PDF (cabinet.php?action=rent_contract&id=, ОкноДокумента); «Подписать через eGov» —
      rent_doc_sign {rental_id}: need_otp — своё окно eGov (ОкноEGov: otp_step_create → remote.biometric.kz, otp_step_check),
      после него подпись ещё раз; «Оформить договор» (rent_doc_buy) — платный документ: при цене 0 (бесплатно по PRO)
-     своим вызовом, при цене — кабинет сайта (списание с кошелька за документ, правило 3.1.1).
+     своим вызовом, при цене — кабинет сайта (списание с кошелька за документ, правило 3.1.1);
+   · ultra-site 13.10.2026 (RentalsRespond.swift): respond_by и cancel_reason записи — «Владелец ответит до…» /
+     «Ответьте до…» и «Владелец не ответил»; owner_bookable корня — плашка «Пройдите верификацию…»; пуш аренды —
+     к своей карточке (ФокусАренды).
  Обмены (loadExchanges, exchRespond, exchCancel):
    · GET  cabinet.php?action=my_exchanges&me_id=<я> → {ok, exchanges[{id, seller_id, buyer_id, item, offer_item,
      item_id, offer_item_id, status, surcharge, surcharge_dir, comment, buyer_name, seller_name, buyer_phone,
@@ -46,6 +49,12 @@ struct АрендаКабинета: Identifiable, Equatable {
     let ценаДоговора: Int
     let подписьНужна: Bool
     let подписьЯвно: Bool
+    /// respond_by: до какого момента владелец ответит на запрос (у requested); nil — поля нет (старый ответ).
+    let ответитьДо: Date?
+    /// cancel_reason: "no_answer" — запрос закрылся сам, владелец не ответил за 24 часа.
+    let причинаОтмены: String
+    /// Номер объявления (item_id или item.id) — «Открыть объявление» у закрытого без ответа.
+    let объявление: String
 
     init?(_ j: [String: Any]) {
         typealias A = МоиОбъявленияAPI
@@ -79,9 +88,16 @@ struct АрендаКабинета: Identifiable, Equatable {
             подписьЯвно = false
             подписьНужна = true
         }
+        ответитьДо = СрокОтветаАренды.дата(A.строка(j["respond_by"]))
+        причинаОтмены = A.строка(j["cancel_reason"]).trimmingCharacters(in: .whitespaces).lowercased()
+        let номерОбъявления = A.строка(j["item_id"]).trimmingCharacters(in: .whitespaces)
+        объявление = номерОбъявления.isEmpty ? A.строка(товар["id"]).trimmingCharacters(in: .whitespaces) : номерОбъявления
     }
 
     var продавец: Bool { роль == "seller" }
+
+    /// cancelled с cancel_reason no_answer — «Владелец не ответил».
+    var безОтвета: Bool { статус == "cancelled" && причинаОтмены == "no_answer" }
 }
 
 @MainActor
@@ -94,12 +110,19 @@ final class АрендыМодель: ObservableObject {
     @Published var занято: Set<String> = []
     @Published private(set) var плашка: String? = nil
     @Published var eGov: ЗапросEGov? = nil
+    /// owner_bookable: false — площадка пока не принимает заявки для этого владельца (нужна верификация); nil — поля нет.
+    @Published private(set) var принимаетЗаявки: Bool? = nil
+    /// owner_rent_items: сколько у владельца объявлений с арендой; nil — поля нет.
+    @Published private(set) var объявленийАренды: Int? = nil
     private var подписатьПосле: String? = nil
     private var скрыть: Task<Void, Never>? = nil
 
     private func т(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
 
     var показанные: [АрендаКабинета] { все.filter { $0.роль == роль } }
+
+    /// Плашка «Пройдите верификацию…»: площадка не принимает заявки для владельца, а сдавать ему есть что (или поля нет).
+    var нужнаВерификация: Bool { принимаетЗаявки == false && (объявленийАренды ?? 1) > 0 }
 
     func показать(_ текст: String) {
         withAnimation(.easeOut(duration: 0.2)) { плашка = текст }
@@ -132,6 +155,16 @@ final class АрендыМодель: ObservableObject {
                 guard let а = запись as? [String: Any] else { return nil }
                 return АрендаКабинета(а)
             }
+            if let можно = j["owner_bookable"], !(можно is NSNull) {
+                принимаетЗаявки = МоиОбъявленияAPI.да(можно)
+            } else {
+                принимаетЗаявки = nil
+            }
+            if let сколько = j["owner_rent_items"], !(сколько is NSNull) {
+                объявленийАренды = МоиОбъявленияAPI.целое(сколько)
+            } else {
+                объявленийАренды = nil
+            }
             ошибка = nil
             нуженВход = false
         } catch {
@@ -158,6 +191,8 @@ final class АрендыМодель: ObservableObject {
                 } else {
                     let ошибка = МоиОбъявленияAPI.строка(j["error"])
                     self.показать(self.т("err_pfx") + (ошибка.isEmpty ? "?" : ошибка))
+                    /* «Срок ответа вышел — запрос уже закрыт» (13.10.2026): сервер закрыл запрос сам — список заново. */
+                    await self.загрузить()
                 }
             } catch {
                 self.показать(self.т("no_conn"))
@@ -233,26 +268,46 @@ struct ЭкранАренд: View {
     @State private var входОткрыт = false
     @State private var спор: АрендаКабинета? = nil
     @State private var причина = ""
+    /// Пуш аренды (ФокусАренды): к какой карточке вести; подсвеченная — пару секунд в рамке.
+    @ObservedObject private var фокус = ФокусАренды.shared
+    @State private var подсвечена: String? = nil
 
     private func т(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                ВкладкиРаздела(варианты: [("seller", т("rent_tab_seller")), ("buyer", т("rent_tab_buyer"))],
-                               выбрано: $модель.роль)
-                Text(т("rent_sub"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                содержимое
+        ScrollViewReader { прокрутка in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ВкладкиРаздела(варианты: [("seller", т("rent_tab_seller")), ("buyer", т("rent_tab_buyer"))],
+                                   выбрано: $модель.роль)
+                    Text(т("rent_sub"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.текстВторой)
+                    /* owner_bookable == false (13.10.2026): заявки с датами площадка пока не принимает — нужна проверка. */
+                    if модель.роль == "seller" && модель.нужнаВерификация {
+                        ПлашкаВерификацииАренды()
+                    }
+                    содержимое
+                }
+                .padding(12)
             }
-            .padding(12)
+            .task {
+                await модель.загрузить()
+                применитьФокус(прокрутка)
+            }
+            .onChange(of: фокус.номер) { _, номер in
+                /* Пуш аренды, пока экран открыт: список заново и к карточке. */
+                guard номер != nil else { return }
+                Task {
+                    await модель.загрузить()
+                    применитьФокус(прокрутка)
+                }
+            }
         }
         .background(Theme.фонСтраницы.ignoresSafeArea())
         .navigationTitle(т("rent_title"))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await модель.загрузить() }
-        .task { await модель.загрузить() }
         .overlay(alignment: .bottom) {
             if let текст = модель.плашка { ПлашкаКошелька(текст: текст) }
         }
@@ -299,7 +354,31 @@ struct ЭкранАренд: View {
         } else {
             ForEach(модель.показанные) { аренда in
                 КарточкаАренды(аренда: аренда, занято: модель.занято.contains(аренда.id), модель: модель,
-                               спор: { спор = аренда })
+                               спор: { спор = аренда }, подсвечена: подсвечена == аренда.id)
+                    .id(аренда.id)
+            }
+        }
+    }
+
+    /**
+     Карточка из пуша аренды: есть в списке — вкладка её роли, прокрутка к ней и рамка на пару секунд, номер забыт. Нет в
+     списке после удачной загрузки — номер тоже забыт (аренда чужая или удалена); не загрузилось — ждём следующей загрузки.
+     */
+    private func применитьФокус(_ прокрутка: ScrollViewProxy) {
+        guard let номер = фокус.номер else { return }
+        guard let аренда = модель.все.first(where: { $0.id == номер }) else {
+            if модель.ошибка == nil { фокус.номер = nil }
+            return
+        }
+        фокус.номер = nil
+        if аренда.роль == "seller" || аренда.роль == "buyer" { модель.роль = аренда.роль }
+        подсвечена = номер
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            withAnimation(.easeInOut(duration: 0.35)) { прокрутка.scrollTo(номер, anchor: .top) }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if подсвечена == номер {
+                withAnimation(.easeOut(duration: 0.3)) { подсвечена = nil }
             }
         }
     }
@@ -316,10 +395,16 @@ private struct КарточкаАренды: View {
     let занято: Bool
     @ObservedObject var модель: АрендыМодель
     let спор: () -> Void
+    /// Открыта из пуша аренды — рамка цветом акцента.
+    var подсвечена = false
 
     private func т(_ ключ: String) -> String { КабинетПлюсText.т(ключ) }
 
     private var статус: (String, ЗаметкаБизнеса.Тон) {
+        /* cancel_reason no_answer (13.10.2026): запрос закрылся сам — не «Отменена», а «Владелец не ответил». */
+        if аренда.безОтвета {
+            return (АрендаОтветText.т(аренда.продавец ? "noanswer_owner" : "noanswer"), .серый)
+        }
         switch аренда.статус {
         case "requested": return (т("rent_st_requested"), .предупреждение)
         case "confirmed": return (т("rent_st_confirmed"), .хорошо)
@@ -346,6 +431,7 @@ private struct КарточкаАренды: View {
                 Spacer(minLength: 6)
                 МеткаСтатуса(текст: статус.0, тон: статус.1)
             }
+            БлокОтветаАренды(аренда: аренда)
             if аренда.итого > 0 || аренда.залог > 0 {
                 HStack(spacing: 14) {
                     if аренда.итого > 0 {
@@ -367,6 +453,13 @@ private struct КарточкаАренды: View {
             }
             договор
             кнопки
+        }
+        .overlay {
+            if подсвечена {
+                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                    .strokeBorder(Theme.акцент, lineWidth: 2.5)
+                    .allowsHitTesting(false)
+            }
         }
     }
 

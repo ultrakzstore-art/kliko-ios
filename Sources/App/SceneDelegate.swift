@@ -131,7 +131,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // (kliko://open?u=…). Раньше это ловил .onOpenURL у WindowGroup.
         // Адрес проходит через Config.deepLink: он переводит схему в страницу и отсекает чужие домены.
         // Объявление и переписка открываются нативными экранами (этап 8, WebBridge.открытьСнаружи), прочее — сайтом.
-        if let адрес = connectionOptions.urlContexts.first?.url, let наш = Config.deepLink(адрес) { мост.открытьСнаружи(наш) }
+        // kliko://own-ai?ok=1|0 — возврат входа через OpenRouter («Свой ИИ», OwnAIOpenRouter.swift): не страница, а
+        // own_ai_state заново и экран «Свой ИИ»; прочее — как раньше.
+        if let адрес = connectionOptions.urlContexts.first?.url, !ВходOpenRouterСвоегоИИ.перехватить(адрес),
+           let наш = Config.deepLink(адрес) { мост.открытьСнаружи(наш) }
 
         // Холодный старт по ссылке сайта из поиска, письма или сообщения (Universal Links, applinks:kliko.kz).
         // Домен здесь уже проверила iOS — по файлу apple-app-site-association; Config.deepLink страхует.
@@ -185,6 +188,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     /// Плашка сделки или кнопка «Открыть в приложении», когда приложение уже запущено.
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        // kliko://own-ai — возврат входа через OpenRouter мимо листа (ссылка из Safari): экран «Свой ИИ».
+        if let адрес = URLContexts.first?.url, ВходOpenRouterСвоегоИИ.перехватить(адрес) { return }
         if let адрес = URLContexts.first?.url, let наш = Config.deepLink(адрес) { WebBridge.shared.открытьСнаружи(наш) }
     }
 
