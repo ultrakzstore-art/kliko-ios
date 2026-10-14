@@ -155,10 +155,16 @@ enum КабинетСайта {
      (dataURL), multipart с файлом photo.jpg, JSON {csrf, image_b64}. После удачи первой — миниатюра тем же адресом
      (multipart imgb64 + thumb_for = имя файла из url), ответ миниатюры не нужен, как у сайта. Картинка и токен идут
      аргументами скрипта, а не текстом: ни байт фото, ни токен не станут кодом. Путь — /kz/<язык>/cabinet.php (§0.3).
+     fx и fxFrom (ultra-site 14.10.2026, «Фото обработано») — необязательные поля upload_photo: виды обработки через
+     запятую (bg, frame, light, adjust, text, redact) и имя исходного файла загрузки. Без них дверь работает как раньше.
      */
-    static func загрузитьФото(картинка: String, миниатюра: String, токен: String) async throws -> ОтветЗагрузки {
-        /* Config.нативнаяСессия: те же попытки через URLSession; не узнали сессию — прежним путём, ниже. */
-        if Config.нативнаяСессия,
+    static func загрузитьФото(картинка: String, миниатюра: String, токен: String, fx: String? = nil,
+                              fxFrom: String? = nil) async throws -> ОтветЗагрузки {
+        let обработка = (fx ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let источник = (fxFrom ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        /* Config.нативнаяСессия: те же попытки через URLSession; не узнали сессию — прежним путём, ниже. Запись об
+           обработке (fx, fx_from) нативный транспорт пока не шлёт — с ней сразу прежним путём, иначе подпись пропадёт. */
+        if Config.нативнаяСессия, обработка.isEmpty, источник.isEmpty,
            let итог = await НативныйТранспортКабинета.загрузитьФото(путь("cabinet.php?action=upload_photo"),
                                                                     картинка: картинка, миниатюра: миниатюра,
                                                                     токен: токен) {
@@ -166,7 +172,7 @@ enum КабинетСайта {
         }
         let web = try await страницаСайта(ждать: true)
         let аргументы: [String: Any] = ["p": путь("cabinet.php?action=upload_photo"), "c": токен, "d": картинка,
-                                        "th": миниатюра]
+                                        "th": миниатюра, "fx": обработка, "ff": источник]
         let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
             web.callAsyncJavaScript(скриптЗагрузки, arguments: аргументы, in: nil, in: .defaultClient) { итог in
                 switch итог {
@@ -186,7 +192,8 @@ enum КабинетСайта {
         return ОтветЗагрузки(код: код, json: ответ)
     }
 
-    /// Тело скрипта загрузки: p — путь, c — токен, d — dataURL фото, th — dataURL миниатюры (пусто — без неё).
+    /// Тело скрипта загрузки: p — путь, c — токен, d — dataURL фото, th — dataURL миниатюры (пусто — без неё), fx и
+    /// ff — виды обработки и имя исходного файла (пусто — поля не шлются; миниатюре они не нужны).
     private static let скриптЗагрузки = """
     let code = 0, err = '';
     const opts = (body, json) => {
@@ -208,6 +215,8 @@ enum КабинетСайта {
       const f = new FormData();
       f.append('csrf', c);
       f.append('imgb64', d);
+      if (fx) { f.append('fx', fx); }
+      if (ff) { f.append('fx_from', ff); }
       const r = await fetch(p, opts(f, false));
       code = r.status;
       if (r.ok) {
@@ -233,6 +242,8 @@ enum КабинетСайта {
       f.append('csrf', c);
       const b = toBlob(d);
       f.append('photo', b, b.type === 'image/webp' ? 'photo.webp' : 'photo.jpg');
+      if (fx) { f.append('fx', fx); }
+      if (ff) { f.append('fx_from', ff); }
       const r = await fetch(p, opts(f, false));
       code = r.status;
       if (r.ok) {
@@ -242,7 +253,10 @@ enum КабинетСайта {
       }
     } catch (e) {}
     try {
-      const r = await fetch(p, opts(JSON.stringify({csrf: c, image_b64: d}), true));
+      const j = {csrf: c, image_b64: d};
+      if (fx) { j.fx = fx; }
+      if (ff) { j.fx_from = ff; }
+      const r = await fetch(p, opts(JSON.stringify(j), true));
       code = r.status;
       if (r.ok) {
         const o = await read(r);

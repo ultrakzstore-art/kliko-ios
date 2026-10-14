@@ -20,6 +20,7 @@ import Foundation
  Запись — только по нажатию и, где сайт спрашивает, после того же вопроса:
    · b2b_order_status {csrf, id, status} (b2bStatus: confirmed · paid · shipped · done · cancelled);
    · kp_generate {csrf, kp_id, mode: "template"|"ai", tpl: "formal"|"short"|""} → {ok, text, quota} | no_company | need_pro;
+     с 14.10.2026 текст, собранный своим ИИ человека, приходит с own_ai_run: 1 — в редакторе пометка «через ваш ИИ»;
    · kp_send {csrf, kp_id, text, tpl, accent, size, foot} — оформление по умолчанию сайта (bar, #16a34a, m, req);
    · kp_decline {csrf, kp_id};
    · shop_sections_list {csrf} / shop_sections_save {csrf, sections[{id, name}]} (shopSecLoad / shopSecSave).
@@ -136,7 +137,8 @@ enum БизнесРазделыAPI {
     }
 
     enum ИтогКП {
-        case текст(String, КвотаКП?)
+        /// своимИИ — own_ai_run ответа kp_generate: текст собрал свой ИИ человека (пометка «через ваш ИИ»).
+        case текст(String, КвотаКП?, своимИИ: Bool)
         case нужныРеквизиты
         case нуженПРО
         case ошибка(String, КвотаКП?)
@@ -149,7 +151,7 @@ enum БизнесРазделыAPI {
             let j = try await A.отправить("cabinet.php?action=kp_generate", тело: тело)
             if A.нетСессии(j) { return .ошибка(CabinetText.т("signed_out"), nil) }
             let квота = КвотаКП(j["quota"])
-            if A.да(j["ok"]) { return .текст(A.строка(j["text"]), квота) }
+            if A.да(j["ok"]) { return .текст(A.строка(j["text"]), квота, своимИИ: ОтветСвоегоИИ.своим(j)) }
             if A.да(j["no_company"]) { return .нужныРеквизиты }
             if A.да(j["need_pro"]) { return .нуженПРО }
             /* «Свой ИИ»: текст КП идёт через свой ИИ — его отказ с готовым текстом и действиями (не только строкой). */

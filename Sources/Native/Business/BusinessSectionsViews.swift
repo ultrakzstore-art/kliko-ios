@@ -1230,6 +1230,8 @@ private struct РедакторКП: View {
     @State private var пишетИИ = false
     @State private var сообщение: String? = nil
     @State private var нужно: String? = nil
+    /// Последний текст собрал свой ИИ человека (own_ai_run ответа kp_generate) — под полем пометка «через ваш ИИ».
+    @State private var своимИИ = false
 
     init(запрос: ЗапросКП, квота: КвотаКП?, открыть: @escaping (URL) -> Void, отправлено: @escaping () -> Void) {
         self.запрос = запрос
@@ -1276,6 +1278,7 @@ private struct РедакторКП: View {
                                 .allowsHitTesting(false)
                         }
                     }
+                    МеткаСвоегоИИ(видна: своимИИ && !пишетИИ && !текст.isEmpty)
                     if let сообщение {
                         ЗаметкаБизнеса(сообщение, тон: .плохо, значок: "exclamationmark.circle")
                     }
@@ -1322,8 +1325,9 @@ private struct РедакторКП: View {
             let итог = await БизнесРазделыAPI.сформироватьКП(запрос.id, ии: ии, шаблон: шаблон)
             пишетИИ = false
             switch итог {
-            case .текст(let готовый, let новая):
+            case .текст(let готовый, let новая, let своим):
                 текст = готовый
+                своимИИ = своим
                 if let новая { квота = новая }
             case .нужныРеквизиты:
                 нужно = тР("kp_need_company")

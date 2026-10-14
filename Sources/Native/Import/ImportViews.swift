@@ -874,6 +874,8 @@ private struct ПроверкаИмпорта: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.текстВторой)
                 .fixedSize(horizontal: false, vertical: true)
+            /* Разбор собрал свой ИИ человека (own_ai_run ответа ai_import / ai_job_chunk) — «через ваш ИИ». */
+            МеткаСвоегоИИ(видна: модель.своимИИ && !модель.демо)
         }
         .padding(14)
         .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))

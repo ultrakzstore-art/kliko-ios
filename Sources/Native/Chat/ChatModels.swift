@@ -459,11 +459,21 @@ struct СделкаВЧате: Hashable {
     let номер: String
     /// seller_id — кнопки видит только продавец.
     let продавец: String
+    /**
+     meta.respond_by аренды (ultra-site 13.10.2026, «Аренда, вторая часть»): до какого момента владелец ответит на запрос
+     (у requested) — «Владелец ответит до …» / «Ответьте до …», как в «Моих арендах» (RentalsRespond.swift). Нет поля
+     (старый сервер, обмен) — nil, карточка как раньше.
+     */
+    let ответитьДо: Date?
+    /// meta.cancel_reason: "no_answer" — запрос закрылся сам, владелец не ответил за 24 часа. Нет поля — пусто.
+    let причинаОтмены: String
 
     init(_ m: KeyedDecodingContainer<ЧатКлюч>, аренда: Bool) {
         self.аренда = аренда
         номер = m.строка(аренда ? "rental_id" : "exchange_id") ?? ""
         продавец = m.строка("seller_id") ?? ""
+        ответитьДо = аренда ? СрокОтветаАренды.дата(m.строка("respond_by") ?? "") : nil
+        причинаОтмены = аренда ? (m.строка("cancel_reason") ?? "").trimmingCharacters(in: .whitespaces).lowercased() : ""
         доплатаКому = (m.строка("surcharge_dir") ?? "").lowercased()
         статус = (m.строка("status") ?? (аренда ? "requested" : "pending")).lowercased()
         начало = m.строка("start") ?? ""
@@ -479,6 +489,18 @@ struct СделкаВЧате: Hashable {
         заВаш = цель?.строка("title") ?? ""
         заВашЦена = max(0, цель?.целое("price") ?? 0)
         доплата = max(0, m.целое("surcharge"))
+    }
+
+    /**
+     Запрос аренды закрыт без ответа владельца: cancelled с cancel_reason no_answer — или карточка в переписке ещё
+     «Ожидает ответа», а срок respond_by уже прошёл (сервер закроет запрос сам и ответ после срока не примет: «Срок ответа
+     вышел — запрос уже закрыт»). Тогда «Владелец не ответил» вместо статуса и без кнопок «Подтвердить» / «Отклонить».
+     */
+    var безОтвета: Bool {
+        guard аренда else { return false }
+        if статус == "cancelled" { return причинаОтмены == "no_answer" }
+        if статус == "requested", let до = ответитьДо { return до <= Date() }
+        return false
     }
 }
 

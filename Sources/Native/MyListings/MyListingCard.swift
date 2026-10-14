@@ -331,7 +331,7 @@ struct КарточкаМоегоОбъявления: View {
         HStack(alignment: .top, spacing: 12) {
             Button { действие(.открыть) } label: { фото }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(format: т("a11y_photo"), товар.название))
+                .accessibilityLabel(подписьФото)
             VStack(alignment: .leading, spacing: 4) {
                 цена
                 Button { действие(.открыть) } label: { название }
@@ -361,6 +361,20 @@ struct КарточкаМоегоОбъявления: View {
         }
         .frame(width: 96, height: 84)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        .overlay(alignment: .topLeading) {
+            /* img_ai — обложку нарисовал ИИ: метка поверх фото, размер карточки тот же (ровная схема). */
+            if товар.обложкаИИ {
+                МеткаИИОбложки()
+                    .padding(5)
+            }
+        }
+    }
+
+    /// VoiceOver у фото: «Фото объявления …» и, если обложку нарисовал ИИ, — об этом.
+    private var подписьФото: String {
+        let подпись = String(format: т("a11y_photo"), товар.название)
+        guard товар.обложкаИИ else { return подпись }
+        return подпись + ", " + ФотоМоихОбъявленийText.т("mlp_ai_badge_a11y")
     }
 
     /// advPriceHTML: «{цена} ₸ · Торг», «Договорная», аренда «{цена} ₸/сут» и « · продажа {цена} ₸».
@@ -457,6 +471,11 @@ struct КарточкаМоегоОбъявления: View {
         if товар.статус == "deleted_permanent" {
             итог.append(СведениеСтатусаОбъявления(символ: "nosign", текст: т("blocked_body"),
                                                   цвет: КраскаОбъявлений.плохоТекст))
+        }
+        /* photos_real = 0: все кадры — иллюстрации ИИ. Одна строка в том же слоте (сайт: «Мои объявления»). */
+        if вкладка != .deleted && товар.нужныНастоящиеФото {
+            итог.append(СведениеСтатусаОбъявления(символ: "camera", текст: ФотоМоихОбъявленийText.т("mlp_real_add"),
+                                                  цвет: КраскаОбъявлений.предупреждениеТекст))
         }
         if товар.топ && !товар.топДо.isEmpty {
             итог.append(СведениеСтатусаОбъявления(символ: "crown",
@@ -590,6 +609,26 @@ struct КарточкаМоегоОбъявления: View {
 }
 
 // MARK: - Части карточки
+
+/// Метка «ИИ» на обложке карточки (img_ai): тёмная капсула с палочкой — читается на любом фото, в обеих темах.
+struct МеткаИИОбложки: View {
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 8, weight: .bold))
+            Text(ФотоМоихОбъявленийText.т("mlp_ai_badge"))
+                .font(.system(size: 9, weight: .heavy))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Color.black.opacity(0.62), in: Capsule())
+        .overlay { Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5) }
+        .environment(\.layoutDirection, .leftToRight)
+        .accessibilityHidden(true)
+    }
+}
 
 /// Значок «ТОП» рядом с названием (.adv-top-badge): золото, корона.
 struct ЗначокТоп: View {

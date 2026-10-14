@@ -1,24 +1,20 @@
 import SwiftUI
-import PhotosUI
 import UIKit
 
 /**
- ОКНО «ОБЪЯВЛЕНИЕ С ИИ» (владелец 13.10.2026: «генератор изображения как в чате»; «фото + описание + мощная подача с
- оформлением»).
+ ОКНО «ИЛЛЮСТРАЦИЯ С ИИ» (владелец 13.10.2026: «генератор изображения как в чате»; сервер — ultra-site 14.10.2026,
+ «Картинка по описанию», часть 2).
 
- Полноэкранный лист поверх подачи. Сверху — шапка («✕», «Объявление с ИИ», сколько картинок осталось сегодня, «…» с
- «Удалить диалог»), посередине — лента как в мессенджере (пузыри человека справа, ответы ИИ — карточки слева), внизу —
- подсказки-чипы и поле ввода со скрепкой (своё фото — правка). Пустой чат — «Что продаёте?» с примерами (режим А) или
- фото вещи и «Что сделать с фото?» (режим Б). Тема — светлая и тёмная, как у подачи (КраскаПодачи); тексты —
- Dynamic Type; «Уменьшение движения» — без бегущего сияния и проявления. Состояние — МодельЧатаИИФото, ответы ИИ —
- AIImageChatParts.swift.
+ Полноэкранный лист поверх подачи. Сверху — шапка («✕», «Иллюстрация с ИИ» и, когда запуск тратит месячный остаток,
+ «Осталось картинок в этом месяце: N из M»), посередине — лента как в мессенджере (пузыри человека справа, ответы ИИ —
+ карточки слева), внизу — одна строка «Что продаёте?» (заполнена названием формы) и «Отправить». Пустой чат — «Что
+ продаёте?» и что будет с картинкой. Про цены и покупку в окне ничего нет. Тема — светлая и тёмная, как у подачи
+ (КраскаПодачи); тексты — Dynamic Type; «Уменьшение движения» — без бегущего сияния и проявления. Состояние —
+ МодельЧатаИИФото, ответы ИИ — AIImageChatParts.swift.
  */
 struct ЭкранЧатаИИФото: View {
     let закрыть: () -> Void
     @StateObject private var модель: МодельЧатаИИФото
-    @State private var выбранное: PhotosPickerItem? = nil
-    @State private var вопросЗакрыть = false
-    @State private var вопросУдалить = false
 
     init(подача: ПодачаМодель, вход: ВходЧатаИИФото, закрыть: @escaping () -> Void) {
         self.закрыть = закрыть
@@ -29,7 +25,7 @@ struct ЭкранЧатаИИФото: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ШапкаЧатаИИФото(модель: модель, закрыть: { нажатьЗакрыть() }, удалить: { вопросУдалить = true })
+            ШапкаЧатаИИФото(модель: модель, закрыть: закрыть)
             содержимое
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .id(модель.экран)
@@ -40,40 +36,6 @@ struct ЭкранЧатаИИФото: View {
         .sheet(isPresented: $модель.согласие, onDismiss: { модель.отказатьсяОтСогласия() }) {
             ЛистСогласияИИФото(модель: модель)
         }
-        .photosPicker(isPresented: $модель.выбратьФото, selection: $выбранное, matching: .images)
-        .onChange(of: выбранное) { _, новое in
-            guard let новое else { return }
-            выбранное = nil
-            Task { @MainActor in
-                guard let данные = try? await новое.loadTransferable(type: Data.self) else {
-                    модель.показатьВесть(т("aim_photo_fail"))
-                    return
-                }
-                guard данные.count <= ОбработкаФото.предел else {
-                    модель.показатьВесть(ПодачаText.т("ph_big"))
-                    return
-                }
-                модель.принятьФото(данные: данные)
-            }
-        }
-        .alert(модель.запрет?.заголовок ?? "", isPresented: запретНаЭкране, presenting: модель.запрет) { _ in
-            Button(т("aim_ok"), role: .cancel) {}
-        } message: { з in
-            Text(з.текст)
-        }
-        .confirmationDialog(т("aim_close_q"), isPresented: $вопросЗакрыть, titleVisibility: .visible) {
-            Button(т("aim_close_keep")) { закрыть() }
-            Button(т("aim_close_delete"), role: .destructive) { модель.удалитьДиалог(потом: закрыть) }
-            Button(т("aim_cancel"), role: .cancel) {}
-        } message: {
-            Text(т("aim_close_s"))
-        }
-        .confirmationDialog(т("aim_delete_q"), isPresented: $вопросУдалить, titleVisibility: .visible) {
-            Button(т("aim_delete_yes"), role: .destructive) { модель.удалитьДиалог() }
-            Button(т("aim_cancel"), role: .cancel) {}
-        } message: {
-            Text(т("aim_delete_s"))
-        }
         .onAppear {
             модель.закрытьОкно = закрыть
             модель.открыт()
@@ -81,21 +43,6 @@ struct ЭкранЧатаИИФото: View {
         .onDisappear { модель.закрыть() }
         .onChange(of: модель.экран) { _, _ in
             UIAccessibility.post(notification: .screenChanged, argument: nil)
-        }
-    }
-
-    private var запретНаЭкране: Binding<Bool> {
-        Binding(get: { модель.запрет != nil }, set: { показан in
-            if !показан { модель.запрет = nil }
-        })
-    }
-
-    /// «✕»: диалог есть — спросить, оставить ли его на сутки (вернуться можно) или удалить сразу.
-    private func нажатьЗакрыть() {
-        if модель.естьДиалог && !модель.реплики.isEmpty && модель.экран == .чат {
-            вопросЗакрыть = true
-        } else {
-            закрыть()
         }
     }
 
@@ -137,33 +84,38 @@ struct ЭкранЧатаИИФото: View {
 
 // MARK: - Шапка
 
-/// «✕» слева, «Объявление с ИИ» и остаток картинок по центру, «…» с «Удалить диалог» справа.
+/// «✕» слева, «Иллюстрация с ИИ» и месячный остаток по центру; справа — пустое место той же ширины (заголовок ровно
+/// посередине).
 struct ШапкаЧатаИИФото: View {
     @ObservedObject var модель: МодельЧатаИИФото
     let закрыть: () -> Void
-    let удалить: () -> Void
     @ObservedObject private var готовность = ГотовностьИИФото.shared
 
-    init(модель: МодельЧатаИИФото, закрыть: @escaping () -> Void, удалить: @escaping () -> Void) {
+    init(модель: МодельЧатаИИФото, закрыть: @escaping () -> Void) {
         self.модель = модель
         self.закрыть = закрыть
-        self.удалить = удалить
     }
 
     private func т(_ ключ: String) -> String { ИИФотоText.т(ключ) }
 
-    /// «Осталось ИИ-картинок сегодня: N»; текстовых ходов — только когда их меньше 5.
+    /// «Осталось картинок в этом месяце: N из M» — только когда spends (сервер сказал, что запуск тратит остаток).
     private var подпись: String? {
-        guard let с = готовность.сведения else { return nil }
-        var части: [String] = []
-        if let осталось = с.осталось { части.append(String(format: т("aim_left"), осталось)) }
-        if let текст = с.текстОсталось, текст < 5 { части.append(String(format: т("aim_left_text"), текст)) }
-        return части.isEmpty ? nil : части.joined(separator: " · ")
+        guard let остаток = готовность.сведения?.строкаОстатка else { return nil }
+        return String(format: т("aim_left_month"), остаток.осталось, остаток.всего)
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            кнопка(значок: "xmark", подпись: т("aim_close"), действие: закрыть)
+            Button(action: закрыть) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(КраскаПодачи.текст)
+                    .frame(width: 44, height: 44)
+                    .background(КраскаПодачи.поле, in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(НажатиеКнопкиФото(сжатие: 0.92))
+            .accessibilityLabel(т("aim_close"))
             Spacer(minLength: 0)
             VStack(spacing: 2) {
                 HStack(spacing: 6) {
@@ -182,23 +134,15 @@ struct ШапкаЧатаИИФото: View {
                         .foregroundStyle(Theme.текстВторой)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
+                        .contentTransition(.numericText())
                 }
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            Menu {
-                Button(т("aim_delete"), systemImage: "trash", role: .destructive, action: удалить)
-                    .disabled(!модель.естьДиалог)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(КраскаПодачи.текст)
-                    .frame(width: 44, height: 44)
-                    .background(КраскаПодачи.поле, in: Circle())
-                    .contentShape(Circle())
-            }
-            .accessibilityLabel(т("aim_more_actions"))
+            Color.clear
+                .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -210,19 +154,6 @@ struct ШапкаЧатаИИФото: View {
                 .frame(height: 1)
                 .accessibilityHidden(true)
         }
-    }
-
-    private func кнопка(значок: String, подпись: String, действие: @escaping () -> Void) -> some View {
-        Button(action: действие) {
-            Image(systemName: значок)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(КраскаПодачи.текст)
-                .frame(width: 44, height: 44)
-                .background(КраскаПодачи.поле, in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(НажатиеКнопкиФото(сжатие: 0.92))
-        .accessibilityLabel(подпись)
     }
 }
 
@@ -241,23 +172,13 @@ struct ЛентаЧатаИИФото: View {
         VStack(spacing: 0) {
             ScrollViewReader { прокрутка in
                 ScrollView {
-                    /* Не Lazy: реплик немного (до 30 ходов), а проявление картинки не должно повторяться при прокрутке. */
+                    /* Не Lazy: реплик немного, а проявление картинки не должно повторяться при прокрутке. */
                     VStack(alignment: .leading, spacing: 16) {
                         if модель.реплики.isEmpty {
-                            if модель.загружаемИсторию {
-                                HStack {
-                                    Spacer()
-                                    SiteSpinner()
-                                    Spacer()
-                                }
-                                .padding(.top, 60)
-                            } else {
-                                ПустойЧатИИФото(модель: модель)
-                            }
+                            ПустойЧатИИФото(модель: модель)
                         }
                         ForEach(модель.реплики) { реплика in
-                            РепликаИИФотоВид(модель: модель, реплика: реплика,
-                                             полная: реплика.id == модель.последнийЧерновик)
+                            РепликаИИФотоВид(модель: модель, реплика: реплика)
                                 .id(реплика.id)
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
@@ -283,9 +204,10 @@ struct ЛентаЧатаИИФото: View {
 
 // MARK: - Пустой чат
 
-/// Режим А — «Что продаёте?» и примеры; режим Б — фото вещи и «Что сделать с фото?».
+/// «Что продаёте?», что будет с картинкой и — если свой ИИ картинки не рисует — фраза сервера и «Нарисовать с Kliko AI».
 struct ПустойЧатИИФото: View {
     @ObservedObject var модель: МодельЧатаИИФото
+    @ObservedObject private var готовность = ГотовностьИИФото.shared
     @State private var появилось = false
     @Environment(\.accessibilityReduceMotion) private var меньшеДвижения
 
@@ -297,26 +219,34 @@ struct ПустойЧатИИФото: View {
 
     private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
 
+    /// Свой ИИ человека картинки не рисует (own_ai:"images"): фраза сервера, иначе своя.
+    private var свойНеРисует: String? {
+        guard let с = готовность.сведения, с.свойНеРисует else { return nil }
+        return с.свойТекст.isEmpty ? т("aim_own_images") : с.свойТекст
+    }
+
     var body: some View {
         VStack(spacing: 14) {
-            if модель.режим == .edit {
-                фотоВещи
-            } else {
-                значок
-            }
-            Text(т(модель.режим == .edit ? "aim_edit_t" : "aim_empty_t"))
+            значок
+            Text(т("aim_empty_t"))
                 .font(.title2.weight(.heavy))
                 .foregroundStyle(КраскаПодачи.текст)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            Text(т(модель.режим == .edit ? "aim_edit_s" : "aim_empty_s"))
+            Text(т("aim_empty_s"))
                 .font(.subheadline)
                 .foregroundStyle(Theme.текстВторой)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            if модель.режим == .draft {
-                примеры
-                ЗаметкаПодачи(т("aim_empty_note"), тон: .серый, значок: "info.circle")
+            ЗаметкаПодачи(т("aim_empty_note"), тон: .серый, значок: "info.circle")
+            if let свойНеРисует {
+                ЗаметкаПодачи(свойНеРисует, тон: .внимание, значок: "cpu")
+                if готовность.сведения?.klikoМожно == true {
+                    КнопкаЧатаИИФото(т("aim_kliko_btn"), значок: "wand.and.stars", главная: true) {
+                        модель.нарисоватьKliko(nil)
+                    }
+                    .disabled(модель.идёт)
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -340,56 +270,11 @@ struct ПустойЧатИИФото: View {
             .symbolEffect(.bounce, value: появилось)
             .accessibilityHidden(true)
     }
-
-    @ViewBuilder
-    private var фотоВещи: some View {
-        if let фото = модель.фото {
-            Image(uiImage: фото)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 300)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                        .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
-                }
-                .accessibilityLabel(т("aim_your_photo"))
-        } else if модель.готовимФото {
-            ЗаглушкаИИФото(прогресс: 0, подпись: т("aim_preparing"), квадрат: true, проценты: false)
-                .frame(maxWidth: 260)
-        } else {
-            КнопкаЧатаИИФото(т("aim_pick_photo"), значок: "photo.on.rectangle", главная: true) {
-                модель.выбратьФото = true
-            }
-        }
-    }
-
-    /// Примеры просьб — в поле (человек может дописать: «б/у, 16/512, серый»).
-    private var примеры: some View {
-        ПотокЧипов(зазор: 8) {
-            ForEach(["aim_ex_1", "aim_ex_2", "aim_ex_3"], id: \.self) { ключ in
-                Button {
-                    модель.вставитьПример(т(ключ))
-                } label: {
-                    Text(т(ключ))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(КраскаПодачи.хорошоТекст)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(КраскаПодачи.хорошоФон, in: Capsule())
-                        .overlay { Capsule().strokeBorder(КраскаПодачи.хорошоТекст.opacity(0.25), lineWidth: 1) }
-                }
-                .buttonStyle(НажатиеКнопкиФото(сжатие: 0.95))
-                .accessibilityHint(т("aim_ex_hint"))
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
 }
 
 // MARK: - Поле ввода
 
-/// Чипы-подсказки, вложение (своё фото или «Правим эту»), поле с счётчиком, скрепка и «Отправить».
+/// Одна строка «Что продаёте?» со счётчиком у предела и «Отправить».
 struct ПолеЧатаИИФото: View {
     @ObservedObject var модель: МодельЧатаИИФото
     @FocusState private var фокус: Bool
@@ -400,30 +285,14 @@ struct ПолеЧатаИИФото: View {
 
     private func т(_ ключ: String) -> String { ИИФотоText.т(ключ) }
 
-    private var заглушка: String {
-        if модель.режим == .edit { return т("aim_ph_edit") }
-        return т(модель.естьДиалог ? "aim_ph_more" : "aim_ph_draft")
-    }
-
-    /// Пустое поле допустимо в правке (с фото — «сделай каталожно»), в черновике — только в начатом диалоге.
     private var можноОтправить: Bool {
-        guard !модель.идёт, !модель.готовимФото else { return false }
-        let пусто = модель.ввод.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if модель.режим == .edit { return модель.фото != nil || модель.основа != nil || модель.естьДиалог }
-        return !пусто
-    }
-
-    /// Скрепка — своё фото для правки: режим правки включён и вид объявления его разрешает.
-    private var можноФото: Bool {
-        ГотовностьИИФото.shared.правкаДоступна(вид: модель.подача.видИИФото)
+        !модель.идёт && !модель.ввод.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !модель.чипы.isEmpty && !модель.идёт { чипы }
-            if модель.фото != nil || модель.основа != nil { вложения }
             строка
-            if модель.ввод.count > модель.пределТекста - 60 {
+            if модель.ввод.count > модель.пределТекста - 15 {
                 Text(String(format: т("aim_counter"), модель.ввод.count, модель.пределТекста))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(модель.ввод.count >= модель.пределТекста ? Theme.скидкаТекст : Theme.текстВторой)
@@ -448,91 +317,15 @@ struct ПолеЧатаИИФото: View {
         }
     }
 
-    private var чипы: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(модель.чипы) { чип in
-                    Button {
-                        модель.нажатьЧип(чип)
-                    } label: {
-                        Text(чип.подпись)
-                            .font(.footnote.weight(.bold))
-                            .foregroundStyle(КраскаПодачи.хорошоТекст)
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 34)
-                            .background(КраскаПодачи.хорошоФон, in: Capsule())
-                            .overlay { Capsule().strokeBorder(КраскаПодачи.хорошоТекст.opacity(0.25), lineWidth: 1) }
-                    }
-                    .buttonStyle(НажатиеКнопкиФото(сжатие: 0.94))
-                    .accessibilityHint(т(чип.вставка == nil ? "aim_chip_send_hint" : "aim_chip_insert_hint"))
-                }
-            }
-            .padding(.vertical, 1)
-        }
-    }
-
-    /// Миниатюра своего фото или картинки «Править эту» с «✕».
-    private var вложения: some View {
-        HStack(spacing: 10) {
-            if let основа = модель.основа {
-                миниатюра(основа, подпись: т("aim_editing_this"), убрать: { модель.снятьОснову() })
-            } else if let фото = модель.фото {
-                миниатюра(фото, подпись: т("aim_your_photo"), убрать: { модель.убратьФото() })
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func миниатюра(_ картинка: UIImage, подпись: String, убрать: @escaping () -> Void) -> some View {
-        HStack(spacing: 8) {
-            Image(uiImage: картинка)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.xs, style: .continuous))
-                .accessibilityHidden(true)
-            Text(подпись)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(КраскаПодачи.текст)
-                .lineLimit(1)
-            Button(action: убрать) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Theme.текстВторой)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(т("aim_remove") + ": " + подпись)
-        }
-        .padding(.leading, 6)
-        .padding(.trailing, 2)
-        .padding(.vertical, 4)
-        .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-    }
-
     private var строка: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if можноФото {
-                Button {
-                    модель.выбратьФото = true
-                } label: {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(КраскаПодачи.хорошоТекст)
-                        .frame(width: 44, height: 44)
-                        .background(КраскаПодачи.хорошоФон, in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(НажатиеКнопкиФото(сжатие: 0.92))
-                .disabled(модель.идёт || модель.готовимФото)
-                .accessibilityLabel(т("aim_attach"))
-            }
-            TextField(заглушка, text: $модель.ввод, axis: .vertical)
-                .lineLimit(1...5)
+        HStack(alignment: .center, spacing: 8) {
+            TextField(т("aim_ph_draft"), text: $модель.ввод)
+                .lineLimit(1)
                 .font(.body)
                 .foregroundStyle(КраскаПодачи.текст)
                 .focused($фокус)
+                .submitLabel(.send)
+                .onSubmit { модель.отправить() }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
                 .background(КраскаПодачи.поле, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -567,9 +360,9 @@ struct ПолеЧатаИИФото: View {
 // MARK: - Согласие
 
 /**
- Перед первым запросом (App Review 5.1.2(i)): кто обработает текст и кто — фото и картинки (ai_text и ai из info),
- сколько хранится, что не для обучения, как удалить, и что картинки ИИ в объявлении помечаются. «Согласен» — на этого
- человека и этих поставщиков (МодельЧатаИИФото.предметСогласия); общая формулировка — только до закрытия окна.
+ Перед первым запуском (App Review 5.1.2(i)): кто нарисует (by_text из info), что в ИИ уходит только текст формы — без
+ фото и контактов, что готовая картинка ложится фото объявления и помечается «не фото товара». «Согласен» — на этого
+ человека и этого исполнителя (МодельЧатаИИФото.предметСогласия); общая формулировка — только до закрытия окна.
  */
 struct ЛистСогласияИИФото: View {
     @ObservedObject var модель: МодельЧатаИИФото
@@ -580,12 +373,6 @@ struct ЛистСогласияИИФото: View {
     }
 
     private func т(_ ключ: String) -> String { ИИФотоText.т(ключ) }
-
-    private var ктоТекст: String {
-        let кто = модель.ктоОбработает
-        if кто.картинки == кто.текст { return String(format: т("aim_consent_same"), кто.текст) }
-        return String(format: т("aim_consent_both"), кто.текст, кто.картинки)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -604,8 +391,8 @@ struct ЛистСогласияИИФото: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    пункт("person.badge.shield.checkmark", ктоТекст)
-                    пункт("clock.arrow.circlepath", т("aim_consent_keep"))
+                    пункт("person.badge.shield.checkmark", String(format: т("aim_consent_who"), модель.ктоОбработает))
+                    пункт("text.alignleft", т("aim_consent_text"))
                     пункт("tag", т("aim_consent_mark"))
                 }
             }
@@ -639,7 +426,7 @@ struct ЛистСогласияИИФото: View {
     }
 }
 
-// MARK: - «Войдите», «Скоро»
+// MARK: - «Войдите», «Сейчас недоступно»
 
 struct ЗаглушкаЧатаИИФото: View {
     let значок: String

@@ -1230,10 +1230,12 @@ struct МастерАвтоВид: View {
 // MARK: - Мастер объекта недвижимости (_rw2)
 
 /**
- Мастер объекта (realtyWizOpen сайта): 1) сделка и вид объекта, 2) параметры (числа, чипы кроме срока и «кто
- размещает», списки кроме документов), 3) условия (переключатели, документы, «кто размещает», срок аренды),
- 4) проверка. Обязательные поля (req) держат «Далее» (_rw2SyncNext). «Сохранить» — REALTY_DATA в форму: сдаю —
- аренда с периодом по сроку, название и описание собираются сами (realtyAutofill).
+ Мастер объекта (realtyWizOpen сайта; 14.10.2026 — два экрана без экрана-сводки): 1) сделка и вид объекта (с «Гараж,
+ паркинг», когда такой раздел есть), 2) все поля вида — параметры (числа, чипы, списки), потом условия (переключатели,
+ документы, «кто размещает», срок аренды) и у продажи квартиры, дома и коммерции «Вторичка | Новостройка»
+ (condition). Обязательные поля (req; у гаража — площадь, у его аренды — срок) держат «Сохранить» (_rw2SyncNext).
+ «Сохранить» — REALTY_DATA в форму: сдаю — аренда с периодом по сроку, раздел — по виду (гараж или паркоместо,
+ комната — rooms), название и описание собираются сами (realtyAutofill).
  */
 struct МастерНедвижимостиВид: View {
     @ObservedObject var модель: ПодачаМодель
@@ -1243,32 +1245,42 @@ struct МастерНедвижимостиВид: View {
     @State private var вид: String
     @State private var значения: [String: String]
     @State private var флаги: [String: Bool]
+    /// condition: used — вторичка, new — новостройка (только у продажи квартиры, дома и коммерции).
+    @State private var состояние: String
     @State private var список: СписокВыбора? = nil
 
     init(модель: ПодачаМодель, форма: ФормаПодачи, сШага: Int) {
         self.модель = модель
         let готово = !форма.сделка.isEmpty && !форма.вид.isEmpty
-        _шаг = State(initialValue: готово ? min(max(0, сШага), 3) : 0)
+        _шаг = State(initialValue: готово ? min(max(0, сШага), 1) : 0)
         _сделка = State(initialValue: форма.сделка)
         _вид = State(initialValue: форма.вид)
         var значения = форма.недвижимость
         if значения["owner"] == nil { значения["owner"] = "owner" }
         _значения = State(initialValue: значения)
         _флаги = State(initialValue: форма.флагиНедвижимости)
+        _состояние = State(initialValue: форма.состояние == "new" ? "new" : "used")
     }
 
     private func т(_ ключ: String) -> String { МастерПодачиText.т(ключ) }
 
-    private static let виды = ["apartment", "house", "commercial", "land"]
-    /// _ASTART_REALTY: вид объекта → раздел каталога.
-    private static let разделы: [String: String] = ["apartment": "apartments", "house": "houses",
-                                                    "commercial": "commercial-realty", "land": "land"]
+    /// Виды объекта; «Гараж, паркинг» — когда раздел garages-parking есть в дереве сайта.
+    private var виды: [String] {
+        var итог = ["apartment", "house", "commercial", "land"]
+        if модель.справочники.разделы["garages-parking"] != nil || вид == "garage" { итог.append("garage") }
+        return итог
+    }
 
     private let колонки = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
+    /// «Вторичка | Новостройка» спрашивается у продажи квартиры, дома и коммерции.
+    private var новостройка: Bool {
+        сделка == "sale" && ["apartment", "house", "commercial"].contains(вид)
+    }
+
     var body: some View {
-        ОкноМастераПодачи(значок: значокВида(вид), заголовок: заголовок, шаг: шаг, всего: 4,
-                          далееПодпись: т(шаг >= 3 ? "m_save" : "m_next"), можноДалее: можноДалее,
+        ОкноМастераПодачи(значок: значокВида(вид), заголовок: заголовок, шаг: шаг, всего: 2,
+                          далееПодпись: т(шаг >= 1 ? "m_save" : "m_next"), можноДалее: можноДалее,
                           подсказкаДалее: шаг == 0 ? nil : т("rw_req"),
                           закрыть: { закрыть() }, назад: { назад() }, далее: { далее() }) {
             содержимое
@@ -1289,17 +1301,17 @@ struct МастерНедвижимостиВид: View {
         case "house": return "house"
         case "commercial": return "building"
         case "land": return "map"
+        case "garage": return "parkingsign.circle"
         default: return "building.2"
         }
     }
 
     @ViewBuilder
     private var содержимое: some View {
-        switch шаг {
-        case 0: шагСделка
-        case 1: шагПолей(1)
-        case 2: шагПолей(2)
-        default: шагПроверка
+        if шаг == 0 {
+            шагСделка
+        } else {
+            шагПолей
         }
     }
 
@@ -1319,7 +1331,7 @@ struct МастерНедвижимостиВид: View {
             }
             ПодписьПоля(т("rw_kind_l"), мелкая: true)
             LazyVGrid(columns: колонки, spacing: 8) {
-                ForEach(Self.виды, id: \.self) { в in
+                ForEach(виды, id: \.self) { в in
                     ПлиткаМастераПодачи(т("rk_" + в), значок: значокВида(в), выбрана: вид == в) {
                         выбратьВид(в)
                     }
@@ -1331,8 +1343,10 @@ struct МастерНедвижимостиВид: View {
     private func выбратьСделку(_ новая: String) {
         guard новая != сделка else { return }
         сделка = новая
-        /* Поля у продажи и аренды разные — лишние значения не тянем. */
-        значения = ["owner": значения["owner"] ?? "owner"]
+        /* Поля у продажи и аренды разные — лишние значения не тянем; «кто размещает» остаётся. */
+        let владелец = значения["owner"] ?? "owner"
+        значения = модель.исходныеЗначенияОбъекта(вид: вид, сделка: новая)
+        значения["owner"] = владелец
         флаги = [:]
         ОткликСайта.выбор()
     }
@@ -1340,16 +1354,17 @@ struct МастерНедвижимостиВид: View {
     private func выбратьВид(_ новый: String) {
         guard новый != вид else { return }
         вид = новый
-        значения = ["owner": значения["owner"] ?? "owner"]
+        let владелец = значения["owner"] ?? "owner"
+        значения = модель.исходныеЗначенияОбъекта(вид: новый, сделка: сделка)
+        значения["owner"] = владелец
         флаги = [:]
         ОткликСайта.выбор()
     }
 
-    // MARK: Поля (_rw2Step1 / _rw2Step2)
+    // MARK: Поля (_rw2Step1 и _rw2Step2 одним экраном)
 
     private var поля: [ПолеМастера] {
-        guard !сделка.isEmpty, !вид.isEmpty else { return [] }
-        return модель.справочники.недвижимость[сделка]?[вид] ?? []
+        модель.поляОбъекта(сделка: сделка, вид: вид)
     }
 
     /// _rw2FieldsOf: 1 — параметры, 2 — условия.
@@ -1360,20 +1375,37 @@ struct МастерНедвижимостиВид: View {
         }
     }
 
-    private func шагПолей(_ группа: Int) -> some View {
-        let свои = поляГруппы(группа)
-        let вопрос = группа == 1 ? т("rw_params_q") : т(сделка == "rent" ? "rw_cond_rent" : "rw_cond_sale")
-        let пояснение = группа == 1 ? т("rw_params_s") : т(сделка == "rent" ? "rw_cond_rent_s" : "rw_cond_sale_s")
+    private var шагПолей: some View {
+        let параметры = поляГруппы(1)
+        let условия = поляГруппы(2)
         return VStack(alignment: .leading, spacing: 14) {
-            ВопросМастераПодачи(вопрос, пояснение: пояснение)
-            if свои.isEmpty {
+            ВопросМастераПодачи(т("rw_params_q"), пояснение: т("rw_params_s"))
+            if новостройка { рынокЖилья }
+            if параметры.isEmpty && условия.isEmpty {
                 ЗаметкаПодачи(т("rw_none"), тон: .серый)
-            } else {
-                ForEach(свои) { поле in
+            }
+            ForEach(параметры) { поле in
+                ПолеМастераВид(поле: поле, значение: значение(поле.id), флаг: флаг(поле.id), варианты: поле.варианты,
+                               показатьСписок: { с in список = с })
+            }
+            if !условия.isEmpty {
+                ПодписьПоля(т(сделка == "rent" ? "rw_cond_rent" : "rw_cond_sale"))
+                    .padding(.top, 6)
+                ForEach(условия) { поле in
                     ПолеМастераВид(поле: поле, значение: значение(поле.id), флаг: флаг(поле.id), варианты: поле.варианты,
                                    показатьСписок: { с in список = с })
                 }
             }
+        }
+    }
+
+    /// «Вторичка | Новостройка» (condition, сайт 14.10.2026).
+    private var рынокЖилья: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ПодписьПоля(ПодачаСайтаText.т("rw_market"), мелкая: true)
+            ВыборСегментом([ВариантПоля(ключ: "used", подпись: ПодачаСайтаText.т("rw_resale")),
+                            ВариантПоля(ключ: "new", подпись: ПодачаСайтаText.т("rw_newbuild"))],
+                           значение: $состояние)
         }
     }
 
@@ -1395,73 +1427,12 @@ struct МастерНедвижимостиВид: View {
         })
     }
 
-    // MARK: Проверка (_rw2Step3)
-
-    private var шагПроверка: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ВопросМастераПодачи(т("rw_sum_q"), пояснение: т("rw_sum_s"))
-            VStack(spacing: 0) {
-                строка(т("rw_deal"), т(сделка == "rent" ? "rd_rent" : "rd_sale"))
-                строка(т("rw_obj"), вид.isEmpty ? "—" : т("rk_" + вид))
-                ForEach(заполненные, id: \.0) { пара in
-                    строка(пара.0, пара.1)
-                }
-            }
-            .background(КраскаПодачи.карточка, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(КраскаПодачи.линия, lineWidth: 1)
-            }
-        }
-    }
-
-    /// Заполненные поля: подпись и показ (вариант, «да» у переключателя, число с единицей).
-    private var заполненные: [(String, String)] {
-        var итог: [(String, String)] = []
-        for п in поля {
-            if п.вид == "toggle" {
-                if флаги[п.id] == true { итог.append((п.подпись, т("rw_yes"))) }
-                continue
-            }
-            let з = значения[п.id] ?? ""
-            guard !з.isEmpty else { continue }
-            let показ = п.варианты.first(where: { $0.ключ == з })?.подпись ?? (з + (п.единица.isEmpty ? "" : " " + п.единица))
-            итог.append((п.подпись, показ))
-        }
-        return итог
-    }
-
-    private func строка(_ ключ: String, _ значение: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(ключ)
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.текстВторой)
-            Spacer(minLength: 8)
-            Text(значение)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(КраскаПодачи.текст)
-                .multilineTextAlignment(.trailing)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(КраскаПодачи.линия).frame(height: 1).padding(.leading, 14)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
     // MARK: Ход мастера
 
     private var можноДалее: Bool {
-        switch шаг {
-        case 0:
-            return !сделка.isEmpty && !вид.isEmpty
-        case 1, 2:
-            return поляГруппы(шаг).filter { $0.обязательно && $0.вид != "toggle" }
-                .allSatisfy { !(значения[$0.id] ?? "").isEmpty }
-        default:
-            return true
-        }
+        if шаг == 0 { return !сделка.isEmpty && !вид.isEmpty }
+        return поля.filter { $0.обязательно && $0.вид != "toggle" }
+            .allSatisfy { !(значения[$0.id] ?? "").isEmpty }
     }
 
     private func назад() {
@@ -1474,7 +1445,7 @@ struct МастерНедвижимостиВид: View {
 
     private func далее() {
         guard можноДалее else { return }
-        if шаг < 3 {
+        if шаг < 1 {
             withAnimation(ДвижениеСайта.смена) { шаг += 1 }
         } else {
             сохранить()
@@ -1486,12 +1457,16 @@ struct МастерНедвижимостиВид: View {
         модель.мастер = nil
     }
 
-    /// realtyWizNext на последнем шаге: REALTY_DATA, аренда по сделке, период по сроку, раздел по виду объекта.
+    /// realtyWizNext на последнем шаге: REALTY_DATA, аренда по сделке, период по сроку, раздел по виду объекта,
+    /// condition — новостройка только у продажи квартиры, дома и коммерции.
     @MainActor
     private func сохранить() {
-        if let раздел = Self.разделы[вид], модель.видНедвижимости(модель.форма.раздел) != вид
-            || !модель.справочники.внутри(модель.форма.раздел, ["realty"]) {
-            if модель.справочники.разделы[раздел] != nil { модель.выбратьРаздел(раздел) }
+        if let раздел = модель.разделОбъекта(вид: вид, значения: значения) {
+            let сейчас = модель.форма.раздел
+            let чужой = модель.видНедвижимости(сейчас) != вид || !модель.справочники.внутри(сейчас, ["realty"])
+            let особый = сейчас != раздел && ["rooms", "parking-space"].contains(сейчас)
+            let другой = сейчас != раздел && !модель.справочники.внутри(сейчас, [раздел])
+            if чужой || особый || другой { модель.выбратьРаздел(раздел) }
         }
         var ф = модель.форма
         ф.тип = "realty"
@@ -1501,6 +1476,7 @@ struct МастерНедвижимостиВид: View {
         ф.флагиНедвижимости = флаги.filter { $0.value }
         ф.аренда = сделка == "rent"
         if сделка == "rent" { ф.период = значения["term"] == "daily" ? "day" : "month" }
+        ф.состояние = новостройка ? состояние : "used"
         модель.форма = ф
         модель.мастер = nil
         ОткликСайта.успех()

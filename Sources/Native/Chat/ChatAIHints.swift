@@ -11,6 +11,9 @@ import SwiftUI
    · ответ {ok: true, replies: [3 строки]} | {ok: false, ai_off: true} (Kliko AI выключен на сайте) | {ok: false,
      limit: 1} (дневной лимит подсказок airep_daily) | {ok: false, busy: true} (чаще раза в 2 секунды) | {error: auth |
      not_found | access | empty | ai}; «Свой ИИ» — {ok: false, own_ai: "<код>", error: готовый текст}.
+   · с 14.10.2026 (ultra-site, «Свой ИИ» во всех местах, пункт 1) успешный ответ, собранный своим ИИ человека, несёт
+     own_ai_run: 1 — признак едет вместе с вариантами, у чипов пометка «через ваш ИИ» (МеткаСвоегоИИ). Нет поля
+     (Kliko AI или старый сервер) — пометки нет, как раньше.
  Транспорт — КабинетСайта (ИнбоксAPI.отправитьБезТокена): fetch самой страницы сайта, как соседние запросы кабинета.
 
  Как у сайта: подсказка только встаёт в поле ввода и ничего не отправляет сама; варианты — тремя чипами над полем
@@ -32,7 +35,8 @@ enum ИИПодсказкиAPI {
     }
 
     enum Итог: Equatable {
-        case варианты([String])
+        /// своимИИ — в ответе own_ai_run (варианты собрал свой ИИ человека): у чипов пометка «через ваш ИИ».
+        case варианты([String], своимИИ: Bool)
         /// ai_off — Kliko AI выключен на сайте.
         case выключен
         /// limit — дневной лимит подсказок исчерпан.
@@ -75,7 +79,7 @@ enum ИИПодсказкиAPI {
                 let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
                 return t.isEmpty ? nil : t
             }
-            return строки.isEmpty ? .сбой : .варианты(Array(строки.prefix(3)))
+            return строки.isEmpty ? .сбой : .варианты(Array(строки.prefix(3)), своимИИ: ОтветСвоегоИИ.своим(j))
         }
         if да(j["ai_off"]) { return .выключен }
         if да(j["limit"]) { return .лимит }
@@ -98,7 +102,8 @@ final class ИИПодсказкиЧата: ObservableObject {
     enum Состояние: Equatable {
         case нет
         case грузим
-        case варианты([String])
+        /// своимИИ — варианты собрал свой ИИ человека (own_ai_run): пометка «через ваш ИИ» у чипов.
+        case варианты([String], своимИИ: Bool)
         case сбой
     }
 
@@ -158,8 +163,8 @@ final class ИИПодсказкиЧата: ObservableObject {
             }
             guard let self, !Task.isCancelled else { return }
             switch итог {
-            case .варианты(let строки):
-                self.состояние = .варианты(строки)
+            case .варианты(let строки, let своимИИ):
+                self.состояние = .варианты(строки, своимИИ: своимИИ)
             case .выключен:
                 self.состояние = .нет
                 ИИПодсказкиЧата.показатьОбразец(.выключен, пусто: false)
@@ -275,8 +280,8 @@ struct ПолосаИИПодсказок: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
-        case .варианты(let строки):
-            варианты(строки)
+        case .варианты(let строки, let своимИИ):
+            варианты(строки, своимИИ: своимИИ)
         case .сбой:
             Button(action: повторить) {
                 HStack(spacing: 6) {
@@ -300,7 +305,8 @@ struct ПолосаИИПодсказок: View {
         }
     }
 
-    private func варианты(_ строки: [String]) -> some View {
+    /// Варианты чипами; своимИИ — рядом с заголовком пометка «через ваш ИИ» (own_ai_run ответа).
+    private func варианты(_ строки: [String], своимИИ: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
@@ -309,6 +315,8 @@ struct ПолосаИИПодсказок: View {
                 Text(т("head").uppercased())
                     .font(.system(size: 11, weight: .heavy))
                     .kerning(0.4)
+                МеткаСвоегоИИ(видна: своимИИ)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
                 Button {
                     ии.скрыть()

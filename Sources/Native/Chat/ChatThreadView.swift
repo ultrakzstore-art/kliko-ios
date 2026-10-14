@@ -863,7 +863,10 @@ struct ChatThreadView: View {
         if Config.нативныеСообщенияКабинета, с.тип == "geo", let ш = с.широта, let д = с.долгота {
             КарточкаГеоЧата(моё: с.моё, широта: ш, долгота: д, изTelegram: false)
         } else if Config.нативныеСообщенияКабинета, let сделка = с.сделкаЧата {
+            /* Владелец аренды — seller_id == я; мой номер ещё не известен — запрос аренды пишет арендатор, значит
+               чужая карточка — владельцу (только для слов «Ответьте до…» / «Владелец ответит до…», не для кнопок). */
             КарточкаСделкиПереписки(сделка: сделка, моё: с.моё,
+                                    владелец: модель.продавецВ(сделка) || (модель.я.isEmpty && !с.моё),
                                     действия: модель.продавецВ(сделка) ? ДействиеСделкиЧата.для(сделка) : [],
                                     занято: модель.занятаСделка == сделка.номер,
                                     нажато: { действие in
@@ -1161,9 +1164,13 @@ struct КарточкаТовараПереписки: View {
 
 /// .dm-card аренды и обмена (_dmCardRental / _dmCardExchange): заголовок со значком 16, строки «Даты / Стоимость / Залог»
 /// или «Вам предлагают / За ваш», статус. Аренда — --tint-ai, обмен — --tint-info; не шире 90 %.
+/// Аренда (ultra-site 13.10.2026): у запроса со сроком meta.respond_by — «Владелец ответит до …» / «Ответьте до …»; у
+/// закрытого без ответа (cancel_reason no_answer) — «Владелец не ответил» и пояснение, как в «Моих арендах».
 struct КарточкаСделкиПереписки: View {
     let сделка: СделкаВЧате
     let моё: Bool
+    /// Смотрит владелец аренды (seller_id == я) — «Ответьте до…»; арендатор — «Владелец ответит до…».
+    var владелец: Bool = false
     /// Кнопки продавца (.dm-cact); покупателю — пусто.
     var действия: [ДействиеСделкиЧата] = []
     var занято: Bool = false
@@ -1172,6 +1179,8 @@ struct КарточкаСделкиПереписки: View {
     private func т(_ ключ: String) -> String { ИнбоксText.т(ключ) }
 
     private var статус: String {
+        /* cancel_reason no_answer: запрос закрылся сам — не «Отменена», а «Владелец не ответил» (владельцу — «Без ответа»). */
+        if сделка.безОтвета { return АрендаОтветText.т(владелец ? "noanswer_owner" : "noanswer") }
         let ключи: [String: String] = [
             "requested": "dm_r_requested", "pending": "dm_r_requested", "confirmed": "dm_r_confirmed",
             "active": "dm_r_active", "returned": "dm_r_returned", "cancelled": "dm_r_cancelled",
@@ -1210,6 +1219,7 @@ struct КарточкаСделкиПереписки: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(ИнбоксКраска.текст)
                     .padding(.top, 4)
+                блокОтвета
                 if !действия.isEmpty { кнопки }
             }
             .padding(.horizontal, 14)
@@ -1228,6 +1238,24 @@ struct КарточкаСделкиПереписки: View {
 
     private func товар(_ название: String, _ цена: Int) -> String {
         цена > 0 ? название + " · " + СделкиФормат.тенге(цена) : название
+    }
+
+    /// Пояснение у закрытого без ответа или срок ответа (requested с meta.respond_by) — как БлокОтветаАренды «Моих аренд».
+    @ViewBuilder
+    private var блокОтвета: some View {
+        if сделка.безОтвета {
+            Text(АрендаОтветText.т(владелец ? "noanswer_owner_s" : "noanswer_s"))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if сделка.аренда && сделка.статус == "requested", let до = сделка.ответитьДо {
+            Label(String(format: АрендаОтветText.т(владелец ? "respond_owner" : "respond_renter"),
+                         СрокОтветаАренды.текст(до)),
+                  systemImage: "clock")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(владелец ? КраскаОбъявлений.предупреждениеТекст : Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// surcharge_dir: buyer — «Доплата вам», seller — «Просит вашу доплату», иначе «Доплата».

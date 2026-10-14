@@ -202,6 +202,12 @@ struct МоёОбъявление: Identifiable, Equatable {
     var состояние: String = ""
     var город: String = ""
     var гарантия: Int = 0
+    /// img_ai (ultra-site 14.10.2026): обложка нарисована ИИ — на фото карточки метка «ИИ». Без поля — по photo_marks[0].gen.
+    var обложкаИИ: Bool = false
+    /// photos_real: сколько кадров — настоящие фото. nil — старый ответ без поля (строки «Добавьте настоящие фото» нет).
+    var настоящихФото: Int? = nil
+    /// Сколько кадров у объявления: images, а без него — есть ли обложка img.
+    var кадров: Int = 0
 
     init(id: String) {
         self.id = id
@@ -246,10 +252,30 @@ struct МоёОбъявление: Identifiable, Equatable {
         состояние = A.строка(j["condition"])
         город = A.строка(j["city"])
         гарантия = A.целое(j["warranty_days"])
+        if let ии = j["img_ai"], !(ии is NSNull) {
+            обложкаИИ = A.да(ии)
+        } else {
+            обложкаИИ = Self.обложкаИИПоМеткам(j["photo_marks"])
+        }
+        if let настоящие = j["photos_real"], !(настоящие is NSNull) { настоящихФото = max(0, A.целое(настоящие)) }
+        if let кадры = j["images"] as? [Any] {
+            кадров = кадры.count
+        } else {
+            кадров = фото.isEmpty ? 0 : 1
+        }
         if let с = j["stats"] as? [String: Any] {
             статистика = Self.статистика(с)
         }
     }
+
+    /// photo_marks[0].gen — первый кадр создан ИИ (старый сервер без img_ai). Неизвестные ключи пропускаются.
+    private static func обложкаИИПоМеткам(_ значение: Any?) -> Bool {
+        guard let метки = значение as? [Any], let первая = метки.first as? [String: Any] else { return false }
+        return первая["gen"] is [String: Any]
+    }
+
+    /// photos_real = 0 при непустых кадрах: все фото — иллюстрации ИИ, продавцу — «Добавьте настоящие фото».
+    var нужныНастоящиеФото: Bool { настоящихФото == 0 && кадров > 0 }
 
     private static func статистика(_ с: [String: Any]) -> СтатистикаОбъявления {
         typealias A = МоиОбъявленияAPI

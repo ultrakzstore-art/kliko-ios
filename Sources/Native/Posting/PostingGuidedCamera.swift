@@ -286,6 +286,8 @@ struct ПроверкаСъёмкиПоПлану: Equatable {
     var текст = ""
     var почему = ""
     var пришла = false
+    /// own_ai_run в ответе shot_read (14.10.2026): кадр прочитал свой ИИ человека — пометка «через ваш ИИ».
+    var своимИИ = false
 
     init(ключ: String, подпись: String) {
         self.ключ = ключ
@@ -912,13 +914,16 @@ struct СъёмкаПоПлану: View {
             надпись = т("cam_ck_bad")
             строка = п.почему.isEmpty ? т("cam_ck_none") : п.почему
         }
+        /* Прочитал свой ИИ человека (own_ai_run) — к надписи «· через ваш ИИ». */
+        let пометка = п.пришла && п.своимИИ ? " · " + СвойИИText.т("oai_via") : ""
         return VStack(spacing: 12) {
             VStack(spacing: 4) {
-                Text(надпись.uppercased())
+                Text((надпись + пометка).uppercased())
                     .font(.caption.weight(.heavy))
                     .tracking(1.2)
                     .foregroundStyle(Color.white.opacity(0.6))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Text(строка)
                     .font(п.пришла ? Font.body.weight(.bold) : Font.subheadline)
                     .foregroundStyle(Color.white)
@@ -1178,6 +1183,7 @@ struct СъёмкаПоПлану: View {
             итог.текст = МоиОбъявленияAPI.строка(j["text"]).trimmingCharacters(in: .whitespacesAndNewlines)
             итог.почему = МоиОбъявленияAPI.строка(j["why"]).trimmingCharacters(in: .whitespacesAndNewlines)
             итог.пришла = true
+            итог.своимИИ = ОтветСвоегоИИ.своим(j)
             проверка = итог
             let что: String
             if итог.хорошо {
@@ -1185,7 +1191,7 @@ struct СъёмкаПоПлану: View {
             } else {
                 что = итог.почему.isEmpty ? т("cam_ck_none") : итог.почему
             }
-            let голос = (итог.хорошо ? т("cam_ck_read") : т("cam_ck_bad")) + ": " + что
+            let голос = ОтветСвоегоИИ.сПометкой(итог.хорошо ? т("cam_ck_read") : т("cam_ck_bad"), j) + ": " + что
             UIAccessibility.post(notification: .announcement, argument: голос)
         }
     }

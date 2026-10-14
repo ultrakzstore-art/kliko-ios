@@ -188,6 +188,11 @@ final class ИмпортМодель: ObservableObject {
     @Published var строки: [СтрокаИмпорта] = []
     @Published private(set) var сИИ = false
     @Published private(set) var осталосьИИ: Int? = nil
+    /**
+     Разбор (хоть одну часть) собрал свой ИИ человека: own_ai_run: 1 в ответе ai_import или ai_job_chunk (ultra-site
+     14.10.2026, «Свой ИИ» во всех местах, пункт 1) — в итоге разбора пометка «через ваш ИИ». Нет поля — пометки нет.
+     */
+    @Published private(set) var своимИИ = false
     @Published private(set) var изСсылок = false
     @Published private(set) var публикуем: String? = nil
     @Published var ошибкаПубликации: String? = nil
@@ -532,6 +537,7 @@ final class ИмпортМодель: ObservableObject {
             if let местные = await прочитатьТаблицу(чистый) {
                 строки = местные.map { СтрокаИмпорта($0) }
                 сИИ = false
+                своимИИ = false
                 осталосьИИ = nil
                 изСсылок = false
                 опубликовано = 0
@@ -566,6 +572,14 @@ final class ИмпортМодель: ObservableObject {
                 return
             }
             сИИ = A.да(j["ai"])
+            if ОтветСвоегоИИ.своим(j) { своимИИ = true }
+            /* «Свой ИИ» (14.10.2026): own_ai:"<код>" рядом с ai_msg при ok:true — строки дочитал обычный разбор; текст
+               в заметку (видна после разбора), окно — раз за запуск. Только по коду own_ai: одно ai_msg без кода здесь
+               бывает и словами Kliko AI. */
+            if let свой = ОтказСвоегоИИ.из(j) {
+                заметка = свой.текст
+                СвойИИМодель.shared.сказатьОдинРаз(свой)
+            }
             осталосьИИ = j["ai_remaining"] == nil || j["ai_remaining"] is NSNull ? nil : A.целое(j["ai_remaining"])
             let новые = строкиОтвета(j)
             все += новые
@@ -663,6 +677,7 @@ final class ИмпортМодель: ObservableObject {
                     return
                 }
                 if A.да(j["ai"]) { сИИ = true }
+                if ОтветСвоегоИИ.своим(j) { своимИИ = true }
                 /* «Свой ИИ» (договор §5): ai_msg — готовый текст отказа своего ИИ по этой части; не молча. */
                 сообщитьИИ(j)
                 let новые = строкиОтвета(j)
@@ -726,7 +741,8 @@ final class ИмпортМодель: ObservableObject {
             заметка = т("no_rows")
             return
         }
-        ход(1, т("prog_done_s"))
+        /* Свой ИИ собрал разбор — «через ваш ИИ» и в подписи итога. */
+        ход(1, своимИИ ? т("prog_done_s") + " · " + СвойИИText.т("oai_via") : т("prog_done_s"))
         заголовокХода = т("prog_done")
         строки = все.map { СтрокаИмпорта($0) }
         изСсылок = false
@@ -836,6 +852,7 @@ final class ИмпортМодель: ObservableObject {
 
     private func начатьХод(_ заголовок: String) {
         этап = .идёт
+        своимИИ = false
         прогресс = 0
         заголовокХода = заголовок
         подписьХода = ""
@@ -867,6 +884,7 @@ final class ИмпортМодель: ObservableObject {
     func заново() {
         строки = []
         демо = false
+        своимИИ = false
         загрузкиФото = [:]
         этап = .ввод
         заметка = nil
