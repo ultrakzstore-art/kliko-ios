@@ -684,6 +684,11 @@ struct WebContainer: UIViewRepresentable {
                 if messenger.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
                     UIApplication.shared.open(url); decisionHandler(.cancel); return
                 }
+                /* Задание сервера 1.13, А3: «Маршрут» и «Открыть в картах» сайта ведут на https://maps.apple.com/?… —
+                   в приложение «Карты», как tel:, а не внутрь веб-окна. */
+                if host == "maps.apple.com" {
+                    UIApplication.shared.open(url); decisionHandler(.cancel); return
+                }
             }
             if Coordinator.вСвойЭкран(navigationAction, webView: webView) {
                 decisionHandler(.cancel); return
@@ -723,12 +728,15 @@ struct WebContainer: UIViewRepresentable {
             return nil
         }
 
-        // Камера/микрофон для getUserMedia (поиск по фото, QR, голосовые). OS всё равно спросит один раз.
+        // Камера/микрофон для getUserMedia (поиск по фото, QR, голосовые, «Измерить по фото» — задание 1.13, Б3).
+        // Страницам kliko.kz — без второго вопроса (iOS всё равно спросит один раз); чужим — как решит человек.
         @available(iOS 15.0, *)
         func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                      initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
                      decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-            decisionHandler(.grant)
+            let хост = origin.host.lowercased()
+            let свой = origin.protocol == "https" && (хост == "kliko.kz" || хост.hasSuffix(".kliko.kz"))
+            decisionHandler(свой ? .grant : .prompt)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
