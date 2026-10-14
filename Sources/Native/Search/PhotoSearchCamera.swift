@@ -226,8 +226,9 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
         }
     }
 
-    /// Затвор: снимок придёт в `готово` на главной нити.
-    func снять(_ готово: @escaping @MainActor (UIImage) -> Void) {
+    /// Затвор: снимок придёт в `готово` на главной нити. угол — поворот снимка (videoRotationAngle), когда телефон держат
+    /// не так, как интерфейс (камера подачи, НаклонТелефонаКамеры: горизонтально — 0 или 180); nil — как интерфейс.
+    func снять(угол: CGFloat? = nil, _ готово: @escaping @MainActor (UIImage) -> Void) {
         guard готова, !снимаем else { return }
         снимаем = true
         self.готово = готово
@@ -239,8 +240,9 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
                 self.наГлавной { self.снимаем = false }
                 return
             }
-            if связь.isVideoRotationAngleSupported(self.уголПоворота) {
-                связь.videoRotationAngle = self.уголПоворота
+            let поворот = угол ?? self.уголПоворота
+            if связь.isVideoRotationAngleSupported(поворот) {
+                связь.videoRotationAngle = поворот
             }
             self.выход.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
         }

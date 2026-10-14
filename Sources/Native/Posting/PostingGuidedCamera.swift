@@ -304,6 +304,8 @@ struct СъёмкаПоПлану: View {
     @State private var вопрос: ВопросСъёмкиПоПлану? = nil
     @State private var проверка: ПроверкаСъёмкиПоПлану? = nil
     @State private var вспышка = false
+    /// Как держат телефон (датчик): горизонтально — снимок в этой ориентации и крупнее (PostingCameraTilt.swift).
+    @StateObject private var наклон = НаклонТелефонаКамеры()
     /// Размер видоискателя — по нему рамка на экране и вырезка снимка.
     @State private var видоискатель: CGSize = .zero
     @State private var выбор: [PhotosPickerItem] = []
@@ -389,9 +391,13 @@ struct СъёмкаПоПлану: View {
         .statusBarHidden(true)
         .onAppear {
             камера.запустить()
+            наклон.запустить()
             ПоследнееФотоГалереи.загрузить { кадр in плёнка = кадр }
         }
-        .onDisappear { камера.остановить() }
+        .onDisappear {
+            камера.остановить()
+            наклон.остановить()
+        }
         .onChange(of: выбор) { _, новые in
             guard let элемент = новые.first else { return }
             выбор = []
@@ -467,7 +473,7 @@ struct СъёмкаПоПлану: View {
             let рамка = ВырезкаКадраПлана.рамка(в: гео.size, пропорция: пропорция)
             ZStack {
                 фонВидоискателя
-                if живая {
+                if живая && !наклон.горизонтально {
                     виньетка(гео.size)
                     УголкиПоискаФото(длина: 28, цвет: Color.white.opacity(0.5), толщина: 2.5)
                         .frame(width: рамка.width, height: рамка.height)
@@ -483,6 +489,13 @@ struct СъёмкаПоПлану: View {
                         .background(Color.black.opacity(0.45), in: Capsule())
                         .position(x: рамка.midX, y: max(14, рамка.minY - 18))
                         .allowsHitTesting(false)
+                    /* Предложение повернуть: горизонтальный кадр 16:10 крупнее вырезки из вертикального. */
+                    ПодсказкаПоворотаКамеры(текст: т("cam_rotate"), горизонтально: false)
+                        .position(x: рамка.midX, y: min(гео.size.height - 40, рамка.maxY + 24))
+                } else if живая {
+                    ПодсказкаПоворотаКамеры(текст: т("cam_wide"), горизонтально: true)
+                        .rotationEffect(наклон.поворотПодписи)
+                        .position(x: гео.size.width / 2, y: гео.size.height * 0.41)
                 }
                 подсказка(план, номер, готово)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -1023,8 +1036,13 @@ struct СъёмкаПоПлану: View {
                 withAnimation(.easeOut(duration: 0.3)) { вспышка = false }
             }
         }
-        камера.снять { снимок in
-            принять(снимок, место: место, подписьRu: подписьRu, подпись: подписьКадра, пропорция: пропорция, вид: вид)
+        /* Горизонтально — снимок в этой ориентации (иначе лёг бы боком), а рамка видоискателя к нему не относится:
+           вид .zero — середина снимка в пропорции 16:10, кадр почти целиком. */
+        let угол = наклон.угол
+        let видКадра = наклон.горизонтально ? CGSize.zero : вид
+        камера.снять(угол: угол) { снимок in
+            принять(снимок, место: место, подписьRu: подписьRu, подпись: подписьКадра, пропорция: пропорция,
+                    вид: видКадра)
         }
     }
 
@@ -1235,7 +1253,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Камера недоступна",
         "cam_no_cam_s": "Выберите кадр из галереи кнопкой внизу — он ляжет на своё место в плане",
         "cam_settings": "Открыть Настройки", "cam_next": "Следующий кадр: %@", "cam_plan_full": "План снят полностью",
-        "cam_extra": "Доп. фото", "cam_frame": "16:10 — так фото увидит покупатель", "step_btn": "Снять по шагам",
+        "cam_extra": "Доп. фото", "cam_frame": "16:10 — так фото увидит покупатель", "cam_rotate": "Поверните телефон горизонтально — кадр будет крупнее", "cam_wide": "Отлично — кадр крупный, снимайте", "step_btn": "Снять по шагам",
         "step_btn_s": "Камера подскажет каждый кадр — снимаете подряд",
         "chip_hint": "Откроет камеру на этом кадре"
     ]
@@ -1259,7 +1277,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Камера қолжетімсіз",
         "cam_no_cam_s": "Төмендегі батырмамен галереядан кадр таңдаңыз — ол жоспардағы өз орнына түседі",
         "cam_settings": "Баптауларды ашу", "cam_next": "Келесі кадр: %@", "cam_plan_full": "Жоспар толық түсірілді",
-        "cam_extra": "Қосымша фото", "cam_frame": "16:10 — сатып алушы фотоны осылай көреді", "step_btn": "Қадаммен түсіру",
+        "cam_extra": "Қосымша фото", "cam_frame": "16:10 — сатып алушы фотоны осылай көреді", "cam_rotate": "Телефонды көлденең бұрыңыз — кадр ірірек болады", "cam_wide": "Тамаша — кадр ірі, түсіре беріңіз", "step_btn": "Қадаммен түсіру",
         "step_btn_s": "Камера әр кадрды айтып отырады — қатарынан түсіресіз",
         "chip_hint": "Камераны осы кадрда ашады"
     ]
@@ -1283,7 +1301,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Camera unavailable",
         "cam_no_cam_s": "Pick a shot from your gallery with the button below — it goes to its place in the plan",
         "cam_settings": "Open Settings", "cam_next": "Next shot: %@", "cam_plan_full": "The plan is fully shot",
-        "cam_extra": "Extra photo", "cam_frame": "16:10 — this is how buyers will see the photo", "step_btn": "Shoot step by step",
+        "cam_extra": "Extra photo", "cam_frame": "16:10 — this is how buyers will see the photo", "cam_rotate": "Turn your phone sideways — the shot will be bigger", "cam_wide": "Great — big shot, go ahead", "step_btn": "Shoot step by step",
         "step_btn_s": "The camera prompts every shot — just shoot one after another",
         "chip_hint": "Opens the camera on this shot"
     ]
@@ -1307,8 +1325,42 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "الكاميرا غير متاحة",
         "cam_no_cam_s": "اختر لقطة من المعرض بالزر في الأسفل — ستوضع في مكانها في الخطة",
         "cam_settings": "فتح الإعدادات", "cam_next": "اللقطة التالية: %@", "cam_plan_full": "اكتملت خطة التصوير",
-        "cam_extra": "صورة إضافية", "cam_frame": "16:10 — هكذا سيرى المشتري الصورة", "step_btn": "التصوير خطوة بخطوة",
+        "cam_extra": "صورة إضافية", "cam_frame": "16:10 — هكذا سيرى المشتري الصورة", "cam_rotate": "أدر الهاتف أفقياً — ستكون اللقطة أكبر", "cam_wide": "رائع — اللقطة كبيرة، صوّر الآن", "step_btn": "التصوير خطوة بخطوة",
         "step_btn_s": "ستخبرك الكاميرا بكل لقطة — صوّر واحدة تلو الأخرى",
         "chip_hint": "يفتح الكاميرا على هذه اللقطة"
     ]
+}
+
+/// Плашка «Поверните телефон горизонтально» (качается значок) и «Отлично — кадр крупный» (лежит горизонтально).
+struct ПодсказкаПоворотаКамеры: View {
+    let текст: String
+    let горизонтально: Bool
+    @State private var качнуть = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: горизонтально ? "checkmark.circle.fill" : "rectangle.landscape.rotate")
+                .font(.system(size: 15, weight: .semibold))
+                .rotationEffect(.degrees(!горизонтально && качнуть ? -90 : 0))
+                .animation(качание, value: качнуть)
+                .accessibilityHidden(true)
+            Text(текст)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(горизонтально ? Theme.зелёный.opacity(0.85) : Color.black.opacity(0.5), in: Capsule())
+        .frame(maxWidth: 300)
+        .allowsHitTesting(false)
+        .onAppear { качнуть = true }
+    }
+
+    /// Качание значка — только у предложения повернуть и не при «Уменьшении движения».
+    private var качание: Animation? {
+        if ДвижениеСайта.тихо || горизонтально { return nil }
+        return Animation.easeInOut(duration: 1.1).repeatForever(autoreverses: true)
+    }
 }
