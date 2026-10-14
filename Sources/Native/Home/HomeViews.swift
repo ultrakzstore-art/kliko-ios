@@ -7,7 +7,9 @@ import SwiftUI
    .mh-vip — золотой квадрат 40×40 со звездой (linear-gradient(135deg, #d9b24c, #b88a1e), скругление --r-ms), рядом
      «VIP-объявления» заголовком .mh-h2 (21px, 800) и «Размещены в ТОП» мелко и приглушённо; ниже — сетка в две колонки
      (на широком экране — больше), каждая карточка в золотой рамке, как ТОП (.mh-vipg .mh-c);
-   .mh-stale — строка «Показано, как было в последний раз» с белой пилюлей «Повторить»;
+   .mh-stale — строка «Показано, как было в последний раз» с пилюлей «Повторить» (у сайта — белой); с 14.10.2026
+     (владелец: «упростить и улучшить главную») — плавающая плашка над нижней панелью, а не строка в потоке главной,
+     пилюля — оттенка акцента (белая на белой плашке не читалась);
    .mh-all — зелёная кнопка во всю ширину, высота 48, скругление --r-md: «Показать все объявления», total на светлой
      плашке и стрелка.
  */
@@ -68,8 +70,15 @@ struct БлокВИП<Карточка: View>: View {
 
 /// «Показано, как было в последний раз» с «Повторить» (.mh-stale): на экране копия главной с диска или прежнего места,
 /// а свежая не пришла. Не помещается в строку — надпись над кнопкой, как flex-wrap сайта.
+///
+/// 14.10.2026 (владелец: «упростить и улучшить главную»): не строка в потоке главной (она сдвигала ряды), а плавающая
+/// плашка слоем над низом ленты (NativeFeedView.плашкаУстаревшей): поверхность, рамка линии, скругление 14; в светлой
+/// теме — мягкая тень заливкой подложки (ShapeStyle.shadow: чёрный 12 %, радиус 8, вниз 4), в тёмной тени нет.
+/// «Повторить» — пилюля оттенка акцента с надписью цветом акцента: плашка теперь сама белая, и белая пилюля с рамкой
+/// линии на ней терялась.
 struct СтрокаУстаревшейГлавной: View {
     let повторить: () -> Void
+    @Environment(\.colorScheme) private var схема
 
     init(повторить: @escaping () -> Void) {
         self.повторить = повторить
@@ -89,7 +98,26 @@ struct СтрокаУстаревшейГлавной: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .background { подложка }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Подложка плашки: тень — у самой фигуры (заливка со встроенной тенью), а не .shadow на всём содержимом.
+    @ViewBuilder
+    private var подложка: some View {
+        if схема == .dark {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .fill(Theme.поверхность)
+        } else {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .fill(Theme.поверхность.shadow(.drop(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)))
+        }
     }
 
     private var надпись: some View {
@@ -103,11 +131,10 @@ struct СтрокаУстаревшейГлавной: View {
         Button(action: повторить) {
             Text(DesignText.т("retry"))
                 .font(.system(.caption, weight: .bold))
-                .foregroundStyle(Theme.текст)
+                .foregroundStyle(Theme.акцент)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Theme.поверхность, in: Capsule())
-                .overlay(Capsule().strokeBorder(Theme.линия, lineWidth: 1))
+                .background(Theme.оттенокАкцента, in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

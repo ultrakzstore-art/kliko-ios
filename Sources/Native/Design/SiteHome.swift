@@ -31,6 +31,24 @@ import UIKit
  разделов), без тасовки при возвращении; баннер — один слайд «Безопасная сделка» (только пока гарант не на паузе,
  ПаузаГаранта) и «Перенесём ваши объявления» только магазину (IS_SHOP); ряды — в том же постоянном порядке, на главной
  первые три, дальше — обычная лента (NativeFeedView.главнаяСайта).
+
+ «ТИХАЯ ВИТРИНА» — 14.10.2026 (владелец: «упростить и улучшить главную», «удобно для глаз», «ровная схема везде»).
+ Прежде первый экран занимали семь крупных разноцветных плиток и высокий баннер — объявления начинались за сгибом.
+ Теперь под шапкой три слоя, у каждого одна задача:
+   1) СеткаРазделов — восемь одинаковых ячеек 4 × 2 (на iPad и в широком окне от 664 pt — восемь в строку): белый
+      квадрат 64 с рамкой линии и картинкой раздела с сайта (/img/cat-<ключ>.webp), под ним подпись в две строки;
+      восьмая — «Все категории» (квадрат оттенка акцента, значок сетки). Чисел на ячейках нет; при крупном тексте
+      (от .xLarge) — список строк в две колонки, от .xxxLarge — в одну; слова в подписях не рвутся по буквам. Порядок
+      постоянный — полоса разделов;
+   2) ПолосаГлавной «Безопасная сделка» — строка 56 pt в фирменном зелёном (пока гарант не на паузе), нажатие — окно
+      «Как работает». Магазину та же полоса синим — «Перенесём ваши объявления» — стоит в рядах после первого;
+   3) сразу ряды объявлений (РядГлавной) без заголовка «Рекомендуем» и без цветных подложек: «• Авто … Все ›» и
+      карточки ленты; до ответа home=1 — заготовка рядов той же высоты (ЗаготовкаКарточкиСайта), одно мерцание на блок.
+ Верх от сети не зависит: сетка и полоса рисуются с первого кадра и не двигаются, когда приходят числа. Карусели,
+ точек, таймера и пилюли «Как это работает» на главной больше нет — белое пятно у пилюли ушло вместе с ними (сам
+ баннер остался на экране «Категории», точки там теперь сверху справа). Вход — одной волной один раз за запуск
+ (ПодъёмСайта, ВходГлавной, Native/Home/HomeHub.swift); «Показано, как было» — плавающая плашка над нижней панелью.
+ Раскладка простая — её же повторит сайт: сетка 4 × 2 ячеек 64 pt с зазорами 8 и 10, полоса 56, ряды через 12.
  */
 struct РазделГлавной: Identifiable, Hashable {
     /// Ключ раздела — cat= у api/listings.php и k в снимке главной (FeedSnapshot).
@@ -57,6 +75,18 @@ struct РазделГлавной: Identifiable, Hashable {
         case "animals": return "pawprint"
         case "jobs": return "briefcase"
         default: return "square.grid.2x2"
+        }
+    }
+
+    /// 14.10.2026: масштаб картинки раздела в квадрате СеткаРазделов — у картинок сайта разные поля вокруг предмета, и
+    /// без поправки предметы в одинаковых квадратах разного размера. Рамку квадрата не меняет; значения правим только
+    /// после проверки на устройстве.
+    var масштабКартинки: CGFloat {
+        switch ключ {
+        case "transport": return 1.12
+        case "services": return 1.08
+        case "electronics": return 1.04
+        default: return 1
         }
     }
 
@@ -343,6 +373,486 @@ private struct ОтветРяда: @unchecked Sendable {
     let страница: ListingsPage?
 }
 
+// MARK: - Сетка разделов «Тихой витрины» (14.10.2026)
+
+/**
+ Сетка разделов под шапкой главной (владелец 14.10.2026: «упростить и улучшить главную»): восемь одинаковых ячеек —
+ семь разделов в постоянном порядке полосы (Авто, Недвижимость, Услуги, Электроника / Товары, Животные, Работа) и
+ «Все категории» восьмой. Без GeometryReader — раскладку выбирает ViewThatFits по ширине:
+   · восемь в строку, если влезают с идеальной шириной ячейки 76 (8 × 76 + 7 × 8 = 664 pt: iPad, широкое окно, левая
+     колонка шире 664);
+   · иначе 4 × 2 — две строки по четыре, зазоры 8 по горизонтали и 10 по вертикали (на iPhone 13 колонка 83,5 pt,
+     высота сетки 2 × 97 + 10 = 204).
+ От .xLarge размера текста — список строк (квадрат 44 и подпись сбоку): до .xxLarge в две колонки, от .xxxLarge и в
+ специальных размерах — в одну, иначе под подпись остаётся ≈ 105 pt и слова не влезают. Чисел на ячейках нет ни в каком
+ состоянии — они только в голосе VoiceOver, когда ответ home=1 пришёл. Нажатие — сжатие 0,94 и «выпрыгивающая»
+ картинка (НажатиеРаздела), отклик выбора; вход — волной (ПодъёмСайта, задержка 0,035 на ячейку).
+ */
+struct СеткаРазделов: View {
+    let разделы: [РазделГлавной]
+    let название: (РазделГлавной) -> String
+    /// «N предложений» по ключу раздела — только больше нуля (ПодборкиГлавной.счёт); для голоса, не для экрана.
+    let счёт: [String: Int]
+    /// Вход главной: false — ячейки ещё не поднялись (ВходГлавной).
+    let видно: Bool
+    let выбрать: (РазделГлавной) -> Void
+    let всеКатегории: () -> Void
+    @Environment(\.dynamicTypeSize) private var размерТекста
+
+    init(разделы: [РазделГлавной], название: @escaping (РазделГлавной) -> String, счёт: [String: Int], видно: Bool,
+         выбрать: @escaping (РазделГлавной) -> Void, всеКатегории: @escaping () -> Void) {
+        self.разделы = разделы
+        self.название = название
+        self.счёт = счёт
+        self.видно = видно
+        self.выбрать = выбрать
+        self.всеКатегории = всеКатегории
+    }
+
+    /// Место в сетке: раздел или «Все категории» последним.
+    private enum Место {
+        case раздел(РазделГлавной)
+        case все
+    }
+
+    /// Восемь мест: семь разделов и «Все категории».
+    private var места: [Место] {
+        разделы.prefix(7).map { Место.раздел($0) } + [Место.все]
+    }
+
+    var body: some View {
+        Group {
+            if размерТекста >= .xLarge {
+                списком
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    вОднуСтроку
+                    сеткой
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(HomeText.т("sections"))
+    }
+
+    /// Восемь в строку: идеальная ширина ячейки 76 — по ней ViewThatFits решает, влезает ли строка (664 pt).
+    private var вОднуСтроку: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ForEach(Array(места.enumerated()), id: \.offset) { номер, место in
+                ячейка(номер, место, списком: false)
+                    .frame(minWidth: 0, idealWidth: 76, maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// 4 × 2: строки по четыре, колонка (W − 32 − 24) / 4.
+    private var сеткой: some View {
+        VStack(spacing: 10) {
+            строкаСетки(0..<4)
+            строкаСетки(4..<8)
+        }
+    }
+
+    private func строкаСетки(_ номера: Range<Int>) -> some View {
+        let все = места
+        return HStack(alignment: .top, spacing: 8) {
+            ForEach(номера, id: \.self) { номер in
+                if номер < все.count {
+                    ячейка(номер, все[номер], списком: false)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+    }
+
+    /// Крупный текст (от .xLarge): строки «квадрат 44 · подпись», зазоры 8, поля 16. До .xxLarge — две колонки (под
+    /// подпись ≈ 105 pt на iPhone 13), от .xxxLarge и в специальных размерах — одна (≈ 288 pt: «Недвижимость» при AX3
+    /// ≈ 261 pt влезает).
+    @ViewBuilder
+    private var списком: some View {
+        if размерТекста >= .xxxLarge {
+            однойКолонкой
+        } else {
+            двумяКолонками
+        }
+    }
+
+    /// Самый крупный текст: восемь строк одна под другой.
+    private var однойКолонкой: some View {
+        VStack(spacing: 8) {
+            ForEach(Array(места.enumerated()), id: \.offset) { номер, место in
+                ячейка(номер, место, списком: true)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 16)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+    }
+
+    /// .xLarge и .xxLarge: две колонки строк.
+    private var двумяКолонками: some View {
+        let все = места
+        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(Array(stride(from: 0, to: все.count, by: 2)), id: \.self) { номер in
+                GridRow {
+                    ячейка(номер, все[номер], списком: true)
+                    if номер + 1 < все.count {
+                        ячейка(номер + 1, все[номер + 1], списком: true)
+                    } else {
+                        Color.clear
+                            .frame(height: 1)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 16)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+    }
+
+    private func ячейка(_ номер: Int, _ место: Место, списком: Bool) -> some View {
+        let готовая: ЯчейкаРаздела
+        switch место {
+        case .раздел(let раздел):
+            готовая = ЯчейкаРаздела(вид: .раздел(раздел), название: название(раздел), значение: голосЧисла(раздел),
+                                    списком: списком, действие: { выбрать(раздел) })
+        case .все:
+            готовая = ЯчейкаРаздела(вид: .все, название: HomeText.т("all_cats"), значение: nil, списком: списком,
+                                    действие: всеКатегории)
+        }
+        return готовая
+            .modifier(ПодъёмСайта(видно: видно, задержка: 0.035 * Double(номер), сдвиг: 12, масштаб: 0.96))
+    }
+
+    /// Голос числа: «8 предложений», у «Работы» — «3 вакансии»; ответа не было или ноль — nil (значения нет).
+    private func голосЧисла(_ раздел: РазделГлавной) -> String? {
+        guard let n = счёт[раздел.ключ], n > 0 else { return nil }
+        return раздел.вакансии ? DesignText.вакансий(n) : DesignText.предложений(n)
+    }
+}
+
+/**
+ Ячейка сетки разделов. Квадрат 64 со скруглением 18: поверхность и рамка линии 1 pt, без градиента, круга и тени;
+ внутри картинка раздела 52 pt (тем же загрузчиком и памятью, что у плиток, — КартинкаЛенты), пока её нет — значок
+ SF Symbol раздела. Подпись 12 pt (caption, полужирный) — место всегда на две строки; слово по буквам не рвётся
+ (названиеБезРазрыва): влезает в строку — одной строкой, два слова («Жылжымайтын мүлік», «Все категории») — каждое на
+ своей строке, а если и так не влезает — с ужатием до 0,75. «Все категории» — квадрат оттенка акцента без рамки, значок
+ сетки и подпись цветом акцента.
+ */
+private struct ЯчейкаРаздела: View {
+    enum Вид {
+        case раздел(РазделГлавной)
+        case все
+    }
+
+    let вид: Вид
+    let название: String
+    /// «8 предложений» — значение для VoiceOver; nil — значения нет.
+    let значение: String?
+    /// Крупный текст: строка «квадрат 44 · подпись» вместо столбика.
+    let списком: Bool
+    let действие: () -> Void
+
+    init(вид: Вид, название: String, значение: String?, списком: Bool, действие: @escaping () -> Void) {
+        self.вид = вид
+        self.название = название
+        self.значение = значение
+        self.списком = списком
+        self.действие = действие
+    }
+
+    var body: some View {
+        Button {
+            ОткликСайта.выбор()
+            действие()
+        } label: {
+            if списком {
+                строкаСписка
+            } else {
+                столбик
+            }
+        }
+        .buttonStyle(НажатиеРаздела())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(название)
+        .accessibilityValue(значение ?? "")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityShowsLargeContentViewer {
+            Label(название, systemImage: значок)
+        }
+    }
+
+    /// Квадрат 64 и подпись под ним — вся колонка нажимается.
+    private var столбик: some View {
+        VStack(spacing: 4) {
+            квадрат(сторона: 64, радиус: Theme.Радиус.lg, картинка: 52, значок: 22)
+            подпись
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+
+    /// Крупный текст: квадрат 44 (скругление 12, картинка 36) и подпись по ведущему краю — одно слово в строку, два — в
+    /// две; не влезает — ужатие до 0,7, а не разрыв слова (названиеБезРазрыва).
+    private var строкаСписка: some View {
+        HStack(spacing: 10) {
+            квадрат(сторона: 44, радиус: Theme.Радиус.ms, картинка: 36, значок: 18)
+            названиеБезРазрыва(Font.system(.subheadline, weight: .semibold), трекинг: 0, выравнивание: .leading,
+                               сжатие: 0.7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, minHeight: 60, maxHeight: .infinity, alignment: .leading)
+        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .strokeBorder(Theme.линия, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+    }
+
+    private func квадрат(сторона: CGFloat, радиус: CGFloat, картинка: CGFloat, значок: CGFloat) -> some View {
+        ZStack {
+            switch вид {
+            case .раздел(let раздел):
+                RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                    .fill(Theme.поверхность)
+                RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                    .strokeBorder(Theme.линия, lineWidth: 1)
+                КартинкаЯчейкиРаздела(раздел: раздел, пунктов: картинка, значок: значок)
+            case .все:
+                RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                    .fill(Theme.оттенокАкцента)
+                Image(systemName: "square.grid.3x3")
+                    .font(.system(size: значок, weight: .semibold))
+                    .foregroundStyle(Theme.акцент)
+            }
+        }
+        .frame(width: сторона, height: сторона)
+        .accessibilityHidden(true)
+    }
+
+    /// Подпись: невидимый пробел держит место ровно на две строки, название лежит поверх него сверху.
+    private var подпись: some View {
+        let шрифт = Font.system(.caption, weight: .semibold)
+        return Text(" ")
+            .font(шрифт)
+            .lineLimit(2, reservesSpace: true)
+            .hidden()
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .top) {
+                названиеБезРазрыва(шрифт, трекинг: -0.1, выравнивание: .center, сжатие: 0.75)
+            }
+    }
+
+    /**
+     Название без разрыва слова по буквам. Слишком длинное слово SwiftUI переносит по буквам — текст при этом влезает в
+     свои строки, и ужатие не включается («Жылжымайты / н мүлік» в колонке 83,5 pt). Поэтому ViewThatFits по ширине:
+     влезает в строку — одной строкой; два слова — каждое на своей строке, если самое длинное влезает; иначе те же строки
+     с ужатием до `сжатие`: лишняя строка для разрыва не помещается, и SwiftUI ужимает шрифт. Голос — название целиком
+     (accessibilityLabel ячейки), перенос строки его не трогает.
+     */
+    private func названиеБезРазрыва(_ шрифт: Font, трекинг: CGFloat, выравнивание: TextAlignment,
+                                    сжатие: CGFloat) -> some View {
+        let слова = название.split(separator: " ")
+        let поСловам = слова.count == 2 ? слова.joined(separator: "\n") : название
+        let строк = слова.count > 1 ? 2 : 1
+        return ViewThatFits(in: .horizontal) {
+            текстНазвания(название, шрифт, трекинг: трекинг)
+                .lineLimit(1)
+            текстНазвания(поСловам, шрифт, трекинг: трекинг)
+                .lineLimit(строк)
+            текстНазвания(поСловам, шрифт, трекинг: трекинг)
+                .lineLimit(строк)
+                .minimumScaleFactor(сжатие)
+        }
+        .multilineTextAlignment(выравнивание)
+    }
+
+    private func текстНазвания(_ строка: String, _ шрифт: Font, трекинг: CGFloat) -> some View {
+        Text(строка)
+            .font(шрифт)
+            .tracking(трекинг)
+            .foregroundStyle(цветПодписи)
+    }
+
+    private var цветПодписи: Color {
+        switch вид {
+        case .раздел: return Theme.текст
+        case .все: return Theme.акцент
+        }
+    }
+
+    /// Значок для крупного просмотра (долгое нажатие при самом крупном тексте).
+    private var значок: String {
+        switch вид {
+        case .раздел(let раздел): return раздел.значок
+        case .все: return "square.grid.3x3"
+        }
+    }
+}
+
+/// Картинка раздела в квадрате ячейки: под пальцем (разделНажат) чуть больше и выше — «выпрыгивает»; при «Уменьшении
+/// движения» стоит на месте (остаётся только сжатие всей ячейки).
+private struct КартинкаЯчейкиРаздела: View {
+    let раздел: РазделГлавной
+    let пунктов: CGFloat
+    /// Кегль значка-заглушки.
+    let значок: CGFloat
+    @Environment(\.разделНажат) private var нажат
+
+    init(раздел: РазделГлавной, пунктов: CGFloat, значок: CGFloat) {
+        self.раздел = раздел
+        self.пунктов = пунктов
+        self.значок = значок
+    }
+
+    var body: some View {
+        let прыжок = нажат && !ДвижениеСайта.тихо
+        КартинкаЛенты(раздел.картинка, пунктов: пунктов, заполнить: false) {
+            Image(systemName: раздел.значок)
+                .font(.system(size: значок, weight: .semibold))
+                .foregroundStyle(Theme.текстВторой.opacity(0.6))
+        }
+        .frame(width: пунктов, height: пунктов)
+        .scaleEffect(раздел.масштабКартинки * (прыжок ? 1.08 : 1))
+        .offset(y: прыжок ? -3 : 0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: прыжок)
+    }
+}
+
+/// Нажатие ячейки сетки разделов: сжатие до 94 % пружиной; «нажата ли» — в среду (разделНажат) для картинки внутри.
+struct НажатиеРаздела: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .environment(\.разделНажат, configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+private struct КлючРазделНажат: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Ячейка сетки разделов под пальцем (НажатиеРаздела).
+    var разделНажат: Bool {
+        get { self[КлючРазделНажат.self] }
+        set { self[КлючРазделНажат.self] = newValue }
+    }
+}
+
+// MARK: - Полоса главной (14.10.2026)
+
+/**
+ Полоса доверия под сеткой разделов — вместо высокого баннера-карусели: строка 56 pt во всю ширину, скругление 18,
+ слева квадрат 36 с градиентом и белым значком, заголовок 15 pt и подпись 12 pt, справа шеврон. Вся полоса — одна
+ кнопка (НажатиеСайта, 0,98), без пилюли, точек и таймера.
+   · гарант — фирменный зелёный (как окно «Как работает»), фон 8 % зелёного, значок щита; нажатие — ЛистГарантСделки;
+   · перенос — то же синим (#2563EB), «Перенесём ваши объявления», только магазину, в рядах после первого.
+ Вторая строка подписи растит полосу — это зависит только от языка и ширины, не от данных.
+ */
+struct ПолосаГлавной: View {
+    enum Вид {
+        case гарант
+        case перенос
+    }
+
+    let вид: Вид
+    /// Растёт — щит гаранта один раз «подпрыгивает» (вход главной).
+    let прыжок: Int
+    let действие: () -> Void
+
+    init(вид: Вид, прыжок: Int = 0, действие: @escaping () -> Void) {
+        self.вид = вид
+        self.прыжок = прыжок
+        self.действие = действие
+    }
+
+    var body: some View {
+        Button(action: действие) {
+            HStack(spacing: 12) {
+                квадрат
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(заголовок)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.текст)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(подпись)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.текстВторой)
+                        .lineLimit(2)
+                }
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .flipsForRightToLeftLayoutDirection(true)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(вид == .гарант ? Theme.акцент : Self.шевронПереноса)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(вид == .гарант ? Self.фонГаранта : Self.фонПереноса,
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                    .strokeBorder(вид == .гарант ? Self.кромкаГаранта : Self.кромкаПереноса, lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        }
+        .buttonStyle(НажатиеСайта())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(заголовок + ". " + подпись)
+        .accessibilityHint(DesignText.т(вид == .гарант ? "bn_escrow_b" : "bn_import_b"))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Квадрат 36 со скруглением 10: градиент от левого верхнего угла к правому нижнему, белый значок 18.
+    private var квадрат: some View {
+        Image(systemName: вид == .гарант ? "checkmark.shield.fill" : "tray.and.arrow.down.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .symbolEffect(.bounce, value: прыжок)
+            .frame(width: 36, height: 36)
+            .background(LinearGradient(colors: вид == .гарант ? Self.краскиГаранта : Self.краскиПереноса,
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private var заголовок: String { DesignText.т(вид == .гарант ? "bn_escrow_t" : "bn_import_t") }
+    private var подпись: String { DesignText.т(вид == .гарант ? "bn_escrow_s" : "bn_import_s") }
+
+    /// Гарант: --mk-green2 → --mk-green (#1D7D4A → #0F5132, в тёмной #34C997 → #22A05B).
+    private static let краскиГаранта: [Color] = [Theme.зелёный2, Theme.зелёный]
+    /// Перенос: #2563EB → #2563EB 68 % к почти чёрному, как значок листа слайда.
+    private static let краскиПереноса: [Color] = [Color(uiColor: Theme.hex(0x2563EB)),
+                                                  Color(uiColor: Theme.смесь(Theme.hex(0x2563EB), Theme.hex(0x0B1A12), 0.68))]
+    /// Фон гаранта: 8 % #1D7D4A к белому, в тёмной — 14 % #34C997 к #16161F.
+    private static let фонГаранта = Theme.цвет(светлый: Theme.смесь(Theme.hex(0x1D7D4A), UIColor.white, 0.08),
+                                               тёмный: Theme.смесь(Theme.hex(0x34C997), Theme.hex(0x16161F), 0.14))
+    /// Кромка гаранта: #1D7D4A 16 %, в тёмной — #34C997 24 %.
+    private static let кромкаГаранта = Theme.цвет(светлый: Theme.hex(0x1D7D4A, 0.16), тёмный: Theme.hex(0x34C997, 0.24))
+    /// Фон переноса: 8 % #2563EB к белому, в тёмной — 18 % к #16161F.
+    private static let фонПереноса = Theme.цвет(светлый: Theme.смесь(Theme.hex(0x2563EB), UIColor.white, 0.08),
+                                                тёмный: Theme.смесь(Theme.hex(0x2563EB), Theme.hex(0x16161F), 0.18))
+    /// Кромка переноса: #2563EB 18 %, в тёмной — 32 %.
+    private static let кромкаПереноса = Theme.цвет(светлый: Theme.hex(0x2563EB, 0.18), тёмный: Theme.hex(0x2563EB, 0.32))
+    /// Шеврон переноса: #2563EB, в тёмной — 55 % с белым.
+    private static let шевронПереноса = Theme.цвет(светлый: Theme.hex(0x2563EB),
+                                                   тёмный: Theme.смесь(Theme.hex(0x2563EB), UIColor.white, 0.55))
+}
+
 // MARK: - Сетка плиток (.mh-hub)
 
 /**
@@ -350,6 +860,9 @@ private struct ОтветРяда: @unchecked Sendable {
  (is-prio, сплошная краска), ниже две строки по две светлые плитки. Высота верхних строк — clamp(86px, …, 118px),
  нижних — 88px, зазор — --vx-gap (10px). Плитки — все семь в постоянном порядке: седьмая — во всю ширину внизу.
  Слайдов нет (гарант на паузе, не магазин) — две сплошные плитки встают рядом в верхнюю строку.
+
+ С 14.10.2026 на главной не показывается — там СеткаРазделов и ПолосаГлавной («Тихая витрина»). Тип оставлен: на него
+ могут ссылаться другие экраны и пачки.
  */
 struct ПлиткиГлавной: View {
     let разделы: [РазделГлавной]
@@ -590,7 +1103,12 @@ struct ПлиткаРаздела: View {
 // MARK: - Баннер (.mh-bn)
 
 /**
- Баннер Kliko (.mh-bn): слайды сменяются наплывом раз в 6 с (MH_BN_EVERY), точки справа внизу.
+ Баннер Kliko (.mh-bn): слайды сменяются наплывом раз в 6 с (MH_BN_EVERY), точки справа вверху.
+
+ 14.10.2026 (владелец прислал скрин: у пилюли «Как это работает» белое пятно): точки стояли справа внизу (16 и 8 от
+ краёв) — ровно там, где кончается длинная пилюля, и белая полоска выбранной точки торчала из-под её края. Теперь точки
+ справа вверху (12 сверху, 14 справа), где у слайда только бледный значок. С главной баннер ушёл («Тихая витрина» —
+ ПолосаГлавной), остался на экране «Категории» (ЭкранКатегорийСайта).
 
  Этап 49: слайдов четыре, как у сайта — «Перенесём ваши объявления» (#2563EB), «Продавайте на Kliko» (#0F7A44),
  «Торгуйтесь по-настоящему» (#D97706) и «Деньги ждут у нас» (#7C3AED); порядок тасует ПодборкиГлавной раз за жизнь ленты
@@ -647,7 +1165,7 @@ struct БаннерГлавной: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .topTrailing) {
             ForEach(Array(слайды.enumerated()), id: \.element.id) { индекс, слайд in
                 слайдВид(слайд)
                     .opacity(индекс == номер ? 1 : 0)
@@ -749,7 +1267,7 @@ struct БаннерГлавной: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// .mh-bn-d: выбранная — полоска 18×6 белая, прочие — точки 6×6 белые 42 %.
+    /// .mh-bn-d: выбранная — полоска 18×6 белая, прочие — точки 6×6 белые 42 %. Справа вверху — не под пилюлей.
     private var точки: some View {
         HStack(spacing: 6) {
             ForEach(Array(слайды.enumerated()), id: \.element.id) { индекс, слайд in
@@ -768,8 +1286,8 @@ struct БаннерГлавной: View {
                 .accessibilityAddTraits(индекс == номер ? .isSelected : [])
             }
         }
-        .padding(.trailing, 16)
-        .padding(.bottom, 8)
+        .padding(.top, 12)
+        .padding(.trailing, 14)
     }
 }
 
@@ -1042,9 +1560,15 @@ struct ЛистСлайдаГлавной: View {
 // MARK: - Ряд раздела (.mh-row)
 
 /**
- Ряд «• Электроника 26  Все ›»: полоса во всю ширину со скруглением 20 и отсветом краски раздела слева сверху, чётные
- ряды — на чуть зелёной подложке; карточки листаются вбок по 2,2 на экран. Раздел больше показанного — в конце ряда
+ Ряд «• Электроника  Все ›» и карточки, листающиеся вбок по 2,2 на экран. Раздел больше показанного — в конце ряда
  плитка «Смотреть все» с числом (.mh-rend).
+
+ 14.10.2026 (владелец: «упростить и улучшить главную»): без подложки-полосы, отсвета краски и чередования фона — ряды
+ лежат прямо на фоне страницы и разделены зазором 12 ленивого стека. Заголовок 36 pt: точка краски раздела, название
+ 17 pt, справа «Все ›» цветом акцента у всех рядов; числа в заголовке нет (оно в голосе «Все»). «Смотреть все» — на
+ каркасе карточки (ЗаготовкаКарточкиСайта) той же высоты, что ListingCard, у «Работы» — высоты карточки вакансии
+ (КаркасВакансииГлавной). Заготовка ряда (заготовка: true) — тот же ряд: точка и полоса вместо названия, без «Все»,
+ прокрутка выключена. Прежний init с `чётный:` оставлен для других экранов — подложку он больше не рисует.
  */
 struct РядГлавной<Карточка: View>: View {
     let раздел: РазделГлавной
@@ -1052,12 +1576,27 @@ struct РядГлавной<Карточка: View>: View {
     /// Сколько карточек в ряду — от него «Смотреть все» (i > items.length у сайта).
     let показано: Int
     let всего: Int?
-    /// Второй, четвёртый… ряд — .mh-row:nth-of-type(2n).
+    /// Прежнее чередование подложки (.mh-row:nth-of-type(2n)). С 14.10.2026 подложки нет — не рисуется.
     let чётный: Bool
+    /// Заготовка ряда до ответа home=1: в заголовке полоса вместо названия, «Все» нет, ряд не листается и не нажимается.
+    let заготовка: Bool
     let всё: () -> Void
     let карточки: Карточка
     @Environment(\.colorScheme) private var схема
 
+    init(раздел: РазделГлавной, название: String, показано: Int, всего: Int?, заготовка: Bool = false,
+         всё: @escaping () -> Void, @ViewBuilder карточки: () -> Карточка) {
+        self.раздел = раздел
+        self.название = название
+        self.показано = показано
+        self.всего = всего
+        self.чётный = false
+        self.заготовка = заготовка
+        self.всё = всё
+        self.карточки = карточки()
+    }
+
+    /// Прежняя сигнатура (до 14.10.2026) — для других экранов и пачек; подложки больше нет, `чётный` не рисуется.
     init(раздел: РазделГлавной, название: String, показано: Int, всего: Int?, чётный: Bool,
          всё: @escaping () -> Void, @ViewBuilder карточки: () -> Карточка) {
         self.раздел = раздел
@@ -1065,6 +1604,7 @@ struct РядГлавной<Карточка: View>: View {
         self.показано = показано
         self.всего = всего
         self.чётный = чётный
+        self.заготовка = false
         self.всё = всё
         self.карточки = карточки()
     }
@@ -1076,59 +1616,68 @@ struct РядГлавной<Карточка: View>: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 10) {
                     карточки
-                    if let всего, всего > показано {
+                    if !заготовка, let всего, всего > показано {
                         конецРяда(всего)
                             .containerRelativeFrame(.horizontal) { длина, _ in ШиринаКарточкиРяда.для(длина) }
                     }
                 }
                 .padding(.horizontal, 16)
-                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: прокрутка обрезает всё, что за её краем, и тень
-                   карточек (до ~9 pt вниз) срезалась в 4 pt под ними ровной полосой. Снизу место под тень — внутри
-                   прокрутки, а внешний отступ меньше на столько же: ряд той же высоты. Сверху 8 (.mh-rh) + 2 (.mh-rs). */
-                .padding(.top, 10)
+                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: прокрутка обрезает всё, что за её краем, — сверху
+                   4 и снизу 14 под тень карточек внутри прокрутки, иначе тень срезалась ровной полосой. */
+                .padding(.top, 4)
                 .padding(.bottom, 14)
             }
+            .scrollDisabled(заготовка)
         }
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-        .background(полоса)
+        .allowsHitTesting(!заготовка)
     }
 
+    /// Заголовок ряда, высота не меньше 36: точка 8 краской раздела, название 17/heavy, справа «Все ›» (44 × 36).
     private var заголовок: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(Color(uiColor: краска))
+                .fill(заготовка ? Theme.линия : Color(uiColor: краска))
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
-            Text(название)
-                .font(.system(size: 19, weight: .heavy))
-                .tracking(-0.19)
-                .foregroundStyle(Theme.текст)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-            if let всего, всего > 0 {
-                Text(DesignText.число(всего))
-                    .font(.system(.caption, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
-                    .accessibilityLabel(числоСловом(всего))
+            if заготовка {
+                RoundedRectangle(cornerRadius: Theme.Радиус.xxs, style: .continuous)
+                    .fill(Theme.линия)
+                    .frame(width: 96, height: 14)
+                    .accessibilityHidden(true)
+            } else {
+                Text(название)
+                    .font(.system(size: 17, weight: .heavy))
+                    .tracking(-0.17)
+                    .foregroundStyle(Theme.текст)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
             }
             Spacer(minLength: 8)
-            Button(action: всё) {
-                HStack(spacing: 2) {
-                    Text(DesignText.т("row_all"))
-                    Image(systemName: "chevron.right")
-                        .flipsForRightToLeftLayoutDirection(true)
-                        .font(.system(size: 12, weight: .bold))
+            if !заготовка {
+                Button(action: всё) {
+                    HStack(spacing: 2) {
+                        Text(DesignText.т("row_all"))
+                            .font(.system(size: 14, weight: .bold))
+                        Image(systemName: "chevron.right")
+                            .flipsForRightToLeftLayoutDirection(true)
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.акцент)
+                    .frame(minWidth: 44, minHeight: 36)
+                    .contentShape(Rectangle())
                 }
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(цветСсылки)
-                .frame(height: 32)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(голосВсе)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(DesignText.т("row_all") + ": " + название)
         }
-        .frame(minHeight: 40)          // .mh-rh: min-height var(--vx-h)
+        .frame(minHeight: 36)
+    }
+
+    /// «Все: Авто, 8 предложений» — число, когда всего известно.
+    private var голосВсе: String {
+        let начало = DesignText.т("row_all") + ": " + название
+        guard let всего, всего > 0 else { return начало }
+        return начало + ", " + числоСловом(всего)
     }
 
     /// «26 предложений», у «Работы» — «3 вакансии» (_mhCount(n, jobs)).
@@ -1136,28 +1685,36 @@ struct РядГлавной<Карточка: View>: View {
         раздел.вакансии ? DesignText.вакансий(n) : DesignText.предложений(n)
     }
 
-    /// .mh-rend: плитка с кружком-стрелкой краски раздела, «Смотреть все» и числом — ведёт туда же, куда «Все».
+    /// .mh-rend на каркасе карточки: в месте фото 4:3 — 7 % краски к поверхности и круг 44 краски со стрелкой, в теле по
+    /// центру «Смотреть все» и число. Ведёт туда же, куда «Все». У «Работы» (вакансии без фото) — плитка высотой карточки
+    /// вакансии (КаркасВакансииГлавной): круг, «Смотреть все» и число по центру на 7 % краски, рамка линии.
     private func конецРяда(_ всего: Int) -> some View {
         Button(action: всё) {
-            VStack(spacing: 8) {
-                Image(systemName: "arrow.right")
-                    .flipsForRightToLeftLayoutDirection(true)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color(uiColor: краска), in: Circle())
-                Text(DesignText.т("see_all"))
-                    .font(.system(.subheadline, weight: .bold))
-                    .foregroundStyle(цветСсылки)
-                Text(числоСловом(всего))
-                    .font(.system(.caption, weight: .semibold))
-                    .foregroundStyle(Theme.текстВторой)
+            if раздел.вакансии {
+                КаркасВакансииГлавной {
+                    VStack(spacing: 8) {
+                        кругКонца
+                        подписьКонца(всего)
+                    }
+                }
+                .background(Color(uiColor: фонКонца),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+            } else {
+                ЗаготовкаКарточкиСайта {
+                    ZStack {
+                        Color(uiColor: фонКонца)
+                        кругКонца
+                    }
+                } тело: {
+                    подписьКонца(всего)
+                }
             }
-            .multilineTextAlignment(.center)
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .background(Color(uiColor: фонКонца), in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
         }
         .buttonStyle(НажатиеСайта())
         .accessibilityElement(children: .ignore)
@@ -1165,38 +1722,40 @@ struct РядГлавной<Карточка: View>: View {
         .accessibilityAddTraits(.isButton)
     }
 
+    /// Круг 44 краски раздела с белой стрелкой — у «Смотреть все».
+    private var кругКонца: some View {
+        Image(systemName: "arrow.right")
+            .flipsForRightToLeftLayoutDirection(true)
+            .font(.system(size: 18, weight: .bold))
+            .foregroundStyle(Color.white)
+            .frame(width: 44, height: 44)
+            .background(Color(uiColor: краска), in: Circle())
+    }
+
+    /// «Смотреть все» цветом акцента и число под ним — по центру.
+    private func подписьКонца(_ всего: Int) -> some View {
+        VStack(spacing: 2) {
+            Text(DesignText.т("see_all"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.акцент)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(числоСловом(всего))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 10)
+    }
+
     private var тёмная: Bool { схема == .dark }
     private var краска: UIColor { Theme.hex(раздел.краска) }
 
-    /// .mh-rall: 85 % краски с чернилами, в тёмной — 55 % с белым.
-    private var цветСсылки: Color {
-        if тёмная { return Color(uiColor: Theme.смесь(краска, UIColor.white, 0.55)) }
-        return Color(uiColor: Theme.смесь(краска, Theme.hex(0x13211B), 0.85))
-    }
-
+    /// 7 % краски раздела к поверхности своей темы.
     private var фонКонца: UIColor {
         Theme.смесь(краска, тёмная ? Theme.hex(0x16161F) : UIColor.white, 0.07)
-    }
-
-    /// --mh-band: белая поверхность (в тёмной — 2 % белого к #16161f); чётный ряд — 6 % зелёного к #f4f8f6 (в тёмной —
-    /// 5 % белого к #1c1c26). Поверх — отсвет краски раздела 8 % из левого верхнего угла.
-    private var фонПолосы: UIColor {
-        if чётный {
-            return тёмная ? Theme.смесь(UIColor.white, Theme.hex(0x1C1C26), 0.05)
-                          : Theme.смесь(Theme.hex(0x0F5132), Theme.hex(0xF4F8F6), 0.06)
-        }
-        return тёмная ? Theme.смесь(UIColor.white, Theme.hex(0x16161F), 0.02) : UIColor.white
-    }
-
-    private var полоса: some View {
-        RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous)
-            .fill(Color(uiColor: фонПолосы))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.xl, style: .continuous)
-                    .fill(RadialGradient(colors: [Color(uiColor: краска).opacity(0.08), Color.clear],
-                                         center: .topLeading, startRadius: 0, endRadius: 280))
-            }
-            .accessibilityHidden(true)
     }
 }
 
