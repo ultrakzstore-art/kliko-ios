@@ -136,16 +136,11 @@ extension ПодачаМодель {
 // MARK: - Кадры плана: пропорция, значок, проверка текста
 
 extension ПланСъёмки {
-    /// SHOT_AR сайта (ширина / высота): высокое — 4:5, вещь на столе — 4:3, длинное и неизвестное — 16:9.
+    /// Кадр камеры — та же рамка 16:10, что у фото в окне объявления (РамкаГалереиОбъявления, GalleryFocus.swift):
+    /// владелец 14.10.2026 — «камеру подсказывай, чтобы 16:10 фоткал, даже вертикальной камерой». Что в рамке — то и
+    /// увидит покупатель. Прежде (SHOT_AR сайта) у вида был свой кадр: 4:5, 4:3, 16:9; группа оставлена в подписи.
     static func пропорция(_ группа: String) -> CGFloat {
-        switch группа {
-        case "clothes", "shoes", "phone", "animals", "birds", "reptiles", "livestock":
-            return 4.0 / 5.0
-        case "laptop", "building", "auto-parts", "petgoods", "fish":
-            return 4.0 / 3.0
-        default:
-            return 16.0 / 9.0
-        }
+        РамкаГалереиОбъявления.пропорция
     }
 
     /// _rcRead сайта: ОДИН кадр на план, где текст решает сделку, — его проверяем на читаемость.
@@ -479,6 +474,15 @@ struct СъёмкаПоПлану: View {
                         .position(x: рамка.midX, y: рамка.midY)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
+                    /* Подсказка рамки: кадр 16:10, как фото в объявлении — держите вещь внутри уголков. */
+                    Text(т("cam_frame"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.45), in: Capsule())
+                        .position(x: рамка.midX, y: max(14, рамка.minY - 18))
+                        .allowsHitTesting(false)
                 }
                 подсказка(план, номер, готово)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -1231,7 +1235,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Камера недоступна",
         "cam_no_cam_s": "Выберите кадр из галереи кнопкой внизу — он ляжет на своё место в плане",
         "cam_settings": "Открыть Настройки", "cam_next": "Следующий кадр: %@", "cam_plan_full": "План снят полностью",
-        "cam_extra": "Доп. фото", "step_btn": "Снять по шагам",
+        "cam_extra": "Доп. фото", "cam_frame": "16:10 — так фото увидит покупатель", "step_btn": "Снять по шагам",
         "step_btn_s": "Камера подскажет каждый кадр — снимаете подряд",
         "chip_hint": "Откроет камеру на этом кадре"
     ]
@@ -1255,7 +1259,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Камера қолжетімсіз",
         "cam_no_cam_s": "Төмендегі батырмамен галереядан кадр таңдаңыз — ол жоспардағы өз орнына түседі",
         "cam_settings": "Баптауларды ашу", "cam_next": "Келесі кадр: %@", "cam_plan_full": "Жоспар толық түсірілді",
-        "cam_extra": "Қосымша фото", "step_btn": "Қадаммен түсіру",
+        "cam_extra": "Қосымша фото", "cam_frame": "16:10 — сатып алушы фотоны осылай көреді", "step_btn": "Қадаммен түсіру",
         "step_btn_s": "Камера әр кадрды айтып отырады — қатарынан түсіресіз",
         "chip_hint": "Камераны осы кадрда ашады"
     ]
@@ -1279,7 +1283,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "Camera unavailable",
         "cam_no_cam_s": "Pick a shot from your gallery with the button below — it goes to its place in the plan",
         "cam_settings": "Open Settings", "cam_next": "Next shot: %@", "cam_plan_full": "The plan is fully shot",
-        "cam_extra": "Extra photo", "step_btn": "Shoot step by step",
+        "cam_extra": "Extra photo", "cam_frame": "16:10 — this is how buyers will see the photo", "step_btn": "Shoot step by step",
         "step_btn_s": "The camera prompts every shot — just shoot one after another",
         "chip_hint": "Opens the camera on this shot"
     ]
@@ -1303,7 +1307,7 @@ enum СъёмкаПоПлануText {
         "cam_no_cam": "الكاميرا غير متاحة",
         "cam_no_cam_s": "اختر لقطة من المعرض بالزر في الأسفل — ستوضع في مكانها في الخطة",
         "cam_settings": "فتح الإعدادات", "cam_next": "اللقطة التالية: %@", "cam_plan_full": "اكتملت خطة التصوير",
-        "cam_extra": "صورة إضافية", "step_btn": "التصوير خطوة بخطوة",
+        "cam_extra": "صورة إضافية", "cam_frame": "16:10 — هكذا سيرى المشتري الصورة", "step_btn": "التصوير خطوة بخطوة",
         "step_btn_s": "ستخبرك الكاميرا بكل لقطة — صوّر واحدة تلو الأخرى",
         "chip_hint": "يفتح الكاميرا على هذه اللقطة"
     ]
