@@ -4,7 +4,7 @@ import UIKit
 /**
  «ПОМЕСТИТСЯ ЛИ?» — ЛИНЕЙКА: ЧАСТИ ЭКРАНА (владелец 14.10.2026: «добавь линейку для габаритных вещей»). Модель и сцена —
  ЛинейкаГабаритов (FitBoxRuler.swift); окно — ЭкранГабаритов (FitBoxScreen.swift), он и ставит эти части:
-   · ПереключательРежимаГабаритов — «Коробка / Линейка» под заголовком;
+   · ПереключательРежимаГабаритов — «Вещь / Коробка / Линейка» под заголовком («Вещь» — FitBoxItem.swift);
    · ПрицелЛинейкиГабаритов — прицел ровно в центре экрана (оттуда ARKit бросает луч) и длина тянущегося отрезка;
    · ПодсказкаЛинейкиГабаритов — что делать сейчас («Медленно ведите телефоном», «Наведите на начало…»);
    · ПанельЛинейкиГабаритов — «Сравнить с вещью» (чипы и итог), «Очистить», «Отменить», «+», «Снимок» и точность;
@@ -19,14 +19,31 @@ import UIKit
 
 struct ПереключательРежимаГабаритов: View {
     let режим: РежимГабаритов
+    /// Есть режим «Вещь» (у объявления фото или 3D-модель, ВещьГабаритов.доступна): он — первым.
+    let сВещью: Bool
     let сменить: (РежимГабаритов) -> Void
+    @Environment(\.dynamicTypeSize) private var размерТекста
+
+    init(режим: РежимГабаритов, сВещью: Bool = false, сменить: @escaping (РежимГабаритов) -> Void) {
+        self.режим = режим
+        self.сВещью = сВещью
+        self.сменить = сменить
+    }
 
     private func т(_ ключ: String) -> String { ЛинейкаГабаритовText.т(ключ) }
 
+    /// Три режима при крупном тексте (AX): без значков — подписи не ужимаются до нечитаемых.
+    private var безЗначков: Bool { сВещью && Config.габаритыЛинейка && размерТекста.isAccessibilitySize }
+
     var body: some View {
         HStack(spacing: 4) {
+            if сВещью {
+                кнопка(.вещь, значок: "sofa", подпись: ВещьГабаритовText.т("fi_mode"))
+            }
             кнопка(.коробка, значок: "cube.transparent", подпись: т("fr_mode_box"))
-            кнопка(.линейка, значок: "ruler", подпись: т("fr_mode_ruler"))
+            if Config.габаритыЛинейка {
+                кнопка(.линейка, значок: "ruler", подпись: т("fr_mode_ruler"))
+            }
         }
         .padding(4)
         .background(Color.black.opacity(0.5), in: Capsule())
@@ -43,16 +60,18 @@ struct ПереключательРежимаГабаритов: View {
             сменить(свой)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: значок)
-                    .font(.footnote.weight(.semibold))
-                    .accessibilityHidden(true)
+                if !безЗначков {
+                    Image(systemName: значок)
+                        .font(.footnote.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
                 Text(подпись)
                     .font(.subheadline.weight(.bold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(безЗначков ? 0.6 : 0.75)
             }
             .foregroundStyle(выбран ? Color.black : Color.white)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, безЗначков ? 6 : 12)
             .frame(maxWidth: .infinity, minHeight: 40)
             .background(выбран ? AnyShapeStyle(Theme.шапкаМята) : AnyShapeStyle(Color.clear), in: Capsule())
             .contentShape(Capsule())
