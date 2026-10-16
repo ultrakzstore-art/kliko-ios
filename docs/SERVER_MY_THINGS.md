@@ -1,6 +1,8 @@
 # «Моё»: подходит к моему — что нужно от сервера
 
-Документ для разработчика сайта kliko.kz (ultra-site), 16.10.2026. Слова владельца:
+Документ для разработчика сайта kliko.kz (ultra-site), 16.10.2026. **Редакция 16.10.2026 (вторая)** — внесены ответы
+ultra-site того же дня (§13): шины и диски — из `parts`, `fit_*` — в теле POST, свой `api/devices.php` со стартовым
+списком `docs/SERVER_MY_THINGS_devices.json`, сортировка; добавлено поле `ar_front` (§2.9). Слова владельца:
 
 > 14.10: «на будущее будет по типу моя машина — туда можно будет примерить диски (чел фоткает по шаблону свою тачку),
 > а наши технологии — свайп: такой диск или другой диск (предложения от продавцов); так же с чехлами для смартфонов,
@@ -17,9 +19,9 @@
 
 | Профиль «Моё» (на телефоне) | Что подходит | Поля объявления | Как увидеть на своём |
 |---|---|---|---|
-| **Мой гараж**: до 5 машин, PCD · ET · DIA · R · шины, фото сбоку по шаблону | диски, шины, колёса в сборе | `rim_*`, `tyre_*`, `wheel_kit` | диск в круг колеса на фото (телефон); «Как вживую» — `api/tryon.php`, `kind: "car"` |
+| **Мой гараж**: до 5 машин, PCD · ET · DIA · R · шины, фото сбоку по шаблону | диски, шины, колёса в сборе | `parts` (шина `tire`, диск `wheel`), `wheel_kit` | диск в круг колеса на фото (телефон); «Как вживую» — `api/tryon.php`, `kind: "car"` |
 | **Мои устройства**: телефон | чехлы, стёкла, запчасти, аксессуары | `device_models` — **новое** | контур своей модели (телефон) |
-| **Мои устройства**: ноутбук, монитор, ТВ | сумки, рюкзаки, чехлы-конверты | `fits_diag_max`, `fits_kind` — **новое** | «Поместится ли?», на столе |
+| **Мои устройства**: ноутбук, монитор, ТВ | сумки, рюкзаки, чехлы-конверты | `fits_diag_max`, `fits_kind` — **новое** | «Поместится ли?», на столе (кадр `ar_front`) |
 | **Мой рост и мерки**: размеры в своей системе, обхваты, фото в полный рост | одежда, обувь, кольца, шапки | `storage`, `size_sys`, `size_all`, `fit` (замеры вещи) | вещь по позе (телефон); «Как вживую» — `kind: "person"` |
 | (позже) Моя комната | мебель, техника | `dim_*` | `kind: "room"` |
 
@@ -36,14 +38,17 @@
 | Профили, хаб, гараж (перенос машины из «Подойдут ли?»), устройства, мерки, съёмка по шаблону | приложение | v1 готов, 16.10.2026 (`Sources/Native/MyThings/`, вход — Кабинет → «Моё») |
 | «Подходит моему» на странице объявления и чип «Для моего» в ленте — по описанию, на телефоне | приложение | готово, 16.10.2026 (`MyThingsMatch.swift`); серверу ничего не нужно |
 | Справочник посадки машин | `api/autofit.php`, `api/auto_models.php` | уже в договоре `SERVER_AUTOFIT.md` |
+| Шины и диски для `fit_car` | `parts` объявления (`kind` `tire` / `wheel`) | сервер уже хранит (ответ 16.10, §2.1); старые без `parts` — по тексту, `compat_src: "text"` |
 | Новые поля: `device_models`, `fits_diag_max`, `fits_kind`, `wheel_kit`, `compat_src` + форма сайта | `submit`, `edit_item`, выдача, кабинет | сервер и сайт (§2) |
-| Фильтры `fit_car`, `fit_phone`, `fit_laptop`, `size` (несколько видов), `fit_me`; ответ `fit_applied`, `fit_match` | `api/listings.php` | сервер (§3) |
+| Кадр «спереди» для «На столе»: `ar_front` | `submit`, `edit_item`, выдача, `my_items` | сервер (§2.9); приложение — следующей сборкой |
+| Фильтры `fit_car`, `fit_phone`, `fit_laptop`, `size` (несколько видов), `fit_me` — **в теле POST**; ответ `fit_applied`, `fit_match` | `api/listings.php` | сервер (§3) |
 | Признаки готовности `rules.compat`, `rules.fit_filters`, `rules.fit_me` | `api/app_post_schema.php` | сервер (§2.6, 3.7) |
 | Вырезка вещи для мгновенной примерки `cutout` | выдача | сервер, по желанию (§2.5) |
 | Пачка для свайпа | `api/listings.php` (`fit_*`, `?ids=`) | сервер (§4) |
 | Фото профиля для примерки: `photo`, `photo_id`, `delete_photo` | `api/tryon.php` | сервер (§5) |
 | Заказ из примерки | `escrow.php?action=create` | без изменений, `from` по желанию (§6) |
-| Каталог устройств | `api/devices.php` | по желанию (§2.7) |
+| Каталог устройств | `api/devices.php` | сервер, свой (ответ 16.10); стартовый список — `docs/SERVER_MY_THINGS_devices.json` (§2.7) |
+| «Подходит моему» по `parts`, `fit_match` и `ar_front` из выдачи | приложение | следующая сборка (§14) |
 | Политика конфиденциальности: «Моё», дополнение «Примерочной» | сайт | сайт (§10) |
 
 ### Дофамин без тёмных паттернов
@@ -66,9 +71,11 @@
 - Применён ли фильтр — `fit_applied` в ответе (§3.1). Нет поля — приложение не считает выдачу отобранной: фильтрует
   загруженную страницу само и подписывает «проверили по описанию».
 - **Имя `fit` у объявления уже занято** — «Замеры вещи» (`rules.fit`: объект `{kind?, chest: 52, …}` в `submit`,
-  `edit_item`, `my_items`). Вердикт совместимости поэтому — **`fit_match`**. `fit` не трогать.
-- `api/listings.php` — те же куки и параметры, что у ленты (`Feed/ListingsAPI.swift`); `api/tryon.php` — транспорт
-  договора примерочной (`docs/SERVER_TRYON.md`, §0); схема — `api/app_post_schema.php` без входа.
+  `edit_item`, `my_items`). Вердикт совместимости поэтому — **`fit_match`** (согласовано ultra-site 16.10.2026). `fit`
+  не трогать.
+- `api/listings.php` — те же куки и параметры, что у ленты (`Feed/ListingsAPI.swift`); значения из «Моего» (`fit_*`,
+  `fit_level`, `size` профиля) — **в теле POST** (§3.1, §10). `api/tryon.php` — транспорт договора примерочной
+  (`docs/SERVER_TRYON.md`, §0); схема — `api/app_post_schema.php` без входа.
 - Языки — `ru`, `kk`, `en`, `ar`. Тексты `error` — готовые, на языке запроса.
 
 ---
@@ -79,14 +86,29 @@
 
 | Поля | Договор | Для чего в «Моём» |
 |---|---|---|
-| `rim_r`, `rim_j`, `rim_et`, `rim_pcd`, `rim_dia`, `tyre_w`, `tyre_h`, `tyre_r` | `SERVER_DIMENSIONS.md` 1.3, 4, 5 | `fit_car`, диск на фото машины |
+| `parts` раздела `tires-wheels`: шина — `kind: "tire"`, `width` (мм), `profile` (%), `diameter` (R), `season`; диск — `kind: "wheel"`, `diameter` (R), `width_j` (J), `pcd` (`"5x114.3"`), `et`, `dia` (мм) | мастер запчастей сайта (`inc/parts_form.php`); `SERVER_DIMENSIONS.md` 4.1 | `fit_car`, диск на фото машины |
 | `dim_w`, `dim_h`, `dim_d`, `dims_src` | `SERVER_DIMENSIONS.md` 1.1–1.2 | «Поместится ли?», на столе; позже — «Моя комната» |
 | `storage`, `size_sys`, `size_all` | `SERVER_SIZES.md` 2 | `size=` |
 | `fit` — замеры вещи | `rules.fit` (сайт 14.10) | `fit_me` |
 | `model3d` | `SERVER_3D.md` 8 | «Посмотреть вживую» (§7) |
 
-Если что-то из этого ещё не хранится полями — §3 работает по строкам описания («Размер шин: …», «Диски: …»,
-«Размер: EU 42 · …»; `SERVER_DIMENSIONS.md` 4.3, `SERVER_SIZES.md` 2.3) как запасной путь.
+**Шины и диски — из `parts`** (ответ ultra-site 16.10.2026): сервер хранит их там, `fit_car` строится на этих полях.
+Отдельные `rim_*` / `tyre_*` (`SERVER_DIMENSIONS.md` 1.3) серверу хранить **не обязательно**. Но:
+
+- приложение шлёт в `submit` и `parts`, и `rim_*` (диски) или `tyre_*` (шины), и — пока нет
+  `rules.dims.wheel_fields: 1` — строку «Размер шин: …» / «Диски: …» в описании; в `edit_item` `parts` не приходит (как
+  у сайта, договор кабинета §2.4.2) — только `rim_*` / `tyre_*` и строка. **Правку брать из `rim_*` / `tyre_*` и класть
+  в `parts`**;
+- приложение пока **не читает `parts`** (§14): «Подходит моему» и «Подойдут ли?» берут пункты `specs` по подписи
+  (корни слов ru, kk, en: подписи мастера «Ширина», «Профиль», «Диаметр», «Разболтовка (PCD)», «Вылет (ET)», «Ступица
+  (DIA)», «Сезон» — `E_SPECS` tire и wheel — и подписи `SERVER_DIMENSIONS.md` 1.3 узнаются одинаково), строку в
+  описании и название; правка — плоские `rim_*` / `tyre_*` из `my_items`. **До доработки приложения**: в выдаче
+  (`?id=`, `?ids=`, по возможности лента) — пункты `specs` из `parts` с этими подписями (`key` — по
+  `SERVER_DIMENSIONS.md` 4.1, без второго такого же пункта), в `my_items` — `rim_*` / `tyre_*`, вычисленные из `parts`.
+
+Старые объявления без `parts` — разбор названия и описания (строки «Размер шин: …», «Диски: …», образцы 3.2) с
+`compat_src: "text"`; такие получают `fit_match.car` **не лучше `"check"`** (§2.8, 3.2). Размеры одежды без полей —
+по строке «Размер: EU 42 · …» (`SERVER_SIZES.md` 2.3).
 
 ### 2.2. `device_models` — для каких моделей телефона
 
@@ -123,8 +145,10 @@
 
 ### 2.4. `wheel_kit` — колёса в сборе
 
-`true` — диски вместе с шинами. Сервер ставит сам, если пришли и `rim_*`, и `tyre_*`; в форме сайта — флажок «Колёса
-в сборе» в разделе `tires-wheels`. Для `fit_car` такие объявления сверяются и как диски, и как шины (§3.2).
+`true` — диски вместе с шинами. Сервер ставит сам, если у объявления есть и размеры диска, и размер шины (пришли и
+`rim_*`, и `tyre_*`; как держать размер шины в `parts` диска — вопрос §13). Приложение сейчас шлёт что-то одно — шины
+или диски, — так что у его объявлений `wheel_kit` пока не появится. В форме сайта — флажок «Колёса в сборе» в
+разделе `tires-wheels`. Для `fit_car` такие объявления сверяются и как диски, и как шины (§3.2).
 
 ### 2.5. `cutout` — вещь без фона для мгновенной примерки (по желанию, только выдача)
 
@@ -188,28 +212,63 @@
 «Для ноутбука до, ″» · «Ноутбукқа дейін, ″» · «Fits laptops up to, ″» · «يتسع لحاسوب حتى، ″»; `wheel_kit` — строка
 `kit`.
 
-### 2.7. Каталог устройств: `GET /api/devices.php?action=phones&lang=ru` (по желанию)
+### 2.7. Каталог устройств: `GET /api/devices.php?action=phones&lang=ru`
 
-Чтобы сайт и приложение одинаково называли модели (форма «Для какой модели», slug фильтра).
+Чтобы сайт и приложение одинаково называли модели (форма «Для какой модели», slug фильтра). Ведёт сервер — свой
+`api/devices.php` (ответ ultra-site 16.10.2026).
 
 ```json
 { "ok": true, "v": "2026-10-16-1",
-  "phones": [ { "brand": "Apple", "model": "iPhone 15 Pro", "slug": "iphone-15-pro", "aliases": ["айфон 15 про"],
-                "diag": 6.1, "mm": [70.6, 146.6, 8.25], "year": 2023 } ],
+  "phones": [ { "brand": "Apple", "model": "iPhone SE (3)", "slug": "iphone-se-3", "aliases": ["iPhone SE 2022"],
+                "diag": 4.7, "w": 67.3, "h": 138.4, "d": 7.3, "year": 2022 } ],
   "laptops": [ { "brand": "Apple", "model": "MacBook Air 13 M2", "slug": "apple-macbook-air-13-m2", "diag": 13.6 } ] }
 ```
 
-Стартовое содержимое — каталог приложения `Sources/Native/MyThings/MyThingsPhones.swift` (все iPhone с XR по 17 Pro
-Max с кодами, диагональю и Ш×В×Т мм, у iPhone 17e — только диагональ; частые Android Казахстана). Без кук, `Cache-Control: public, max-age=86400`, ETag по
-`v`. Нет адреса — приложение работает по своему каталогу.
+- **Стартовый список — `docs/SERVER_MY_THINGS_devices.json`**: каталог приложения
+  `Sources/Native/MyThings/MyThingsPhones.swift`, 69 моделей — 34 iPhone (с XR и XS по 17 Pro Max) и 35 частых
+  Android Казахстана. Поля: `brand`, `model` (имя ровно как в приложении — его приложение кладёт в `device_models`),
+  `slug`, `diag` (дюймы), `w`, `h`, `d` (мм; у iPhone 17e их нет — не сверены), `aliases`. Года в приложении нет —
+  `year` сервер добавит сам, если знает. `aliases` — по правилу §3.3 п. 4: без марки («Galaxy S25+», «Redmi Note 13»,
+  «Pixel 9», «Poco X6»), с годом и поколением («iPhone SE 2022», «iPhone SE 3rd generation»); у Honor без марки слишком
+  коротко — нет. Псевдонимов в приложении нет, их составили для этого файла — поправьте, если сервер знает
+  лучше. `laptops` пуст: каталога
+  ноутбуков в приложении нет, только диагонали.
+- Сервер **сливает** список с моделями, которые уже знает из характеристик электроники. Совпадение — по slug; при
+  совпадении имя и размеры приложения не менять (их уже хранят телефоны людей).
+- Slug — по §3.3: строчные, `+` → `plus`, без 5G и памяти, Apple без марки.
+- Без кук, `Cache-Control: public, max-age=86400`, ETag по `v`. Нет адреса — приложение работает по своему каталогу.
+- Меняется каталог в приложении — обновляем файл и сообщаем.
 
 ### 2.8. Перенос старых объявлений (фоном, по желанию — но без него подборки пустые)
 
 - `device_models` — из названия и описания разделов 2.2 по правилу §3.3 (перечисления «iPhone 13/14/15», «15, 15 Plus»).
 - `fits_diag_max` — из названия: «до 15.6″», «15,6 дюйм», «для ноутбука 15». Округлённые метки рынка: 13 → 13.3, 15 →
   15.6, 17 → 17.3.
+- Шины и диски без `parts` — из строк «Размер шин: …» / «Диски: …», названия и описания (образцы 3.2), с
+  `compat_src: "text"`; `fit_match.car` у них не лучше `"check"` (ответ 16.10).
 - Берётся только однозначное. Ставить `compat_src: "text"` — покупатель увидит «По описанию продавца — уточните», а
-  `fit_match` будет `"text"` (§3.1). Своя правка продавца снимает пометку (`compat_src: ""`).
+  `fit_match` будет `"text"` (§3.1; у машины — `"check"`). Своя правка продавца снимает пометку (`compat_src: ""`).
+
+### 2.9. `ar_front` — кадр «спереди» для «На столе»
+
+Владелец 16.10: «одно фото… чтобы его удобно было вставить на стол в 3D — чтобы обеим сторонам было удобно».
+
+```json
+{ "category": "laptops", "title": "MacBook Air 13 M2", "images": ["…/0.jpg", "…/1.jpg", "…/2.jpg"], "ar_front": 2 }
+```
+
+| Поле | Формат | Что значит |
+|---|---|---|
+| `ar_front` | целое `0…N−1` — номер в `images` | кадр, где вещь снята **прямо спереди и целиком**: его приложение ставит на стол в «Поместится ли?» (стойка и грань 3D-формы) |
+
+- Приложение (следующая сборка) отмечает этот кадр в плане съёмки меткой «На столе» и шлёт номер в `submit` и
+  `edit_item`. **Фон вырезает само, на телефоне покупателя** — серверу картинку не менять, не вырезать, не хранить
+  отдельно.
+- Нет поля или номер вне `images` — приложение берёт первое фото. Покупателю на сайте поле не показывается.
+- `edit_item`: поля нет — не трогать (старое приложение); `-1` — снять. Фото переставили или удалили — приложение шлёт
+  новый номер; номер вышел за `images` после правки — снять самому.
+- Выдача: лента, `?id=`, `?ids=`, `my_items` — плоско, целым; в `specs` не выводить.
+- Сайт — по желанию: та же метка «На столе» на миниатюре в подаче (одна на объявление).
 
 ---
 
@@ -218,8 +277,17 @@ Max с кодами, диагональю и Ш×В×Т мм, у iPhone 17e — 
 ### 3.1. Общие правила
 
 ```
-GET /api/listings.php?fit_car=pcd:5x114.3;dia:60.1;et:35..45;r:16,17,18;tyre:215/55R17&per=20&sort=new
+POST /api/listings.php?cat=tires-wheels&per=20&sort=new
+Content-Type: application/json
+
+{ "fit_car": "pcd:5x114.3;dia:60.1;et:35..45;r:16,17,18;tyre:215/55R17", "fit_level": "check" }
 ```
+
+**Значения из «Моего» — в теле POST** (ответ ultra-site 16.10.2026): JSON, те же имена — `fit_car`, `fit_phone`,
+`fit_laptop`, `fit_me`, `fit_level` и `size` из профиля. Остальные параметры ленты (`cat`, `q`, цена, город, `per`,
+`sort`, страницы, `seed`) — в адресе, как раньше: в них нет ничего из «Моего». Ответ — тот же, что у GET. `csrf` не
+нужен: запрос ничего не меняет. Сервер принимает `fit_*` и в адресе (GET — сайт, старые ссылки), но гарантию «не в
+журналах» даёт **только для POST** (§10) — приложение шлёт POST.
 
 | Параметр | Что несёт | Где отбирает |
 |---|---|---|
@@ -232,34 +300,38 @@ GET /api/listings.php?fit_car=pcd:5x114.3;dia:60.1;et:35..45;r:16,17,18;tyre:215
 
 - Разные `fit_*` в одном запросе — **ИЛИ** (объявление проходит, если подходит хотя бы по одному). С `cat`, `q`, ценой,
   городом, `cond` и остальным — **И**, как раньше. `cat` вне области параметра — по нему пусто, не ошибка.
-- `fit_level=ok` — только `fit_match` «ok»; `parts` — ещё «rings», «spacers», «rings+spacers»; `check` — всё, что
-  вернул бы фильтр, включая «check», «text», «universal», «tight», «loose».
-- `sort` — как запрошен; страницы, `gs`, `seed` — как раньше. **ТОП** (`slot: "top"`) — только из подходящих и с обычной
-  пометкой.
+- `fit_level=ok` — только `fit_match` «ok»; `parts` — ещё «rings», «spacers», «rings+spacers» (значение «с кольцами и
+  проставками», не поле `parts` объявления); `check` — всё, что вернул бы фильтр, включая «check», «text»,
+  «universal», «tight», «loose».
+- `sort` — как запросило приложение (ответ 16.10); страницы, `gs`, `seed` — как раньше. При сортировке по умолчанию
+  (по релевантности) `ok` («точно подходит») идёт выше остальных вердиктов (`check`, `rings`, `spacers`…). **ТОП**
+  (`slot: "top"`) в выдаче с `fit_*` — только подходящий и с обычной пометкой.
 - `total` — честное число подходящих; `has_more` — как раньше.
 - `Cache-Control: private, no-store` при любом `fit_*`. Журналы и аналитика — §10.
-- Значение не разобралось — параметр не применяется и не входит в `fit_applied`. В PHP `arg_separator.input` должен
-  быть `&` (по умолчанию так): `;` внутри значений — часть формата.
+- Значение не разобралось — параметр не применяется и не входит в `fit_applied`. Для GET: в PHP `arg_separator.input`
+  должен быть `&` (по умолчанию так) — `;` внутри значений часть формата.
 - В сохранённые поиски (`subs.php`) `fit_*` в v1 не принимать — приложение их туда не кладёт.
 
 **Ответ** — как раньше, плюс:
 
 ```json
 { "ok": true, "total": 37, "has_more": true, "fit_applied": ["car"],
-  "items": [ { "id": "d4e5f6", "category": "tires-wheels", "rim_pcd": "5x114.3", "rim_dia": 67.1, "rim_et": 40,
-               "rim_r": 17, "fit_match": { "car": "rings" }, "…": "…" } ] }
+  "items": [ { "id": "d4e5f6", "category": "tires-wheels",
+               "parts": { "kind": "wheel", "diameter": "17", "width_j": "7", "et": "40", "pcd": "5x114.3", "dia": "67.1" },
+               "fit_match": { "car": "rings" }, "…": "…" } ] }
 ```
 
 | `fit_match.<вид>` | Значения |
 |---|---|
-| `car` | `ok` · `rings` (нужны центровочные кольца) · `spacers` (нужны проставки) · `rings+spacers` · `check` (проверьте: R, ET наружу, J, нет DIA/ET у продавца) |
+| `car` | `ok` · `rings` (нужны центровочные кольца) · `spacers` (нужны проставки) · `rings+spacers` · `check` (проверьте: R, ET наружу, J, нет DIA/ET у продавца; объявление без `parts`, `compat_src: "text"`) |
 | `phone` | `ok` (в `device_models`) · `universal` · `text` (по описанию) |
 | `laptop` | `ok` · `text` |
 | `size` | `ok` |
 | `me` | `ok` · `tight` · `loose` · `check` (где-то мало, где-то велико) |
 
 Незнакомое значение приложение читает как `check`. Подробности («кольца 67.1×60.1») приложение считает само по полям
-объявления — та же математика (`TryOn/AutoFitMath.swift`).
+объявления — та же математика (`TryOn/AutoFitMath.swift`): по пунктам `specs` и строке описания, после доработки — по
+`parts` (§14).
 
 ### 3.2. `fit_car`
 
@@ -276,9 +348,12 @@ ET −65…80, R 12–26, J 3,5–13) — пропустить ключ.
 | `tyre` | штатные шины `<Ш>/<П>R<R>`, первая главная | `215/55R17,205/65R16` | шины — только по `r`; нет ни `r`, ни `tyre` — шины не отбираются |
 | `j` | ширина обода `min..max` | `6.5..8` | ширину не сверять |
 
-Что такое объявление: диск — есть `rim_*`, `parts.kind: "wheel"` или строка «Диски: …»; шина — `tyre_*` или «Размер
-шин: …»; в сборе — `wheel_kit` или и то и другое. Допуски — **ровно как в «Подойдут ли?»** (`SERVER_AUTOFIT.md`,
-сверено с `AutoFitMath.swift`); итог — худший пункт:
+Что такое объявление (ответ ultra-site 16.10.2026 — по `parts`): диск — `parts.kind: "wheel"`; шина —
+`parts.kind: "tire"`; в сборе — `wheel_kit`. Поля для сверки: PCD — `parts.pcd`, DIA — `dia`, ET — `et`, J — `width_j`,
+R диска — `diameter` у `wheel`; шина — `width`, `profile`, `diameter` у `tire`. Нет `parts` — разбор строк «Диски: …» /
+«Размер шин: …», названия и описания (`compat_src: "text"`) — тогда вердикт **не лучше `check`**: подошло бы — `check`,
+не подошло — исключить. Допуски — **ровно как в «Подойдут ли?»** (`SERVER_AUTOFIT.md`, сверено с `AutoFitMath.swift`);
+итог — худший пункт:
 
 | Проверка | `ok` | `rings` / `spacers` | `check` | исключить |
 |---|---|---|---|---|
@@ -295,7 +370,7 @@ ET −65…80, R 12–26, J 3,5–13) — пропустить ключ.
 ### 3.3. `fit_phone`
 
 ```
-GET /api/listings.php?fit_phone=iphone-15-pro
+POST /api/listings.php            { "fit_phone": "iphone-15-pro" }
 ```
 
 Один slug. Совпадение — **строгое**: `iphone-15-pro` ≠ `iphone-15-pro-max` ≠ `iphone-15`.
@@ -326,7 +401,7 @@ Slug из любого написания:
 ### 3.4. `fit_laptop`
 
 ```
-GET /api/listings.php?fit_laptop=15.6
+POST /api/listings.php            { "fit_laptop": "15.6" }
 ```
 
 Диагональ D — дюймы 10…20, один знак.
@@ -344,11 +419,13 @@ GET /api/listings.php?fit_laptop=15.6
 таблицей впереди:
 
 ```
-size=shoes_men:US M:9.5|clothes_men:INT:M|jeans_men:W:32|ring:RU:17.5
+{ "size": "shoes_men:US M:9.5|clothes_men:INT:M|jeans_men:W:32|ring:RU:17.5" }
 ```
 
-- Три части через `:` — `<таблица>:<код>:<значение>`; две — как раньше (`<код>:<значение>`). Ключи таблиц —
-  строчная латиница, коды — как на бирках; спутать нельзя.
+- Три части через `:` — `<таблица>:<код>:<значение>`; две — как раньше (`<код>:<значение>`, продолжает работать).
+  Ключи таблиц — строчная латиница, коды — как на бирках; спутать нельзя. Согласовано ultra-site 16.10.2026: таблицы и
+  коды — из `SERVER_SIZES.md`.
+- Размеры из «Моего» приложение кладёт в тело POST (§3.1); обычный фильтр размера ленты — в адресе, как раньше.
 - Таблица ограничивает отбор своими разделами (`rules.sizes.cats`): `clothes_men` — только мужские разделы.
 - Свои ключи «Моё» для джинсов: `jeans_women` и `jeans_men` = таблица `jeans` в разделах женской / мужской одежды.
   Длина L не отбирает (покупатель видит её на бирке).
@@ -358,7 +435,7 @@ size=shoes_men:US M:9.5|clothes_men:INT:M|jeans_men:W:32|ring:RU:17.5
 ### 3.6. `fit_me` — по замерам вещи (по желанию, последним)
 
 ```
-GET /api/listings.php?fit_me=chest:96;waist:84;hips:100;foot:26.5
+POST /api/listings.php            { "fit_me": "chest:96;waist:84;hips:100;foot:26.5" }
 ```
 
 Ключи тела (см, **полные обхваты**): `chest`, `waist`, `hips`, `shoulders`, `sleeve`, `inseam`, `foot`. Рост и голову
@@ -422,8 +499,8 @@ CREATE TABLE listing_devices (
 );
 ```
 
-`rim_dia`, `rim_et`, `rim_r`, `tyre_*` — числами (`SERVER_DIMENSIONS.md` 1.3); замеры `fit` — вычисляемыми колонками
-из JSON.
+`rim_bolts`, `rim_pcd_mm` — из `parts.pcd` дисков; `dia`, `et`, `diameter`, `width_j` дисков и `width`, `profile`,
+`diameter` шин — числами из `parts` (вычисляемые колонки из JSON или свои — как удобнее); замеры `fit` — так же.
 
 ---
 
@@ -431,10 +508,12 @@ CREATE TABLE listing_devices (
 
 Нового адреса не нужно — та же лента с `fit_*`:
 
-- Стопка: `api/listings.php?fit_car=…&per=20&sort=new` (свежие первыми); следующая страница — когда в стопке осталось 5.
-- Карточке нужны: `images[]`, `title`, `price`, `city`, продавец, поля §2.1–2.5, `fit_match`, `slot`. Если лента отдаёт
-  записи урезанными — приложение доберёт пачкой `GET api/listings.php?ids=a,b,c` (до 20; адрес уже есть для
-  избранного). **Просьба: `?ids=` отдаёт те же поля, что `?id=`** (`images`, `specs`, поля §2), в порядке `ids`.
+- Стопка: `POST api/listings.php?per=20&sort=new` с `{"fit_car": "…"}` в теле (свежие первыми); следующая страница —
+  когда в стопке осталось 5.
+- Карточке нужны: `images[]`, `title`, `price`, `city`, продавец, поля §2.1–2.5 (у шин и дисков — `parts`), `ar_front`,
+  `fit_match`, `slot`. Если лента отдаёт записи урезанными — приложение доберёт пачкой `GET api/listings.php?ids=a,b,c`
+  (до 20; адрес уже есть для избранного). **Просьба: `?ids=` отдаёт те же поля, что `?id=`** (`images`, `specs`,
+  поля §2), в порядке `ids`.
 - Конец честный: `has_more: false` → «Вы посмотрели все N подходящих» (N = `total`) и «Сохранить поиск».
 - Свайп на сервер ничего не шлёт. «Нравится» — обычное избранное (`favorites.php`), только по нажатию.
 - Свайп не запускает ИИ: быстрый показ — на телефоне (`cutout` в круг колеса, вещь по позе, контур телефона).
@@ -519,8 +598,8 @@ CREATE TABLE listing_devices (
 | На мне | `info.kinds` `person` + фото профиля | `SERVER_TRYON.md`, §5 |
 | На моей машине | `car` + фото профиля, `cutout.front` | §5, 2.5 |
 | В комнате | `room` | `SERVER_TRYON.md` 7б |
-| На столе · Поместится ли? | `dim_*` | `SERVER_DIMENSIONS.md` |
-| Подойдут ли? · Подходит к моему | `rim_*`, `tyre_*`, `device_models`, `fits_*`, `size_all`, `fit` | §2–3 |
+| На столе · Поместится ли? | `dim_*`, кадр `ar_front` | `SERVER_DIMENSIONS.md`, §2.9 |
+| Подойдут ли? · Подходит к моему | `parts`, `device_models`, `fits_*`, `size_all`, `fit` | §2–3 |
 
 Сайту — так же, по желанию: одна кнопка вместо нескольких.
 
@@ -553,21 +632,24 @@ CREATE TABLE listing_devices (
 ## 10. Приватность
 
 1. **v1 — ничего не уходит с телефона.** Справочник посадки получает только марку, модель и год, без кук.
-2. **`fit_*` — данные профиля в запросе.** Обрабатывать только в рамках запроса: не писать в БД, не связывать с
-   человеком, **не класть в журналы** доступа и ошибок, не в аналитику (можно счётчик «запросов с `fit_car`» без
-   значений), не в рекламу и рекомендации; `Cache-Control: private, no-store`. Тогда это не «сбор данных» по определению
-   Apple, и анкету App Privacy менять не нужно. Что-то невыполнимо — скажите **до** `rules.fit_filters`: владелец
-   поменяет анкету.
+2. **`fit_*` — данные профиля в запросе, и едут они в теле POST.** Обрабатывать только в рамках запроса: не писать в
+   БД, не связывать с человеком, **не класть в журналы** сайта и ошибок, не в аналитику (можно счётчик «запросов с
+   `fit_car`» без значений), не в рекламу и рекомендации; `Cache-Control: private, no-store`. Тогда это не «сбор
+   данных» по определению Apple, и анкету App Privacy менять не нужно.
 
-   ```nginx
-   map $request_uri $log_uri {
-       "~^(?<path>/api/listings\.php)\?.*fit_"  "${path}?fit=hidden";
-       default                                    $request_uri;
-   }
-   log_format kliko '$remote_addr [$time_local] "$request_method $log_uri" $status $body_bytes_sent';
-   ```
+   Ответ ultra-site 16.10.2026: за свой код — да (закроют сторожем). **Журнал доступа веб-сервера ведёт хостинг** — он
+   пишет адрес запроса, полностью выключить его ultra-site не может. Поэтому:
+   - приложение шлёт `fit_*`, `fit_level` и `size` из «Моего» **в теле POST** на `api/listings.php` (JSON, те же имена,
+     §3.1): тело журнал доступа не пишет. Гарантия «не в журналах» — **только для POST** (для `size` — вопрос §13,
+     п. 4 открытых);
+   - сервер принимает и GET (сайт, старые ссылки), но без гарантии. Сайту для своего «Моего» (`localStorage`, §8) — тоже
+     POST;
+   - тело запроса не писать ни в журнал ошибок PHP, ни в отладку (`error_log` с `php://input`, дампы на исключениях).
 
-3. **`fit_me`** — самое чувствительное: включать последним, только целые сантиметры, только с маскировкой журналов.
+   Приложение будет слать POST — анкету App Privacy менять не нужно. Если когда-нибудь придётся GET — сказать до
+   включения: владелец отразит это в анкете.
+
+3. **`fit_me`** — самое чувствительное: включать последним, только целые сантиметры, только в теле POST.
 4. **Фото профиля в примерке** — только по нажатию «Как вживую», после согласия с названием поставщика (`ai`), 24 часа,
    не для обучения, `delete_photo`. «Фото или видео» (linked, App Functionality) в анкете уже объявлены — сверить.
 5. **Дети**: детских размеров и фото детей в «Моё» нет; `person` — не ребёнок (`SERVER_TRYON.md` §8).
@@ -588,46 +670,91 @@ K='https://kliko.kz'
 # Схема — флаги
 curl -sS "$K/api/app_post_schema.php?lang=ru" | jq '{v, compat: .rules.compat.on, filters: .rules.fit_filters, me: .rules.fit_me.on}'
 
-# fit_car: только подходящие диски и шины, вердикт в fit_match
-curl -sS -G "$K/api/listings.php" --data-urlencode 'fit_car=pcd:5x114.3;dia:60.1;et:35..45;r:16,17,18;tyre:215/55R17' \
-  --data-urlencode per=24 | jq '{total, fit_applied, items: [.items[] | {id, rim_pcd, rim_dia, rim_et, rim_r, tyre_r, fit_match}] | .[:5]}'
-# строгость: ни одного диска с DIA меньше 60.1 и с чужой разболтовкой
-curl -sS -G "$K/api/listings.php" --data-urlencode 'fit_car=pcd:5x114.3;dia:60.1' --data-urlencode per=48 \
-  | jq '[.items[] | select((.rim_dia // 99) < 59.95 or ((.rim_pcd // "5x114.3") | test("114") | not))] | length'   # 0
+# Лента с «Моим»: значения — в теле POST (§3.1), остальные параметры — в адресе
+feed() { curl -sS -H 'Content-Type: application/json' -X POST "$K/api/listings.php?$1" -d "$2"; }
 
-# fit_phone: «15 Pro» не находит «15 Pro Max»
-curl -sS "$K/api/listings.php?fit_phone=iphone-15-pro&per=48" \
-  | jq '{fit_applied, max: ([.items[].device_models[]? | select(test("Pro Max"))] | length)}'                  # max: 0
+# fit_car: только подходящие диски и шины (по parts), вердикт в fit_match
+feed 'per=24' '{"fit_car": "pcd:5x114.3;dia:60.1;et:35..45;r:16,17,18;tyre:215/55R17"}' \
+  | jq '{total, fit_applied, items: [.items[] | {id, parts, compat_src, fit_match}] | .[:5]}'
+# строгость: ни одного диска с DIA меньше 60.1 и с чужой разболтовкой
+feed 'per=48' '{"fit_car": "pcd:5x114.3;dia:60.1"}' | jq '[.items[] | select(.parts.kind == "wheel")
+  | select(((.parts.dia // 99) | (tonumber? // 99)) < 59.95
+           or ((.parts.pcd // "5x114.3") | test("^5x([0-9.]+/)*114\\.3"; "i") | not))] | length'   # 0
+# без parts (разбор текста) — не лучше check
+feed 'per=48' '{"fit_car": "pcd:5x114.3;dia:60.1"}' \
+  | jq '[.items[] | select(.compat_src == "text" and .fit_match.car != "check")] | length'                      # 0
+# сортировка по умолчанию: ok выше остальных; ТОП — только подходящий
+feed 'per=48' '{"fit_car": "pcd:5x114.3;dia:60.1"}' \
+  | jq '{ok_first: ([.items[] | select(.slot != "top") | .fit_match.car == "ok"] | . == (sort | reverse)),
+         top_bad: ([.items[] | select(.slot == "top" and .fit_match == null)] | length)}'                    # true, 0
+
+# fit_phone: «15 Pro» не находит «15 Pro Max» (объявление, где в device_models только Pro Max, — ошибка)
+feed 'per=48' '{"fit_phone": "iphone-15-pro"}' \
+  | jq '{fit_applied, max: ([.items[] | select((.device_models | length) > 0
+                                          and all(.device_models[]; test("pro max"; "i")))] | length)}'  # max: 0
+# GET тоже принимается (без гарантии журналов) — тот же итог
+curl -sS "$K/api/listings.php?fit_phone=iphone-15-pro&per=48" | jq '{fit_applied, total}'
 
 # fit_laptop и size нескольких видов
-curl -sS "$K/api/listings.php?fit_laptop=15.6&per=24" | jq '[.items[] | {id, fits_diag_max, fits_kind, fit_match}] | .[:5]'
-curl -sS -G "$K/api/listings.php" --data-urlencode 'size=shoes_men:US M:9.5|clothes_men:INT:M' \
+feed 'per=24' '{"fit_laptop": "15.6"}' | jq '[.items[] | {id, fits_diag_max, fits_kind, fit_match}] | .[:5]'
+feed 'per=24' '{"size": "shoes_men:US M:9.5|clothes_men:INT:M"}' \
   | jq '{fit_applied, items: [.items[] | {category, storage, size_all}] | .[:5]}'
 
 # Пачка для свайпа — те же поля, что ?id=
-curl -sS "$K/api/listings.php?ids=a1b2c3,d4e5f6" | jq '.items[] | {id, images: (.images | length), specs: (.specs | length), device_models, cutout}'
+curl -sS "$K/api/listings.php?ids=a1b2c3,d4e5f6" \
+  | jq '.items[] | {id, images: (.images | length), specs: (.specs | length), device_models, parts, ar_front, cutout}'
+
+# Каталог устройств: весь стартовый список на месте, slug те же
+curl -sS "$K/api/devices.php?action=phones&lang=ru" | jq -r '.phones[].slug' | sort > srv.txt
+jq -r '.phones[].slug' docs/SERVER_MY_THINGS_devices.json | sort | comm -23 - srv.txt                         # пусто
+
+# ar_front и правка шин без parts — под тестовым продавцом (как в SERVER_DIMENSIONS.md §9): куки в cookies.txt,
+# csrf — со страницы кабинета; «…» — адреса своих загруженных фото
+CSRF='…'
+BASE='{"csrf":"'"$CSRF"'","title":"Тест «Моё»","price":1000,"condition":"used","city":"Алматы","description":"Тест","images":["…"]}'
+add()  { jq -c --arg id "${ID:-}" ". + $1" <<<"$BASE"; }
+post() { curl -sS -b cookies.txt -H 'Content-Type: application/json' -X POST "$K/kz/ru/cabinet.php?action=$1" -d "$2"; }
+item() { curl -sS -H 'Accept: application/json' "$K/api/listings.php?id=$1" | jq ".item | $2"; }
+ID=$(post submit "$(add '{category:"laptops", images:["…/0.jpg","…/1.jpg","…/2.jpg"], ar_front:2}')" | jq -r .id)
+item "$ID" '{ar_front}'                                                                        # 2
+post edit_item "$(add '{id:$id, category:"laptops", images:["…/0.jpg","…/1.jpg"]}')" | jq .ok
+item "$ID" '{ar_front}'                                                                        # null — номер вышел за images
+ID=$(post submit "$(add '{category:"tires-wheels", parts:{kind:"wheel", diameter:"16", pcd:"5x114.3", dia:"67.1"},
+  rim_r:16, rim_pcd:"5x114.3", rim_dia:67.1}')" | jq -r .id)
+post edit_item "$(add '{id:$id, category:"tires-wheels", rim_r:16, rim_pcd:"5x114.3", rim_dia:60.1}')" | jq .ok
+item "$ID" '{parts, specs: [.specs[]? | {key, label, value}]}'              # parts.dia 60.1; «Ступица…» в specs — 60.1
+curl -sS -b cookies.txt "$K/kz/ru/cabinet.php?action=my_items" \
+  | jq --arg id "$ID" '.items[] | select((.id | tostring) == $id) | {rim_r, rim_pcd, rim_dia}'  # 16, "5x114.3", 60.1
 
 # Примерка с фото профиля (под тестовым человеком: cookies.txt, CSRF — как в SERVER_DIMENSIONS.md §9)
 curl -sS -b cookies.txt "$K/api/tryon.php?action=info&lang=ru" | jq '{on, kinds, photo_id}'
-post() { curl -sS -b cookies.txt -H 'Content-Type: application/json' -X POST "$K/api/tryon.php?action=$1" -d "$2"; }
-PH=$(post photo "$(jq -nc --arg c "$CSRF" --arg p "data:image/jpeg;base64,$(base64 -w0 car.jpg)" \
+tpost() { curl -sS -b cookies.txt -H 'Content-Type: application/json' -X POST "$K/api/tryon.php?action=$1" -d "$2"; }
+PH=$(tpost photo "$(jq -nc --arg c "$CSRF" --arg p "data:image/jpeg;base64,$(base64 -w0 car.jpg)" \
   '{csrf: $c, lang: "ru", kind: "car", photo: $p, wheels: [{x: 0.27, y: 0.62, r: 0.08}, {x: 0.73, y: 0.62, r: 0.08}]}')" | jq -r .photo_id)
-post start "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, lang: "ru", listing_id: "d4e5f6", kind: "car", photo_id: $p, source: "my"}')" | jq '{ok, job, code}'
-post delete_photo "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, photo_id: $p}')" | jq .ok
-post start "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, lang: "ru", listing_id: "d4e5f6", kind: "car", photo_id: $p}')" | jq .code   # "photo_gone"
+tpost start "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, lang: "ru", listing_id: "d4e5f6", kind: "car", photo_id: $p, source: "my"}')" | jq '{ok, job, code}'
+tpost delete_photo "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, photo_id: $p}')" | jq .ok
+tpost start "$(jq -nc --arg c "$CSRF" --arg p "$PH" '{csrf: $c, lang: "ru", listing_id: "d4e5f6", kind: "car", photo_id: $p}')" | jq .code   # "photo_gone"
 
-# Журналы: значений fit_* нет
-grep -c 'fit_me=chest' /var/log/nginx/access.log   # 0
+# Журналы: значений из тела POST нет (свои журналы и журнал ошибок PHP; журнал хостинга — если есть доступ)
+feed 'per=1' '{"fit_me": "chest:97;foot:26.5"}' >/dev/null
+grep -rc 'chest:97' /var/log/ 2>/dev/null | grep -v ':0$'               # пусто; так же — в папке журналов сайта
 ```
 
 - [ ] Схема: `rules.compat`, `rules.fit_filters` — флаги только у работающего; `rules.fit_me` — последним.
 - [ ] `submit` с `device_models`, `fits_diag_max`, `fits_kind` → поля в `?id=`, `?ids=`, `my_items` и в `specs` с `key`.
 - [ ] Подача без новых полей проходит; `edit_item` без них не стирает прежние.
-- [ ] `fit_car`: в выдаче нет чужой разболтовки и DIA меньше ступицы; `rings` и `spacers` — по таблице 3.2.
+- [ ] `fit_*` в теле POST — тот же ответ, что в адресе; `csrf` не нужен.
+- [ ] `fit_car` по `parts`: в выдаче нет чужой разболтовки и DIA меньше ступицы; `rings` и `spacers` — по таблице 3.2;
+      без `parts` (`compat_src: "text"`) — не лучше `check`.
+- [ ] `edit_item` с `rim_*` / `tyre_*` (без `parts`) обновляет `parts`; `my_items` отдаёт `rim_*` / `tyre_*` (§2.1).
+- [ ] Сортировка по умолчанию: `ok` выше остальных; ТОП — только подходящий и с пометкой.
 - [ ] `fit_phone=iphone-15-pro` не находит «15 Pro Max» и «iPhone 15».
+- [ ] `ar_front` — в ленте, `?id=`, `?ids=`, `my_items`; `edit_item` без поля не стирает, `-1` снимает, номер вне
+      `images` снят.
+- [ ] `api/devices.php`: все 69 slug стартового списка на месте.
 - [ ] Запрос без `fit_*` — ответ как раньше, без `fit_applied`.
 - [ ] `photo_id`: `start` работает, после `delete_photo` — `photo_gone`; результаты с этим фото удалены.
-- [ ] Журналы и аналитика без значений `fit_*`.
+- [ ] Журналы, журнал ошибок и аналитика без значений из тела POST.
 
 Пробы можно добавить в «Новые адреса сервера» в `.github/workflows/ios-check.yml` (job `api-probe`).
 
@@ -636,10 +763,11 @@ grep -c 'fit_me=chest' /var/log/nginx/access.log   # 0
 ## 12. Порядок включения
 
 1. Политика конфиденциальности — разделы §10.6.
-2. Поля §2.2–2.4, выдача, форма сайта; затем `rules.compat.on: true`.
+2. Поля §2.2–2.4 и `ar_front` §2.9, `api/devices.php` §2.7 (из него — чипы формы «Для какой модели»), выдача, форма
+   сайта; затем `rules.compat.on: true`.
 3. Перенос старых §2.8 — сразу, иначе подборки пустые.
-4. `fit_car` → `size` (несколько видов) → `fit_phone` → `fit_laptop`, с `fit_applied` и `fit_match`; каждый флаг
-   `rules.fit_filters` — когда его параметр работает.
+4. `fit_car` → `size` (несколько видов) → `fit_phone` → `fit_laptop` — в теле POST, с `fit_applied` и `fit_match`;
+   каждый флаг `rules.fit_filters` — когда его параметр работает.
 5. `cutout` §2.5 — по желанию.
 6. `photo_id` §5 — когда примерочная включена (`info.on`).
 7. `fit_me` и `rules.fit_me` — последним.
@@ -652,14 +780,29 @@ grep -c 'fit_me=chest' /var/log/nginx/access.log   # 0
 
 ## 13. Вопросы к ultra-site
 
-1. Хранятся ли уже `rim_*` и `tyre_*` полями (`SERVER_DIMENSIONS.md` 4)? Если нет — начинать `fit_car` со строк описания?
-2. `fit_match` вместо `fit` (занято замерами вещи) — согласны?
-3. Каталог устройств: ведёте `api/devices.php` у себя или берёте стартовый из приложения (§2.7)?
-4. Форма `size=<таблица>:<код>:<значение>` (§3.5) — подходит?
-5. Можно ли гарантировать, что значения `fit_*` не попадут в журналы и аналитику (§10.2)?
-6. ТОП в подборках «подходит» — только подходящие и с пометкой — согласны?
-7. Есть ли на сервере удаление фона (для примерочной) — переиспользовать для `cutout`?
-8. Сортировка при `fit_*`: оставить запрошенную или «точно подходит» выше «проверьте»?
+### Закрыто — ответы ultra-site 16.10.2026
+
+Номера — вопросов этого договора (прежний список 1–8). У ultra-site ответов шесть: ТОП и сортировка — один ответ 6.
+
+| № | Вопрос | Ответ | Где |
+|---|---|---|---|
+| 1 | Хранятся ли `rim_*` и `tyre_*` полями? | Да, в `parts`: шина `tire` — `width`, `profile`, `diameter`, `season`; диск `wheel` — `diameter`, `width_j`, `pcd`, `et`, `dia`. Старые без `parts` — по тексту, `compat_src: "text"`, `fit_match.car: "check"` | §2.1, 2.8, 3.2 |
+| 2 | `fit_match` вместо `fit`? | Согласны; `fit` (замеры вещи) не трогают | §1, 3.1 |
+| 3 | Каталог устройств | Свой `api/devices.php`; стартовый список — из приложения, слить с моделями из характеристик электроники; slug по §3.3 | §2.7, `SERVER_MY_THINGS_devices.json` |
+| 4 | `size=<таблица>:<код>:<значение>` | Подходит; таблицы и коды — `SERVER_SIZES.md`; старая форма работает | §3.5 |
+| 5 | `fit_*` не в журналах? | За свой код — да. Журнал доступа хостинга пишет адрес → `fit_*` в теле POST, гарантия только для POST; GET тоже примут | §3.1, 10.2 |
+| 6 | ТОП в подборках | Только подходящий и с пометкой | §3.1 |
+| 8 | Сортировка при `fit_*` | Порядок `sort=` приложения; по умолчанию `ok` выше `check`, `rings`, `spacers` | §3.1 |
+
+### Открыто
+
+1. (был 7) Есть ли на сервере удаление фона (для примерочной) — переиспользовать для `cutout` (§2.5)?
+2. Колёса в сборе в `parts`: как держать размер шины у объявления `kind: "wheel"` — ключами `width`, `profile` рядом с
+   полями диска? От этого зависят `wheel_kit` (§2.4) и сверка «и как диск, и как шина» (§3.2).
+3. Отдаёте ли `parts` как есть в выдаче (лента, `?id=`, `?ids=`) и в `my_items`? Тогда приложение будет читать его
+   напрямую (§14) — без пунктов `specs` из `parts` и `rim_*` / `tyre_*` в `my_items`.
+4. `size` из «Моего» в теле POST (§3.1, 3.5) — принимаете и даёте ту же гарантию «не в журналах», что для `fit_*`?
+   Пришёл `size` и в адресе (обычный фильтр ленты), и в теле — предлагаем И, как с остальными параметрами ленты.
 
 ---
 
@@ -669,7 +812,8 @@ grep -c 'fit_me=chest' /var/log/nginx/access.log   # 0
   (мерки — ключи 3.6, размеры — таблицы `SERVER_SIZES.md`); рубильник `Config.моё`.
 - `MyThingsStore.swift` — хранилище: файл на телефоне, перенос гаража «Подойдут ли?», мост с ним (полный гараж
   сохранённую машину не вытесняет), «Удалить всё».
-- `MyThingsPhones.swift` — каталог телефонов (стартовое содержимое §2.7).
+- `MyThingsPhones.swift` — каталог телефонов, 69 моделей; выгружен в `docs/SERVER_MY_THINGS_devices.json` (стартовый
+  список §2.7). Меняется каталог — обновить файл.
 - `MyThingsPhoto.swift` — фото без EXIF, круги колёс, точки позы (Vision; на сервер не уходят).
 - `MyThingsHub.swift`, `MyThingsParts.swift` — хаб «Моё» и карточки.
 - `MyThingsBodyModel.swift`, `MyThingsFiles.swift`, `MyThingsControls.swift` — мерки и размеры, файлы и прогресс, поля.
@@ -683,6 +827,22 @@ grep -c 'fit_me=chest' /var/log/nginx/access.log   # 0
   (сверка §3.2), чехлы и стёкла (строго по модели, §3.3), сумки для ноутбука (диагональ), одежда и обувь (строка
   размеров `SERVER_SIZES.md`). Плашка на странице объявления (`Design/SiteListing.swift`) и чип «Для моего» в шапке
   ленты раздела — отбор загруженного (`Refine/FeedRefine.swift`, `Feed/FeedModel.swift`), без параметров `fit_*`.
+- **Шины и диски — что шлёт и что читает** (сверено с кодом 16.10.2026):
+  - шлёт: `submit` — `parts` (`kind` `tire` / `wheel`, поля мастера; `Posting/PostingSend.swift`, `телоЗапчасти`),
+    `tyre_*` / `rim_*` и строку «Размер шин / Диски» (`Posting/PostingSizeWheels.swift`, `дописатьРазмерКолёс`);
+    `edit_item` — без `parts` (как сайт), только `tyre_*` / `rim_*` и строку;
+  - читает: **`parts` — нигде.** `Feed/Listing.swift` не разбирает ни `parts`, ни плоские `rim_*` / `tyre_*` — в
+    `Listing` попадают только пункты `specs` (`label` → `value`). «Подойдут ли?» и «Подходит моему»
+    (`РазборАвтоподбора.из`, `TryOn/AutoFitParse.swift`) берут эти пункты по подписи (подпись, равная `tyre_w`,
+    `rim_pcd`…, тоже узнаётся), затем строку подачи в описании, название, описание. Правка (`приложитьКолёсаЗаписи`,
+    `PostingSizeWheels.swift`) — плоские `tyre_*` / `rim_*` из `my_items` и строку в описании;
+  - **доработка приложения**: читать `parts` в `Listing` (выдача) и в записи `my_items` и класть первым в
+    `РазборАвтоподбора` и в поля мастера правки; читать из выдачи `fit_match` и `compat_src`. До неё серверу — пункты
+    `specs` из `parts` и `rim_*` / `tyre_*` в `my_items` (§2.1).
+- `ar_front` (§2.9) — приложение пока не шлёт и не читает. Следующая сборка: метка «На столе» в плане съёмки
+  (`Posting/PostingShots.swift`, места кадров — `shot_slots`); кадр для стойки и 3D-формы — `TryOn/FitBoxItem.swift`
+  (`вырезка`: сейчас ракурс «спереди» 3D-обзора, затем фото по порядку), вырезка фона — на телефоне
+  (`TryOn/FitBoxItemImage.swift`).
 - Ссылки: `/cabinet.php?go=my` и `?s=my` открывают хаб «Моё» (гостю тоже) — `Links/CabinetRouter.swift`.
-- Следующими: чип ленты по всему сайту (`fit_*`, `Filters/FeedFilters.swift`, `Feed/ListingsAPI.swift`), стопка
-  свайпа, примерка с фото профиля (`TryOn/TryOnAPI.swift`).
+- Следующими: чип ленты по всему сайту (`fit_*` в теле POST, `Filters/FeedFilters.swift`, `Feed/ListingsAPI.swift`),
+  стопка свайпа, примерка с фото профиля (`TryOn/TryOnAPI.swift`).
