@@ -481,8 +481,9 @@ final class ПодборкаДляВас: ObservableObject {
         let кто = СессияПриложения.shared.id
         номерЗагрузки += 1
         let номер = номерЗагрузки
-        let задача = Task { [weak self] in
-            await self?.загрузить(разделы, где: где, кто: кто)
+        let задача = Task<Void, Never> { [weak self] in
+            guard let self else { return }
+            await self.загрузить(разделы, где: где, кто: кто)
         }
         загрузка = задача
         await задача.value
