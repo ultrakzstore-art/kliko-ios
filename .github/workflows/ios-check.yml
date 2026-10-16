@@ -22,6 +22,10 @@ on:
         description: "Снять кадры с симулятора (job screens, 20+ минут macOS)"
         type: boolean
         default: false
+      diag:
+        description: "Разбор зависания: 78 и текущая рядом на симуляторе (job diag)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-check-${{ github.ref }}
@@ -176,6 +180,114 @@ jobs:
   # запустить приложение, открыть ленту и карточку (через kliko://open — тот же путь, что у ссылки с сайта) и снять
   # экраны в светлой и тёмной теме. Снимки уходят в ветку ci/screenshots — её можно открыть на GitHub или забрать git.
   # Не роняет прогон. Только вручную с галочкой «shots» — не на пуш и не на pull request (минуты macOS).
+  # РАЗБОР ЗАВИСАНИЯ 79/80 (владелец 16.10.2026: «так же висит… разберись с косяком»). Сборка 78 (f3c59be, работала) и 80
+  # (97989f8, висит) — рядом, на одном симуляторе против живого kliko.kz: кадры через 3/8/15/30 с, снимок стеков всех
+  # потоков (sample) на 15-й секунде, вывод приложения и журнал. Запуск — галочкой diag или словом [diag] в сообщении
+  # коммита. Итог — в ветке ci/diag-<сборка> и в журнале прогона.
+  diag:
+    if: (github.event_name == 'workflow_dispatch' && inputs.diag) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[diag]'))
+    runs-on: macos-26
+    timeout-minutes: 50
+    continue-on-error: true
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: b78
+            ref: f3c59bee81cf48d244d9b0568dbdbf05c48222c3
+          - label: b80
+            ref: 97989f8ba7bf9f867822544eb87487d2b11b59ce
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+
+      - name: Xcode, XcodeGen, симулятор
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          brew install xcodegen
+          xcodegen generate
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"]); raise SystemExit
+          ')
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          sysctl -n hw.ncpu hw.perflevel0.physicalcpu 2>/dev/null || true
+
+      - name: Собрать
+        run: |
+          set -o pipefail
+          xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=1.13 CURRENT_PROJECT_VERSION=999 | tail -3
+          app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
+          echo "APP=$app" >> "$GITHUB_ENV"
+
+      - name: Запуск и снимки
+        run: |
+          mkdir -p diag
+          xcrun simctl install "$UDID" "$APP"
+          id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
+          echo "объявление для ссылки: $id"
+          run_case() {  # имя, аргументы запуска
+            name=$1; shift
+            echo "===== $name: $(date -u +%T)"
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            xcrun simctl launch --stdout="$PWD/diag/$name-out.txt" --stderr="$PWD/diag/$name-err.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@" || echo "::warning::$name: не запустилось"
+            t0=$(date +%s)
+            for t in 3 8 15 30; do
+              while [ $(( $(date +%s) - t0 )) -lt $t ]; do sleep 1; done
+              xcrun simctl io "$UDID" screenshot "diag/$name-$t.png" >/dev/null 2>&1 || true
+              if [ $t = 15 ]; then
+                pid=$(pgrep -f 'Kliko.app/Kliko' | head -1)
+                echo "pid=$pid"
+                [ -n "$pid" ] && sudo sample "$pid" 3 -file "diag/$name-sample15.txt" >/dev/null 2>&1 || true
+              fi
+            done
+            xcrun simctl spawn "$UDID" log show --last 2m --style compact --predicate 'process == "Kliko"' > "diag/$name-log.txt" 2>/dev/null || true
+            echo "--- вывод приложения ($name)"; tail -60 "diag/$name-out.txt" "diag/$name-err.txt" 2>/dev/null || true
+            echo "--- журнал, ошибки ($name)"; grep -iE 'error|fail|timed out|cancel|hang|deadlock|nw_|tcp|tls|-100[0-9]' "diag/$name-log.txt" | tail -60 || true
+            if [ -f "diag/$name-sample15.txt" ]; then
+              echo "--- стеки на 15-й секунде ($name)"
+              sed -n '/Call graph:/,/Total number in stack/p' "diag/$name-sample15.txt" | head -400
+            fi
+          }
+          run_case first
+          run_case second
+          [ -n "$id" ] && run_case link -klikoOpen "https://kliko.kz/marketplace?item=$id" || true
+          xcrun simctl terminate "$UDID" kz.kliko.app || true
+          for f in diag/*.png; do sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          ls -la diag
+
+      - name: Выложить в ветку ci/diag-${{ matrix.label }}
+        if: always()
+        run: |
+          [ -d diag ] || exit 0
+          cd diag
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "Разбор зависания: сборка %s (%s), прогон %s\n" "${{ matrix.label }}" "${{ matrix.ref }}" "$GITHUB_RUN_ID" > README.md
+          git add -A
+          git commit -qm "diag ${{ matrix.label }} $GITHUB_RUN_ID"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/diag-${{ matrix.label }}
+
   screens:
     if: github.event_name == 'workflow_dispatch' && inputs.shots
     runs-on: macos-26
