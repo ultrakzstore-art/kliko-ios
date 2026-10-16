@@ -625,8 +625,20 @@ struct СтраницаПодачи {
         return max(0, 10 * Int(сырая.rounded()))
     }
 
+    /// Скорость: выражения собираются один раз на запуск, а не на каждое открытие подачи. NSCache сам потокобезопасен,
+    /// готовое выражение не меняется — разбор идёт и вне главной нити.
+    private static let выражения = NSCache<NSString, NSRegularExpression>()
+
     private static func найти(_ шаблон: String, в тексте: String) -> String? {
-        guard let выражение = try? NSRegularExpression(pattern: шаблон, options: []) else { return nil }
+        let ключ = NSString(string: шаблон)
+        let выражение: NSRegularExpression
+        if let готовое = выражения.object(forKey: ключ) {
+            выражение = готовое
+        } else {
+            guard let новое = try? NSRegularExpression(pattern: шаблон, options: []) else { return nil }
+            выражения.setObject(новое, forKey: ключ)
+            выражение = новое
+        }
         let весь = NSRange(тексте.startIndex..<тексте.endIndex, in: тексте)
         guard let совпадение = выражение.firstMatch(in: тексте, options: [], range: весь),
               совпадение.numberOfRanges > 1,

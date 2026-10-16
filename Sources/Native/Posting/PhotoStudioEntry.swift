@@ -70,7 +70,8 @@ struct ПлашкаСтудииФото: View {
 
     private func т(_ ключ: String) -> String { СтудияФотоText.т(ключ) }
 
-    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
+    /// Без блика: «Уменьшение движения» или лёгкий режим (РежимУстройства).
+    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо || РежимУстройства.сейчас }
 
     var body: some View {
         /* Первая подходящая плитка, но не картинка ИИ (AIImagePosting.swift): иллюстрацию студия не переснимает. */
@@ -115,9 +116,26 @@ struct ПлашкаСтудииФото: View {
             .buttonStyle(.plain)
             .accessibilityLabel(т("st_hide"))
         }
-        .onAppear {
+        .task {
+            /* Скорость: плашка студии на экране — модель вырезки грузится заранее, в фоне (не в лёгком режиме). */
+            if !РежимУстройства.сейчас { ВырезкаПредмета.прогреть() }
             guard !тихо else { return }
-            блик = true
+            await пробежатьБликом()
+        }
+    }
+
+    /// Блик — пауза 1,4 с и пробег 1,6 с, по кругу, пока плашка на экране (ушла — задача отменяется сама). В лёгком
+    /// режиме и при «Уменьшении движения» его нет вовсе (тихо).
+    private func пробежатьБликом() async {
+        while !Task.isCancelled {
+            var без = Transaction()
+            без.disablesAnimations = true
+            withTransaction(без) { блик = false }
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 1.6)) { блик = true }
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
         }
     }
 
@@ -157,9 +175,7 @@ struct ПлашкаСтудииФото: View {
                        endPoint: .bottomTrailing)
     }
 
-    private static let бегБлика = Animation.easeInOut(duration: 1.6).delay(1.4).repeatForever(autoreverses: false)
-
-    /// Блик: светлая косая полоса раз в три секунды проходит слева направо.
+    /// Блик: светлая косая полоса раз в три секунды проходит слева направо (пробежатьБликом).
     private var отблеск: some View {
         GeometryReader { г in
             LinearGradient(colors: [Color.white.opacity(0), Color.white.opacity(0.35), Color.white.opacity(0)],
@@ -167,7 +183,6 @@ struct ПлашкаСтудииФото: View {
                 .frame(width: 70)
                 .rotationEffect(.degrees(18))
                 .offset(x: блик ? г.size.width + 80 : -150)
-                .animation(блик ? Self.бегБлика : nil, value: блик)
         }
         .opacity(тихо ? 0 : 1)
         .allowsHitTesting(false)

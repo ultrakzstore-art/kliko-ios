@@ -41,7 +41,10 @@ struct WebContainer: UIViewRepresentable {
         Self.большойКэш()
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
-        cfg.mediaTypesRequiringUserActionForPlayback = []          // видео/аудио в ленте без лишнего тапа
+        /* Видео/аудио на странице на экране — без лишнего тапа. Под слоем (подСлоем) её никто не видит: сами не играют,
+           и отрисовка — один раз, когда страница догрузилась, а не на каждом шаге (владелец 16.10.2026: «моментально»). */
+        cfg.mediaTypesRequiringUserActionForPlayback = Self.подСлоем ? .all : []
+        cfg.suppressesIncrementalRendering = Self.подСлоем
         cfg.websiteDataStore = .default()                          // ПЕРСИСТЕНТНЫЕ cookie → сессия не слетает
         /* ПОДПИСЬ ПРИЛОЖЕНИЯ В USER-AGENT. WKWebView честно считает себя браузером, и
            странице приходилось угадывать по косвенным признакам: «iPhone/iPad в UA, но
@@ -111,6 +114,12 @@ struct WebContainer: UIViewRepresentable {
         // Вход по Face ID (AppLock): страница узнаёт, что умеет телефон и включена ли защита, и включает её по просьбе
         // человека в Настройках кабинета. Включение и выключение подтверждаются той же проверкой владельца.
         ucc.add(context.coordinator, name: "klikoLock")
+        /* Под слоем строку состояния решает нативный слой, а не страница: klikoBars (liveBridgeJS) там не следит за
+           прокруткой, кликами и перестройкой страницы и не опрашивает её раз в 1,5 с. Признак — раньше моста. */
+        if Self.подСлоем {
+            ucc.addUserScript(WKUserScript(source: "window.__klikoБезЧасов = true;",
+                                           injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         ucc.addUserScript(WKUserScript(source: Coordinator.liveBridgeJS,
                                        injectionTime: .atDocumentStart, forMainFrameOnly: false))
 
@@ -171,7 +180,7 @@ struct WebContainer: UIViewRepresentable {
                     let coordinator = координатор
                     defer { coordinator.былаГлавная = наГлавной }
                     guard наГлавной, !coordinator.былаГлавная, !WebBridge.shared.сайтВместоЛенты else { return }
-                    WebBridge.shared.лентаВидна = true
+                    WebBridge.shared.показатьЛенту()
                 }
             }
         }
@@ -180,8 +189,69 @@ struct WebContainer: UIViewRepresentable {
         context.coordinator.contacts.webView = web
         context.coordinator.photos.webView = web
         bridge.webView = web
-        web.load(URLRequest(url: Config.apiBase))
+        /* Под слоем первая загрузка — не здесь, а позже (WebBridge.загрузитьСтраницуПодСлоем): тяжёлая веб-главная не
+           спорит за сеть и процессор с первым кадром ленты. Страница на экране (отладочный klikoSite) — сразу, как
+           раньше. */
+        if !Self.подСлоем { web.load(URLRequest(url: Config.apiBase)) }
         return web
+    }
+
+    /// Отладочный klikoSite (SceneDelegate, снимки CI) показывает страницу сайта вместо ленты. В выпуске — никогда.
+    private static var страницаНаЭкране: Bool {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: "klikoSite") != nil
+        #else
+        return false
+        #endif
+    }
+
+    /// Страница сайта живёт под нативным слоем и человеку не видна: её первая загрузка откладывается, картинки, видео и
+    /// шрифты ей не нужны, а строку состояния решает слой.
+    static var подСлоем: Bool { Config.нативнаяЛента && !страницаНаЭкране }
+
+    /// Под слоем страница качает только разметку, скрипты, стили и запросы данных: картинки, видео и шрифты не видны
+    /// никому, а съедают сеть и память рядом с лентой. Окна eGov и оплаты — со своей конфигурацией, их это не касается.
+    /// Собранный список WebKit хранит на диске под именем имяПравилПодСлоем: поменяли правила — новое имя (v2), иначе
+    /// lookUp вернёт прежний.
+    private static let правилаПодСлоем =
+        #"[{"trigger":{"url-filter":"^https?://","resource-type":["image","media","font"]},"action":{"type":"block"}}]"#
+    private static let имяПравилПодСлоем = "kliko-under-v1"
+
+    /**
+     Первая загрузка страницы под слоем (WebBridge.загрузитьСтраницуПодСлоем). Сначала правила без картинок, видео и
+     шрифтов: готовые с прошлого запуска берутся из хранилища WebKit, иначе собираются один раз. Ответы приходят на главной
+     очереди. Не вышло — грузим без правил. Пока ждали, страницу открыл кто-то другой — второй раз не грузим.
+     */
+    @MainActor
+    static func загрузитьПервую(_ web: WKWebView) {
+        let хранилищеПравил: WKContentRuleListStore? = подСлоем ? WKContentRuleListStore.default() : nil
+        guard let хранилище = хранилищеПравил else {
+            грузитьГлавную(web)
+            return
+        }
+        /* Ответы WebKit приходят на главной очереди; assumeIsolated говорит это компилятору, как бы SDK ни объявил
+           тип ответа (без него ответ без MainActor не дал бы позвать грузитьГлавную). */
+        хранилище.lookUpContentRuleList(forIdentifier: WebContainer.имяПравилПодСлоем) { готовый, _ in
+            MainActor.assumeIsolated {
+                if let готовый {
+                    web.configuration.userContentController.add(готовый)
+                    WebContainer.грузитьГлавную(web)
+                    return
+                }
+                хранилище.compileContentRuleList(forIdentifier: WebContainer.имяПравилПодСлоем,
+                                                 encodedContentRuleList: WebContainer.правилаПодСлоем) { список, _ in
+                    MainActor.assumeIsolated {
+                        if let список { web.configuration.userContentController.add(список) }
+                        WebContainer.грузитьГлавную(web)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private static func грузитьГлавную(_ web: WKWebView) {
+        if web.url == nil && !web.isLoading { web.load(URLRequest(url: Config.apiBase)) }
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
@@ -193,7 +263,10 @@ struct WebContainer: UIViewRepresentable {
             let наГлавную = Config.главная(url)
             DispatchQueue.main.async {
                 bridge.pendingURL = nil
-                if Config.нативнаяЛента && !bridge.сайтВместоЛенты { bridge.лентаВидна = наГлавную }
+                /* Только при смене: запись того же значения — лишняя публикация моста и пересборка слоя. */
+                if Config.нативнаяЛента && !bridge.сайтВместоЛенты && bridge.лентаВидна != наГлавную {
+                    bridge.лентаВидна = наГлавную
+                }
             }
         }
         // Токен пришёл после загрузки страницы → регистрируем в веб-сессии.
@@ -298,9 +371,11 @@ struct WebContainer: UIViewRepresentable {
            Зелёная шапка витрины уходит под Dynamic Island, и тёмные часы на ней не читаются; светлый кабинет — наоборот.
            Смотрим, что лежит под строкой состояния: вуаль безопасной зоны (--sa-veil) поверх первого непрозрачного слоя,
            градиенты тоже, фото — тёмное. Говорим приложению «light» (светлые часы) или «dark» только при смене.
+           Страница под нативным слоем (window.__klikoБезЧасов) — не следим вовсе: часы там решает слой приложения.
            Без обратных косых черт: строка живёт в Swift-литерале, где они значат своё. */
         (function(){
           if (window.top !== window) return;
+          if (window.__klikoБезЧасов) return;
           var м = window.webkit && window.webkit.messageHandlers;
           if (!м || !м.klikoBars) return;
           var было = '', ждём = false;
@@ -658,7 +733,7 @@ struct WebContainer: UIViewRepresentable {
                    "إعلانات جديدة في الطريق", "لحظة — تتحدث القائمة"]
         ]
         static func фразаОбновления() -> NSAttributedString {
-            let код = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+            let код = DesignText.язык          // язык приложения, прочитанный один раз за запуск (и после смены в шапке)
             let список = фразыОбновления[код] ?? фразыОбновления["ru"] ?? []
             let текст = список.randomElement() ?? ""
             return NSAttributedString(string: текст, attributes: [
@@ -751,6 +826,8 @@ struct WebContainer: UIViewRepresentable {
             webView.scrollView.refreshControl?.attributedTitle = Coordinator.фразаОбновления()   // в следующий раз — другая фраза
             /* Проверка на телефоне, сборка 33: без лишней публикации — она пересобирала бы ленту на каждой загрузке. */
             if bridge.loadFailed { bridge.loadFailed = false }
+            /* Новая страница — запомненный ответ «вошёл/токен» прежней больше не в счёт (SiteSession.состояние). */
+            SiteSession.страницаСменилась()
             if !bridge.isLoaded { bridge.isLoaded = true }
             if wipeAfterLogout, let адрес = webView.url?.absoluteString, адрес.contains("bye=1") {
                 wipeAfterLogout = false
@@ -768,6 +845,15 @@ struct WebContainer: UIViewRepresentable {
             /* TestFlight 1.10: вход, выход, eGov и кабинет на странице — общее состояние входа сверяется (с отсрочкой). */
             let адресСтраницы = webView.url
             Task { @MainActor in СессияПриложения.shared.страницаЗагрузилась(адресСтраницы) }
+        }
+
+        /// Процесс страницы закрыт системой (память, сбой WebKit): страница под слоем пустая, и мосты, сверки и токен в ней
+        /// не работают. Перезагружаем её; didFinish сам вернёт isLoaded и запустит сверки. Страницу ещё не грузили — её
+        /// загрузит WebBridge.загрузитьСтраницуПодСлоем или первый, кому она понадобится.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            if bridge.isLoaded { bridge.isLoaded = false }
+            SiteSession.страницаСменилась()
+            if webView.url != nil { webView.reload() }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

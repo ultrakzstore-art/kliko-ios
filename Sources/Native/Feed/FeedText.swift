@@ -3,7 +3,7 @@ import Foundation
 /// Тексты нативной ленты на языке телефона (kk/ru/en/ar) — тем же способом, что экран замка (AppLock.т).
 enum FeedText {
     static func т(_ ключ: String) -> String {
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let язык = DesignText.язык          // скорость: язык запомнен один раз, а не читается из настроек на каждую строку
         let словарь = тексты[язык] ?? тексты["ru"]!
         return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
     }

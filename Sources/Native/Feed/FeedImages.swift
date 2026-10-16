@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import ImageIO
+import CoreImage
 
 /**
  КАРТИНКИ ЛЕНТЫ — ИСПРАВЛЕНИЯ С ТЕЛЕФОНА (владелец 25.09.2026: «лента подвисает»; проверка на телефоне, сборка 33).
@@ -127,6 +128,37 @@ final class КартинкиЛенты {
         }
     }
 
+    // MARK: - Размытая подложка фото «целиком» (техника, услуги)
+
+    /// Ключ подложки: та же картинка, что у самой карточки (адрес, пиксели, без «заполнить»), и «#blur».
+    private static func ключРазмытой(_ адрес: URL, _ пикселей: Int) -> String {
+        ключ(адрес, пикселей, false) + "#blur"
+    }
+
+    /// Готовая размытая подложка из памяти или nil — для первого кадра ячейки.
+    func готоваяРазмытая(_ адрес: URL, пикселей: Int) -> UIImage? {
+        память.object(forKey: Self.ключРазмытой(адрес, пикселей) as NSString)
+    }
+
+    /**
+     Размытая подложка фото «целиком» (скорость, владелец 16.10.2026: «чтобы не тупил от слова совсем»). Раньше под каждой
+     такой карточкой лежала своя копия фото другого размера (второй запрос) с живым .blur(radius: 18) — размытие
+     считалось заново каждый кадр прокрутки. Теперь основа — та же картинка, что у самой карточки (из памяти или та же
+     загрузка, второго запроса нет), уменьшенная до ~64 px и размытая один раз не на главной очереди (РазмытиеЛенты);
+     готовая — в памяти рядом с основной.
+     */
+    func размытая(_ адрес: URL, пикселей: Int) async -> UIImage? {
+        let ключ = Self.ключРазмытой(адрес, пикселей)
+        if let есть = память.object(forKey: ключ as NSString) { return есть }
+        guard let основа = await загрузить(адрес, пикселей: пикселей, заполнить: false), !Task.isCancelled,
+              let растр = основа.cgImage else { return nil }
+        if let есть = память.object(forKey: ключ as NSString) { return есть }
+        let готовая = await Task.detached(priority: .utility) { РазмытиеЛенты.размыть(растр) }.value
+        guard let готовая else { return nil }
+        память.setObject(готовая, forKey: ключ as NSString, cost: Self.вес(готовая))
+        return готовая
+    }
+
     /// Одна из ждущих ячеек отменена. Не осталось ни одной — отменить загрузку (URLSession рвёт запрос).
     private func отпустить(_ ключ: String, номер: Int) {
         guard var идёт = вПути[ключ], идёт.номер == номер else { return }
@@ -178,6 +210,9 @@ final class КартинкиЛенты {
     nonisolated private static func скачать(_ адрес: URL, пикселей: Int, заполнить: Bool) async -> Data? {
         if let лёгкий = адресЛёгкого(адрес, пикселей: пикселей, заполнить: заполнить) {
             var запрос = URLRequest(url: лёгкий)
+            /* Скорость: копия img.php своего сайта не меняется — повторное открытие берёт её из URLCache без сети, даже
+               если срок в заголовках вышел. */
+            запрос.cachePolicy = .returnCacheDataElseLoad
             запрос.setValue("image/avif,image/webp,image/jpeg;q=0.8,image/png;q=0.8", forHTTPHeaderField: "Accept")
             if let ответ = try? await URLSession.shared.data(for: запрос),
                let http = ответ.1 as? HTTPURLResponse, (200..<300).contains(http.statusCode), !ответ.0.isEmpty {
@@ -185,9 +220,21 @@ final class КартинкиЛенты {
             }
             if Task.isCancelled { return nil }
         }
-        guard let ответ = try? await URLSession.shared.data(from: адрес) else { return nil }
+        var запрос = URLRequest(url: адрес)
+        /* Свои фото объявлений (/img/uploads/) под своим именем не меняются — из URLCache без сети; чужие хосты — как
+           скажут их заголовки. */
+        if своёФото(адрес) { запрос.cachePolicy = .returnCacheDataElseLoad }
+        guard let ответ = try? await URLSession.shared.data(for: запрос) else { return nil }
         if let http = ответ.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
         return ответ.0
+    }
+
+    /// Фото из /img/uploads/ своего сайта (kliko.kz или www.kliko.kz).
+    nonisolated private static func своёФото(_ адрес: URL) -> Bool {
+        let полный = адрес.absoluteURL
+        guard let хост = полный.host?.lowercased(), let свой = Config.apiBase.host?.lowercased(),
+              хост == свой || хост == "www." + свой else { return false }
+        return полный.path.hasPrefix("/img/uploads/")
     }
 
     /// Сколько байт занимает растр — цена для NSCache.
@@ -221,6 +268,98 @@ final class КартинкиЛенты {
                          kCGImageSourceThumbnailMaxPixelSize: потолок] as CFDictionary
         guard let растр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры) else { return nil }
         return UIImage(cgImage: растр)
+    }
+}
+
+/**
+ Размытие подложки фото «целиком» — один раз на картинку, не на главной очереди (КартинкиЛенты.размытая). Основа
+ уменьшается до 64 px по длинной стороне (Lanczos — без ряби), размывается по Гауссу и отдаётся готовым растром: на
+ экране его только растягивают. Сигма 6,5 px при 64 px — на карточке сетки iPhone (около 170 pt) это те же ~18 pt, что
+ давал прежний .blur(radius: 18). Края — продолжением крайних точек (как opaque: true у .blur): по краям не светлеет.
+ */
+enum РазмытиеЛенты {
+    /// Длинная сторона уменьшенной основы, пикселей.
+    static let сторона: CGFloat = 64
+    /// Сигма размытия на уменьшенной основе, пикселей.
+    static let сигма: Double = 6.5
+    /// Один контекст Core Image на все подложки: создать его дорого, а рисовать им можно из любого потока.
+    private static let контекст = CIContext(options: [.cacheIntermediates: false])
+
+    /// Уменьшить и размыть; не вышло — nil.
+    static func размыть(_ растр: CGImage) -> UIImage? {
+        let длинная = CGFloat(max(растр.width, растр.height))
+        guard длинная > 0 else { return nil }
+        var основа = CIImage(cgImage: растр)
+        let доля = min(1, сторона / длинная)
+        if доля < 1 {
+            основа = основа.applyingFilter("CILanczosScaleTransform",
+                                           parameters: [kCIInputScaleKey: доля, kCIInputAspectRatioKey: 1])
+        }
+        let рамка = основа.extent.integral
+        guard рамка.width >= 1, рамка.height >= 1 else { return nil }
+        let размытая = основа.clampedToExtent().applyingGaussianBlur(sigma: сигма).cropped(to: рамка)
+        guard let итог = контекст.createCGImage(размытая, from: рамка) else { return nil }
+        return UIImage(cgImage: итог)
+    }
+}
+
+/**
+ Размытая подложка фото «целиком» в карточке ленты: готовый растр КартинкиЛенты.размытая, растянутый на всю область фото
+ (.resizable().scaledToFill()), — без живого .blur. Пока его нет — прозрачно, как прежде до загрузки. `пунктов` — те же,
+ что у самой картинки карточки: основа подложки — она.
+ */
+struct РазмытаяКартинкаЛенты: View {
+    let адрес: URL?
+    let пунктов: CGFloat
+    @Environment(\.displayScale) private var масштаб
+    @State private var готовая: UIImage? = nil
+    @State private var готовАдрес: URL? = nil
+
+    init(_ адрес: URL?, пунктов: CGFloat) {
+        self.адрес = адрес
+        self.пунктов = пунктов
+    }
+
+    var body: some View {
+        ZStack {
+            if let картинка = показать {
+                Image(uiImage: картинка)
+                    .resizable()
+                    .interpolation(.medium)
+                    .scaledToFill()
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: адрес) { await загрузить() }
+    }
+
+    /// Пикселей — как у КартинкаЛенты с теми же пунктами: ключ основы тот же.
+    private var пикселей: Int {
+        max(64, Int((пунктов * max(1, масштаб)).rounded(.up)))
+    }
+
+    @MainActor
+    private var показать: UIImage? {
+        guard let цель = адрес else { return nil }
+        if готовАдрес == цель, let своя = готовая { return своя }
+        return КартинкиЛенты.shared.готоваяРазмытая(цель, пикселей: пикселей)
+    }
+
+    @MainActor
+    private func загрузить() async {
+        guard let цель = адрес else { return }
+        if готовАдрес == цель && готовая != nil { return }
+        let размер = пикселей
+        if let есть = КартинкиЛенты.shared.готоваяРазмытая(цель, пикселей: размер) {
+            готовая = есть
+            готовАдрес = цель
+            return
+        }
+        let пришла = await КартинкиЛенты.shared.размытая(цель, пикселей: размер)
+        guard !Task.isCancelled, let новая = пришла else { return }
+        готовая = новая
+        готовАдрес = цель
     }
 }
 

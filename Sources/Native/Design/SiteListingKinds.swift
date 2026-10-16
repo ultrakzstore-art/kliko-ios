@@ -1130,12 +1130,8 @@ struct СхемаПомещенияСайта: View {
             }
             Button { наВесьЭкран = true } label: {
                 HStack(spacing: 12) {
-                    AsyncImage(url: адрес) { фаза in
-                        if case .success(let картинка) = фаза {
-                            картинка.resizable().scaledToFill()
-                        } else {
-                            Color.white
-                        }
+                    КартинкаЛенты(адрес, пунктов: 84) {
+                        Color.white
                     }
                     .frame(width: 84, height: 62)
                     .background(Color.white)
@@ -1849,12 +1845,18 @@ struct БлокАрендыСайта: View {
 
     /// mkRcFmt: разряды через пробел.
     static func сумма(_ число: Double) -> String {
+        форматСуммы.string(from: NSNumber(value: число.rounded())) ?? String(Int(число))
+    }
+
+    /// Скорость: форматтер — один на запуск (после создания не меняется — его можно звать с любой нити).
+    private static let форматСуммы: NumberFormatter = {
         let ф = NumberFormatter()
+        ф.locale = .autoupdatingCurrent
         ф.numberStyle = .decimal
         ф.groupingSeparator = " "
         ф.maximumFractionDigits = 0
-        return ф.string(from: NSNumber(value: число.rounded())) ?? String(Int(число))
-    }
+        return ф
+    }()
 
     // MARK: Запрос (mkRentRequest)
 
@@ -1966,14 +1968,9 @@ enum АрендаОбъявленияAPI {
         case сеть
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — без своего Accept, срок 20 с и без кэша, как у прежней
+    /// своей.
+    private static let сессия = СетьСайта.Запросы(json: false, безКэша: true)
 
     @MainActor
     static func запросить(объявление: String, начало: Date, конец: Date, сообщение: String) async -> Итог {

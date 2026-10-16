@@ -153,14 +153,11 @@ struct ЭкранСравнения: View {
             Theme.поверхность2
                 .frame(width: Self.ширинаКолонки, height: Self.ширинаКолонки * 3 / 4)
                 .overlay {
-                    AsyncImage(url: товар.обложка) { фаза in
-                        if case .success(let картинка) = фаза {
-                            картинка.resizable().scaledToFill()
-                        } else {
-                            Image(systemName: "photo")
-                                .font(.system(size: 22))
-                                .foregroundStyle(Theme.текстВторой)
-                        }
+                    /* КартинкаЛенты, а не AsyncImage: обложку из ленты — из памяти в первом кадре. */
+                    КартинкаЛенты(товар.обложка, пунктов: Self.ширинаКолонки) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 22))
+                            .foregroundStyle(Theme.текстВторой)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))

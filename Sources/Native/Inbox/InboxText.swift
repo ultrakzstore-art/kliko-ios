@@ -12,7 +12,8 @@ enum ИнбоксText {
         return словарь[ключ] ?? ru[ключ] ?? ключ
     }
 
-    private static var язык: String { String((Locale.preferredLanguages.first ?? "ru").prefix(2)) }
+    /// Язык, запомненный за запуск (DesignText.язык): настройки телефона не перечитываются на каждую строку.
+    private static var язык: String { DesignText.язык }
 
     /// Даты «d мес» — на языке текстов.
     static var локаль: Locale {

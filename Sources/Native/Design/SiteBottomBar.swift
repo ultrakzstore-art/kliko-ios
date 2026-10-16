@@ -235,15 +235,18 @@ private struct СтеклоПанели: ViewModifier {
                 .glassEffect(.regular, in: Capsule())
                 .shadow(color: Color.black.opacity(схема == .dark ? 0.35 : 0.10), radius: 14, x: 0, y: 6)
         } else if устройство.лёгкий {
-            /* Скорость: .ultraThinMaterial заново размывает ленту под панелью на каждом кадре прокрутки. */
+            /* Скорость: .ultraThinMaterial заново размывает ленту под панелью на каждом кадре прокрутки. Тень — у самой
+               подложки (капсула непрозрачна — на вид то же), а не у всего состава со значками и подписями: та
+               рисовалась отдельным проходом по всей панели. */
             content
-                .background(Theme.панель, in: Capsule())
+                .background(Theme.панель.shadow(.drop(color: Color.black.opacity(схема == .dark ? 0.4 : 0.12),
+                                                      radius: 6, x: 0, y: 3)),
+                            in: Capsule())
                 .overlay {
                     Capsule()
                         .strokeBorder(Theme.панельКромка.opacity(0.35), lineWidth: 0.8)
                         .accessibilityHidden(true)
                 }
-                .shadow(color: Color.black.opacity(схема == .dark ? 0.4 : 0.12), radius: 6, x: 0, y: 3)
         } else {
             content
                 .background(.ultraThinMaterial, in: Capsule())

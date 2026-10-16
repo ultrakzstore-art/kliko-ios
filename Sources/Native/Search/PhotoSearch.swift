@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import ImageIO
 
 /**
  ПОИСК ПО ФОТО — СВОЙ ЭКРАН КАМЕРЫ (владелец 29.09.2026: «И поиск по фото тоже дизайн камеры»).
@@ -75,6 +76,25 @@ enum ПоискПоФотоAPI {
         guard let данные = готовый.jpegData(compressionQuality: 0.82) else { return nil }
         let адрес = "data:image/jpeg;base64," + данные.base64EncodedString()
         return адрес.count > 120 ? адрес : nil
+    }
+
+    /// Фото из галереи — уменьшенным уже при чтении (ImageIO): длинная сторона не больше `сторона` px, поворот по EXIF
+    /// применён, раскодировано заранее. Формат, который ImageIO не прочёл, — UIImage(data:), как раньше. Вне главной
+    /// нити.
+    static func открыть(_ данные: Data, сторона: Int) -> UIImage? {
+        let чтение = [kCGImageSourceShouldCache: false] as CFDictionary
+        if let источник = CGImageSourceCreateWithData(данные as CFData, чтение) {
+            let параметры: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: сторона
+            ]
+            if let кадр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры as CFDictionary) {
+                return UIImage(cgImage: кадр)
+            }
+        }
+        return UIImage(data: данные)
     }
 
     /// _mkPhotoSend: POST /api/photo_search.php (FormData с imgb64 и city), куки и токен веб-сессии.
@@ -338,7 +358,15 @@ final class ПоискПоФотоСайта: ObservableObject {
         Task { @MainActor in
             let данные = try? await выбранный.loadTransferable(type: Data.self)
             guard номер == поколение else { return }
-            guard let данные, let снимок = UIImage(data: данные) else {
+            /* Скорость: снимок галереи (бывает 48 Мп) — сразу уменьшенным до 2048 px и раскодированным, вне главной нити;
+               сайт всё равно получает не больше 1024 (ПоискПоФотоAPI.сжать). */
+            var снимок: UIImage? = nil
+            if let данные {
+                снимок = await Task.detached(priority: .userInitiated) { ПоискПоФотоAPI.открыть(данные, сторона: 2048) }
+                    .value
+            }
+            guard номер == поколение else { return }
+            guard let снимок else {
                 шаг = .ошибка(т("ps_bad_img"))
                 return
             }
@@ -350,12 +378,19 @@ final class ПоискПоФотоСайта: ObservableObject {
         сбросить()
         превью = снимок
         шаг = .идёт
-        guard let адрес = ПоискПоФотоAPI.сжать(снимок) else {
-            шаг = .ошибка(т("ps_fail"))
-            return
+        let номер = поколение
+        /* Скорость (владелец 16.10.2026): сжатие в JPEG и base64 — не на главной нити: «Ищем похожие…» встаёт сразу,
+           а не после замирания экрана. Пока жали, начали заново («Снять ещё», другое фото) — этот снимок не нужен. */
+        Task { @MainActor in
+            let адрес = await Task.detached(priority: .userInitiated) { ПоискПоФотоAPI.сжать(снимок) }.value
+            guard номер == поколение else { return }
+            guard let адрес else {
+                шаг = .ошибка(т("ps_fail"))
+                return
+            }
+            адресФото = адрес
+            распознать(адрес)
         }
-        адресФото = адрес
-        распознать(адрес)
     }
 
     /// Фото — на сайт (тот же запрос, что mkPhotoSearch), распознанное — в выдачу похожих.

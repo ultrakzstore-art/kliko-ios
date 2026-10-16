@@ -30,15 +30,12 @@ struct ЗагрузкаОбъёма: View {
     var body: some View {
         ZStack {
             if let постер {
-                AsyncImage(url: постер) { фаза in
-                    if let картинка = фаза.image {
-                        картинка
-                            .resizable()
-                            .scaledToFit()
-                            .opacity(0.32)
-                            .padding(32)
-                    }
+                /* КартинкаЛенты, а не AsyncImage: раскодирована вне главной нити, повторно — из памяти. */
+                КартинкаЛенты(постер, пунктов: 320, заполнить: false) {
+                    EmptyView()
                 }
+                .opacity(0.32)
+                .padding(32)
                 .accessibilityHidden(true)
             }
             VStack(spacing: 14) {

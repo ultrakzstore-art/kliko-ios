@@ -432,6 +432,40 @@ enum ПодсказкиСайта {
         return готовый
     }
 
+    /// Слово заголовка объявления, разобранное один раз (_mkTitleToks и проверки mkDataSuggest): показ, канон и то, о чём
+    /// спрашивает каждое нажатие клавиши.
+    private struct СловоЗаголовка {
+        let показ: String
+        let канон: String
+        /// Годится в подсказку само по себе: канон не пуст, не короче двух знаков, не стоп-слово, не единица данных.
+        let годно: Bool
+        /// Канон — год (четыре цифры).
+        let год: Bool
+        /// Единицы в каноне (gb, ghz…) — для «уже есть в запросе».
+        let единицы: [String]
+    }
+
+    /// Скорость (владелец 16.10.2026: «чтобы он не тупил от слова совсем»): слова заголовков по номеру объявления —
+    /// разобраны один раз, а не регулярками на каждую букву ввода по 600 объявлениям. С заголовком, по которому
+    /// разобраны: сменился — заново. Только с главной нити, как канонТоваров.
+    private static var словаТоваров: [String: (заголовок: String, слова: [СловоЗаголовка])] = [:]
+
+    private static func готовыеСлова(_ товар: Listing) -> [СловоЗаголовка] {
+        if let готовые = словаТоваров[товар.id], готовые.заголовок == товар.title { return готовые.слова }
+        var итог: [СловоЗаголовка] = []
+        for часть in словаЗаголовка(товар.title) {
+            let т = часть.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !т.isEmpty else { continue }
+            let к = канон(т)
+            let годно = !к.isEmpty && к.count >= 2 && !стоп.contains(к) && !совпало(единицаДанных, к)
+            итог.append(СловоЗаголовка(показ: т, канон: к, годно: годно, год: совпало(ПодсказкиСайта.год, к),
+                                       единицы: всеСовпадения(единицыВТексте, к)))
+        }
+        if словаТоваров.count > 3000 { словаТоваров.removeAll() }
+        словаТоваров[товар.id] = (заголовок: товар.title, слова: итог)
+        return итог
+    }
+
     /// _mkTitleToks: слова заголовка; число с единицей («256 ГБ») — одним словом.
     private static func словаЗаголовка(_ заголовок: String) -> [String] {
         let части = заголовок.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == "/" || $0 == "|" })
@@ -466,7 +500,7 @@ enum ПодсказкиСайта {
 
     /// mkDataSuggest: дописать запрос словами заголовков загруженных объявлений, где есть все слова запроса.
     private static func поДанным(канонЗапроса: String, слова o: [String], набрано: String,
-                                 естьУже: (String) -> Bool, товары: [Listing]) -> [String] {
+                                 естьУже: (СловоЗаголовка) -> Bool, товары: [Listing]) -> [String] {
         guard !товары.isEmpty else { return [] }
         let словаНабора = слова(набрано)
         var счёт: [String: Int] = [:]
@@ -478,17 +512,12 @@ enum ПодсказкиСайта {
             let u = канонТовара(товар)
             guard o.allSatisfy({ u.contains($0) }) else { continue }
             мерило += 1
-            for часть in словаЗаголовка(товар.title) {
-                let т = часть.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !т.isEmpty else { continue }
-                let к = канон(т)
-                if к.isEmpty || к.count < 2 || стоп.contains(к) || совпало(единицаДанных, к) || o.contains(к)
-                    || естьУже(к) {
-                    continue
-                }
+            for слово in готовыеСлова(товар) {
+                let к = слово.канон
+                if !слово.годно || o.contains(к) || естьУже(слово) { continue }
                 if счёт[к] == nil {
                     счёт[к] = 0
-                    показ[к] = т
+                    показ[к] = слово.показ
                     появление.append(к)
                 }
                 счёт[к, default: 0] += 1
@@ -526,18 +555,24 @@ enum ПодсказкиСайта {
         let брендЕсть = o.contains { канонБрендов.contains($0) }
         let вЗапросе = " " + n + " "
         func есть(_ т: String) -> Bool { !т.isEmpty && вЗапросе.contains(" " + т + " ") }
+        /* Есть ли в запросе год — один раз на ввод, а не на каждое слово каждого объявления. */
+        let годВЗапросе = ПодсказкиСайта.совпало(ПодсказкиСайта.годВТексте, n)
         func естьУже(_ т: String) -> Bool {
             if есть(т) { return true }
-            if ПодсказкиСайта.совпало(ПодсказкиСайта.год, т) && ПодсказкиСайта.совпало(ПодсказкиСайта.годВТексте, n) {
-                return true
-            }
+            if годВЗапросе && ПодсказкиСайта.совпало(ПодсказкиСайта.год, т) { return true }
             for единица in ПодсказкиСайта.всеСовпадения(ПодсказкиСайта.единицыВТексте, т)
             where вЗапросе.contains(" " + единица + " ") {
                 return true
             }
             return false
         }
-        let сДанных = поДанным(канонЗапроса: n, слова: o, набрано: e, естьУже: естьУже, товары: товары)
+        /* То же для слова заголовка, разобранного заранее (готовыеСлова): без регулярок. */
+        func естьУжеСлово(_ слово: СловоЗаголовка) -> Bool {
+            if есть(слово.канон) { return true }
+            if годВЗапросе && слово.год { return true }
+            return слово.единицы.contains { вЗапросе.contains(" " + $0 + " ") }
+        }
+        let сДанных = поДанным(канонЗапроса: n, слова: o, набрано: e, естьУже: естьУжеСлово, товары: товары)
         func подходит(_ схема: Схема) -> Bool {
             схема.запускК.contains { запуск in
                 o.contains { слово in слово == запуск || слово.hasPrefix(запуск) || запуск.hasPrefix(слово) }
@@ -716,8 +751,13 @@ enum ЗагрузкаКаталогаПоиска {
                 каталог = скачанный
                 каталог.популярные = популярные
             }
-            каталог.собратьБренды()
-            return каталог
+            /* Скорость: индекс брендов (сотни разделов) — не на главной нити. */
+            let собранный = каталог
+            return await Task.detached(priority: .userInitiated) { () -> КаталогПоиска in
+                var готовый = собранный
+                готовый.собратьБренды()
+                return готовый
+            }.value
         }
         идёт = задача
         let каталог = await задача.value
@@ -740,8 +780,16 @@ enum ЗагрузкаКаталогаПоиска {
             + "Object.keys(F).forEach(function(k){var n=F[k]||{};r.push([k,String(n.name||''),String(n.parent||''),"
             + "String(n.color||''),(n.brands||[]).map(String)]);});"
             + "return JSON.stringify({c:r,t:T.map(String),k:C});}catch(e){return '{}';}})()"
-        guard let строка = try? await web.evaluateJavaScript(js) as? String,
-              let данные = строка.data(using: .utf8),
+        guard let строка = try? await web.evaluateJavaScript(js) as? String else { return nil }
+        /* Скорость: разбор сотен разделов (JSON и каноны имён) — не на главной нити. */
+        return await Task.detached(priority: .userInitiated) { () -> КаталогПоиска? in
+            ЗагрузкаКаталогаПоиска.разобратьСтраницу(строка)
+        }.value
+    }
+
+    /// Ответ скрипта страницы (MK_CFLAT, MK_TRENDS, MK_CAT_COLOR) — справочник; не JSON — nil. Вне главной нити.
+    nonisolated private static func разобратьСтраницу(_ строка: String) -> КаталогПоиска? {
+        guard let данные = строка.data(using: .utf8),
               let ответ = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else { return nil }
         var каталог = КаталогПоиска()
         if let популярные = ответ["t"] as? [String], !популярные.isEmpty { каталог.популярные = популярные }
@@ -769,16 +817,21 @@ enum ЗагрузкаКаталогаПоиска {
             var запрос = URLRequest(url: адрес)
             запрос.timeoutInterval = 20
             guard let пара = try? await URLSession.shared.data(for: запрос),
-                  ((пара.1 as? HTTPURLResponse)?.statusCode ?? 200) == 200,
-                  let текст = String(data: пара.0, encoding: .utf8),
-                  let каталог = разобрать(текст), !каталог.пустой else { continue }
+                  ((пара.1 as? HTTPURLResponse)?.statusCode ?? 200) == 200 else { continue }
+            /* Скорость: текст справочника (сотни КБ) — в строку и в дерево не на главной нити. */
+            let данные = пара.0
+            let разобранный = await Task.detached(priority: .userInitiated) { () -> КаталогПоиска? in
+                guard let текст = String(data: данные, encoding: .utf8) else { return nil }
+                return ЗагрузкаКаталогаПоиска.разобрать(текст)
+            }.value
+            guard let каталог = разобранный, !каталог.пустой else { continue }
             return каталог
         }
         return nil
     }
 
-    /// Из текста cats-*.js — JSON между «MK_CATS=» и последней «]».
-    private static func разобрать(_ текст: String) -> КаталогПоиска? {
+    /// Из текста cats-*.js — JSON между «MK_CATS=» и последней «]». Вне главной нити.
+    nonisolated private static func разобрать(_ текст: String) -> КаталогПоиска? {
         guard let метка = текст.range(of: "MK_CATS="),
               let конец = текст.range(of: "]", options: .backwards),
               метка.upperBound < конец.upperBound else { return nil }
@@ -790,7 +843,7 @@ enum ЗагрузкаКаталогаПоиска {
         return каталог
     }
 
-    private static func обойти(_ ветви: [[String: Any]], родитель: String?, в каталог: inout КаталогПоиска) {
+    nonisolated private static func обойти(_ ветви: [[String: Any]], родитель: String?, в каталог: inout КаталогПоиска) {
         for ветвь in ветви {
             guard let ключ = ветвь["slug"] as? String, !ключ.isEmpty else { continue }
             let узел = КаталогПоиска.Узел(имя: (ветвь["name"] as? String) ?? "", родитель: родитель,

@@ -46,14 +46,9 @@ enum ОтзывыПродавца {
         let отзывы: [Отзыв]
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим
-        c.httpCookieStorage = nil
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON и срок 15 с, как у прежней своей; куки — из
+    /// WebKit (SiteSession).
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15)
 
     /// GET /kz/ru/api/seller_reviews.php?id=<seller_id>. nil — нет связи, не JSON или ok не пришёл.
     static func загрузить(_ продавец: String) async -> Сводка? {
@@ -112,15 +107,8 @@ enum ПричинаЖалобы: String, CaseIterable, Identifiable, Sendable {
 
 /// Записи на сайт: жалоба и блокировка. Только по нажатию человека — зовёт их ДействияСПродавцом.
 enum ЗапросыПродавца {
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта) — Accept JSON, срок 15 с и без кэша, как у прежней своей.
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15, безКэша: true)
 
     /// POST report.php?action=submit — ровно тело mkReportSubmit: target_id — продавец, listing_id — объявление.
     static func пожаловаться(на продавец: String, объявление: String, причина: ПричинаЖалобы, комментарий: String,

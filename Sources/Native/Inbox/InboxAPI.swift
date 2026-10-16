@@ -144,7 +144,14 @@ enum ИнбоксAPI {
         var ответили = 0
         var безВхода = 0
 
-        if let j = try? await получить("dm.php?action=list&me_id=" + вАдрес(я), ждать: ждать) {
+        /* Скорость (владелец 16.10.2026: «моментально открывал всё»): три чтения — разом, а не друг за другом; ответы
+           разбираются в прежнем порядке источников, склейка та же. */
+        async let ответDm: [String: Any]? = try? получить("dm.php?action=list&me_id=" + вАдрес(я), ждать: ждать)
+        async let ответЛиды: [String: Any]? = try? получить("chat.php?action=leads", ждать: ждать)
+        async let ответПокупки: [String: Any]? = try? получить("chat.php?action=buyer_chats", ждать: ждать)
+        let (dm, лиды, покупки) = await (ответDm, ответЛиды, ответПокупки)
+
+        if let j = dm {
             ответили += 1
             if З.да(j["ok"]) {
                 for t in (j["threads"] as? [[String: Any]]) ?? [] {
@@ -154,7 +161,7 @@ enum ИнбоксAPI {
                 безВхода += 1
             }
         }
-        if let j = try? await получить("chat.php?action=leads", ждать: ждать) {
+        if let j = лиды {
             ответили += 1
             if З.да(j["ok"]) {
                 for t in (j["leads"] as? [[String: Any]]) ?? [] {
@@ -164,7 +171,7 @@ enum ИнбоксAPI {
                 безВхода += 1
             }
         }
-        if let j = try? await получить("chat.php?action=buyer_chats", ждать: ждать) {
+        if let j = покупки {
             ответили += 1
             if З.да(j["ok"]) {
                 for t in (j["chats"] as? [[String: Any]]) ?? [] {
@@ -681,11 +688,63 @@ struct СтрокаИнбокса: Identifiable, Equatable {
 // MARK: - Время строк (_msgWhen, reqTimeAgo)
 
 enum ИнбоксВремя {
-    /// Сейчас — ISO 8601 с поясом (дата() разберёт его однозначно): время своего сообщения, если сервер его не прислал.
-    static func сейчас() -> String {
+    /*
+     Скорость (владелец 16.10.2026: «чтобы он не тупил от слова совсем»): форматтеры — один раз на запуск. Раньше на
+     каждую строку инбокса создавались два ISO-разборщика и до четырёх DateFormatter, а список перерисовывается на
+     каждом опросе. Готовые форматтеры не меняются после создания — их можно звать из любого потока.
+     */
+    private static let isoДоли: ISO8601DateFormatter = {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return iso
+    }()
+    private static let iso: ISO8601DateFormatter = {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
-        return iso.string(from: Date())
+        return iso
+    }()
+    /// Разборы без пояса — время телефона; длина — сколько знаков строки брать под шаблон.
+    private static let разборы: [(форматтер: DateFormatter, длина: Int)] = {
+        ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"].map {
+            (формат: String) -> (форматтер: DateFormatter, длина: Int) in
+            let ф = DateFormatter()
+            ф.locale = Locale(identifier: "en_US_POSIX")
+            ф.timeZone = .autoupdatingCurrent
+            ф.dateFormat = формат
+            return (форматтер: ф, длина: формат.replacingOccurrences(of: "'", with: "").count)
+        }
+    }()
+    /// «чч:мм» сообщения.
+    private static let часы: DateFormatter = {
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "en_US_POSIX")
+        ф.timeZone = .autoupdatingCurrent
+        ф.dateFormat = "HH:mm"
+        return ф
+    }()
+    /// Печать на языке текстов — по одной на язык и шаблон (NSCache сам потокобезопасен).
+    private static let печати = NSCache<NSString, DateFormatter>()
+
+    /// Готовый форматтер для языка текстов: шаблон — dateFormat как есть, местный — шаблон под язык («d мес»).
+    private static func печать(_ шаблон: String, местный: Bool) -> DateFormatter {
+        let локаль = ИнбоксText.локаль
+        let ключ = NSString(string: локаль.identifier + "|" + (местный ? "t" : "f") + "|" + шаблон)
+        if let готовый = печати.object(forKey: ключ) { return готовый }
+        let ф = DateFormatter()
+        ф.locale = локаль
+        ф.timeZone = .autoupdatingCurrent
+        if местный {
+            ф.setLocalizedDateFormatFromTemplate(шаблон)
+        } else {
+            ф.dateFormat = шаблон
+        }
+        печати.setObject(ф, forKey: ключ)
+        return ф
+    }
+
+    /// Сейчас — ISO 8601 с поясом (дата() разберёт его однозначно): время своего сообщения, если сервер его не прислал.
+    static func сейчас() -> String {
+        iso.string(from: Date())
     }
 
     /// Разбор времени сервера: ISO 8601 (с поясом или без) и «yyyy-MM-dd HH:mm:ss». Без пояса — время телефона, как
@@ -693,18 +752,11 @@ enum ИнбоксВремя {
     static func дата(_ строка: String) -> Date? {
         let s = строка.trimmingCharacters(in: .whitespaces)
         guard s.count >= 10 else { return nil }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoДоли.date(from: s) { return d }
         if let d = iso.date(from: s) { return d }
-        iso.formatOptions = [.withInternetDateTime]
-        if let d = iso.date(from: s) { return d }
-        let ф = DateFormatter()
-        ф.locale = Locale(identifier: "en_US_POSIX")
-        ф.timeZone = TimeZone.current
-        for формат in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"] {
-            ф.dateFormat = формат
-            let длина = min(s.count, формат.replacingOccurrences(of: "'", with: "").count)
-            if let d = ф.date(from: String(s.prefix(длина))) { return d }
+        for разбор in разборы {
+            let длина = min(s.count, разбор.длина)
+            if let d = разбор.форматтер.date(from: String(s.prefix(длина))) { return d }
         }
         return nil
     }
@@ -713,14 +765,13 @@ enum ИнбоксВремя {
     static func коротко(_ строка: String) -> String {
         guard let д = дата(строка) else { return "" }
         let календарь = Calendar.current
-        let ф = DateFormatter()
-        ф.locale = ИнбоксText.локаль
+        let ф: DateFormatter
         if календарь.isDateInToday(д) {
-            ф.dateFormat = "HH:mm"
+            ф = печать("HH:mm", местный: false)
         } else if календарь.component(.year, from: д) == календарь.component(.year, from: Date()) {
-            ф.setLocalizedDateFormatFromTemplate("dMMM")
+            ф = печать("dMMM", местный: true)
         } else {
-            ф.dateFormat = "dd.MM.yy"
+            ф = печать("dd.MM.yy", местный: false)
         }
         return ф.string(from: д)
     }
@@ -728,10 +779,7 @@ enum ИнбоксВремя {
     /// Время сообщения «чч:мм» (toLocaleTimeString ru-RU).
     static func время(_ строка: String) -> String {
         guard let д = дата(строка) else { return "" }
-        let ф = DateFormatter()
-        ф.locale = Locale(identifier: "en_US_POSIX")
-        ф.dateFormat = "HH:mm"
-        return ф.string(from: д)
+        return часы.string(from: д)
     }
 
     /// reqTimeAgo: «только что», «N мин назад», «N ч назад», «N дней назад», дальше — дата «d мес».
@@ -745,9 +793,6 @@ enum ИнбоксВремя {
         if ч < 24 { return String(format: ИнбоксText.т("ago_h"), ч) }
         let дн = ч / 24
         if дн < 7 { return ИнбоксText.дней(дн) }
-        let ф = DateFormatter()
-        ф.locale = ИнбоксText.локаль
-        ф.setLocalizedDateFormatFromTemplate("dMMM")
-        return ф.string(from: д)
+        return печать("dMMM", местный: true).string(from: д)
     }
 }

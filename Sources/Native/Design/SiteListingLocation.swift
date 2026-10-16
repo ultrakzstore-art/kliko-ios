@@ -380,12 +380,24 @@ enum МаршрутОбъявления {
             let метры = max(10, Int((км * 1000 / 10).rounded()) * 10)
             return String(format: тМеста("dist_m"), String(метры))
         }
-        let ф = NumberFormatter()
-        ф.locale = Locale(identifier: ListingPageText.язык)
-        ф.maximumFractionDigits = км < 10 ? 1 : 0
-        ф.minimumFractionDigits = 0
-        let число = ф.string(from: NSNumber(value: км)) ?? String(Int(км.rounded()))
+        let число = форматКм(язык: ListingPageText.язык, знаков: км < 10 ? 1 : 0).string(from: NSNumber(value: км))
+            ?? String(Int(км.rounded()))
         return String(format: тМеста("dist_km"), число)
+    }
+
+    /// Скорость: форматтер километров — один на язык и число знаков за запуск, а не новый на каждую строку расстояния.
+    /// NSCache сам потокобезопасен; готовый форматтер не меняется.
+    private static let форматыКм = NSCache<NSString, NumberFormatter>()
+
+    private static func форматКм(язык: String, знаков: Int) -> NumberFormatter {
+        let ключ = NSString(string: язык + "|" + String(знаков))
+        if let готовый = форматыКм.object(forKey: ключ) { return готовый }
+        let ф = NumberFormatter()
+        ф.locale = Locale(identifier: язык)
+        ф.maximumFractionDigits = знаков
+        ф.minimumFractionDigits = 0
+        форматыКм.setObject(ф, forKey: ключ)
+        return ф
     }
 }
 
@@ -796,14 +808,27 @@ private struct КартаМестаСайта: View {
     let точка: CLLocationCoordinate2D
     let название: String
     let открыть: () -> Void
+    /// Скорость (владелец 16.10.2026): карта встаёт после перехода к объявлению, а не в его первом кадре — MapKit
+    /// тяжёл. До того — поверхность той же высоты, раскладка не прыгает.
+    @State private var живая = false
 
     var body: some View {
         let место = MKCoordinateRegion(center: точка, latitudinalMeters: 1600, longitudinalMeters: 1600)
-        Map(initialPosition: MapCameraPosition.region(место), interactionModes: []) {
-            Marker(название, coordinate: точка)
-                .tint(Theme.зелёный2)
+        Group {
+            if живая {
+                Map(initialPosition: MapCameraPosition.region(место), interactionModes: []) {
+                    Marker(название, coordinate: точка)
+                        .tint(Theme.зелёный2)
+                }
+            } else {
+                Theme.поверхность2
+            }
         }
         .frame(height: 200)
+        .task {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            живая = true
+        }
         .allowsHitTesting(false)
         .overlay(alignment: .topTrailing) {
             Image(systemName: "arrow.up.left.and.arrow.down.right")

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import ImageIO
 
 /**
  ФОТО ПОДАЧИ — СЖАТИЕ, ВОДЯНОЙ ЗНАК, МИНИАТЮРА, КАМЕРА (этап 42, владелец 26.09.2026: «всё одно и то же, просто код
@@ -12,7 +13,7 @@ import UIKit
      маяком над «ı»), те же размеры и место: высота 6,2 % меньшей стороны, отступ 2,8 %, один из шести углов/краёв
      со случайным сдвигом, прозрачность 0,45 и тень. Светлый фон под знаком (средняя яркость > 140) — тёмная надпись,
      тёмный — белая. После знака сайт перекодирует JPEG в q0.90 — так же и здесь;
-   · миниатюра — из исходного снимка, без знака: 420 px, JPEG q0.62 (uploadThumb);
+   · миниатюра — из снимка без знака (ужатого до 1280, а не из 12 Мп): 420 px, JPEG q0.62 (uploadThumb);
    · исходник больше 15 МБ — «Фото больше 15 МБ», файл пропускается;
    · ИИ-студия фото (PhotoStudio*.swift, владелец 13.10.2026) сдаёт готовый кадр сюда же — подготовить(_:водянойЗнак:).
  Надпись «Klıko» и «.kz» — те же векторные картинки приложения (WmKliko, WmKz), что у заставки и открытки.
@@ -31,8 +32,27 @@ enum ОбработкаФото {
     static let предел = 15_728_640
 
     static func подготовить(_ данные: Data) -> ГотовоеФото? {
-        guard let изображение = UIImage(data: данные) else { return nil }
+        guard let изображение = открыть(данные, сторона: 1280) else { return nil }
         return подготовить(изображение)
+    }
+
+    /// Скорость (владелец 16.10.2026: «моментально»): снимок сразу уменьшенным при чтении (ImageIO) — длинная сторона не
+    /// больше `сторона` px, поворот по EXIF применён, раскодирован заранее; 12–48 Мп целиком в память не попадают.
+    /// Формат, который ImageIO не прочёл, — UIImage(data:), как раньше.
+    static func открыть(_ данные: Data, сторона: Int) -> UIImage? {
+        let чтение = [kCGImageSourceShouldCache: false] as CFDictionary
+        if let источник = CGImageSourceCreateWithData(данные as CFData, чтение) {
+            let параметры: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: сторона
+            ]
+            if let кадр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры as CFDictionary) {
+                return UIImage(cgImage: кадр)
+            }
+        }
+        return UIImage(data: данные)
     }
 
     /// srcToBlob(1280, q0.7) → klikoWatermark (JPEG q0.9); миниатюра — srcToBlob(420, q0.62) из исходника.
@@ -57,7 +77,8 @@ enum ОбработкаФото {
             guard let безЗнака = ужатое.jpegData(compressionQuality: 0.9) else { return nil }
             итог = безЗнака
         }
-        let мини = ужать(изображение, сторона: 420)
+        /* Миниатюра — из уже ужатого до 1280 (знака на нём нет): рисовать 420 px из 12 Мп вчетверо дольше. */
+        let мини = ужать(ужатое, сторона: 420)
         let итогМини = мини?.jpegData(compressionQuality: 0.62) ?? Data()
         return ГотовоеФото(картинка: итог, миниатюра: итогМини)
     }

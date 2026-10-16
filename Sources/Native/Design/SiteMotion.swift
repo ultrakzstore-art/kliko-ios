@@ -114,23 +114,40 @@ struct SiteSpinner: View {
     var период: Double = 0.7
     /// Стоит на месте (прелоадер при «Уменьшении движения»).
     var стоит: Bool = false
+    /// Крутится: поворот до 360° бесконечной линейной анимацией. Скорость (владелец 16.10.2026): без покадрового body
+    /// (TimelineView пересчитывал его каждый кадр у каждого колеса на экране) — анимация только поворота, своей областью
+    /// (animation(_:body:)), чтобы рамка колеса не уезжала вместе с переходом экрана.
+    @State private var крутится = false
+
+    /// Явный init: закрытое состояние прячет поэлементный, а колесо создают по всему приложению.
+    init(размер: CGFloat = 20, толщина: CGFloat = 2.5, дорожка: Color = Theme.линия, верх: Color = Theme.зелёный,
+         период: Double = 0.7, стоит: Bool = false) {
+        self.размер = размер
+        self.толщина = толщина
+        self.дорожка = дорожка
+        self.верх = верх
+        self.период = период
+        self.стоит = стоит
+    }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: стоит)) { шкала in
-            let t = шкала.date.timeIntervalSinceReferenceDate
-            let угол = стоит ? 0 : t.truncatingRemainder(dividingBy: период) / период * 360
-            ZStack {
-                Circle()
-                    .strokeBorder(дорожка, lineWidth: толщина)
-                /* border-top у круга — четверть от 225° до 315° (от левой верхней диагонали до правой). У Circle путь
-                   начинается справа и идёт по часовой: это доли 0,625…0,875. */
-                Circle()
-                    .inset(by: толщина / 2)
-                    .trim(from: 0.625, to: 0.875)
-                    .stroke(верх, lineWidth: толщина)
-            }
-            .rotationEffect(.degrees(угол))
+        ZStack {
+            Circle()
+                .strokeBorder(дорожка, lineWidth: толщина)
+            /* border-top у круга — четверть от 225° до 315° (от левой верхней диагонали до правой). У Circle путь
+               начинается справа и идёт по часовой: это доли 0,625…0,875. */
+            Circle()
+                .inset(by: толщина / 2)
+                .trim(from: 0.625, to: 0.875)
+                .stroke(верх, lineWidth: толщина)
         }
+        /* Остановили (стоит, ушло с экрана) — без анимации: поворот сразу в начало. */
+        .animation(крутится ? Animation.linear(duration: период).repeatForever(autoreverses: false) : nil) { колесо in
+            колесо.rotationEffect(.degrees(крутится ? 360 : 0))
+        }
+        .onAppear { if !стоит { крутится = true } }
+        .onDisappear { крутится = false }
+        .onChange(of: стоит) { _, стал in крутится = !стал }
         .frame(width: размер, height: размер)
         /* Как ProgressView: VoiceOver называет его «Загрузка…»; своя подпись снаружи (.accessibilityLabel) её заменяет. */
         .accessibilityElement(children: .ignore)

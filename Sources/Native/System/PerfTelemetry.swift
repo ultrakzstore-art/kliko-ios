@@ -48,7 +48,9 @@ final class СетьДляЗамеров: @unchecked Sendable {
     private var запущен = false
     private let монитор = NWPathMonitor()
     private let очередьМонитора = DispatchQueue(label: "kz.kliko.perf.net", qos: .utility)
-    private let телефония = CTTelephonyNetworkInfo()
+    /// Создаётся при первом чтении — в обновить(), на очереди монитора, а не на главной при запуске: его создание —
+    /// разговор с системной службой связи (владелец 16.10.2026: «моментально открывал всё»).
+    private lazy var телефония = CTTelephonyNetworkInfo()
 
     private init() {}
 
@@ -257,7 +259,8 @@ enum ЗамерыСкорости {
         }
         /* Запуск в фоне (проверка поисков, пуш) — до экрана может пройти сколько угодно: cold_* в такой раз не считаем. */
         if UIApplication.shared.applicationState == .background { холодныйИдёт = false }
-        СетьДляЗамеров.shared.запустить()
+        /* Монитор сети — только когда замеры включены; включили позже — добавить() запустит его сам. */
+        if Config.телеметрияСкорости { СетьДляЗамеров.shared.запустить() }
         let п = ПодписчикMetricKit()
         подписчик = п
         MXMetricManager.shared.add(п)
@@ -325,6 +328,7 @@ enum ЗамерыСкорости {
             деньСчёта = сегодня
             заДень = [:]
         }
+        СетьДляЗамеров.shared.запустить()          // уже запущен — сразу выходит
         let сеть = СетьДляЗамеров.shared.сейчас
         let лёгкий = РежимУстройства.shared.причина
         let где = город()

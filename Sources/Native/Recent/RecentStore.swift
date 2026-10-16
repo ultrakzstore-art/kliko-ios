@@ -192,9 +192,11 @@ enum НедавниеФайл {
         return try? JSONDecoder().decode(НедавниеСодержимое.self, from: данные)
     }
 
+    /// Скорость: и путь к файлу, и JSONEncoder (до 30 записей с полями строки ленты) — в той же очереди, не на главной:
+    /// открытие карточки не ждёт кодирования в JSON. Порядок записей и стирания тот же — очередь одна.
     static func записать(_ содержимое: НедавниеСодержимое) {
-        guard let файл = адрес, let данные = try? JSONEncoder().encode(содержимое) else { return }
         очередь.async {
+            guard let файл = адрес, let данные = try? JSONEncoder().encode(содержимое) else { return }
             do {
                 try данные.write(to: файл, options: .atomic)
                 var значения = URLResourceValues()

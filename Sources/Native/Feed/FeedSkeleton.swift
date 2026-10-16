@@ -26,28 +26,47 @@ struct СкелетЛенты: View {
     }
 
     var body: some View {
-        Group {
-            if безДвижения || режим.лёгкий {
-                сетка(nil)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { контекст in
-                    сетка(Self.сдвиг(контекст.date))
+        /* Скорость: сетка заготовок строится один раз и стоит; бежит только блик — один слой поверх, вырезанный по
+           фигурам заготовок (mask), а не вся сетка заново 30 раз в секунду. */
+        сетка(маска: false)
+            .overlay {
+                if !(безДвижения || режим.лёгкий) {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { контекст in
+                        Self.блик(Self.сдвиг(контекст.date))
+                    }
+                    .mask { сетка(маска: true) }
                 }
             }
-        }
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AccessText.т("loading"))
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AccessText.т("loading"))
     }
 
-    private func сетка(_ сдвиг: CGFloat?) -> some View {
+    /// `маска` — те же места фигур, залитые сплошь, без подложки и рамки: по ней вырезается блик.
+    private func сетка(маска: Bool) -> some View {
         /* Зазор и поля — те же, что у сетки ленты (этап 49: у вида сайта 14 и 16), иначе карточки прыгнут при ответе. */
         LazyVGrid(columns: колонки, spacing: ListingCard.зазор) {
             ForEach(0..<8, id: \.self) { _ in
-                ЯчейкаСкелетаЛенты(сдвиг: сдвиг)
+                ЯчейкаСкелетаЛенты(маска: маска)
             }
         }
         .padding(.horizontal, ListingCard.поле)
+    }
+
+    /// Блик mk-shim поверх ровной линии: прозрачно → поверхность → прозрачно (те же точки 25, 37, 63 %), вчетверо шире
+    /// колонки сетки (около половины ширины ленты). Прозрачный край — та же поверхность с нулевой прозрачностью: в
+    /// середине перехода не темнеет.
+    private static func блик(_ сдвиг: CGFloat) -> some View {
+        let край = Theme.поверхность.opacity(0)
+        let блеск = Gradient(stops: [
+            .init(color: край, location: 0.25),
+            .init(color: Theme.поверхность, location: 0.37),
+            .init(color: край, location: 0.63)
+        ])
+        let колонка: CGFloat = 0.5
+        return LinearGradient(gradient: блеск,
+                              startPoint: UnitPoint(x: сдвиг * колонка, y: 0.5),
+                              endPoint: UnitPoint(x: (сдвиг + 4) * колонка, y: 0.5))
     }
 
     /// mk-shim: background-position от 100 % до −100 % при ширине фона 400 % — начало градиента едет от −3 до +3
@@ -59,10 +78,9 @@ struct СкелетЛенты: View {
     }
 }
 
-/// Одна заготовка .mk-card.mk-skel: фото 4:3 и три полосы, рамка без тени.
+/// Одна заготовка .mk-card.mk-skel: фото 4:3 и три полосы, рамка без тени. В маске блика — только фигуры, сплошь.
 private struct ЯчейкаСкелетаЛенты: View {
-    /// Где начало градиента, в ширинах фигуры; nil — без блеска.
-    let сдвиг: CGFloat?
+    let маска: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -80,10 +98,11 @@ private struct ЯчейкаСкелетаЛенты: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg - 1, style: .continuous))
         .padding(1)                         // рамка 1 px у сайта — снаружи содержимого
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .background(маска ? Color.clear : Theme.поверхность,
+                    in: RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                .strokeBorder(Theme.линия, lineWidth: 1)
+                .strokeBorder(маска ? Color.clear : Theme.линия, lineWidth: 1)
         }
     }
 
@@ -100,16 +119,6 @@ private struct ЯчейкаСкелетаЛенты: View {
             }
     }
 
-    /// Градиент блеска относительно самой фигуры (как background у каждой полосы сайта) или ровная линия.
-    private var заливка: AnyShapeStyle {
-        guard let сдвиг else { return AnyShapeStyle(Theme.линия) }
-        let блеск = Gradient(stops: [
-            .init(color: Theme.линия, location: 0.25),
-            .init(color: Theme.поверхность, location: 0.37),
-            .init(color: Theme.линия, location: 0.63)
-        ])
-        return AnyShapeStyle(LinearGradient(gradient: блеск,
-                                            startPoint: UnitPoint(x: сдвиг, y: 0.5),
-                                            endPoint: UnitPoint(x: сдвиг + 4, y: 0.5)))
-    }
+    /// Фигура заготовки — ровная линия; в маске — сплошь (важна только непрозрачность).
+    private var заливка: Color { маска ? Color.black : Theme.линия }
 }

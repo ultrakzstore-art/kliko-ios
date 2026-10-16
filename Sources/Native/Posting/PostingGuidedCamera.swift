@@ -802,12 +802,9 @@ struct СъёмкаПоПлану: View {
         } else if let адрес = Config.url(плитка.url) {
             Color.clear
                 .overlay {
-                    AsyncImage(url: адрес) { фаза in
-                        if let изображение = фаза.image {
-                            изображение.resizable().scaledToFill()
-                        } else {
-                            Color.white.opacity(0.1)
-                        }
+                    /* КартинкаЛенты, а не AsyncImage: из памяти — в первом кадре, уменьшенной под миниатюру. */
+                    КартинкаЛенты(адрес, пунктов: 48) {
+                        Color.white.opacity(0.1)
                     }
                 }
                 .clipped()

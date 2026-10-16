@@ -10,7 +10,8 @@ import SwiftUI
 @MainActor
 final class ChatListModel: ObservableObject {
     @Published private(set) var диалоги: [ЧатДиалог] = []
-    @Published private(set) var грузим = false
+    /// Без @Published: его никто не рисует, а публикация дважды за каждый опрос (раз в 12 с) будила всех подписчиков.
+    private(set) var грузим = false
     @Published private(set) var ошибка: ChatAPI.Ошибка?
     @Published private(set) var загружено = false
     /// Сколько раз список сверился с сайтом: пришёл ответ или «нужен вход». По нему вкладки ставят число на иконку
@@ -47,7 +48,7 @@ final class ChatListModel: ObservableObject {
            страницы. Не ответил ни один — прежний путь этапа 3 не нужен: ошибка та же. */
         if Config.нативныеСообщенияКабинета {
             await загрузитьИнбокс()
-            загружено = true
+            if !загружено { загружено = true }
             return
         }
         do {
@@ -71,7 +72,7 @@ final class ChatListModel: ObservableObject {
         } catch {
             if !Task.isCancelled { ошибка = .сеть }
         }
-        загружено = true
+        if !загружено { загружено = true }
     }
 
     /// Этап 45: инбокс — через ИнбоксМодель (она же держит строки экрана); здесь — ошибка, число и отметка сверки.
@@ -80,14 +81,16 @@ final class ChatListModel: ObservableObject {
         guard !Task.isCancelled else { return }
         switch итог {
         case .готово:
-            ошибка = nil
-            непрочитаноИнбокса = ИнбоксМодель.shared.непрочитано
+            /* Опрос раз в 12 с: публикуем только то, что изменилось; сверка — всегда (число на иконку). */
+            if ошибка != nil { ошибка = nil }
+            let число = ИнбоксМодель.shared.непрочитано
+            if число != непрочитаноИнбокса { непрочитаноИнбокса = число }
             сверка += 1
         case .нуженВход:
-            ошибка = .нуженВход
-            диалоги = []
-            лиды = []
-            непрочитаноИнбокса = 0
+            if ошибка != .нуженВход { ошибка = .нуженВход }
+            if !диалоги.isEmpty { диалоги = [] }
+            if !лиды.isEmpty { лиды = [] }
+            if непрочитаноИнбокса != 0 { непрочитаноИнбокса = 0 }
             сверка += 1
         case .сбой:
             if ИнбоксМодель.shared.строки.isEmpty { ошибка = .сеть }
@@ -356,28 +359,31 @@ enum ЧатВремя {
         return ф
     }()
 
+    /// Скорость (владелец 16.10.2026): форматтеры — один раз на запуск, а не по три на каждую строку списка.
+    private static let часы = печать("HH:mm", пояс: TimeZone(identifier: "UTC"))
+    private static let число = печать("dd.MM", пояс: TimeZone(identifier: "UTC"))
+    /// «Сегодня» — по часам телефона (пояс телефона, как прежний DateFormatter без пояса; сменили пояс — следом).
+    private static let день = печать("yyyy-MM-dd", пояс: .autoupdatingCurrent)
+
+    private static func печать(_ шаблон: String, пояс: TimeZone?) -> DateFormatter {
+        let ф = DateFormatter()
+        ф.locale = Locale(identifier: "en_US_POSIX")
+        if let пояс { ф.timeZone = пояс }
+        ф.dateFormat = шаблон
+        return ф
+    }
+
     static func коротко(_ строка: String) -> String {
         guard let дата = разбор.date(from: String(строка.prefix(19))) else { return "" }
         /* «Сегодня» — по часам телефона: время сервера в строке уже местное, а Date() в UTC у Казахстана до пяти утра
            ещё вчерашний. */
-        let день = DateFormatter()
-        день.locale = Locale(identifier: "en_US_POSIX")
-        день.dateFormat = "yyyy-MM-dd"
         let сегодня = день.string(from: Date())
-        let ф = DateFormatter()
-        ф.locale = Locale(identifier: "en_US_POSIX")
-        ф.timeZone = TimeZone(identifier: "UTC")
-        ф.dateFormat = строка.hasPrefix(сегодня) ? "HH:mm" : "dd.MM"
-        return ф.string(from: дата)
+        return (строка.hasPrefix(сегодня) ? часы : число).string(from: дата)
     }
 
     static func время(_ строка: String) -> String {
         guard let дата = разбор.date(from: String(строка.prefix(19))) else { return "" }
-        let ф = DateFormatter()
-        ф.locale = Locale(identifier: "en_US_POSIX")
-        ф.timeZone = TimeZone(identifier: "UTC")
-        ф.dateFormat = "HH:mm"
-        return ф.string(from: дата)
+        return часы.string(from: дата)
     }
 }
 

@@ -213,13 +213,19 @@ struct МодельОбъёмаОбъявления: Sendable, Hashable, Decodab
 
     /// Сантиметры без лишних нулей: 60, 85.5.
     static func см(_ значение: Double) -> String {
+        форматСм.string(from: NSNumber(value: значение)) ?? String(Int(значение.rounded()))
+    }
+
+    /// Скорость: форматтер — один на запуск (после создания не меняется — его можно звать с любой нити).
+    private static let форматСм: NumberFormatter = {
         let формат = NumberFormatter()
+        формат.locale = .autoupdatingCurrent
         формат.numberStyle = .decimal
         формат.maximumFractionDigits = 1
         формат.minimumFractionDigits = 0
         формат.usesGroupingSeparator = false
-        return формат.string(from: NSNumber(value: значение)) ?? String(Int(значение.rounded()))
-    }
+        return формат
+    }()
 }
 
 extension Listing {

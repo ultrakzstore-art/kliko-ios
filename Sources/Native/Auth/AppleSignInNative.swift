@@ -132,6 +132,9 @@ enum ВходApple {
             await хранилище.setCookie(кука)
             HTTPCookieStorage.shared.setCookie(кука)
         }
+        /* Заголовок «Cookie» SiteSession держит 30 с: следующий запрос (послеВхода) — уже с куками входа, не дожидаясь
+           наблюдателя кук, как у входа через Google. */
+        SiteSession.кукиСменились()
     }
 
     // MARK: Nonce

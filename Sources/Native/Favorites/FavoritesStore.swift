@@ -274,8 +274,10 @@ enum ИзбранноеФайл {
     }
 
     static func записать(_ список: [ИзбранноеЗапись]) {
-        guard let файл = адрес, let данные = try? JSONEncoder().encode(список) else { return }
+        /* Скорость: и кодирование в JSON (сотни записей) — на очереди записи, а не в нажатии сердца на главной нити.
+           Порядок записей тот же: очередь последовательная. */
         очередь.async {
+            guard let файл = адрес, let данные = try? JSONEncoder().encode(список) else { return }
             do {
                 try данные.write(to: файл, options: .atomic)
                 var значения = URLResourceValues()

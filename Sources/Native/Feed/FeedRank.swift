@@ -88,21 +88,27 @@ final class ОтчётТОП {
     }
 }
 
-/// Ячейка золотого места сообщает о показе ОтчётТОП: видна наполовину (iOS 18+) или появилась в сетке (iOS 17).
+/// Ячейка золотого места сообщает о показе ОтчётТОП: видна наполовину (iOS 18+) или появилась в сетке (iOS 17), — и о
+/// нажатии (mkReportClick). Скорость: обычные ячейки (их большинство) — без слежки за видимостью и без лишнего жеста:
+/// место ячейки (ячейка.топ) постоянно, ветка не переключается.
 struct ПоказТОП: ViewModifier {
     let id: String
     let золото: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.onScrollVisibilityChange(threshold: 0.5) { видно in
-                if видно && золото { ОтчётТОП.shared.показан(id) }
-            }
+        if !золото {
+            content
+        } else if #available(iOS 18.0, *) {
+            content
+                .onScrollVisibilityChange(threshold: 0.5) { видно in
+                    if видно { ОтчётТОП.shared.показан(id) }
+                }
+                .simultaneousGesture(TapGesture().onEnded { ОтчётТОП.shared.нажат(id) })
         } else {
-            content.onAppear {
-                if золото { ОтчётТОП.shared.показан(id) }
-            }
+            content
+                .onAppear { ОтчётТОП.shared.показан(id) }
+                .simultaneousGesture(TapGesture().onEnded { ОтчётТОП.shared.нажат(id) })
         }
     }
 }

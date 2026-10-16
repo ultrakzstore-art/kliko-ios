@@ -63,8 +63,10 @@ enum ChatAPI {
 
     /// То же целым ответом — с телом как пришло (ЧатОтвет.тело): офлайн-копия переписки (OfflineCopies.swift) и сверка
     /// очереди исходящих «не дошло ли» (OutboxQueue.swift).
-    static func перепискаЦеликом(_ tid: String, ждать: Bool = true) async throws -> ЧатОтвет {
-        let я = await ИнбоксAPI.номерБыстро()
+    /// `я` — свой номер, если переписка его уже знает: опрос раз в три секунды не спрашивает страницу под слоем.
+    static func перепискаЦеликом(_ tid: String, ждать: Bool = true, я известный: String = "") async throws -> ЧатОтвет {
+        var я = известный
+        if я.isEmpty { я = await ИнбоксAPI.номерБыстро() }
         var хвост = путь + "?action=poll&tid=" + ИнбоксAPI.вАдрес(tid)
         if !я.isEmpty { хвост += "&me_id=" + ИнбоксAPI.вАдрес(я) }
         return try await выполнить(хвост, метод: "GET", тело: nil, ждать: ждать)
@@ -162,9 +164,13 @@ enum ChatAPI {
         }
         #endif
         if код == 401 || код == 403 { throw Ошибка.нуженВход }
-        /* JSON разбираем и при 4xx: сайт объясняет отказ полем error («no_peer», «origin», «auth»), а не кодом. */
+        /* JSON разбираем и при 4xx: сайт объясняет отказ полем error («no_peer», «origin», «auth»), а не кодом. Разбор —
+           не на главной нити (длинная переписка — сотни сообщений, опрос раз в три секунды). */
         let данные = Data(ответ.текст.utf8)
-        guard var разобранный = try? JSONDecoder().decode(ЧатОтвет.self, from: данные) else {
+        let пришло = await Task.detached(priority: .userInitiated) { () -> ЧатОтвет? in
+            try? JSONDecoder().decode(ЧатОтвет.self, from: данные)
+        }.value
+        guard var разобранный = пришло else {
             if !(200..<300).contains(код) { throw Ошибка.статус(код) }
             throw Ошибка.разбор
         }

@@ -7,7 +7,7 @@ import Foundation
  */
 enum КнопкиОбъявленияText {
     static func т(_ ключ: String) -> String {
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let язык = DesignText.язык          // запомненный за запуск, а не настройки телефона на каждую подпись
         return тексты[язык]?[ключ] ?? тексты["ru"]?[ключ] ?? ключ
     }
 

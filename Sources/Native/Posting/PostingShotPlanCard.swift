@@ -393,12 +393,9 @@ struct КадрЛентыПлана: View {
         } else if let адрес = Config.url(плитка.url) {
             Color.clear
                 .overlay {
-                    AsyncImage(url: адрес) { фаза in
-                        if let изображение = фаза.image {
-                            изображение.resizable().scaledToFill()
-                        } else {
-                            значокКадра
-                        }
+                    /* КартинкаЛенты, а не AsyncImage: из памяти — в первом кадре, уменьшенной под карточку. */
+                    КартинкаЛенты(адрес, пунктов: Self.ширина - 12) {
+                        значокКадра
                     }
                 }
                 .clipped()

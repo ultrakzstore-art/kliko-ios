@@ -114,13 +114,19 @@ enum ДоставкаОбъявления {
 
     /// 15000 — «15 000» (toLocaleString("ru-RU") у сайта: неразрывный пробел между тысячами).
     static func сумма(_ n: Int) -> String {
+        форматСуммы.string(from: NSNumber(value: n)) ?? String(n)
+    }
+
+    /// Скорость: форматтер — один на запуск (после создания не меняется — его можно звать с любой нити).
+    private static let форматСуммы: NumberFormatter = {
         let ф = NumberFormatter()
+        ф.locale = .autoupdatingCurrent
         ф.numberStyle = .decimal
         ф.groupingSeparator = "\u{00A0}"
         ф.usesGroupingSeparator = true
         ф.maximumFractionDigits = 0
-        return ф.string(from: NSNumber(value: n)) ?? String(n)
-    }
+        return ф
+    }()
 
     /// Цвет кружка компании — хеш имени, как у сайта (31 * n + код UTF-16, по модулю 2^32).
     static func цветКомпании(_ имя: String) -> Color {
@@ -185,15 +191,8 @@ enum ДоставкаТКAPI {
         case сеть
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON, срок 15 с и без кэша, как у прежней своей.
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15, безКэша: true)
 
     @MainActor
     private static func получить(_ путь: String, _ пункты: [URLQueryItem]) async -> [String: Any]? {

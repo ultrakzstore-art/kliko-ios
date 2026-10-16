@@ -1479,15 +1479,8 @@ enum КонтактыПродавца {
         case нетСессии
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON, срок 15 с и без кэша, как у прежней своей.
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15, безКэша: true)
 
     /// POST /marketplace.php?contact=<номер> с {csrf} и куками веб-сессии — ровно как mkGetContact.
     @MainActor

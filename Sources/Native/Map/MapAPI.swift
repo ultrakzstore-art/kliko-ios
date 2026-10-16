@@ -89,14 +89,9 @@ enum КартаAPI {
         let всего: Int?
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим, как ListingsAPI
-        c.httpCookieStorage = nil
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON и срок 20 с, как у прежней своей; куки — из
+    /// WebKit (SiteSession), как у ListingsAPI.
+    private static let сессия = СетьСайта.Запросы(json: true)
 
     // MARK: - Запросы
 

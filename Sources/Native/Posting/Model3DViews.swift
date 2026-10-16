@@ -191,12 +191,10 @@ struct КартинкаРакурсаОбзора3D: View {
                 .resizable()
                 .scaledToFit()
         } else if let адрес {
-            AsyncImage(url: адрес) { фаза in
-                if let изображение = фаза.image {
-                    изображение.resizable().scaledToFit()
-                } else {
-                    Color.white.opacity(0.05)
-                }
+            /* КартинкаЛенты, а не AsyncImage: одна загрузка и раскодирование вне главной нити на полоску и большой вид
+               (размер один — 400 pt), дальше — из памяти. */
+            КартинкаЛенты(адрес, пунктов: 400, заполнить: false) {
+                Color.white.opacity(0.05)
             }
         } else {
             Image(systemName: "photo")

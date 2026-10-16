@@ -50,15 +50,9 @@ enum ИзбранноеСайта {
     /// Карточки — пачками по 48, как страница ленты: длинный список номеров — не один бесконечный адрес.
     static let пачка = 48
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData   // избранное — всегда свежее
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON, срок 15 с и без кэша (избранное — всегда
+    /// свежее), как у прежней своей; куки — из WebKit (SiteSession).
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15, безКэша: true)
 
     private static let кодыВхода: Set<String> = ["auth", "need_reg"]
     private static let кодыВерификации: Set<String> = ["verify", "need_verification", "need_verify"]

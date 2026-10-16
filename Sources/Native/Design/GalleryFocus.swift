@@ -78,6 +78,36 @@ enum ФокусСнимка {
         }
     }
 
+    /// Точка без Vision и без ожидания — для первого кадра слайда (СлайдФото): из памяти или по пропорции; nil — нужен
+    /// разбор.
+    static func изПамяти(_ снимок: UIImage, адрес: URL) -> CGPoint? {
+        безРазбора(снимок, адрес: адрес)
+    }
+
+    /// Точка, найденная по снимку той же пропорции (обложка ленты для первого фото), — в память и для этого адреса:
+    /// следующий показ встанет из памяти, без Vision.
+    static func запомнить(_ точка: CGPoint, адрес: URL) {
+        кэш.setObject(NSValue(cgPoint: точка), forKey: адрес as NSURL)
+    }
+
+    /// Модель Vision загружена (трогается только на очереди).
+    private static var прогрето = false
+
+    /// Скорость (владелец 16.10.2026): модель Vision грузится в простое после запуска, на крошечном холсте, — первое
+    /// открытое объявление не ждёт её загрузки. Один раз за запуск, на своей очереди.
+    static func прогреть() {
+        очередь.async {
+            guard !прогрето else { return }
+            прогрето = true
+            guard let холст = CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 0,
+                                        space: CGColorSpaceCreateDeviceRGB(),
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  let пустой = холст.makeImage() else { return }
+            try? VNImageRequestHandler(cgImage: пустой, options: [:])
+                .perform([VNGenerateObjectnessBasedSaliencyImageRequest()])
+        }
+    }
+
     /// Ответ без Vision: точка уже в памяти; снимок пустой; почти та же пропорция, что у рамки, — обрезать нечего.
     /// nil — нужен разбор.
     private static func безРазбора(_ снимок: UIImage, адрес: URL) -> CGPoint? {

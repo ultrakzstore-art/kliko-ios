@@ -16,10 +16,13 @@ import SwiftUI
     (к восьмой секунде, потолку заставки, около 92 %), а в веб-обёртке не ниже доли загрузки страницы
     (WKWebView.estimatedProgress). Своих задержек здесь нет: уходит экран тогда, когда решит RootWebView.
 
- «Уменьшение движения» — стоят стрелка, кольца, дыхание, блик полосы; пользы сменяются проявлением, без сдвига.
+ «Уменьшение движения» — стоят стрелка, кольца, дыхание, блик полосы; пользы сменяются проявлением, без сдвига. Так же —
+ в лёгком режиме (РежимУстройства: слабое железо, энергосбережение, нагрев): бесконечное движение там не крутится.
  */
 struct SitePreloader: View {
     @Environment(\.accessibilityReduceMotion) private var тихо
+    /// Лёгкий режим (DeviceMode.swift): «логотип на заставке стоит» — как при «Уменьшении движения».
+    @ObservedObject private var режим = РежимУстройства.shared
     @ObservedObject private var заставка = ЗаставкаЗапуска.shared
     @ObservedObject private var мост = WebBridge.shared
     @State private var появилось = false
@@ -31,6 +34,9 @@ struct SitePreloader: View {
 
     /// Приложению есть что показать: у нативной ленты — первые данные, у веб-обёртки — отрисованная страница.
     private var готово: Bool { Config.нативнаяЛента ? заставка.данныеЕсть : мост.isLoaded }
+
+    /// Бесконечное движение стоит: «Уменьшение движения» или лёгкий режим (слабое железо, энергосбережение, нагрев).
+    private var стоит: Bool { тихо || режим.лёгкий }
 
     var body: some View {
         ZStack {
@@ -50,10 +56,10 @@ struct SitePreloader: View {
                 Spacer(minLength: 24)
                 логотип
                 Spacer(minLength: 24)
-                КарусельПольз(пользы: пользы, номер: номер, тихо: тихо)
+                КарусельПольз(пользы: пользы, номер: номер, тихо: стоит)
                     .frame(maxWidth: 440)
                     .padding(.horizontal, 20)
-                ПолосаЗапуска(доля: доля, готово: готово, тихо: тихо)
+                ПолосаЗапуска(доля: доля, готово: готово, тихо: стоит)
                     .frame(maxWidth: 400)
                     .padding(.horizontal, 40)
                     .padding(.top, 26)
@@ -66,16 +72,16 @@ struct SitePreloader: View {
         .accessibilityValue(Text(verbatim: "\(Int((доля * 100).rounded()))%"))
         .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
-            if тихо {
+            if стоит {
                 появилось = true
             } else {
                 withAnimation(.timingCurve(0.2, 0.8, 0.25, 1, duration: 0.5)) { появилось = true }
                 withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true).delay(0.5)) { дышит = true }
             }
-            /* Данные уже есть (лента с диска, стартовые данные сборки) — полоса не прыгает, а плавно добегает за 0,5 с,
-               пока длится минимум показа (0,6 с, RootWebView). */
+            /* Данные уже есть (лента с диска, стартовые данные сборки) — полоса не прыгает, а плавно добегает за 0,15 с,
+               пока длится минимум показа (0,15 с при данных с диска, RootWebView; владелец 16.10.2026: «моментально»). */
             if готово {
-                if тихо { доля = 1 } else { withAnimation(.easeInOut(duration: 0.5)) { доля = 1 } }
+                if тихо { доля = 1 } else { withAnimation(.easeInOut(duration: 0.15)) { доля = 1 } }
             }
         }
         .onChange(of: готово) { _, есть in
@@ -88,11 +94,12 @@ struct SitePreloader: View {
 
     private var логотип: some View {
         VStack(spacing: 16) {
-            ЗначокПрелоадера(стоит: тихо)
+            /* Тень — постоянная, посередине прежнего дыхания (0,28–0,40, радиус 13–18): тень, которая сама меняется,
+               SwiftUI и Core Animation рисуют вне экрана заново на каждом кадре. Дышат масштаб логотипа и свечение. */
+            ЗначокПрелоадера(стоит: стоит)
                 .frame(width: 96, height: 96)
-                .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, дышит ? 0.40 : 0.28)),
-                        radius: дышит ? 18 : 13, x: 0, y: 12)
-            НадписьПрелоадера(стоит: тихо)
+                .shadow(color: Color(uiColor: Theme.hex(0x0F7A44, 0.34)), radius: 15, x: 0, y: 12)
+            НадписьПрелоадера(стоит: стоит)
                 .frame(width: 128, height: 32)
         }
         .scaleEffect(появилось ? 1 : 0.86)
@@ -111,12 +118,13 @@ struct SitePreloader: View {
             let поВремени = 0.06 + 0.86 * (1 - exp(-t / 2.4))
             let поСтранице = Config.нативнаяЛента ? 0 : мост.progress * 0.95
             let цель = min(0.95, max(доля, поВремени, поСтранице))
+            /* Шаг 0,25 с с плавным переходом той же длины: на глаз полоса та же, а пересборок экрана вдвое меньше. */
             if тихо {
                 доля = цель
             } else {
-                withAnimation(.linear(duration: 0.12)) { доля = цель }
+                withAnimation(.linear(duration: 0.25)) { доля = цель }
             }
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 250_000_000)
         }
     }
 
@@ -301,7 +309,9 @@ private struct ЗначокПрелоадера: View {
     let стоит: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: стоит)) { шкала in
+        /* 30 кадров в секунду, а не частота экрана (на ProMotion — 120): стрелка и кольцо на глаз те же, кадров вчетверо
+           меньше в первые секунды запуска (владелец 16.10.2026: «моментально открывал всё»). */
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: стоит)) { шкала in
             let t = шкала.date.timeIntervalSinceReferenceDate
             Canvas { ctx, размер in
                 let s = размер.width / 48
@@ -382,8 +392,10 @@ private struct НадписьПрелоадера: View {
                     .renderingMode(.template)
                     .foregroundStyle(ПодсказкиПрелоадера.зелёный2)
                 /* Маяк: <g transform=translate(79,15)> — кольцо r 10, штрих 2.4, #25d366 (klk-ring) и точка r 6.2 (klk-blink).
-                   Точку «уменьшение движения» сайта не останавливает. SVG обрезает всё, что за viewBox, — .clipped(). */
-                TimelineView(.animation) { шкала in
+                   SVG обрезает всё, что за viewBox, — .clipped(). Скорость (владелец 16.10.2026: «моментально открывал
+                   всё»): 30 кадров в секунду, а при «Уменьшении движения» и в лёгком режиме маяк стоит целиком — точка
+                   горит ровно, без мигания, как и кольцо значка рядом. */
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: стоит)) { шкала in
                     let t = шкала.date.timeIntervalSinceReferenceDate
                     Canvas { ctx, _ in
                         let c = CGPoint(x: 79 * s, y: 15 * s)
@@ -394,7 +406,7 @@ private struct НадписьПрелоадера: View {
                                    lineWidth: 2.4 * пульс.масштаб * s)
                         let dr = 6.2 * s
                         ctx.fill(Path(ellipseIn: CGRect(x: c.x - dr, y: c.y - dr, width: 2 * dr, height: 2 * dr)),
-                                 with: .color(ПодсказкиПрелоадера.маяк.opacity(ПодсказкиПрелоадера.мигание(t))))
+                                 with: .color(ПодсказкиПрелоадера.маяк.opacity(стоит ? 1 : ПодсказкиПрелоадера.мигание(t))))
                     }
                 }
             }

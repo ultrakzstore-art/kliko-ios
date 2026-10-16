@@ -3,7 +3,7 @@ import Foundation
 /// Тексты чата на языке телефона (kk/ru/en/ar) — тем же способом, что лента (FeedText) и замок (AppLock.т).
 enum ChatText {
     static func т(_ ключ: String) -> String {
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let язык = DesignText.язык          // запомненный за запуск, а не настройки телефона на каждую подпись
         let словарь = тексты[язык] ?? тексты["ru"]!
         return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
     }

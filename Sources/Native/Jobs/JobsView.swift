@@ -101,14 +101,9 @@ enum ВакансииAPI {
         case сеть
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession)
-        c.httpCookieStorage = nil
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON и срок 20 с, как у прежней своей; куки — из
+    /// WebKit (SiteSession).
+    private static let сессия = СетьСайта.Запросы(json: true)
 
     /// Страница списка: nil — нет связи или ответ не тот.
     /// место — город SEO-ссылки /rabota/…/<город>/; nil — выбор места человека, как у ленты.

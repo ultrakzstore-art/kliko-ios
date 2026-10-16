@@ -309,16 +309,13 @@ struct ЛистОбменаОбъявления: View {
     }
 
     private func картинка(_ адрес: URL?) -> some View {
-        AsyncImage(url: адрес) { фаза in
-            if let изображение = фаза.image {
-                изображение.resizable().scaledToFill()
-            } else {
-                ZStack {
-                    Theme.поверхность2
-                    Image(systemName: "photo")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Theme.текстВторой)
-                }
+        /* КартинкаЛенты, а не AsyncImage: из памяти — в первом кадре, уменьшенной под ячейку. */
+        КартинкаЛенты(адрес, пунктов: 48) {
+            ZStack {
+                Theme.поверхность2
+                Image(systemName: "photo")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Theme.текстВторой)
             }
         }
         .frame(width: 48, height: 48)

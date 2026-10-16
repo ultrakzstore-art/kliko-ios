@@ -237,12 +237,9 @@ struct ЭкранПослеПодачи: View {
     @ViewBuilder
     private var обложка: some View {
         if let адрес = адресОбложки {
-            AsyncImage(url: адрес) { фаза in
-                if let изображение = фаза.image {
-                    изображение.resizable().scaledToFill()
-                } else {
-                    КраскаПодачи.линия
-                }
+            /* КартинкаЛенты, а не AsyncImage: уменьшенной под рамку 52 pt, из памяти при перерисовке списка. */
+            КартинкаЛенты(адрес, пунктов: 52) {
+                КраскаПодачи.линия
             }
         } else {
             КраскаПодачи.линия
@@ -408,14 +405,16 @@ extension ПодачаМодель {
         ПодачаОкно.shared.цель = nil
         let код = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
         let адрес = Config.url("/marketplace.php?item=" + код)
+        /* Скорость (владелец 16.10.2026): «Мои объявления» — сразу, в фоне, а не после перехода; переход — когда окно
+           мастера уехало (0,45 с, было 0,7). */
+        Task { @MainActor in await МоиОбъявленияМодель.shared.загрузить(страницу: false) }
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: 450_000_000)
             if NativeRouter.доступна(.объявление(id: id)) {
                 NativeRouter.shared.цель = .объявление(id: id)
             } else if let адрес {
                 запасной(адрес)
             }
-            await МоиОбъявленияМодель.shared.загрузить(страницу: false)
         }
     }
 

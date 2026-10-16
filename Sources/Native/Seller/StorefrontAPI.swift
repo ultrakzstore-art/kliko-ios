@@ -44,14 +44,9 @@ struct ВитринаПродавца: Equatable {
 }
 
 enum ВитринаПродавцаAPI {
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим
-        c.httpCookieStorage = nil
-        c.urlCache = .shared
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift): соединение, открытое лентой и карточкой, — сразу и витрине.
+    /// Без своего Accept и с общим сроком 20 с — как у прежней своей; куки — из WebKit (SiteSession).
+    private static let сессия = СетьСайта.Запросы(json: false)
 
     /// Номер продавца годится в адрес: буквы, цифры, «_» и «-» (seller_id сайта — «u<12 hex>»).
     static func годный(_ id: String) -> Bool {

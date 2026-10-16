@@ -51,8 +51,13 @@ final class РежимСделокСайта: ObservableObject {
 
     /// Разметка страницы сайта: MK_DEAL_MODE, если он там есть.
     func принять(_ html: String) {
+        принятьРежим(Self.режим(html))
+    }
+
+    /// Режим, уже найденный в разметке (режим(_:) — вне главной нити); nil — на странице его нет, режим прежний.
+    func принятьРежим(_ режим: String?) {
         сверено = Date()
-        guard let режим = Self.режим(html) else { return }
+        guard let режим else { return }
         UserDefaults.standard.set(режим, forKey: Self.ключ)
         let новое = режим == "eds"
         if новое != eds { eds = новое }
@@ -72,12 +77,19 @@ final class РежимСделокСайта: ObservableObject {
         }
         var запрос = URLRequest(url: Config.apiBase.appendingPathComponent("marketplace"))
         запрос.timeoutInterval = 15
-        guard let ответ = try? await URLSession.shared.data(for: запрос),
-              let страница = String(data: ответ.0, encoding: .utf8) else { return }
-        принять(страница)
+        guard let ответ = try? await URLSession.shared.data(for: запрос) else { return }
+        /* Скорость: страница витрины — сотни КБ; в строку и через регулярку — не на главной нити. */
+        let данные = ответ.0
+        let разбор = await Task.detached(priority: .utility) { () -> (прочитана: Bool, режим: String?) in
+            guard let страница = String(data: данные, encoding: .utf8) else { return (прочитана: false, режим: nil) }
+            return (прочитана: true, режим: РежимСделокСайта.режим(страница))
+        }.value
+        guard разбор.прочитана else { return }
+        принятьРежим(разбор.режим)
     }
 
-    nonisolated private static func режим(_ html: String) -> String? {
+    /// MK_DEAL_MODE из разметки страницы — чистая функция, зовётся и вне главной нити.
+    nonisolated static func режим(_ html: String) -> String? {
         guard let выражение = try? NSRegularExpression(pattern: шаблон),
               let найдено = выражение.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
               let часть = Range(найдено.range(at: 1), in: html) else { return nil }

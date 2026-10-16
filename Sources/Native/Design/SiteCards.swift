@@ -1175,7 +1175,13 @@ struct ПлашкаЗагрузкиЛенты: View {
         .padding(.top, 12)
         .padding(.bottom, 14)
         .frame(maxWidth: 340)
-        .background(Theme.поверхность, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+        /* Скорость: тень — у самой подложки (неподвижной фигуры), а не у всей плашки через compositingGroup: кольцо внутри
+           крутится, и тень всей группы пересчитывалась бы каждый его кадр. Вид тот же — подложка непрозрачна. */
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                .fill(Theme.поверхность)
+                .shadow(color: Color(red: 15 / 255, green: 40 / 255, blue: 25 / 255).opacity(0.25), radius: 14, x: 0, y: 10)
+        )
         .overlay(alignment: .bottomLeading) {
             GeometryReader { место in
                 Theme.зелёный2
@@ -1189,8 +1195,6 @@ struct ПлашкаЗагрузкиЛенты: View {
             RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
                 .strokeBorder(Theme.линия, lineWidth: 1)
         }
-        .compositingGroup()
-        .shadow(color: Color(red: 15 / 255, green: 40 / 255, blue: 25 / 255).opacity(0.25), radius: 14, x: 0, y: 10)
         .onAppear {
             withAnimation(ДвижениеСайта.мягко(.easeOut(duration: 3))) { доля = 0.45 }
         }

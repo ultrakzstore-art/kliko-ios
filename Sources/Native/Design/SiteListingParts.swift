@@ -187,11 +187,27 @@ extension View {
     /// Стекло кнопок над фото без размера — одно у квадратной кнопки и у пары стрелок: тёмный 45 % с размытием,
     /// скругление 10 и тонкий блик по верхней кромке, чтобы кнопка читалась и на тёмном снимке.
     func стеклоНадФото() -> some View {
-        self
-            .background(Theme.кнопкаНадФото, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+        modifier(СтеклоНадФото())
+    }
+}
+
+/// Стекло кнопок над фото. Лёгкий режим (РежимУстройства: слабое железо, энергосбережение, перегрев) — без размытия
+/// .ultraThinMaterial: тёмная подложка и блик те же, а размытие под каждой кнопкой — лишняя работа на каждом кадре
+/// листания фото. Размытие — слоем фона, само содержимое при смене режима не пересоздаётся.
+private struct СтеклоНадФото: ViewModifier {
+    @ObservedObject private var режим = РежимУстройства.shared
+
+    func body(content: Content) -> some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+        return content
+            .background(Theme.кнопкаНадФото, in: форма)
+            .background {
+                if !режим.лёгкий {
+                    форма.fill(.ultraThinMaterial)
+                }
+            }
             .overlay {
-                RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous)
+                форма
                     .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), Color.clear],
                                                  startPoint: .top, endPoint: .center), lineWidth: 1)
                     .allowsHitTesting(false)
@@ -267,10 +283,14 @@ struct ГалереяСайта: View {
     /// Палец на фото — истории ждут (mkStoryPause на touchstart/touchend).
     @GestureState private var тянут = false
     @Environment(\.layoutDirection) private var направление
+    /// Обложка из ленты — заставкой первого слайда, пока качается полное фото; nil — без заставки.
+    let обложка: URL?
 
     /// Явный init: страницу создаёт другой файл, и поэлементный init не должен зависеть от закрытых свойств.
     init(адреса: [URL], страница: Binding<Int>, верх: CGFloat, ширина: CGFloat, метка: Listing.МеткаСостояния?,
-         аренда: Bool, пауза: Bool = false, вИзбранное: (@MainActor () -> Void)? = nil, открыть: @escaping (Int) -> Void) {
+         аренда: Bool, пауза: Bool = false, вИзбранное: (@MainActor () -> Void)? = nil, обложка: URL? = nil,
+         открыть: @escaping (Int) -> Void) {
+        self.обложка = обложка
         self.адреса = адреса
         _страница = страница
         self.верх = верх
@@ -330,7 +350,8 @@ struct ГалереяСайта: View {
         } else {
             TabView(selection: $страница) {
                 ForEach(Array(адреса.enumerated()), id: \.offset) { номер, адрес in
-                    СлайдФото(адрес: адрес, верх: верх, ширина: ширина, высотаФото: высотаФото)
+                    СлайдФото(адрес: адрес, верх: верх, ширина: ширина, высотаФото: высотаФото,
+                              превью: номер == 0 ? обложка : nil)
                         .contentShape(Rectangle())
                         .gesture(
                             SpatialTapGesture(count: 2).onEnded { _ in дважды() }
@@ -464,13 +485,18 @@ private struct ПолоскиИсторииСайта: View {
     let пауза: Bool
     let ширина: CGFloat
     @State private var ход: CGFloat = 0
-    /// Пауза в хранилище состояния: задача читает её живой, а не копию на момент запуска.
-    @State private var стоп = false
+    /// Чья полоска сейчас в ходе: смена страницы показывает новую пустой с первого кадра, а не заполненной на миг.
+    @State private var страницаХода = -1
+    /// Сколько секунд текущей полоски прошло до последней паузы.
+    @State private var прошло: Double = 0
+    /// Когда пошёл текущий отрезок заливки; nil — стоит.
+    @State private var пошёл: Date?
 
     private static let длительность: Double = 3.6
-    private static let шаг: Double = 0.1
 
-    private var авто: Bool { !ДвижениеСайта.тихо && всего > 1 }
+    /// Скорость (владелец 16.10.2026): заливка — одной анимацией на остаток, а не 36 перерисовками по 0,1 с; в лёгком
+    /// режиме (РежимУстройства) истории не листают сами — текущая сразу белая, как при «Уменьшении движения».
+    private var авто: Bool { !ДвижениеСайта.тихо && !РежимУстройства.сейчас && всего > 1 }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -490,29 +516,69 @@ private struct ПолоскиИсторииСайта: View {
         }
         .padding(.horizontal, 10)
         .frame(width: ширина)
-        .onChange(of: пауза, initial: true) { _, стало in стоп = стало }
-        .task(id: страница) { await идти() }
+        /* Смена страницы или паузы — новый отрезок: пауза замораживает заливку там, где она есть, снятие — доливает
+           остаток. Без опроса раз в 0,1 с. */
+        .task(id: страница * 2 + (пауза ? 1 : 0)) { await идти() }
     }
 
     private func заполнение(_ номер: Int) -> CGFloat {
         if номер < страница { return 1 }
         if номер > страница { return 0 }
-        return авто ? ход : 1
+        guard авто else { return 1 }
+        return страницаХода == страница ? ход : 0
+    }
+
+    /// Заливка без анимации — сразу на место (новая страница с нуля, пауза — где стоит).
+    private func поставить(_ доля: CGFloat) {
+        var без = Transaction()
+        без.disablesAnimations = true
+        withTransaction(без) { ход = доля }
     }
 
     private func идти() async {
-        ход = 0
-        guard авто else { return }
-        var прошло: Double = 0
-        while прошло < Self.длительность {
-            try? await Task.sleep(nanoseconds: UInt64(Self.шаг * 1_000_000_000))
-            if Task.isCancelled { return }
-            if стоп { continue }
-            прошло += Self.шаг
-            withAnimation(.linear(duration: Self.шаг)) { ход = CGFloat(min(1, прошло / Self.длительность)) }
+        if страницаХода != страница {
+            страницаХода = страница
+            прошло = 0
+            пошёл = nil
+            поставить(0)
         }
+        guard авто else { return }
+        if пауза {
+            if let с = пошёл {
+                прошло += Date().timeIntervalSince(с)
+                пошёл = nil
+            }
+            поставить(CGFloat(min(1, прошло / Self.длительность)))
+            return
+        }
+        let остаток = max(0, Self.длительность - прошло)
+        пошёл = Date()
+        withAnimation(.linear(duration: остаток)) { ход = 1 }
+        try? await Task.sleep(nanoseconds: UInt64(остаток * 1_000_000_000))
         guard !Task.isCancelled else { return }
+        пошёл = nil
         withAnimation(ДвижениеСайта.слайд) { страница = (страница + 1) % всего }
+    }
+}
+
+/// Скорость (владелец 16.10.2026: «моментально открывал всё»): готовые к показу снимки галереи — в памяти за время
+/// работы приложения. Повторное открытие, листание назад и заготовка следующего (ListingFlip.swift) рисуют кадр в
+/// первом же проходе, без спиннера и без раскодирования. NSCache сам потокобезопасен и сам чистится при нехватке
+/// памяти; вес — байты растра, на слабом железе предел вдвое меньше.
+enum ГотовыеСнимкиГалереи {
+    private static let кэш: NSCache<NSURL, UIImage> = {
+        let к = NSCache<NSURL, UIImage>()
+        к.totalCostLimit = (ЖелезоУстройства.слабое ? 24 : 48) * 1024 * 1024
+        return к
+    }()
+
+    static func снимок(_ адрес: URL) -> UIImage? {
+        кэш.object(forKey: адрес as NSURL)
+    }
+
+    static func положить(_ снимок: UIImage, _ адрес: URL) {
+        let вес = снимок.cgImage.map { $0.bytesPerRow * $0.height } ?? 1
+        кэш.setObject(снимок, forKey: адрес as NSURL, cost: max(1, вес))
     }
 }
 
@@ -526,8 +592,12 @@ private struct СлайдФото: View {
     let верх: CGFloat
     let ширина: CGFloat
     let высотаФото: CGFloat
-    @State private var кадр: ГотовыйКадр? = nil
+    /// Обложка из ленты (малый снимок, лента его уже качала) — заставкой, пока в пути полный; nil — без неё.
+    let превью: URL?
+    @State private var кадр: ГотовыйКадр?
     @State private var неудача = false
+    /// Обложка ленты на месте кадра, пока полный снимок не готов: вместо спиннера — то же фото, что было в ленте.
+    @State private var заставка: ГотовыйКадр?
 
     /// Снимок и его фокус приходят вместе: показываем только оба сразу. Адрес — чей это кадр: строка ленты без фото
     /// показывает обложку, а с полной карточкой на том же слайде встаёт другой адрес — кадр меняется, а не застревает.
@@ -537,11 +607,21 @@ private struct СлайдФото: View {
         let фокус: CGPoint
     }
 
-    init(адрес: URL, верх: CGFloat, ширина: CGFloat, высотаФото: CGFloat) {
+    init(адрес: URL, верх: CGFloat, ширина: CGFloat, высотаФото: CGFloat, превью: URL? = nil) {
         self.адрес = адрес
         self.верх = верх
         self.ширина = ширина
         self.высотаФото = высотаФото
+        self.превью = превью
+        /* Снимок уже раскодирован за этот запуск и точка известна — кадр в первом же проходе, без спиннера. */
+        _кадр = State(initialValue: Self.готовый(адрес))
+    }
+
+    /// Кадр из памяти (ГотовыеСнимкиГалереи и точка ФокусСнимка) — только когда есть оба; иначе nil.
+    private static func готовый(_ адрес: URL) -> ГотовыйКадр? {
+        guard let снимок = ГотовыеСнимкиГалереи.снимок(адрес),
+              let фокус = ФокусСнимка.изПамяти(снимок, адрес: адрес) else { return nil }
+        return ГотовыйКадр(адрес: адрес, картинка: снимок, фокус: фокус)
     }
 
     var body: some View {
@@ -572,6 +652,10 @@ private struct СлайдФото: View {
                 .buttonStyle(.plain)
                 .frame(width: ширина, height: высотаФото)
                 .padding(.top, верх)
+            } else if let заставка {
+                /* Обложка ленты, пока полный снимок в пути: то же фото, что человек только что видел в ленте. */
+                видСнимка(заставка)
+                    .padding(.top, верх)
             } else {
                 SiteSpinner.белый
                     .frame(width: ширина, height: высотаФото)
@@ -603,31 +687,68 @@ private struct СлайдФото: View {
     private func загрузить() async {
         /* Прежний кадр (другого адреса) стоит, пока не готов новый: без вспышки спиннера. */
         guard кадр?.адрес != адрес else { return }
+        /* Скорость: снимок уже раскодирован за этот запуск (листание назад, заготовка следующего) — сразу, без сети. */
+        if let г = Self.готовый(адрес) {
+            кадр = г
+            неудача = false
+            return
+        }
         let начало = ContinuousClock.now
-        var запрос = URLRequest(url: адрес)
-        запрос.cachePolicy = .returnCacheDataElseLoad
+        let запрос = URLRequest(url: адрес, cachePolicy: .returnCacheDataElseLoad)
+        /* Полный снимок качается сразу, а пока он в пути — заставка из обложки ленты. */
+        async let ответ = URLSession.shared.data(for: запрос)
+        if заставка == nil, кадр == nil, let превью, превью != адрес {
+            await показатьЗаставку(превью)
+        }
         do {
-            let (данные, _) = try await URLSession.shared.data(for: запрос)
+            let (данные, _) = try await ответ
             guard let снимок = UIImage(data: данные) else {
                 неудача = true
                 return
             }
-            let готовый = await снимок.byPreparingForDisplay() ?? снимок
-            guard !Task.isCancelled else { return }
-            /* Фокус — до показа (обычно десятки миллисекунд, повторно — из памяти): кадр сразу на своём месте. Не дольше
-               0,3 с — первый разбор после запуска грузит модель Vision; не успел — центр, кадр потом не прыгает. */
-            let фокус = await ФокусСнимка.фокус(для: готовый, адрес: адрес, неДольше: 0.3)
+            /* Раскодирование и фокус — разом. Фокус — до показа (обычно десятки миллисекунд, повторно — из памяти): кадр
+               сразу на своём месте. Не дольше 0,3 с — первый разбор после запуска грузит модель Vision; не успел —
+               центр, кадр потом не прыгает. Обложка той же пропорции уже разобрана — её точка, без Vision. */
+            async let распакованный = снимок.byPreparingForDisplay()
+            let фокус: CGPoint
+            if let заставка, let превью, abs(Self.доля(заставка.картинка.size) - Self.доля(снимок.size)) < 0.02,
+               let точка = ФокусСнимка.изПамяти(заставка.картинка, адрес: превью) {
+                фокус = точка
+                ФокусСнимка.запомнить(точка, адрес: адрес)
+            } else {
+                фокус = await ФокусСнимка.фокус(для: снимок, адрес: адрес, неДольше: 0.3)
+            }
+            let готовый = await распакованный ?? снимок
+            ГотовыеСнимкиГалереи.положить(готовый, адрес)
             guard !Task.isCancelled else { return }
             /* Короткое проявление, без движения кадра, — только если ждали (сеть, Vision); из кэша — сразу. «Уменьшение
                движения» — тоже сразу. */
             let ждали = ContinuousClock.now - начало > .milliseconds(60)
             withAnimation(ждали ? ДвижениеСайта.мягко(.easeOut(duration: 0.18)) : nil) {
                 кадр = ГотовыйКадр(адрес: адрес, картинка: готовый, фокус: фокус)
+                заставка = nil
                 неудача = false
             }
         } catch {
             if !Task.isCancelled { неудача = true }
         }
+    }
+
+    /// Обложка ленты — только из кэша URLSession (.returnCacheDataDontLoad: без сети, лента её уже качала). Не вышло —
+    /// молча, остаётся спиннер.
+    private func показатьЗаставку(_ превью: URL) async {
+        let запрос = URLRequest(url: превью, cachePolicy: .returnCacheDataDontLoad)
+        guard let ответ = try? await URLSession.shared.data(for: запрос),
+              let снимок = UIImage(data: ответ.0) else { return }
+        let малая = await снимок.byPreparingForDisplay() ?? снимок
+        let фокус = await ФокусСнимка.фокус(для: малая, адрес: превью, неДольше: 0.15)
+        guard !Task.isCancelled, кадр == nil else { return }
+        заставка = ГотовыйКадр(адрес: адрес, картинка: малая, фокус: фокус)
+    }
+
+    /// Ширина к высоте; пустой — 0.
+    private static func доля(_ размер: CGSize) -> CGFloat {
+        размер.height > 0 ? размер.width / размер.height : 0
     }
 }
 
@@ -1637,9 +1758,9 @@ struct КарточкаПродавцаСайта: View {
             }
             .overlay {
                 if let адрес = товар.аватарПродавца.flatMap({ Config.url($0) }) {
-                    AsyncImage(url: адрес) { картинка in
-                        картинка.resizable().scaledToFill()
-                    } placeholder: {
+                    /* КартинкаЛенты, а не AsyncImage: из памяти — в первом кадре, уменьшенной и раскодированной вне
+                       главной нити. */
+                    КартинкаЛенты(адрес, пунктов: 52) {
                         Color.clear
                     }
                     .frame(width: 52, height: 52)

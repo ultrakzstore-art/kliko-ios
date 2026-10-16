@@ -71,15 +71,9 @@ enum ListingsAPI {
         }
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 20
-        c.httpShouldSetCookies = false        // куки ставим сами, из WebKit (см. выше)
-        c.httpCookieStorage = nil
-        c.urlCache = .shared                  // тот же большой кэш, что поднимает WebContainer
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift): одно соединение с карточкой, витриной и отзывами. Accept
+    /// JSON — как у прежней своей; куки ставим сами, из WebKit (см. выше).
+    private static let сессия = СетьСайта.Запросы(json: true)
 
     /// `куки` — заголовки заранее: фоновая проверка сохранённых поисков (этап 12) берёт их у WebKit сама, с пределом
     /// по времени, и одни на все запросы; пустые — запрос без куков. nil — как раньше, у WebKit перед запросом.
@@ -177,6 +171,8 @@ enum ListingsAPI {
     /// продавец на экране сразу, свежий ответ догоняет. NSCache потокобезопасен и сам отдаёт память системе.
     private final class ЯщикТовара {
         let товар: Listing
+        /// Когда пришла: свежую повторное открытие показывает и в сеть за ней не идёт (свежая).
+        let когда = Date()
         init(_ товар: Listing) { self.товар = товар }
     }
     private static let полные: NSCache<NSString, ЯщикТовара> = {
@@ -188,6 +184,12 @@ enum ListingsAPI {
     /// Полная карточка из памяти этого запуска или nil.
     static func готовая(_ id: String) -> Listing? {
         полные.object(forKey: id as NSString)?.товар
+    }
+
+    /// Полная карточка из памяти, пришедшая не раньше, чем неСтарше секунд назад, или nil: повторное открытие в первом
+    /// кадре — сразу полное, без второго запроса.
+    static func свежая(_ id: String, неСтарше: TimeInterval) -> Listing? {
+        полные.object(forKey: id as NSString).flatMap { Date().timeIntervalSince($0.когда) < неСтарше ? $0.товар : nil }
     }
 
     /// Выход из аккаунта — карточки с ценами и избранным прежнего человека больше не показываем.
@@ -346,6 +348,7 @@ enum ListingsCache {
         /* Скорость: вместе с лентой — копии выдач и полные карточки в памяти: они тоже прежнего человека. */
         КэшВыдачи.стереть()
         ListingsAPI.забытьГотовые()
+        Task { @MainActor in Похожие.забыть() }
         if let файлПервого { try? FileManager.default.removeItem(at: файлПервого) }
         guard let файл else { return }
         try? FileManager.default.removeItem(at: файл)

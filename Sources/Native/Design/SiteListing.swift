@@ -41,7 +41,8 @@ struct СтраницаОбъявленияСайта: View {
     @Environment(\.isPresented) private var вСтеке
     /// В стеке какой вкладки панели сайта лежит страница — по нему панель прячется (этап 29), а часы светлеют.
     @Environment(\.стекСайта) private var стек
-    @ObservedObject private var вид = ВидСайта.shared
+    /// Без подписки: страница в ВидСайта только пишет — смена чужих отметок (ленты, вкладок) её не перерисовывает.
+    private var вид: ВидСайта { ВидСайта.shared }
     /// Своя метка у каждой страницы: две страницы одного стека (похожее поверх) не путаются.
     @State private var метка = UUID()
     @State private var названия: [String: String] = [:]
@@ -51,8 +52,9 @@ struct СтраницаОбъявленияСайта: View {
     @State private var скрытыеСоветы: Set<String> = СоветыОбъявления.скрытые()
     /// Фото ушло из-под часов — под ними поверхность, и часы снова по теме.
     @State private var прокручено = false
-    /// «Разбор объявления»: цена по рынку и метка chip (api/brief.php), доводы ИИ по нажатию.
-    @StateObject private var разбор = МодельРазбораОбъявления()
+    /// «Разбор объявления»: цена по рынку и метка chip (api/brief.php), доводы ИИ по нажатию. @State, а не @StateObject:
+    /// страница на разбор не подписана — его наблюдает ВерхСтраницы, и ответ двери перерисовывает только верх.
+    @State private var разбор = МодельРазбораОбъявления()
 
     /// Явный init: страницу создаёт КарточкаОбъявленияЯдро из другого файла.
     init(товар: Listing, догружаем: Bool, неДогрузилась: Bool, сохранённаяКопия: Date?, похожие: Похожие.Состояние,
@@ -120,7 +122,7 @@ struct СтраницаОбъявленияСайта: View {
         VStack(alignment: .leading, spacing: 0) {
             ГалереяСайта(адреса: товар.фотоАдреса, страница: $страница, верх: 0, ширина: ширина,
                          метка: товар.меткаСостояния, аренда: товар.forRent, пауза: прокручено,
-                         вИзбранное: вИзбранноеДвойным, открыть: открытьФото)
+                         вИзбранное: вИзбранноеДвойным, обложка: товар.обложка, открыть: открытьФото)
                 /* Кнопки — часть галереи и уезжают с ней, как .mk-mhead внутри прокрутки .mk-modal. */
                 .overlay(alignment: .top) {
                     /* Видимые края кнопок — 16 pt от краёв фото (по линии с меткой «Б/У») и 20 pt от верха: между
@@ -154,10 +156,11 @@ struct СтраницаОбъявленияСайта: View {
                                 if стало != прокручено { прокручено = стало }
                             }
                             /* Где фото в прокрутке — по нему страницу смахивают вниз только от самого верха
-                               (ЗакрытьСмахиваниемВниз в SiteListingPull.swift). */
+                               (ЗакрытьСмахиваниемВниз в SiteListingPull.swift). Ниже -3 — уже «не у верха» (жесту
+                               нужно ≥ -2): значение стоит, и прокрутка не будит жест каждый кадр. */
                             .preference(key: ВерхСтраницыОбъявления.self,
-                                        value: г.frame(in: NamedCoordinateSpace.named(ПрокруткаСтраницыОбъявления.имя)).minY
-                                            - верх)
+                                        value: max(-3, г.frame(in: NamedCoordinateSpace.named(
+                                            ПрокруткаСтраницыОбъявления.имя)).minY - верх))
                     }
                 }
             ВерхСтраницы(товар: товар, магазин: магазин, названия: названия, ширина: ширина, листДоверия: $листДоверия,
@@ -542,7 +545,7 @@ private struct БлокЕщёОбъявления: View {
 
     /// Подписи «Ещё» на языке телефона.
     private static func т(_ ключ: String) -> String {
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let язык = DesignText.язык          // запомненный за запуск, а не настройки телефона на каждую подпись
         let словарь = тексты[язык] ?? тексты["ru"] ?? [:]
         return словарь[ключ] ?? ключ
     }
@@ -657,21 +660,51 @@ extension SiteSession {
         return итог
     }
 
+    /// Скорость: страница не читается или списка в ней нет — до этого времени магазинов нет без сети (10 минут), а не
+    /// новая загрузка сотен КБ на каждое открытое объявление. Сеть не ответила — только 30 с: короткий сбой на запуске
+    /// не гасит значки «Магазин» и сверку режима сделок на 10 минут.
+    @MainActor private static var неУдалосьДо: Date?
+
     @MainActor
     private static func загрузитьМагазины() async -> Set<String> {
+        if let до = неУдалосьДо, до > Date() { return [] }
         var запрос = URLRequest(url: Config.apiBase.appendingPathComponent("marketplace"))
         запрос.timeoutInterval = 15
-        guard let ответ = try? await URLSession.shared.data(for: запрос),
-              let страница = String(data: ответ.0, encoding: .utf8) else { return [] }
+        guard let ответ = try? await URLSession.shared.data(for: запрос) else {
+            неУдалосьДо = Date().addingTimeInterval(30)
+            return []
+        }
+        let разбор = await разобратьВитрину(ответ.0)
+        guard разбор.прочитана else {
+            неУдалосьДо = Date().addingTimeInterval(10 * 60)
+            return []
+        }
         /* Та же страница несёт MK_DEAL_MODE — режим сделок (SiteListingEds.swift): второй раз её не качаем. */
-        РежимСделокСайта.shared.принять(страница)
+        РежимСделокСайта.shared.принятьРежим(разбор.режим)
+        guard let итог = разбор.магазины else {
+            неУдалосьДо = Date().addingTimeInterval(10 * 60)
+            return []
+        }
+        неУдалосьДо = nil
+        кэшМагазинов = итог
+        return итог
+    }
+
+    /// Разбор страницы витрины не на главной нити: сотни КБ в строку, MK_SHOPS и MK_DEAL_MODE регулярками.
+    /// прочитана = false — не текст; магазины = nil — списка на странице нет.
+    nonisolated private static func разобратьВитрину(_ данные: Data) async
+        -> (прочитана: Bool, магазины: Set<String>?, режим: String?) {
+        guard let страница = String(data: данные, encoding: .utf8) else {
+            return (прочитана: false, магазины: nil, режим: nil)
+        }
+        let режим = РежимСделокСайта.режим(страница)
         guard let образец = try? NSRegularExpression(pattern: "MK_SHOPS\\s*=\\s*new Set\\((\\[[^\\]]*\\])\\)"),
               let найдено = образец.firstMatch(in: страница, range: NSRange(страница.startIndex..., in: страница)),
               let часть = Range(найдено.range(at: 1), in: страница),
-              let список = try? JSONDecoder().decode([String].self, from: Data(страница[часть].utf8)) else { return [] }
-        let итог = Set(список)
-        кэшМагазинов = итог
-        return итог
+              let список = try? JSONDecoder().decode([String].self, from: Data(страница[часть].utf8)) else {
+            return (прочитана: true, магазины: nil, режим: режим)
+        }
+        return (прочитана: true, магазины: Set(список), режим: режим)
     }
 }
 

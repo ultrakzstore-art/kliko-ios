@@ -80,15 +80,9 @@ enum ПодпискиСайта {
         }
     }
 
-    private static let сессия: URLSession = {
-        let c = URLSessionConfiguration.default
-        c.httpAdditionalHeaders = ["Accept": "application/json"]
-        c.timeoutIntervalForRequest = 15
-        c.httpShouldSetCookies = false        // куки — из WebKit (SiteSession), своих не заводим
-        c.httpCookieStorage = nil
-        c.requestCachePolicy = .reloadIgnoringLocalCacheData   // подписки — всегда свежие
-        return URLSession(configuration: c)
-    }()
+    /// Общая сессия сайта (СетьСайта, SiteNetwork.swift) — Accept JSON, срок 15 с и без кэша (подписки — всегда
+    /// свежие), как у прежней своей; куки — из WebKit (SiteSession).
+    private static let сессия = СетьСайта.Запросы(json: true, срок: 15, безКэша: true)
 
     /// GET subs.php?action=list.
     static func список() async -> Итог {

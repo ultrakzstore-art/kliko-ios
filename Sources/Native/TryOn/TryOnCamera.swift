@@ -42,7 +42,8 @@ struct ШагСъёмкиПримерочной: View {
 
     private func т(_ ключ: String) -> String { ПримерочнаяText.т(ключ) }
 
-    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
+    /// Без движения: «Уменьшение движения» или лёгкий режим (РежимУстройства) — камера и так нагружает телефон.
+    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо || РежимУстройства.сейчас }
 
     private var живая: Bool { камера.доступ == .есть || камера.доступ == .неизвестно }
 
@@ -493,10 +494,17 @@ struct КонтурПримерочной: View {
         GeometryReader { место in
             let рамка = местоФигуры(в: место.size)
             ZStack {
-                фигура
-                    .stroke(Theme.зелёныйЯркий.opacity(0.45),
-                            style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
-                    .blur(radius: 7)
+                if тихо {
+                    /* Без движения — и ореол без размытия: blur над живой камерой пересчитывается на каждом её кадре. */
+                    фигура
+                        .stroke(Theme.зелёныйЯркий.opacity(0.3),
+                                style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                } else {
+                    фигура
+                        .stroke(Theme.зелёныйЯркий.opacity(0.45),
+                                style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                        .blur(radius: 7)
+                }
                 фигура
                     .stroke(Color.white.opacity(0.92),
                             style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round, dash: [9, 7]))

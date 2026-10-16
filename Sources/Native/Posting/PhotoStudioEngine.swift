@@ -304,6 +304,28 @@ enum ВырезкаПредмета {
     private static let контекст = CIContext(options: [.cacheIntermediates: false])
     private static let пространство = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
 
+    /// Модель вырезки уже прогревали за этот запуск (трогается только под замком).
+    private static let замокПрогрева = NSLock()
+    private static var прогрета = false
+
+    /// Скорость (владелец 16.10.2026: «моментально открывал всё»): модель вырезки Vision грузится заранее, на крошечном
+    /// пустом кадре и в фоне, — когда открыли студию фото или съёмку 3D-обзора: первый разбор не ждёт её загрузки.
+    /// Один раз за запуск; лёгкий режим зовущий проверяет сам.
+    static func прогреть() {
+        замокПрогрева.lock()
+        let уже = прогрета
+        прогрета = true
+        замокПрогрева.unlock()
+        guard !уже else { return }
+        DispatchQueue.global(qos: .utility).async {
+            guard let холст = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
+                                        space: CGColorSpaceCreateDeviceRGB(),
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  let кадр = холст.makeImage() else { return }
+            _ = ВырезкаПредмета.экземпляры(кадр)
+        }
+    }
+
     /// Предмет занимает больше этой доли кадра — это весь кадр (крупный план ткани, сплошной узор): вырезать нечего.
     /// Только для вырезать(…) со всего фото: студии «весь кадр» не мешает, а в ручной рамке вещь и должна занимать почти
     /// всё (там предел — 1, LiveTryOnCutout.swift).

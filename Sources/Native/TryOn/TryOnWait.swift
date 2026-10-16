@@ -22,7 +22,10 @@ struct ШагОжиданияПримерочной: View {
 
     private func т(_ ключ: String) -> String { ПримерочнаяText.т(ключ) }
 
-    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
+    /// Лёгкий режим (слабое железо, энергосбережение, перегрев) — сцена стоит, как при «Уменьшении движения».
+    @ObservedObject private var режим = РежимУстройства.shared
+
+    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо || режим.лёгкий }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,7 +112,9 @@ struct ШагОжиданияПримерочной: View {
     // MARK: Сцена
 
     private var сцена: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: тихо)) { шкала in
+        /* 30 кадров в секунду, а не частота экрана (на ProMotion — 120): плавание, пульс и сканер на глаз те же, а
+           пересчётов сцены вчетверо меньше, пока идёт примерка. */
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: тихо)) { шкала in
             let t = тихо ? 10 : шкала.date.timeIntervalSince(начало)
             GeometryReader { место in
                 кадр(t: t, размер: место.size)
@@ -239,7 +244,8 @@ struct ПолосаПримерочной: View {
                     .frame(width: ширина)
                     .overlay {
                         if !тихо {
-                            TimelineView(.animation) { шкала in
+                            /* 30 кадров в секунду и одним слоем (drawingGroup): блик и так обрезан по полосе. */
+                            TimelineView(.animation(minimumInterval: 1.0 / 30)) { шкала in
                                 let t = шкала.date.timeIntervalSinceReferenceDate
                                 let фаза = CGFloat(t.truncatingRemainder(dividingBy: 1.4) / 1.4)
                                 LinearGradient(colors: [Color.white.opacity(0), Color.white.opacity(0.55),
@@ -248,6 +254,7 @@ struct ПолосаПримерочной: View {
                                     .frame(width: 44)
                                     .offset(x: фаза * (ширина + 44) - 44)
                                     .frame(width: ширина, alignment: .leading)
+                                    .drawingGroup()
                             }
                             .clipShape(Capsule())
                         }

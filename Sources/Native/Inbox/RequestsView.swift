@@ -20,6 +20,8 @@ struct ЭкранЗаявок: View {
     @State private var чат: ЧатЦель? = nil
     @State private var принять: Заявка? = nil
     @State private var входОткрыт = false
+    /// Секунда отсчёта: модель больше не публикует её сама (ЗаявкиМодель.сейчас) — экран тикает своим состоянием.
+    @State private var тик = Date()
     /// «Объявление» заявки — в стек «Кабинета», «Назад» вернёт к заявкам (ListingReturn.swift).
     @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
 
@@ -35,7 +37,16 @@ struct ЭкранЗаявок: View {
             .background(ИнбоксКраска.фон)
             .modifier(ШапкаСделок(заголовок: т("req_title")))
             .task { await модель.загрузить() }
-            .task { await модель.тик() }
+            /* reqStartTicker: отсчёт — свой, раз в секунду: перерисовывается только этот экран. */
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    let момент = Date()
+                    модель.отсчитать(момент)
+                    тик = момент
+                }
+            }
             .refreshable { await модель.загрузить() }
             .navigationDestination(item: $чат) { цель in
                 ЭкранЧатаЗаявки(цель: цель, открыть: открыть)
@@ -88,7 +99,9 @@ struct ЭкранЗаявок: View {
     }
 
     private var список: some View {
-        ScrollView {
+        /* Читается здесь, в теле: каждая секунда отсчёта перерисовывает список (ответ сайта мог прийти позже тика). */
+        let сейчас = max(тик, модель.сейчас)
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 /* #requests-screen: подзаголовок 13 с отступом 14, чипы — ещё 14 до списка (12 промежутка + 2). */
                 Text(т("req_sub"))
@@ -108,7 +121,7 @@ struct ЭкранЗаявок: View {
                     пусто
                 } else {
                     ForEach(модель.видимые) { заявка in
-                        КарточкаЗаявки(заявка: заявка, сейчас: модель.сейчас,
+                        КарточкаЗаявки(заявка: заявка, сейчас: сейчас,
                                        занята: модель.занято.contains(заявка.id),
                                        действие: { д in выполнить(д, заявка) })
                     }

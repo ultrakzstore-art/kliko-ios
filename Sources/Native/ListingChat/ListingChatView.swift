@@ -633,9 +633,8 @@ struct КонтекстЧатаОбъявления: View {
             .fill(Theme.поверхность)
             .overlay {
                 if let адрес = фото {
-                    AsyncImage(url: адрес) { картинка in
-                        картинка.resizable().scaledToFill()
-                    } placeholder: {
+                    /* КартинкаЛенты, а не AsyncImage: из памяти — в первом кадре, уменьшенной под ячейку. */
+                    КартинкаЛенты(адрес, пунктов: 44) {
                         Theme.поверхность
                     }
                     .frame(width: 44, height: 44)
@@ -847,9 +846,8 @@ struct ОблакоЧатаОбъявления: View {
                 ПлашкаТелеграмаЧата(моё: моё)
             }
             if let адрес = сообщение.фото.flatMap({ Config.url($0) }) {
-                AsyncImage(url: адрес) { картинка in
-                    картинка.resizable().scaledToFill()
-                } placeholder: {
+                /* КартинкаЛенты, а не AsyncImage: прокрутка переписки не раскодирует фото заново на главной нити. */
+                КартинкаЛенты(адрес, пунктов: 200) {
                     Theme.поверхность2
                 }
                 .frame(width: 200, height: 200)

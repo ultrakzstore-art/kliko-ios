@@ -162,12 +162,10 @@ struct РядИсторий: View {
                         Circle().fill(AngularGradient(colors: Self.кольцо, center: .center,
                                                       startAngle: .degrees(120), endAngle: .degrees(480)))
                     }
-                    AsyncImage(url: история.картинка) { фаза in
-                        if let картинка = фаза.image {
-                            картинка.resizable().scaledToFill()
-                        } else {
-                            Theme.поверхность2
-                        }
+                    /* Скорость: КартинкаЛенты, а не AsyncImage — уменьшена до кружка и распакована не на главной очереди,
+                       из памяти при возврате к ленте. */
+                    КартинкаЛенты(история.картинка, пунктов: 56) {
+                        Theme.поверхность2
                     }
                     .frame(width: 56, height: 56)
                     .clipShape(Circle())
@@ -212,6 +210,10 @@ struct ПросмотрИсторий: View {
 
     /// Одна история — 6,5 с, как наезд фото у сайта (.stv-img transition transform 6.5s).
     private static let длительность: Double = 6.5
+    /// Фото истории — во весь экран: столько точек по длинной стороне (и у заготовки следующей — те же, ключ памяти один).
+    private static let пунктовФото: CGFloat = 900
+    /// Плотность экрана — заготовка следующей истории того же размера, что покажет КартинкаЛенты.
+    @Environment(\.displayScale) private var масштаб
 
     init(набор: ИсторииРаздела, начать: Int, сПлитки: Bool, перейти: @escaping (String) -> Void,
          открыть: @escaping (URL) -> Void) {
@@ -284,19 +286,15 @@ struct ПросмотрИсторий: View {
     private var фото: some View {
         if let адрес = история?.картинка {
             GeometryReader { г in
-                AsyncImage(url: адрес) { фаза in
-                    if let картинка = фаза.image {
-                        картинка
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: г.size.width, height: г.size.height)
-                            .scaleEffect(наезд || меньшеДвижения ? 1 : 1.05)
-                            .clipped()
-                    } else {
-                        LinearGradient(colors: [краска, Color(red: 11 / 255, green: 15 / 255, blue: 13 / 255)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    }
+                /* Скорость: КартинкаЛенты вместо AsyncImage — распакована не на главной очереди и лежит в памяти;
+                   следующую история заранее кладёт туда же (идти). */
+                КартинкаЛенты(адрес, пунктов: Self.пунктовФото) {
+                    LinearGradient(colors: [краска, Color(red: 11 / 255, green: 15 / 255, blue: 13 / 255)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
+                .frame(width: г.size.width, height: г.size.height)
+                .scaleEffect(наезд || меньшеДвижения ? 1 : 1.05)
+                .clipped()
                 .id(адрес)
             }
             .allowsHitTesting(false)
@@ -481,6 +479,10 @@ struct ПросмотрИсторий: View {
         доля = 0
         наезд = false
         if let история { ХранилищеИсторий.shared.отметить(история.id) }
+        /* Скорость: фото следующей истории — заранее в память, пока идёт эта: листнули — оно уже на экране. */
+        if набор.истории.indices.contains(номер + 1), let следующая = набор.истории[номер + 1].картинка {
+            КартинкиЛенты.shared.заранее([следующая], пунктов: Self.пунктовФото, масштаб: масштаб)
+        }
         withAnimation(.linear(duration: Self.длительность)) { наезд = true }
         let шаг = 0.05
         while !Task.isCancelled {

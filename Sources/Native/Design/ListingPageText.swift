@@ -20,7 +20,8 @@ enum ListingPageText {
         return тексты["ru"]?[ключ] ?? текстыДоверия["ru"]?[ключ] ?? ключ
     }
 
-    static var язык: String { String((Locale.preferredLanguages.first ?? "ru").prefix(2)) }
+    /// Язык, запомненный за запуск (DesignText.язык): настройки телефона не перечитываются на каждую подпись.
+    static var язык: String { DesignText.язык }
 
     /// Ключи «Продавец утверждает» в порядке справочника сайта (TRUST_LABELS в js/mk-refs-ru.js).
     static let ключиЗаявлений: [String] = [

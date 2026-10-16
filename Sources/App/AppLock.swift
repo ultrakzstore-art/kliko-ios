@@ -114,13 +114,14 @@ final class AppLock: ObservableObject {
 
     func sceneWillResignActive() {
         /* Окно проверки Face ID тоже делает приложение неактивным — закрывать содержимое во время своей же проверки
-           незачем: под окном и так замок или настройки. */
-        if enabled && !проверяем { cover = true }
+           незачем: под окном и так замок или настройки. Пишем только при смене: каждая запись — публикация, а за замком
+           следят корень и вкладки (владелец 16.10.2026: «моментально открывал всё»). */
+        if enabled && !проверяем && !cover { cover = true }
     }
 
     func sceneDidEnterBackground() {
         guard enabled else { return }
-        cover = true
+        if !cover { cover = true }
         if ушёлВ == nil { ушёлВ = Date() }
     }
 
@@ -132,7 +133,8 @@ final class AppLock: ObservableObject {
     }
 
     func sceneDidBecomeActive() {
-        cover = false
+        /* Без защиты cover всегда false — раньше каждый возврат в приложение всё равно публиковал замок. */
+        if cover { cover = false }
         if enabled && locked { unlock() }
     }
 
@@ -148,7 +150,7 @@ final class AppLock: ObservableObject {
     }
 
     static func т(_ ключ: String) -> String {
-        let язык = String((Locale.preferredLanguages.first ?? "ru").prefix(2))
+        let язык = DesignText.язык          // язык приложения, прочитанный один раз за запуск
         let словарь = тексты[язык] ?? тексты["ru"]!
         return словарь[ключ] ?? тексты["ru"]![ключ] ?? ключ
     }

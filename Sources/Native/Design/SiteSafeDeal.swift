@@ -230,12 +230,9 @@ struct ОкноБезопаснойСделки: View {
 
     private var строкаТовара: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: товар.обложка ?? товар.фотоАдреса.first) { фаза in
-                if let картинка = фаза.image {
-                    картинка.resizable().scaledToFill()
-                } else {
-                    Theme.поверхность2
-                }
+            /* КартинкаЛенты, а не AsyncImage: обложку из ленты — из памяти в первом кадре, без повторной загрузки. */
+            КартинкаЛенты(товар.обложка ?? товар.фотоАдреса.first, пунктов: 56) {
+                Theme.поверхность2
             }
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))

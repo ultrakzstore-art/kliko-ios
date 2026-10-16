@@ -269,12 +269,14 @@ struct ЧатСообщение: Identifiable, Hashable, Decodable {
     /// написал что-то похожее среди других слов, не попадёт. Буква «ё» — в составленном виде, как её пишет сервер.
     static func похожеНаСобытие(_ текст: String) -> Bool {
         let строка = текст.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !строка.isEmpty, строка.count <= 80 else { return false }
-        return строка.range(of: шаблонСобытия, options: .regularExpression) != nil
+        guard !строка.isEmpty, строка.count <= 80, let выражение = выражениеСобытия else { return false }
+        return выражение.firstMatch(in: строка, range: NSRange(строка.startIndex..., in: строка)) != nil
     }
 
     private static let шаблонСобытия =
         "^(Покупатель|Продавец) (вышел из чата|вернулся в чат|отозвал сво[её] предложение)\\.?$"
+    /// Скорость: выражение собирается один раз на запуск, а не на каждое сообщение каждого опроса.
+    private static let выражениеСобытия = try? NSRegularExpression(pattern: шаблонСобытия)
 }
 
 /// Переписка: open / poll / send отдают её целиком.

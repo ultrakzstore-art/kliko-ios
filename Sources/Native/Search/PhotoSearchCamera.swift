@@ -228,7 +228,9 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
 
     /// Затвор: снимок придёт в `готово` на главной нити. угол — поворот снимка (videoRotationAngle), когда телефон держат
     /// не так, как интерфейс (камера подачи, НаклонТелефонаКамеры: горизонтально — 0 или 180); nil — как интерфейс.
-    func снять(угол: CGFloat? = nil, _ готово: @escaping @MainActor (UIImage) -> Void) {
+    /// быстро — снимок для поиска, а не для объявления: камера отдаёт его без долгой обработки качества
+    /// (photoQualityPrioritization .speed) — затвор срабатывает заметно быстрее, сайту всё равно уходит до 1024 px.
+    func снять(угол: CGFloat? = nil, быстро: Bool = false, _ готово: @escaping @MainActor (UIImage) -> Void) {
         guard готова, !снимаем else { return }
         снимаем = true
         self.готово = готово
@@ -244,7 +246,10 @@ final class КамераПоиска: NSObject, ObservableObject, AVCapturePhoto
             if связь.isVideoRotationAngleSupported(поворот) {
                 связь.videoRotationAngle = поворот
             }
-            self.выход.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
+            let настройки = AVCapturePhotoSettings()
+            /* .speed — нижняя ступень: выше предела выхода (maxPhotoQualityPrioritization) она не бывает. */
+            if быстро { настройки.photoQualityPrioritization = .speed }
+            self.выход.capturePhoto(with: настройки, delegate: self)
         }
     }
 
@@ -307,27 +312,31 @@ struct ПревьюКамерыПоиска: UIViewRepresentable {
 
 /// Последнее фото галереи — только если доступ к фото уже дан (сами не спрашиваем: PhotosPicker его не требует).
 enum ПоследнееФотоГалереи {
+    /// Скорость: поиск в медиатеке (fetchAssets — синхронный, на большой медиатеке заметный) — не на главной нити,
+    /// пока камера открывается; ответ — всегда на главной.
     static func загрузить(_ готово: @escaping (UIImage?) -> Void) {
-        let статус = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard статус == .authorized || статус == .limited else {
-            готово(nil)
-            return
-        }
-        let отбор = PHFetchOptions()
-        отбор.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        отбор.fetchLimit = 1
-        guard let снимок = PHAsset.fetchAssets(with: .image, options: отбор).firstObject else {
-            готово(nil)
-            return
-        }
-        let настройки = PHImageRequestOptions()
-        настройки.deliveryMode = .highQualityFormat
-        настройки.resizeMode = .fast
-        настройки.isNetworkAccessAllowed = false
-        настройки.isSynchronous = false
-        PHImageManager.default().requestImage(for: снимок, targetSize: CGSize(width: 160, height: 160),
-                                              contentMode: .aspectFill, options: настройки) { кадр, _ in
-            DispatchQueue.main.async { готово(кадр) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let статус = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            guard статус == .authorized || статус == .limited else {
+                DispatchQueue.main.async { готово(nil) }
+                return
+            }
+            let отбор = PHFetchOptions()
+            отбор.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            отбор.fetchLimit = 1
+            guard let снимок = PHAsset.fetchAssets(with: .image, options: отбор).firstObject else {
+                DispatchQueue.main.async { готово(nil) }
+                return
+            }
+            let настройки = PHImageRequestOptions()
+            настройки.deliveryMode = .highQualityFormat
+            настройки.resizeMode = .fast
+            настройки.isNetworkAccessAllowed = false
+            настройки.isSynchronous = false
+            PHImageManager.default().requestImage(for: снимок, targetSize: CGSize(width: 160, height: 160),
+                                                  contentMode: .aspectFill, options: настройки) { кадр, _ in
+                DispatchQueue.main.async { готово(кадр) }
+            }
         }
     }
 }
@@ -381,7 +390,8 @@ struct ЭкранКамерыПоиска: View {
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
-    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо }
+    /// Без движения: «Уменьшение движения» или лёгкий режим (РежимУстройства) — камера и так нагружает телефон.
+    private var тихо: Bool { меньшеДвижения || ДвижениеСайта.тихо || РежимУстройства.сейчас }
 
     private var живая: Bool { камера.доступ == .есть || камера.доступ == .неизвестно }
 
@@ -812,10 +822,17 @@ struct ЭкранКамерыПоиска: View {
            «Авто» с похожими внизу (или во сне) её не видно — тогда, как и живой поиск, весь кадр. */
         let доля = рамкаНужна ? рамкаНаЭкране.flatMap { ОбрезкаСнимкаПоиска.доля(рамки: $0, превью: местоПревью) } : nil
         let превью = местоПревью.size
-        камера.снять { снимок in
+        камера.снять(быстро: true) { снимок in
             if живойСнимок { живой.забыть() }
-            /* В модель — часть в рамке: сайту меньше фона, и «Ищем похожие…» показывает то, что искали. */
-            модель.снято(ОбрезкаСнимкаПоиска.обрезать(снимок, доля: доля, превью: превью))
+            /* В модель — часть в рамке: сайту меньше фона, и «Ищем похожие…» показывает то, что искали. Обрезка
+               полного снимка камеры (12 Мп) — не на главной нити: экран не замирает на затворе. */
+            let ящик = ЯщикКартинкиОбъёма(снимок)
+            Task { @MainActor in
+                let часть = await Task.detached(priority: .userInitiated) { () -> ЯщикКартинкиОбъёма in
+                    ЯщикКартинкиОбъёма(ОбрезкаСнимкаПоиска.обрезать(ящик.картинка, доля: доля, превью: превью))
+                }.value
+                модель.снято(часть.картинка)
+            }
         }
     }
 
