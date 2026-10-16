@@ -1,0 +1,46 @@
+Timestamp               Ty Process[PID:TID]
+2026-10-16 20:52:32.897 Df Kliko[31045:14fb9] [com.apple.network:connection] nw_socket_handle_socket_event [C1.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:32.898 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:32.898 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:32.898 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:32.898 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 1: cleaning up
+2026-10-16 20:52:32.900 Df Kliko[31045:14fb9] [com.apple.network:connection] [C1 0936AFC2-B1E1-40EC-9B69-8AA0B9DC9624 Hostname#ffa1e8bd:443 quic-connection, url hash: 7755d97c, definite, attribution: developer] cancel
+2026-10-16 20:52:32.902 Df Kliko[31045:14fb9] [com.apple.network:connection] [C1 0936AFC2-B1E1-40EC-9B69-8AA0B9DC9624 Hostname#ffa1e8bd:443 quic-connection, url hash: 7755d97c, definite, attribution: developer] cancelled
+	[C1.1.1.1 BAEB7D88-A105-4318-89A9-4C35BA618BD3 192.168.64.9:59102<->IPv4#56e3ba2a:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 90.550s, DNS @0.005s took 0.001s, TCP @0.007s took 0.157s, TLS 1.3 took 0.181s
+	bytes in/out: 6820/1897, packets in/out: 8/6, rtt: 0.159s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/5/0/0
+2026-10-16 20:52:32.909 Df Kliko[31045:14fb9] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C1] reporting state cancelled
+2026-10-16 20:52:32.910 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 1: done
+2026-10-16 20:52:34.444 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 2: cleaning up
+2026-10-16 20:52:34.444 Df Kliko[31045:14fb9] [com.apple.network:connection] [C2 59B31043-5AD7-4330-A16D-23C108B4A7FC Hostname#ffa1e8bd:443 quic-connection, url: https://kliko.kz/api/listings.php, definite, attribution: developer] cancel
+2026-10-16 20:52:34.444 Df Kliko[31045:14fb9] [com.apple.network:connection] [C2 59B31043-5AD7-4330-A16D-23C108B4A7FC Hostname#ffa1e8bd:443 quic-connection, url: https://kliko.kz/api/listings.php, definite, attribution: developer] cancelled
+	[C2.1.1.1 E0489D74-57BA-4128-983C-E244149CD905 192.168.64.9:59115<->IPv4#56e3ba2a:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 90.666s, DNS @0.005s took 0.008s, TCP @0.014s took 0.162s, TLS 1.3 took 0.216s
+	bytes in/out: 20585/1966, packets in/out: 11/6, rtt: 0.163s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/4/0/0
+2026-10-16 20:52:34.446 Df Kliko[31045:14fb9] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C2] reporting state cancelled
+2026-10-16 20:52:34.446 Df Kliko[31045:14fb9] [com.apple.CFNetwork:Default] Connection 2: done
+2026-10-16 20:52:37.430 Df Kliko[31045:14e4c] [com.apple.network:connection] nw_socket_handle_socket_event [C3.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:37.430 Df Kliko[31045:14e4c] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:37.430 Df Kliko[31045:14e4c] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:37.430 Df Kliko[31045:14e4c] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:37.431 Df Kliko[31045:14e4c] [com.apple.CFNetwork:Default] Connection 3: cleaning up
+2026-10-16 20:52:37.431 Df Kliko[31045:14e4c] [com.apple.network:connection] [C3 036F8E4A-3B11-430C-891C-7CCD2B067924 Hostname#ffa1e8bd:443 quic-connection, url: https://kliko.kz/marketplace, definite, attribution: developer] cancel
+2026-10-16 20:52:37.431 Df Kliko[31045:14e4c] [com.apple.network:connection] [C3 036F8E4A-3B11-430C-891C-7CCD2B067924 Hostname#ffa1e8bd:443 quic-connection, url: https://kliko.kz/marketplace, definite, attribution: developer] cancelled
+	[C3.1.1.1 70683524-BEB7-4243-BB26-59B266887BB8 192.168.64.9:59127<->IPv4#56e3ba2a:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 90.979s, DNS @0.208s took 0.002s, TCP @0.251s took 0.182s, TLS 1.3 took 0.222s
+	bytes in/out: 82612/1925, packets in/out: 32/6, rtt: 0.167s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/4/0/0
+2026-10-16 20:52:37.448 Df Kliko[31045:14e4c] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C3] reporting state cancelled
+2026-10-16 20:52:37.448 Df Kliko[31045:14e4c] [com.apple.CFNetwork:Default] Connection 3: done
+2026-10-16 20:53:00.778 A  Kliko[31045:14e4b] (StoreKit) StoreKit/TransactionUpdateStart
+2026-10-16 20:53:00.800 Df Kliko[31045:14fc1] [com.apple.xpc:connection] [0x16a50ca00] activating connection: mach=true listener=false peer=false name=com.apple.metrickit.xpc
+2026-10-16 20:53:04.243 Df Kliko[31045:14fc1] [com.apple.xpc:connection] [0x16a50ca00] failed to do a bootstrap look-up: xpc_error=[3: No such process]
+2026-10-16 20:53:04.243 Df Kliko[31045:14fc1] [com.apple.xpc:connection] [0x16a50ca00] invalidated after a failed init
