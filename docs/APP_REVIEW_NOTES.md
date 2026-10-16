@@ -162,8 +162,8 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 - Фото перерисовываются (без EXIF и места съёмки), защищены файловой защитой iOS. Vision только находит точки позы и
   «есть ли люди в кадре» — лица не распознаются, биометрических шаблонов нет. Детских размеров и фото детей нет; на
   камере — совет «Снимайте только себя».
-- Удаление (5.1.1(v)): «Удалить всё «Моё»» одним шагом — внизу хаба и в меню «…»; строка «Моё: машины, устройства,
-  мерки и фото» в Кабинет → «Данные на телефоне»; у каждой машины, фото и размера — своё «Удалить». Выход из аккаунта
+- Удаление (5.1.1(v)): «Удалить всё «Моё»» одним шагом — внизу хаба и в меню «…»; строка «Моё: машины, дом,
+  компьютер, гардероб, мерки и фото» в Кабинет → «Данные на телефоне»; у каждой машины, фото и размера — своё «Удалить». Выход из аккаунта
   тоже стирает «Моё» — об этом сказано в окне выхода и под кнопкой «Выйти». Удаление приложения уносит всё.
 - «Подходит моему»: на странице объявления шин и дисков, чехлов, сумок для ноутбука, одежды и обуви — плашка «Подходят
   ✓ / Не ваш размер / Проверьте модель» с подписью «Проверили по описанию объявления»; в ленте этих разделов — чип «Для
@@ -173,6 +173,61 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 - Что показать проверяющему: Кабинет → «Моё» → «Мой гараж» → «Добавить машину» → марка, модель, год → «Снять по
   шаблону»; «Мои устройства» — модель телефона определилась сама; «Мой рост и мерки» — линейка роста и «Добавить
   размер»; затем «Удалить всё «Моё»».
+
+## 3г. «Мой дом», «Мой компьютер», «Мой гардероб», «Для вас», «Добавить из моих покупок» (для Review Notes; 16.10.2026)
+
+Версия 1.13. Код — `Sources/Native/MyThings/` (`MyThingsHome*`, `MyThingsPC*`, `MyThingsWardrobe*`,
+`MyThingsFromDeals.swift`), полка — `Sources/Native/ForYou/`, сверка по стандартам — `Sources/Native/Standards/`.
+Рубильники `Config.мойДом`, `Config.мойКомпьютер`, `Config.мойГардероб`, `Config.покупкиВМоё`, `Config.дляВас`,
+`Config.стандарты` — все `true` и все внутри `Config.моё`.
+
+| Что | Где найти | Где хранится | Что уходит с телефона |
+|---|---|---|---|
+| «Мой дом»: комнаты (размеры, фото, цвета), проёмы, лифт и лестница, кровати, окна, ТВ на стене, свет, техника; «Пройдёт ли в дверь и лифт?» | Кабинет → «Моё» → «Мой дом» | Application Support/MyThings на телефоне, вне iCloud и резервной копии (как в 3в) | Ничего. Цвета с фото комнаты считаются на телефоне, модель с наклейки техники («Снять наклейку») читает Vision на телефоне; снимок наклейки не сохраняется |
+| «Мой компьютер»: до 4 компьютеров и ноутбуков, схема, «По снимку экрана», «Можно улучшить» | Кабинет → «Моё» → «Мой компьютер» | там же | Конфигурация компьютера — ничего. Снимок экрана читает Vision на телефоне и не сохраняет. Цена «от N ₸» у варианта — обычная лента раздела (память, накопители, видеокарты, блоки питания, процессоры): в адресе только раздел и город, как если открыть раздел самому. «Найти на Kliko» — обычный поиск, только по нажатию |
+| «Мой гардероб»: вещи (фото, вид, цвет, размер), образы, «С чем носить» | Кабинет → «Моё» → «Мой гардероб» | там же; фон вещи убирается и цвет считается на телефоне | Ничего. «Подобрать» в «С чем носить» — по нажатию одна лента раздела (только с фото); цвета и размер в запрос не попадают, отбор — на телефоне |
+| «Добавить из моих покупок» | Кабинет → «Моё» → карточка под разделами (нужен вход) | добавленная вещь — в «Моё» на телефоне: название, обложка, цена и месяц покупки видны только владельцу | Только чтение своих завершённых покупок в безопасной сделке (`escrow.php?action=my_deals&role=buyer`, тот же ответ, что у «Моих сделок»); обратно на сервер ничего не пишется. Сделки цифровых кодов не предлагаются |
+| «Для вас» | Главная, полка после рядов объявлений; «Все» — экран целиком. Полки нет, пока «Моё» пусто | ответы разделов — 15 минут в памяти; на диске только число разделов, при котором полку скрыли («Скрыть») | Ленты разделов (раздел, город, новые подряд) запросами GET без куков. Значений «Моего» нет ни в адресе, ни в теле: подходящее отбирается на телефоне (крючок отбора на сервере `ОтборСервераДляВас.включён = false`) |
+
+- Работает без входа, кроме «Добавить из моих покупок». Ничего не продаётся, покупок App Store здесь нет; «от N ₸» в
+  «Можно улучшить» — цены продавцов в объявлениях физических товаров, как в ленте.
+- Камера — только по нажатию: «Снять» у комнаты и у вещи гардероба, «Снять наклейку» у техники, «Измерить в AR»
+  у комнаты, проёма, окна и кабины лифта (та же AR-линейка, что у «Поместится ли?»; без AR кнопки нет). Фото
+  и снимки экрана — через системный выбор фото (PhotosPicker: «Из галереи», «Из Фото», «Заполнить по снимку экрана» —
+  до 4 снимков): приложение получает только выбранное, разрешение на всю медиатеку не спрашивается. В Фото iPhone
+  ничего не сохраняется.
+- Фото перерисовываются без EXIF и места съёмки и защищены файловой защитой iOS, папка и каждый файл — «не в резервную
+  копию» (`isExcludedFromBackup`). Vision на телефоне читает текст (наклейка, снимок экрана), отделяет вещь от фона и
+  подсказывает вид вещи («похоже на» — человек подтверждает сам). Лица не распознаются.
+- Удаление (5.1.1(v)): «Удалить всё «Моё»» стирает и дом, и компьютеры, и гардероб с образами, и добавленные покупки, и
+  отметку «Скрыть» полки «Для вас» (окно подтверждения называет дом, компьютеры и гардероб). Строка «Моё: машины, дом, компьютер, гардероб,
+  мерки и фото» в Кабинет → «Данные на телефоне» и выход из аккаунта стирают то же самое.
+- ⚠️ Текст разрешения камеры (`NSCameraUsageDescription` в `project.yml`) из «Моего» называет только машину сбоку и
+  снимок в полный рост; комнаты, наклейки техники и вещи гардероба в нём не названы. Перед отправкой стоит дописать
+  пример (правило 5.1.1(ii)).
+- Анкета App Privacy и `PrivacyInfo.xcprivacy` не меняются: обработка только на устройстве, запросы полки — те же
+  публичные ленты разделов.
+- Что показать проверяющему: Кабинет → «Моё» → «Мой дом» — кровать и лифт чипами, затем «Пройдёт ли в дверь и лифт?»;
+  «Мой компьютер» — компьютер или ноутбук и «Можно улучшить»; «Мой гардероб» — вещь, «Снять» или «Из Фото», затем «С чем
+  носить» → «Подобрать»; главная → полка «Для вас»; в конце «Удалить всё «Моё»».
+
+## 3д. Цифровые товары (для Review Notes; 16.10.2026)
+
+Код — `Sources/Native/Feed/ListingDigital.swift`, `Sources/Native/Design/ListingDigitalPanel.swift`,
+`Sources/Native/Deals/DealDigital.swift`, `Sources/Native/MyListings/MyListingDigital.swift`. Показ —
+`Config.цифровоеВПриложенииВСборке = false`; ключ сервера `digital_show` может только выключить показ, включить его может
+лишь новая сборка после проверки.
+
+- На сайте есть раздел цифровых кодов (игровые ключи, подарочные карты, лицензии). Приложение их **не показывает и не
+  продаёт** (правило 3.1.1): цифровые объявления отбрасываются в ленте, поиске, каталоге, на главной, на карте, в
+  избранном и в остальных списках; в подаче такого раздела нет.
+- Объявление, открытое по ссылке или пушу, показывает только сведения о коде и строку «Эта возможность
+  недоступна в приложении.»: нет «Купить», «Торг» и «Связаться», чат скрыт. Ссылок и слов о покупке на сайте нет.
+- Сам код в приложение не приходит и **не открывается** в нём (`digital_reveal` не вызывается нигде). Сделка такого
+  кода, купленного вне приложения, показывает в «Моих сделках» только название, сумму и статус, а вместо шагов —
+  строку «Цифровой код открывается в веб-версии кабинета» без ссылки.
+- Продавец видит свои цифровые объявления в «Моих объявлениях» со значком «Цифровой товар»: снять и удалить можно, править
+  в приложении — нет (строка «Правка цифровых товаров — в веб-версии кабинета», без ссылки).
 
 ---
 
@@ -235,11 +290,27 @@ full-length photo, so the app can show listings that fit them: a "Fits mine" not
 phone cases, laptop bags, clothing and shoes, checked against the listing text) and a "Fits mine" chip that filters the
 loaded feed, both computed on the device. Everything stays on the device (Application
 Support, excluded from backups); photos are re-encoded without metadata and are not saved to the Photos library. Apple
-Vision on the device only finds body pose points and whether people are in a car photo; no face recognition. The only
-network request is the public wheel-spec lookup with make, model and year (no sign-in, no cookies). The camera is
-requested only when the user taps "Shoot with guide". "Delete all My Things" removes everything in one step (in the
-screen and in Cabinet > Data on this phone); signing out also deletes it, and the sign-out dialog says so. Nothing is
-sold here.
+Vision on the device only finds body pose points and whether people are in a car photo; no face recognition. No My
+Things data is sent to our server, except the car's make, model and year for the public wheel-spec lookup (no sign-in,
+no cookies). The camera is requested only when the user taps "Shoot with guide". "Delete all My Things" removes
+everything in one step (in the screen and in Cabinet > Data on this phone); signing out also deletes it, and the
+sign-out dialog says so. Nothing is sold here.
+
+MY HOME, MY COMPUTER, MY WARDROBE, "FOR YOU"
+In My Things users can also save their home (rooms, doorways, elevator, beds, windows, TV, lighting, appliances; "Will
+it fit through the door and lift?"), up to 4 computers ("Fill in from a screenshot": on-device Vision text recognition,
+screenshots are not stored; "Upgrade options") and their wardrobe (clothes and outfits; background removal and colors
+on the device; "What to wear with"). "Add from my purchases" (sign-in) reads the user's completed safe-deal purchases,
+read-only. The "For you" shelf on the Home tab, the "from" prices in "Upgrade options" and "Find matches" load ordinary
+public category feeds (category, city and ordinary feed filters only; the shelf without cookies) and match on the
+device: no My Things values are sent. All of it stays on the device and "Delete all My Things" erases it. The camera
+opens only on "Take photo", "Shoot the sticker" or "Measure in AR"; photos come from the system photo picker (no photo
+library access requested). Nothing is sold here.
+
+DIGITAL GOODS (3.1.1)
+Digital-code listings (game keys, gift cards, licenses) are not shown or sold in the app: they are filtered out of all
+lists and cannot be posted. One opened from a link shows only its details and "This feature is not available in the
+app." (no Buy, Offer, Contact or chat); codes are never revealed in the app.
 
 ACCOUNT DELETION
 Cabinet > Settings > Delete account (in-app, step-by-step).
