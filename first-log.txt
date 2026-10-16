@@ -1,0 +1,3 @@
+Timestamp               Ty Process[PID:TID]
+2026-10-16 20:48:25.142 Df Kliko[23879:10400] [com.apple.Safari.SafeBrowsing:Database] Service did finish database update with protection type 1 and provider 1
+2026-10-16 20:48:25.143 Df Kliko[23879:10400] [com.apple.Safari.SafeBrowsing:Database] Service did finish database update with protection type 1 and provider 1

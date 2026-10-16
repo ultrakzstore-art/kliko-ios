@@ -1,0 +1,156 @@
+Timestamp               Ty Process[PID:TID]
+2026-10-16 20:52:00.604 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:00.609 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <A140DA16-9510-42A0-AE7C-FD41F7C5C963>.<31> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:00.611 Df Kliko[31256:154b2] [com.apple.CFNetwork:Summary] Task <A140DA16-9510-42A0-AE7C-FD41F7C5C963>.<31> summary for task success {transaction_duration_ms=1, response_status=200, cache_hit=true}
+2026-10-16 20:52:00.612 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Task <A140DA16-9510-42A0-AE7C-FD41F7C5C963>.<31> finished successfully
+2026-10-16 20:52:00.647 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:04.428 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:04.431 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <79487798-6DB8-4B77-97B3-08052DFD52CA>.<32> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:04.433 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <79487798-6DB8-4B77-97B3-08052DFD52CA>.<32> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:52:04.434 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <79487798-6DB8-4B77-97B3-08052DFD52CA>.<32> finished successfully
+2026-10-16 20:52:04.461 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:10.394 A  Kliko[31256:1529d] (StoreKit) StoreKit/TransactionUpdateStart
+2026-10-16 20:52:10.554 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:10.565 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <D94F5CB1-47CD-48D9-A776-DECF166193C2>.<33> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:10.567 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <D94F5CB1-47CD-48D9-A776-DECF166193C2>.<33> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:52:10.567 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <D94F5CB1-47CD-48D9-A776-DECF166193C2>.<33> finished successfully
+2026-10-16 20:52:10.661 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:11.151 Df Kliko[31256:1529c] [com.apple.xpc:connection] [0x14e095900] activating connection: mach=true listener=false peer=false name=com.apple.metrickit.xpc
+2026-10-16 20:52:11.270 Df Kliko[31256:1529c] [com.apple.xpc:connection] [0x14e095900] failed to do a bootstrap look-up: xpc_error=[3: No such process]
+2026-10-16 20:52:11.271 Df Kliko[31256:1529c] [com.apple.xpc:connection] [0x14e095900] invalidated after a failed init
+2026-10-16 20:52:14.514 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:14.521 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Task <07D5FC96-CCBF-40A8-A1BA-CA29D417D53A>.<34> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:14.522 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <07D5FC96-CCBF-40A8-A1BA-CA29D417D53A>.<34> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:52:14.522 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <07D5FC96-CCBF-40A8-A1BA-CA29D417D53A>.<34> finished successfully
+2026-10-16 20:52:14.559 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:15.417 Df Kliko[31256:1545f] [com.apple.network:connection] nw_socket_handle_socket_event [C1.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:15.418 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:15.418 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:15.418 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 1: read-side closed
+2026-10-16 20:52:15.419 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 1: cleaning up
+2026-10-16 20:52:15.419 Df Kliko[31256:1545f] [com.apple.network:connection] [C1 4BF64AE4-3E21-4ED7-B127-A8547C8D525B Hostname#5f499edf:443 quic-connection, url hash: e989ae99, definite, attribution: developer] cancel
+2026-10-16 20:52:15.420 Df Kliko[31256:1545f] [com.apple.network:connection] [C1 4BF64AE4-3E21-4ED7-B127-A8547C8D525B Hostname#5f499edf:443 quic-connection, url hash: e989ae99, definite, attribution: developer] cancelled
+	[C1.1.1.1 29EBAB59-09E8-4FA9-9CB8-9E0A71C192C0 192.168.64.17:56596<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 91.639s, DNS @0.004s took 0.001s, TCP @0.007s took 0.200s, TLS 1.3 took 0.684s
+	bytes in/out: 6820/1897, packets in/out: 8/6, rtt: 0.199s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/5/0/0
+2026-10-16 20:52:15.429 Df Kliko[31256:1545f] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C1] reporting state cancelled
+2026-10-16 20:52:15.435 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 1: done
+2026-10-16 20:52:22.055 Df Kliko[31256:1545f] [com.apple.network:connection] nw_socket_handle_socket_event [C3.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:22.055 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:22.055 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:22.055 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 3: read-side closed
+2026-10-16 20:52:22.057 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 3: cleaning up
+2026-10-16 20:52:22.057 Df Kliko[31256:1545f] [com.apple.network:connection] [C3 85632C1B-36CF-46FD-919B-FE2B2901854D Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/img/uploads/u260831215455904c6a.jpg, definite, attribution: developer] cancel
+2026-10-16 20:52:22.058 Df Kliko[31256:1545f] [com.apple.network:connection] [C3 85632C1B-36CF-46FD-919B-FE2B2901854D Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/img/uploads/u260831215455904c6a.jpg, definite, attribution: developer] cancelled
+	[C3.1.1.1 7D473405-1EC7-478A-AA26-38BFCF0C0F32 192.168.64.17:56632<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 91.086s, DNS @0.008s took 0.003s, TCP @0.016s took 0.194s, TLS 1.3 took 0.310s
+	bytes in/out: 207010/1879, packets in/out: 81/6, rtt: 0.195s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/5/0/0
+2026-10-16 20:52:22.059 Df Kliko[31256:1545f] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C3] reporting state cancelled
+2026-10-16 20:52:22.059 Df Kliko[31256:1545f] [com.apple.CFNetwork:Default] Connection 3: done
+2026-10-16 20:52:31.922 Df Kliko[31256:154b2] [com.apple.network:connection] nw_socket_handle_socket_event [C5.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:31.922 Df Kliko[31256:154b2] [com.apple.network:connection] nw_socket_handle_socket_event [C6.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:31.923 Df Kliko[31256:154b2] [com.apple.network:connection] nw_socket_handle_socket_event [C2.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:52:31.943 A  Kliko[31256:1529d] (StoreKit) StoreKit/TransactionQuery
+2026-10-16 20:52:31.945 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 5: read-side closed
+2026-10-16 20:52:31.951 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 5: read-side closed
+2026-10-16 20:52:31.951 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 5: read-side closed
+2026-10-16 20:52:31.957 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 5: cleaning up
+2026-10-16 20:52:31.960 Df Kliko[31256:154b2] [com.apple.network:connection] [C5 1AE98FC0-1F2F-4C2C-8327-9F43B684AD3C Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/subs.php, definite, attribution: developer] cancel
+2026-10-16 20:52:31.968 Df Kliko[31256:154b2] [com.apple.network:connection] [C5 1AE98FC0-1F2F-4C2C-8327-9F43B684AD3C Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/subs.php, definite, attribution: developer] cancelled
+	[C5.1.1.1 66275972-9720-4448-BD83-90C0E58BDB65 192.168.64.17:56664<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 98.152s, DNS @0.289s took 0.213s, TCP @0.519s took 0.194s, TLS 1.3 took 0.395s
+	bytes in/out: 6389/1958, packets in/out: 8/6, rtt: 0.196s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/5/0/0
+2026-10-16 20:52:31.969 Df Kliko[31256:154b2] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C5] reporting state cancelled
+2026-10-16 20:52:31.970 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 5: done
+2026-10-16 20:52:31.988 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 6: read-side closed
+2026-10-16 20:52:31.988 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 6: read-side closed
+2026-10-16 20:52:31.988 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 6: read-side closed
+2026-10-16 20:52:31.991 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 6: cleaning up
+2026-10-16 20:52:31.992 Df Kliko[31256:154b2] [com.apple.network:connection] [C6 8E10E325-5DE8-4F09-AD1A-4C3DF36073BA Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/api/brief.php, definite, attribution: developer] cancel
+2026-10-16 20:52:31.992 Df Kliko[31256:154b2] [com.apple.network:connection] [C6 8E10E325-5DE8-4F09-AD1A-4C3DF36073BA Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/api/brief.php, definite, attribution: developer] cancelled
+	[C6.1.1.1 A86A9855-ABF9-408C-8FFD-C48041401F0E 192.168.64.17:56665<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 97.891s, DNS @0.030s took 0.180s, TCP @0.272s took 0.194s, TLS 1.3 took 0.368s
+	bytes in/out: 6336/1947, packets in/out: 7/6, rtt: 0.197s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 6/5/0/0
+2026-10-16 20:52:31.998 Df Kliko[31256:154b2] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C6] reporting state cancelled
+2026-10-16 20:52:31.998 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 6: done
+2026-10-16 20:52:31.999 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 2: read-side closed
+2026-10-16 20:52:31.999 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 2: read-side closed
+2026-10-16 20:52:31.999 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 2: read-side closed
+2026-10-16 20:52:31.999 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 2: cleaning up
+2026-10-16 20:52:32.000 Df Kliko[31256:154b2] [com.apple.network:connection] [C2 2B5C1437-9468-4E6A-9B76-F30911878D14 Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/api/listings.php, definite, attribution: developer] cancel
+2026-10-16 20:52:32.019 Df Kliko[31256:154b2] [com.apple.network:connection] [C2 2B5C1437-9468-4E6A-9B76-F30911878D14 Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/api/listings.php, definite, attribution: developer] cancelled
+	[C2.1.1.1 7EF57234-AB13-46CC-B46A-F18EE1FE65EC 192.168.64.17:56611<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 104.996s, DNS @0.043s took 0.014s, TCP @0.224s took 0.193s, TLS 1.3 took 0.215s
+	bytes in/out: 31021/2201, packets in/out: 18/8, rtt: 0.197s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 8/7/0/0
+2026-10-16 20:52:32.022 Df Kliko[31256:154b2] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C2] reporting state cancelled
+2026-10-16 20:52:32.022 Df Kliko[31256:154b2] [com.apple.CFNetwork:Default] Connection 2: done
+2026-10-16 20:52:51.584 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:51.591 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <7CB8703B-BC3B-43C6-BE18-E89692908F4A>.<35> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:51.597 Df Kliko[31256:154b3] [com.apple.CFNetwork:Summary] Task <7CB8703B-BC3B-43C6-BE18-E89692908F4A>.<35> summary for task success {transaction_duration_ms=3, response_status=200, cache_hit=true}
+2026-10-16 20:52:51.597 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <7CB8703B-BC3B-43C6-BE18-E89692908F4A>.<35> finished successfully
+2026-10-16 20:52:51.676 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:55.411 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:55.413 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <403C0FCC-3BF1-4CF6-8262-022E48BB8D94>.<36> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:55.415 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <403C0FCC-3BF1-4CF6-8262-022E48BB8D94>.<36> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:52:55.415 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <403C0FCC-3BF1-4CF6-8262-022E48BB8D94>.<36> finished successfully
+2026-10-16 20:52:55.461 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:59.229 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:52:59.233 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <F31D7BB5-B7CC-4817-B433-F94268ADD6EA>.<37> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:52:59.236 Df Kliko[31256:154b3] [com.apple.CFNetwork:Summary] Task <F31D7BB5-B7CC-4817-B433-F94268ADD6EA>.<37> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:52:59.236 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <F31D7BB5-B7CC-4817-B433-F94268ADD6EA>.<37> finished successfully
+2026-10-16 20:52:59.279 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.network:connection] nw_socket_handle_socket_event [C4.1.1.1:3] Socket received READ_CLOSE event
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Connection 4: read-side closed
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Connection 4: read-side closed
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Connection 4: read-side closed
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Connection 4: cleaning up
+2026-10-16 20:53:00.066 Df Kliko[31256:154b3] [com.apple.network:connection] [C4 A05FD9BF-74B4-4ADF-ABCA-23BA37E96A1E Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/img/uploads/u260830204428116ad9.jpg, definite, attribution: developer] cancel
+2026-10-16 20:53:00.068 Df Kliko[31256:154b3] [com.apple.network:connection] [C4 A05FD9BF-74B4-4ADF-ABCA-23BA37E96A1E Hostname#5f499edf:443 quic-connection, url: https://kliko.kz/img/uploads/u260830204428116ad9.jpg, definite, attribution: developer] cancelled
+	[C4.1.1.1 7D473405-1EC7-478A-AA26-38BFCF0C0F32 192.168.64.17:56639<->IPv4#149c2e30:443]
+	Connected Path: satisfied (Path is satisfied), interface: en0
+	Privacy Stance: Not Eligible
+	Duration: 128.497s, DNS @0.220s took 0.616s, TCP @0.949s took 0.188s, TLS 1.3 took 0.311s
+	bytes in/out: 3399420/2983, packets in/out: 1218/17, rtt: 0.205s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 17/16/0/0
+2026-10-16 20:53:00.068 Df Kliko[31256:154b3] [com.apple.network:connection] nw_connection_report_state_with_handler_on_nw_queue [C4] reporting state cancelled
+2026-10-16 20:53:00.069 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Connection 4: done
+2026-10-16 20:53:03.297 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:03.316 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <72692AD7-8E92-4D0C-8854-6AE37B7178B4>.<38> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:53:03.318 Df Kliko[31256:15297] [com.apple.CFNetwork:Summary] Task <72692AD7-8E92-4D0C-8854-6AE37B7178B4>.<38> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:53:03.318 Df Kliko[31256:15297] [com.apple.CFNetwork:Default] Task <72692AD7-8E92-4D0C-8854-6AE37B7178B4>.<38> finished successfully
+2026-10-16 20:53:03.377 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:29.627 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:29.636 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <ED3E4417-0347-4DCD-9BAE-8847C45A3E9D>.<39> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:53:29.642 Df Kliko[31256:154b3] [com.apple.CFNetwork:Summary] Task <ED3E4417-0347-4DCD-9BAE-8847C45A3E9D>.<39> summary for task success {transaction_duration_ms=1, response_status=200, cache_hit=true}
+2026-10-16 20:53:29.642 Df Kliko[31256:154b3] [com.apple.CFNetwork:Default] Task <ED3E4417-0347-4DCD-9BAE-8847C45A3E9D>.<39> finished successfully
+2026-10-16 20:53:29.678 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:33.429 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:33.431 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <5F04058C-EBA3-44DE-9537-19F67671948C>.<40> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:53:33.433 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <5F04058C-EBA3-44DE-9537-19F67671948C>.<40> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:53:33.433 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <5F04058C-EBA3-44DE-9537-19F67671948C>.<40> finished successfully
+2026-10-16 20:53:33.475 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:37.228 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:37.233 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <C86BF64A-D6D8-461B-864E-98786C6C9882>.<41> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:53:37.235 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <C86BF64A-D6D8-461B-864E-98786C6C9882>.<41> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:53:37.235 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <C86BF64A-D6D8-461B-864E-98786C6C9882>.<41> finished successfully
+2026-10-16 20:53:37.276 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:41.260 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-16 20:53:41.262 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <158E5FBA-B601-42C1-B481-470BFB059CF2>.<42> resuming, timeouts(60.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+2026-10-16 20:53:41.263 Df Kliko[31256:15463] [com.apple.CFNetwork:Summary] Task <158E5FBA-B601-42C1-B481-470BFB059CF2>.<42> summary for task success {transaction_duration_ms=0, response_status=200, cache_hit=true}
+2026-10-16 20:53:41.263 Df Kliko[31256:15463] [com.apple.CFNetwork:Default] Task <158E5FBA-B601-42C1-B481-470BFB059CF2>.<42> finished successfully
+2026-10-16 20:53:41.297 Df Kliko[31256:15259] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:kz.kliko.app-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
