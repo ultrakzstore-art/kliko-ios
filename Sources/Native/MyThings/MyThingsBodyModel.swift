@@ -1,0 +1,224 @@
+import Foundation
+
+/**
+ «МОЁ» — ТЕЛО: МЕРКИ, ВИДЫ РАЗМЕРОВ И РАЗМЕР В СВОЕЙ СИСТЕМЕ (часть модели «Моего», MyThingsModel.swift).
+
+ Мерки — полные обхваты и длины тела в сантиметрах (ключи — как у замеров вещи rules.fit). Размер хранится значением
+ своей системы, а не номером ряда: таблицы размеров (ClothingSizes — только вызовы) могут сдвинуть ряды. Детских
+ размеров нет: данные детей не собираем. Чтение — терпимое, с короткими ASCII-ключами, как у всей записи.
+ */
+
+// MARK: - Тело
+
+/// Мерка тела — ПОЛНЫЕ обхваты и длины, см. Ключи — те же, что у замеров вещи (rules.fit), кроме стопы (у вещи insole)
+/// и головы (для шапок). Сверка позже: ширина вещи × 2 против обхвата тела плюс запас.
+enum МеркаМоего: String, Codable, CaseIterable, Sendable {
+    case грудь = "chest"
+    case талия = "waist"
+    case бёдра = "hips"
+    case плечи = "shoulders"
+    case рукав = "sleeve"
+    case шаг = "inseam"
+    case стопа = "foot"
+    case голова = "head"
+
+    /// Что можно сохранить, см.
+    var пределы: ClosedRange<Double> {
+        switch self {
+        case .грудь: return 60...160
+        case .талия: return 45...160
+        case .бёдра: return 60...170
+        case .плечи: return 30...65
+        case .рукав: return 45...85
+        case .шаг: return 55...100
+        case .стопа: return 15...35
+        case .голова: return 45...65
+        }
+    }
+
+    /// «Обычно 80–120 см» под полем — у взрослых.
+    var обычно: (Int, Int) {
+        switch self {
+        case .грудь: return (80, 120)
+        case .талия: return (60, 105)
+        case .бёдра: return (85, 125)
+        case .плечи: return (38, 50)
+        case .рукав: return (55, 68)
+        case .шаг: return (70, 90)
+        case .стопа: return (22, 30)
+        case .голова: return (53, 60)
+        }
+    }
+
+    /// Ключ замера вещи в rules.fit (у стопы — стелька).
+    var ключСхемы: String { self == .стопа ? "insole" : rawValue }
+
+    var название: String { МоёТелоText.т("mb_m_" + rawValue) }
+
+    /// Как мерить — одной строкой.
+    var как: String { МоёТелоText.т("mb_h_" + rawValue) }
+
+    /// Шаг округления: у стопы — полсантиметра, у остальных — сантиметр.
+    var приращение: Double { self == .стопа ? 0.5 : 1 }
+}
+
+/// Вид размера — свой ключ хранения (у женской и мужской одежды в таблицах одна вкладка «cl»).
+enum ВидРазмераМоего: String, Codable, CaseIterable, Sendable {
+    case обувьЖ = "shoes_women"
+    case обувьМ = "shoes_men"
+    case одеждаЖ = "clothes_women"
+    case одеждаМ = "clothes_men"
+    case джинсыЖ = "jeans_women"
+    case джинсыМ = "jeans_men"
+    case бельё = "bra"
+    case кольцо = "ring"
+    case шапка = "hat"
+    case перчатки = "gloves"
+
+    /// Таблица размеров (ClothingSizes.swift — только вызовы).
+    var вкладка: ВкладкаРазмеровОдежды {
+        switch self {
+        case .обувьЖ: return ТаблицыРазмеровОдежды.вкладкаЖенскойОбуви
+        case .обувьМ: return ТаблицыРазмеровОдежды.вкладкаМужскойОбуви
+        case .одеждаЖ: return ТаблицыРазмеровОдежды.вкладкаЖенскойОдежды
+        case .одеждаМ: return ТаблицыРазмеровОдежды.вкладкаМужскойОдежды
+        case .джинсыЖ: return ТаблицыРазмеровОдежды.вкладкаЖенскихДжинсов
+        case .джинсыМ: return ТаблицыРазмеровОдежды.вкладкаМужскихДжинсов
+        case .бельё: return ТаблицыРазмеровОдежды.вкладкаБелья
+        case .кольцо: return ТаблицыРазмеровОдежды.вкладкаКолец
+        case .шапка: return ТаблицыРазмеровОдежды.вкладкаШапок
+        case .перчатки: return ТаблицыРазмеровОдежды.вкладкаПерчаток
+        }
+    }
+
+    /// «Мужская обувь»; у джинсов таблица общая — подпись своя.
+    var подпись: String {
+        switch self {
+        case .джинсыЖ: return МоёТелоText.т("mb_jeans_w")
+        case .джинсыМ: return МоёТелоText.т("mb_jeans_m")
+        default: return РазмерыОдеждыText.т("cap_" + вкладка.основная.ключ)
+        }
+    }
+
+    var значок: String {
+        switch self {
+        case .обувьЖ, .обувьМ: return "shoeprints.fill"
+        case .одеждаЖ, .одеждаМ, .джинсыЖ, .джинсыМ, .бельё: return "tshirt"
+        case .кольцо: return "circle.circle"
+        case .шапка: return "person.crop.circle"
+        case .перчатки: return "hand.raised"
+        }
+    }
+
+    var обувь: Bool { self == .обувьЖ || self == .обувьМ }
+    var одежда: Bool { self == .одеждаЖ || self == .одеждаМ || self == .джинсыЖ || self == .джинсыМ }
+}
+
+/// Размер человека в своей системе: «US M 9.5», «W32 L32», «75B». Ряд таблицы ищется по значению, а не по номеру:
+/// таблицы из rules.sizes могут сдвинуть ряды.
+struct РазмерМоего: Codable, Equatable, Sendable {
+    var вид: ВидРазмераМоего
+    /// Код системы вкладки: «EU», «US M», «W», «RU/EU».
+    var система: String
+    /// Основной столбец своей системы: «9.5», «32», «75».
+    var значение: String
+    /// Длина L джинсов или чашка; иначе пусто.
+    var значение2: String
+
+    enum CodingKeys: String, CodingKey {
+        case вид = "kind"
+        case система = "sys"
+        case значение = "v"
+        case значение2 = "v2"
+    }
+
+    init(вид: ВидРазмераМоего, система: String, значение: String, значение2: String = "") {
+        self.вид = вид
+        self.система = система
+        self.значение = значение
+        self.значение2 = значение2
+    }
+
+    init(from decoder: Decoder) throws {
+        let к = try decoder.container(keyedBy: CodingKeys.self)
+        вид = try к.decode(ВидРазмераМоего.self, forKey: .вид)
+        система = try String(к.decode(String.self, forKey: .система).prefix(16))
+        значение = try String(к.decode(String.self, forKey: .значение).prefix(16))
+        значение2 = String((к.значениеМоего(String.self, .значение2) ?? "").prefix(16))
+    }
+
+    /// Выбор в таблице: ряд — по значению в столбце своей системы. nil — такого значения в таблице больше нет.
+    func выбор() -> ВыборРазмераОдежды? {
+        let в = вид.вкладка
+        guard let с = в.система(система) else { return nil }
+        let нужное = ПравилаРазмераОдежды.ключ(значение)
+        guard let ряд = в.основная.чипы(с.первый).first(where: { ПравилаРазмераОдежды.ключ($0.значение) == нужное })?.id
+        else { return nil }
+        var ряд2: Int? = nil
+        if let второй = с.второй, let т2 = в.вторая, !значение2.isEmpty {
+            let нужное2 = ПравилаРазмераОдежды.ключ(значение2)
+            ряд2 = т2.чипы(второй).first(where: { ПравилаРазмераОдежды.ключ($0.значение) == нужное2 })?.id
+        }
+        return ВыборРазмераОдежды(вкладка: в.ключ, ряд: ряд, ряд2: ряд2)
+    }
+
+    /// Бирка всех систем; крупно — своя система.
+    func бирка() -> ДанныеБиркиРазмера? {
+        guard let выбор = выбор() else { return nil }
+        return вид.вкладка.бирка(выбор, система: система)
+    }
+
+    /// «EU 42», «W32 L32» — как на бирке; таблица не нашла значение — как сохранено.
+    var коротко: String {
+        if let б = бирка(), !б.главная.isEmpty { return б.главная }
+        let хвост = значение2.isEmpty ? "" : " " + значение2
+        return РазмерыОдеждыText.система(система) + " " + значение + хвост
+    }
+}
+
+/// Рост, мерки, размеры по видам и фото в полный рост.
+struct ТелоМоего: Codable, Equatable, Sendable {
+    /// См, 100…230.
+    var рост: Int?
+    /// Ключ — МеркаМоего.rawValue, значение — см.
+    var мерки: [String: Double]
+    /// По одному на вид.
+    var размеры: [РазмерМоего]
+    var фото: ФотоМоего?
+
+    static let пределыРоста = 100...230
+
+    enum CodingKeys: String, CodingKey {
+        case рост = "h"
+        case мерки = "m"
+        case размеры = "sizes"
+        case фото = "photo"
+    }
+
+    init(рост: Int? = nil, мерки: [String: Double] = [:], размеры: [РазмерМоего] = [], фото: ФотоМоего? = nil) {
+        self.рост = рост
+        self.мерки = мерки
+        self.размеры = размеры
+        self.фото = фото
+    }
+
+    init(from decoder: Decoder) throws {
+        let к = try decoder.container(keyedBy: CodingKeys.self)
+        рост = к.значениеМоего(Int.self, .рост).flatMap { Self.пределыРоста.contains($0) ? $0 : nil }
+        var годные: [String: Double] = [:]
+        for (ключ, значение) in к.значениеМоего([String: Double].self, .мерки) ?? [:] {
+            guard let мерка = МеркаМоего(rawValue: ключ), мерка.пределы.contains(значение) else { continue }
+            годные[ключ] = значение
+        }
+        мерки = годные
+        var виды = Set<ВидРазмераМоего>()
+        размеры = к.списокМоего(РазмерМоего.self, .размеры).filter { виды.insert($0.вид).inserted }
+        фото = к.значениеМоего(ФотоМоего.self, .фото)
+    }
+
+    func мерка(_ м: МеркаМоего) -> Double? { мерки[м.rawValue] }
+
+    func размер(_ вид: ВидРазмераМоего) -> РазмерМоего? { размеры.first { $0.вид == вид } }
+
+    var пусто: Bool { рост == nil && мерки.isEmpty && размеры.isEmpty && фото == nil }
+}

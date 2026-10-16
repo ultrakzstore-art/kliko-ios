@@ -43,7 +43,7 @@ enum CabinetText {
                "data_footer_synced": "Избранное хранится в вашем аккаунте на сайте, история — только на этом телефоне и стирается при выходе из аккаунта.",
                "about": "О приложении", "version": "Версия", "build": "Сборка",
                "logout_row": "Выйти из аккаунта",
-               "logout_footer": "Выход — в кабинете на сайте: так сервер закроет сессию и перестанет присылать уведомления на этот телефон, а приложение сотрёт данные аккаунта."],
+               "logout_footer": "Выход — в кабинете на сайте: так сервер закроет сессию и перестанет присылать уведомления на этот телефон, а приложение сотрёт данные аккаунта. Раздел «Моё» (машины, мерки и фото) тоже удалится с телефона."],
         "kk": ["title": "Профиль",
                "more": "Тағы", "favorites": "Таңдаулылар", "dlv_rent": "Жеткізулер мен жалдар",
                "docs": "Шоттар мен құжаттар", "biz_toggle": "Мен бизнеспін",
@@ -78,7 +78,7 @@ enum CabinetText {
                "data_footer_synced": "Таңдаулылар сайттағы аккаунтыңызда сақталады, тарих — тек осы телефонда және аккаунттан шыққанда өшіріледі.",
                "about": "Қосымша туралы", "version": "Нұсқа", "build": "Жинақ",
                "logout_row": "Аккаунттан шығу",
-               "logout_footer": "Шығу — сайттағы кабинетте: сонда сервер сессияны жабады және осы телефонға хабарландыру жіберуді тоқтатады, ал қосымша аккаунт деректерін өшіреді."],
+               "logout_footer": "Шығу — сайттағы кабинетте: сонда сервер сессияны жабады және осы телефонға хабарландыру жіберуді тоқтатады, ал қосымша аккаунт деректерін өшіреді. «Менікі» бөлімі (көліктер, өлшемдер мен суреттер) де телефоннан өшеді."],
         "en": ["title": "Profile",
                "more": "More", "favorites": "Favorites", "dlv_rent": "Deliveries and rentals",
                "docs": "Invoices and documents", "biz_toggle": "I'm a business",
@@ -113,7 +113,7 @@ enum CabinetText {
                "data_footer_synced": "Favorites are stored in your account on the website; history stays only on this phone and is erased when you sign out.",
                "about": "About", "version": "Version", "build": "Build",
                "logout_row": "Sign out",
-               "logout_footer": "Sign out in your account on the website: the server then closes the session and stops sending notifications to this phone, and the app erases the account's data."],
+               "logout_footer": "Sign out in your account on the website: the server then closes the session and stops sending notifications to this phone, and the app erases the account's data. My Things (cars, measurements and photos) will also be deleted from the phone."],
         "ar": ["title": "الملف الشخصي",
                "more": "المزيد", "favorites": "المفضلة", "dlv_rent": "التوصيل والتأجير",
                "docs": "الفواتير والمستندات", "biz_toggle": "أنا نشاط تجاري",
@@ -148,6 +148,6 @@ enum CabinetText {
                "data_footer_synced": "تُحفظ المفضلة في حسابك على الموقع، أما السجل فيبقى على هذا الهاتف فقط ويُمحى عند تسجيل الخروج.",
                "about": "حول التطبيق", "version": "الإصدار", "build": "رقم البناء",
                "logout_row": "تسجيل الخروج",
-               "logout_footer": "سجّل الخروج من حسابك على الموقع: عندها يُغلق الخادم الجلسة ويتوقف عن إرسال الإشعارات إلى هذا الهاتف، ويمحو التطبيق بيانات الحساب."]
+               "logout_footer": "سجّل الخروج من حسابك على الموقع: عندها يُغلق الخادم الجلسة ويتوقف عن إرسال الإشعارات إلى هذا الهاتف، ويمحو التطبيق بيانات الحساب. وسيُحذف قسم «أشيائي» (السيارات والقياسات والصور) من الهاتف أيضًا."]
     ]
 }

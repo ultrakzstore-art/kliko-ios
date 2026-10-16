@@ -145,6 +145,35 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
 - Что показать проверяющему: подать объявление в «Мебели» → «Подробно» → «Фото» → «3D-обзор · 5 фото»; на объявлении
   со значком «360°» или «3D» — повернуть, «В комнате».
 
+## 3в. «Моё» (для Review Notes; 16.10.2026)
+
+Код — `Sources/Native/MyThings/`, рубильник `Config.моё = true`, договор на будущее — `docs/SERVER_MY_THINGS.md`.
+
+| Что | Где найти | Где хранится | Что уходит с телефона |
+|---|---|---|---|
+| «Мой гараж»: до 5 машин, PCD, ET, DIA, R, шины, фото сбоку по шаблону | Кабинет → «Моё» → «Мой гараж»; из «Подойдут ли?» — «Мой гараж» | Application Support/MyThings на телефоне, вне iCloud и резервной копии | Только марка, модель и год — в справочник kliko.kz (`/api/autofit.php`, без входа и кук), как у «Подойдут ли?» |
+| «Мои устройства»: модель телефона (определяется по железу), ноутбук, мониторы, ТВ | Кабинет → «Моё» → «Мои устройства» | там же | Ничего |
+| «Мой рост и мерки»: рост, размеры в своей системе, мерки, фото в полный рост | Кабинет → «Моё» → «Мой рост и мерки» | там же; точки позы — Vision на телефоне | Ничего |
+
+- Работает **без входа**: карточка «Моё» видна и гостю. Ничего не продаётся, цен и покупок нет.
+- Камера — только по нажатию «Снять по шаблону» (контур машины сбоку или человека в полный рост); текст разрешения
+  в `project.yml` упоминает «Моё» и то, что снимки остаются на телефоне (5.1.1(ii)). Галерея — системный выбор фото,
+  разрешение на фото не нужно. В Фото iPhone снимки не сохраняются.
+- Фото перерисовываются (без EXIF и места съёмки), защищены файловой защитой iOS. Vision только находит точки позы и
+  «есть ли люди в кадре» — лица не распознаются, биометрических шаблонов нет. Детских размеров и фото детей нет; на
+  камере — совет «Снимайте только себя».
+- Удаление (5.1.1(v)): «Удалить всё «Моё»» одним шагом — внизу хаба и в меню «…»; строка «Моё: машины, устройства,
+  мерки и фото» в Кабинет → «Данные на телефоне»; у каждой машины, фото и размера — своё «Удалить». Выход из аккаунта
+  тоже стирает «Моё» — об этом сказано в окне выхода и под кнопкой «Выйти». Удаление приложения уносит всё.
+- «Подходит моему»: на странице объявления шин и дисков, чехлов, сумок для ноутбука, одежды и обуви — плашка «Подходят
+  ✓ / Не ваш размер / Проверьте модель» с подписью «Проверили по описанию объявления»; в ленте этих разделов — чип «Для
+  моего» (отбор уже загруженных карточек). Всё считается на телефоне, профиль на сервер не уходит.
+- Анкета App Privacy и `PrivacyInfo.xcprivacy` не меняются: обработка только на устройстве — не «сбор данных»;
+  UserDefaults (CA92.1) и даты файлов (C617.1) уже объявлены, размер «Моего» для кабинета берётся через fileSize.
+- Что показать проверяющему: Кабинет → «Моё» → «Мой гараж» → «Добавить машину» → марка, модель, год → «Снять по
+  шаблону»; «Мои устройства» — модель телефона определилась сама; «Мой рост и мерки» — линейка роста и «Добавить
+  размер»; затем «Удалить всё «Моё»».
+
 ---
 
 ## 4. Текст App Review Notes (вставить в App Store Connect → App Review Information → Notes)
@@ -198,6 +227,19 @@ Buyers see a "360" badge and can spin the item through these photos on the listi
 the model can be viewed in the room with AR Quick Look. If an AI-built 3D model is offered, the app first shows a
 consent screen naming the AI provider; unpublished photos are deleted within 24 hours and nothing is used to train AI.
 AI-built models are labeled as such. Nothing is sold in this flow.
+
+MY THINGS (Cabinet > "My Things", no sign-in needed)
+Users can save their car (make, model, year, wheel specs and a side photo taken with an on-screen guide), their devices
+(phone model detected on the device, laptop, monitors, TVs) and their height, clothing sizes, body measurements and a
+full-length photo, so the app can show listings that fit them: a "Fits mine" note on a listing page (tires and wheels,
+phone cases, laptop bags, clothing and shoes, checked against the listing text) and a "Fits mine" chip that filters the
+loaded feed, both computed on the device. Everything stays on the device (Application
+Support, excluded from backups); photos are re-encoded without metadata and are not saved to the Photos library. Apple
+Vision on the device only finds body pose points and whether people are in a car photo; no face recognition. The only
+network request is the public wheel-spec lookup with make, model and year (no sign-in, no cookies). The camera is
+requested only when the user taps "Shoot with guide". "Delete all My Things" removes everything in one step (in the
+screen and in Cabinet > Data on this phone); signing out also deletes it, and the sign-out dialog says so. Nothing is
+sold here.
 
 ACCOUNT DELETION
 Cabinet > Settings > Delete account (in-app, step-by-step).

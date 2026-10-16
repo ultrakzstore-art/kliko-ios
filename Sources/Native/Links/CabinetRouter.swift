@@ -219,6 +219,8 @@ enum АдресаКабинета {
         case ("s", "founder"): return Config.нативныйБизнес ? .разделКабинета(.клуб) : nil
         case ("s", "appear"), ("s", "home"): return .кабинет
         case ("s", "own_ai"): return .свойИИ
+        /* «Моё» (16.10.2026): ?go=my и ?s=my — хаб «Моё» поверх корня «Кабинета» (гостю тоже, без входа). */
+        case (_, "my"): return Config.моё ? .разделКабинета(.моё) : nil
         default: return nil
         }
     }

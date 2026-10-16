@@ -22,8 +22,12 @@ struct УточнениеЛенты: Equatable {
     var ценаОт = ""
     var ценаДо = ""
     var толькоНовые = false
+    /// «Для моего» (чип ленты, MyThings/MyThingsMatch.swift): снимок «Моего» на момент включения с итогами по
+    /// объявлениям; nil — выключено. Отбор — тоже по загруженному и по тому, что написано в объявлении. Работает и при
+    /// фильтрах на сервере.
+    var моё: ОтборМоегоЛенты? = nil
 
-    var пустое: Bool { город.isEmpty && нижняя == nil && верхняя == nil && !толькоНовые }
+    var пустое: Bool { город.isEmpty && нижняя == nil && верхняя == nil && !толькоНовые && моё == nil }
 
     var нижняя: Double? { Self.число(ценаОт) }
     var верхняя: Double? { Self.число(ценаДо) }
@@ -33,6 +37,7 @@ struct УточнениеЛенты: Equatable {
     func подходит(_ товар: Listing) -> Bool {
         if !город.isEmpty && товар.city.caseInsensitiveCompare(город) != .orderedSame { return false }
         if толькоНовые && !товар.isNew { return false }
+        if let моё, !моё.подходит(товар) { return false }
         let от = нижняя
         let до = верхняя
         if от != nil || до != nil {
@@ -110,6 +115,17 @@ struct ЛистУточнения: View {
                 Section {
                     Toggle(RefineText.т("only_new"), isOn: $модель.уточнение.толькоНовые)
                         .tint(Theme.green2)
+                }
+                /* «Для моего» включают чипом в шапке ленты (ЧипМоегоЛенты); здесь его можно только снять. */
+                if модель.уточнение.моё != nil {
+                    Section {
+                        Toggle(МоёСверкаText.т("mf_chip"),
+                               isOn: Binding(get: { модель.уточнение.моё != nil },
+                                             set: { if !$0 { модель.уточнение.моё = nil } }))
+                            .tint(Theme.green2)
+                    } footer: {
+                        Text(МоёСверкаText.т("mf_by_desc"))
+                    }
                 }
                 Section {
                     Button(RefineText.т("reset"), role: .destructive) {
