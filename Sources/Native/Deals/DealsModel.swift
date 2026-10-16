@@ -35,6 +35,9 @@ final class СделкиМодель: ObservableObject {
     @Published private(set) var загрузка: Загрузка = .нет
     /// Сколько сделок ждут человека (disputed|delivered, как loadDealsBadge) — значок у строки «Мои сделки».
     @Published private(set) var ждут: Int = 0
+    /// «Требует внимания» в кабинете (задание сервера 1.13, Б5): незакрытые сделки, где ход за человеком (next.who ==
+    /// me); без next — спор и «получено — подтвердите» у покупателя. Тот же ответ my_deals, что у значка.
+    @Published private(set) var внимание: [СделкаКратко] = []
     /// Скорость: на экране копия списка с диска (КэшКабинета), а свежий ответ ещё не пришёл или не пришёл вовсе.
     @Published private(set) var сКопии = false
     /// counts {seller, buyer} ответа my_deals (ultra-site 13.10.2026): незавершённые сделки по ролям — числа на вкладках.
@@ -191,6 +194,22 @@ final class СделкиМодель: ObservableObject {
             let статус = СделкиAPI.строка((з as? [String: Any])?["status"])
             return статус == "disputed" || статус == "delivered"
         }.count
+        let нужны = сырые.compactMap { з in (з as? [String: Any]).flatMap { СделкаКратко($0) } }
+            .filter(Self.нуженЧеловек)
+        /* Спор — первым, дальше — у кого срок ближе; без срока — в конце. */
+        let порядок = нужны.sorted { а, б in
+            let спорА = а.статус == "disputed", спорБ = б.статус == "disputed"
+            if спорА != спорБ { return спорА }
+            return (а.ход?.срок ?? .distantFuture) < (б.ход?.срок ?? .distantFuture)
+        }
+        if порядок != внимание { внимание = порядок }
+    }
+
+    /// Сделка ждёт именно этого человека: next говорит «ваш ход»; старый ответ без next — спор или «получено» у покупателя.
+    private static func нуженЧеловек(_ с: СделкаКратко) -> Bool {
+        guard !с.закрыта else { return false }
+        if let ход = с.ход { return ход.мойХод || с.статус == "disputed" }
+        return с.статус == "disputed" || (с.статус == "delivered" && !с.продавец)
     }
 
     /// counts {seller, buyer}: есть поле — числа вкладок; нет (старый ответ) — прежние.
@@ -210,6 +229,7 @@ final class СделкиМодель: ObservableObject {
         сделки = []
         сКопии = false
         ждут = 0
+        внимание = []
         вРаботе = [:]
         uid = ""
     }

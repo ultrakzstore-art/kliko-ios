@@ -329,6 +329,7 @@ struct CabinetView: View {
                 разделСигнала
                     .строкиСайта()
                 разделПлиток
+                разделВнимания
                 разделы
                     .строкиСайта()
             } else {
@@ -336,6 +337,7 @@ struct CabinetView: View {
                 разделКошелька
                 разделСигнала
                 разделПлиток
+                разделВнимания
                 разделы
             }
         }
@@ -530,6 +532,22 @@ struct CabinetView: View {
                     /* «Отзывы»: сводка своего человека — при показе плиток и при смене человека, не при перерисовке. */
                     .task(id: свойНомер) { await загрузитьСводкуОтзывов() }
                     .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+    /// «Требует внимания» (задание сервера 1.13, Б5) — под плитками: сделки, где ход за человеком (ВниманиеКабинета).
+    /// Нечего делать или гость — раздела нет.
+    @ViewBuilder
+    private var разделВнимания: some View {
+        if Config.нативныеСделки && вошёл == true && !сделки.внимание.isEmpty {
+            Section {
+                ВниманиеКабинета(сделки: сделки.внимание,
+                                 открыть: { номер in перейти(.сделка(номер)) },
+                                 все: { перейти(.сделки) })
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
