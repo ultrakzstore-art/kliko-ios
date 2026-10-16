@@ -210,7 +210,13 @@ struct NativeTabsView: View {
                         .оставитьМестоПодПанелью(местоПодПанелью)
                         .кНачалуПоНажатию(.сообщения)
                         .чатМаршруты(открыть: открыть)
+                        /* «Объявление» в переписке — в этот же стек, «Назад» вернёт в чат (владелец 16.10.2026,
+                           ListingReturn.swift); раньше кнопка уводила во вкладку «Лента». */
+                        .navigationDestination(for: Listing.self) { товар in
+                            ListingDetailView(товар: товар, открыть: открыть)
+                        }
                 }
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьСообщений.append(товар) })
             }
             if вкладка == .кабинет && Config.нативныйКабинет {
                 NavigationStack(path: $путьКабинета) {
@@ -483,7 +489,11 @@ struct NativeTabsView: View {
                     ChatListView(модель: чаты, открыть: открыть)
                         .кНачалуПоНажатию(.сообщения)
                         .чатМаршруты(открыть: открыть)
+                        .navigationDestination(for: Listing.self) { товар in
+                            ListingDetailView(товар: товар, открыть: открыть)     // «Объявление» в переписке
+                        }
                 }
+                .environment(\.открытьОбъявлениеВСтеке, { товар in путьСообщений.append(товар) })
                 .tabItem { Label(TabsText.т("messages"), systemImage: "bubble.left.and.bubble.right") }
                 .badge(чаты.непрочитано)
                 .tag(Вкладка.сообщения)
@@ -581,6 +591,9 @@ struct NativeTabsView: View {
         case .сделка(let номер):
             /* Этап 43: ?deal=<id> — как у сайта (showDeals, затем openDeal): «Мои сделки», поверх — карточка. */
             guard NativeRouter.доступна(.сделка(id: номер)) else { return }
+            /* Карточка этой сделки уже открыта листом над объявлением или чатом (ListingReturn.swift): она на экране и
+               задание банка заберёт сама; «Кабинет» под листом после «Закрыть» встретил бы второй копией. */
+            if СделкиЛистом.наЭкране(номер) { return }
             var путь = NavigationPath()
             путь.append(КабинетЦель.сделки)
             путь.append(КабинетЦель.сделка(номер))

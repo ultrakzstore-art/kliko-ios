@@ -20,6 +20,8 @@ struct ЭкранЗаявок: View {
     @State private var чат: ЧатЦель? = nil
     @State private var принять: Заявка? = nil
     @State private var входОткрыт = false
+    /// «Объявление» заявки — в стек «Кабинета», «Назад» вернёт к заявкам (ListingReturn.swift).
+    @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
 
     init(открыть: @escaping (URL) -> Void) {
         self.открыть = открыть
@@ -179,6 +181,8 @@ struct ЭкранЗаявок: View {
             принять = заявка
         case .объявление:
             if Config.нативнаяКарточка {
+                if ОбъявлениеИзЧата.здесь(заявка.объявлениеID, подЧатом: nil, вСтеке: открытьВСтеке,
+                                          закрытьЧат: {}) { return }
                 NativeRouter.shared.цель = .объявление(id: заявка.объявлениеID)
             } else if let адрес = Config.url("/marketplace.php?item=" + ИнбоксAPI.вАдрес(заявка.объявлениеID)) {
                 открыть(адрес)
@@ -642,6 +646,10 @@ struct КарточкаЗаявкиВЧате: View {
     @State private var сделано = false
     /// «Заявка уже неактивна» — своё окно у карточки: карточек в переписке может быть несколько.
     @State private var неактивна = false
+    /// «По вашему объявлению» — без ухода в другую вкладку (ListingReturn.swift): в стек, где открыт чат.
+    @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
+    @Environment(\.объявлениеПодЧатом) private var подЧатом
+    @Environment(\.dismiss) private var закрытьЧат
 
     init(заявка: ЗаявкаВЧате, текст: String, естьНазначенный: Bool, открыть: @escaping (URL) -> Void) {
         self.заявка = заявка
@@ -742,6 +750,8 @@ struct КарточкаЗаявкиВЧате: View {
                 if !заявка.объявление.isEmpty {
                     Button {
                         if Config.нативнаяКарточка {
+                            if ОбъявлениеИзЧата.здесь(заявка.объявлениеID, подЧатом: подЧатом, вСтеке: открытьВСтеке,
+                                                      закрытьЧат: { закрытьЧат() }) { return }
                             NativeRouter.shared.цель = .объявление(id: заявка.объявлениеID)
                         } else if let u = Config.url("/marketplace.php?item=" + ИнбоксAPI.вАдрес(заявка.объявлениеID)) {
                             открыть(u)

@@ -31,6 +31,8 @@ struct ЭкранЛида: View {
     @Environment(\.openURL) private var открытьСсылку
     /// «Назад» своей шапки — системная панель спрятана, как у переписки dm.php (стеклянная кнопка iOS 26 с тенью).
     @Environment(\.dismiss) private var закрытьЭкран
+    /// «Перейти к сделке» — карточка сделки листом над чатом (ListingReturn.swift).
+    @State private var открытаСделка: СделкаПоверх? = nil
     /// Офлайн-режим: неотправленные ответы этого чата — облаками с часиками под перепиской.
     @ObservedObject private var очередь = ОчередьСообщений.shared
 
@@ -103,6 +105,7 @@ struct ЭкранЛида: View {
         .sheet(isPresented: $жалоба) {
             ОкноЖалобыНаПокупателя(имя: модель.имя, модель: модель)
         }
+        .карточкаСделкиПоверх($открытаСделка, открыть: открыть)
         .overlay(alignment: .bottom) {
             ПлашкаИнбокса(текст: модель.плашка)
                 .padding(.bottom, 60)
@@ -253,7 +256,8 @@ struct ЭкранЛида: View {
             Button {
                 let номер = модель.сделка
                 if NativeRouter.доступна(.сделка(id: номер)) {
-                    NativeRouter.shared.цель = .сделка(id: номер)
+                    /* Карточка листом над чатом (ListingReturn.swift): закрыли — снова чат, а не «Мои сделки». */
+                    открытаСделка = СделкаПоверх(id: номер)
                 } else if let адрес = Config.страницаСайта("cabinet.php?deal=" + СделкиAPI.вАдрес(номер)) {
                     открыть(адрес)
                 }
@@ -583,6 +587,16 @@ struct ПолосаВерификацииКабинета: View {
 struct КарточкаТовараЛида: View {
     let товар: ТоварЛида
     let открыть: (URL) -> Void
+    /// «Объявление» — без ухода в другую вкладку (ListingReturn.swift): в стек, где открыт чат.
+    @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
+    @Environment(\.объявлениеПодЧатом) private var подЧатом
+    @Environment(\.dismiss) private var закрытьЧат
+
+    /// Явный init: private-окружение прячет готовый.
+    init(товар: ТоварЛида, открыть: @escaping (URL) -> Void) {
+        self.товар = товар
+        self.открыть = открыть
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -608,6 +622,8 @@ struct КарточкаТовараЛида: View {
             Spacer(minLength: 6)
             Button {
                 if Config.нативнаяКарточка {
+                    if ОбъявлениеИзЧата.здесь(товар.id, подЧатом: подЧатом, вСтеке: открытьВСтеке,
+                                              закрытьЧат: { закрытьЧат() }) { return }
                     NativeRouter.shared.цель = .объявление(id: товар.id)
                 } else if let адрес = Config.url("/marketplace.php?item=" + ИнбоксAPI.вАдрес(товар.id) + "&ret=chat") {
                     открыть(адрес)

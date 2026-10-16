@@ -1080,6 +1080,17 @@ struct ИмяПерепискиКабинета: View {
 struct КарточкаТовараПереписки: View {
     let товар: ТоварПереписки
     let открыть: (URL) -> Void
+    /// «Объявление» — без ухода в другую вкладку (ListingReturn.swift): чат с этого объявления — закрыть его, иначе — в
+    /// стек, где открыт чат.
+    @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
+    @Environment(\.объявлениеПодЧатом) private var подЧатом
+    @Environment(\.dismiss) private var закрытьЧат
+
+    /// Явный init: private-окружение прячет готовый.
+    init(товар: ТоварПереписки, открыть: @escaping (URL) -> Void) {
+        self.товар = товар
+        self.открыть = открыть
+    }
 
     private var цена: String {
         if товар.торг && товар.цена <= 0 { return ИнбоксText.т("negotiable") }
@@ -1134,6 +1145,8 @@ struct КарточкаТовараПереписки: View {
     private func кнопка(_ подпись: String, значок: String, текст: Color, фон: Color, кромка: Color?) -> some View {
         Button {
             if Config.нативнаяКарточка {
+                if ОбъявлениеИзЧата.здесь(товар.id, подЧатом: подЧатом, вСтеке: открытьВСтеке,
+                                          закрытьЧат: { закрытьЧат() }) { return }
                 NativeRouter.shared.цель = .объявление(id: товар.id)
             } else if let адрес = Config.url("/marketplace.php?item=" + ИнбоксAPI.вАдрес(товар.id) + "&ret=chat") {
                 открыть(адрес)

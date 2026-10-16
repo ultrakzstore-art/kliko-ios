@@ -256,7 +256,9 @@ struct БыстрыеВопросыУслуги: View {
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .navigationDestination(item: $вопрос) { какой in
+            /* «Объявление» и «Оформить за …» в этом чате — назад к этой же странице, а не её копия (ListingReturn.swift). */
             ЭкранЧатаОбъявления(товар: товар, предложить: false, открыть: откуда, текст: какой.текст)
+                .environment(\.объявлениеПодЧатом, товар.id)
         }
     }
 

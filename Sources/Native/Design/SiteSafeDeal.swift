@@ -120,6 +120,11 @@ enum ЛистГарантаОбъявления: Identifiable {
     case оформление
     /// mkEdsShow — «Сделка с подписью eGov» с ответом eds.php?action=quote (SiteListingEds.swift).
     case подписьEDS(РасчётСделкиEDS)
+    /// Проверенный, деньги включены — окно «Безопасная сделка» (?start_deal=, DealCreate.swift) прямо над объявлением
+    /// (владелец 16.10.2026, ListingReturn.swift): закрыли — снова объявление, а не «Мои сделки» другой вкладки.
+    case сделка(товар: String)
+    /// То же для «Заказать безопасно» (?start_service=).
+    case заказ(товар: String)
 
     var id: String {
         switch self {
@@ -133,6 +138,10 @@ enum ЛистГарантаОбъявления: Identifiable {
             return "checkout"
         case .подписьEDS(let расчёт):
             return "eds-" + расчёт.id.uuidString
+        case .сделка(let товар):
+            return "deal-" + товар
+        case .заказ(let товар):
+            return "order-" + товар
         }
     }
 }
