@@ -15,6 +15,10 @@ import CoreGraphics
      студии ВырезкаПредмета, запасной путь — однотонный фон по краям); на фото человек — фото не годится, берём следующее.
  К вырезке — она же зеркально (задняя сторона стойки: сзади силуэт вещи отражён) и средний цвет вещи (боковины стойки).
 
+ 3D-форма настольной вещи (владелец 16.10.2026, FitBoxItemShape.swift) берёт отсюда же картинку на грань коробки
+ (вырезка — кадрГрани, не вышла — фото целиком — дляЭкрана) с яркостью, заставку экрана (заставка: не фото товара — на
+ нём обычно вещь целиком, и на экране ноутбука стоял бы ещё один ноутбук) и мягкую подложку-тень (подложка).
+
  Чистые функции без главной нити: их зовут из Task.detached, отмену задачи проверяют между шагами.
  */
 enum ПодготовкаВещиГабаритов {
@@ -39,6 +43,13 @@ enum ПодготовкаВещиГабаритов {
         case человек
         /// Вещь не отделилась от фона, файл битый, задачу отменили.
         case фон
+    }
+
+    /// Картинка для 3D-формы (экран ноутбука, монитора, планшета или передняя грань коробки, FitBoxItemShape.swift) и её
+    /// яркость 0…1 — коробка светлая или тёмная. Картинка неизменяема — переходит на главную нить как есть.
+    struct Кадр: @unchecked Sendable {
+        let картинка: CGImage
+        let яркость: Double
     }
 
     /// Файл ракурса (PNG-вырезка или JPEG кадра): не больше `сторона` px по длинной стороне.
@@ -200,6 +211,114 @@ enum ПодготовкаВещиГабаритов {
         к.interpolationQuality = .high
         к.draw(кадр, in: CGRect(x: 0, y: 0, width: w, height: h))
         return к.makeImage()
+    }
+
+    // MARK: 3D-форма
+
+    /**
+     Заставка экрана 3D-формы (ноутбук, монитор, планшет, телефон) — вместо фото товара: на фото обычно вещь целиком, и
+     на экране ноутбука стоял бы ещё один ноутбук. Экран включён, но ничем не занят: тёмный градиент (синий сверху слева,
+     почти чёрный снизу справа), мягкое бирюзовое свечение справа внизу и косой блик стекла. 256×160, непрозрачная.
+     */
+    static func заставка() -> Кадр? {
+        let ш = 256
+        let в = 160
+        guard let пространство = CGColorSpace(name: CGColorSpace.sRGB),
+              let к = CGContext(data: nil, width: ш, height: в, bitsPerComponent: 8, bytesPerRow: ш * 4,
+                                space: пространство, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+        let ширина = CGFloat(ш)
+        let высота = CGFloat(в)
+        /* У CGContext y растёт вверх: верх картинки — y = высота. */
+        let фон = [CGColor(srgbRed: 0.15, green: 0.21, blue: 0.40, alpha: 1),
+                   CGColor(srgbRed: 0.03, green: 0.04, blue: 0.08, alpha: 1)] as CFArray
+        guard let градиент = CGGradient(colorsSpace: пространство, colors: фон, locations: [0, 1]) else { return nil }
+        к.drawLinearGradient(градиент, start: CGPoint(x: 0, y: высота), end: CGPoint(x: ширина, y: 0),
+                             options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        let свет = [CGColor(srgbRed: 0.20, green: 0.62, blue: 0.58, alpha: 0.32),
+                    CGColor(srgbRed: 0.20, green: 0.62, blue: 0.58, alpha: 0)] as CFArray
+        if let пятно = CGGradient(colorsSpace: пространство, colors: свет, locations: [0, 1]) {
+            let центр = CGPoint(x: ширина * 0.72, y: высота * 0.3)
+            к.drawRadialGradient(пятно, startCenter: центр, startRadius: 0, endCenter: центр,
+                                 endRadius: ширина * 0.55, options: [])
+        }
+        к.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.06))
+        к.beginPath()
+        к.move(to: CGPoint(x: ширина * 0.18, y: высота))
+        к.addLine(to: CGPoint(x: ширина * 0.40, y: высота))
+        к.addLine(to: CGPoint(x: ширина * 0.20, y: 0))
+        к.addLine(to: CGPoint(x: -ширина * 0.02, y: 0))
+        к.closePath()
+        к.fillPath()
+        guard !Task.isCancelled, let картинка = к.makeImage() else { return nil }
+        return Кадр(картинка: картинка, яркость: 0.1)
+    }
+
+    /// Фото объявления целиком (прямо, не больше `сторона` px) — на грань коробки, когда вырезка не вышла. Яркость — по
+    /// середине кадра: по краям фото обычно фон.
+    static func дляЭкрана(фото: UIImage, сторона: Int) -> Кадр? {
+        guard let кадр = ВырезкаЖивойПримерки.кадр(фото), !Task.isCancelled else { return nil }
+        let меньше = уменьшить(кадр, сторона: сторона) ?? кадр
+        return Кадр(картинка: меньше, яркость: яркость(меньше, середина: true))
+    }
+
+    /// Вырезка стойки — на переднюю грань коробки; яркость — по среднему цвету вещи (он приглушён на 15 % — вернуть).
+    static func кадрГрани(_ готово: Готово) -> Кадр {
+        let я = (0.299 * готово.красный + 0.587 * готово.зелёный + 0.114 * готово.синий) / 0.85
+        return Кадр(картинка: готово.лицо, яркость: min(1, max(0, Double(я))))
+    }
+
+    /// Средняя яркость по непрозрачным пикселям (растр до 48 px); середина — только средняя половина кадра.
+    private static func яркость(_ кадр: CGImage, середина: Bool) -> Double {
+        guard let р = растр(кадр, предел: 48) else { return 0.5 }
+        let xs = середина ? (р.w / 4)..<max(р.w / 4 + 1, р.w - р.w / 4) : 0..<р.w
+        let ys = середина ? (р.h / 4)..<max(р.h / 4 + 1, р.h - р.h / 4) : 0..<р.h
+        var сумма = 0.0
+        var вес = 0.0
+        for y in ys {
+            for x in xs {
+                let i = (y * р.w + x) * 4
+                let альфа = Double(р.байты[i + 3])
+                guard альфа > 40 else { continue }
+                /* Пиксели умножены на прозрачность: яркость — к альфе. */
+                сумма += 0.299 * Double(р.байты[i]) + 0.587 * Double(р.байты[i + 1]) + 0.114 * Double(р.байты[i + 2])
+                вес += альфа
+            }
+        }
+        guard вес > 0 else { return 0.5 }
+        return min(1, сумма / вес)
+    }
+
+    /**
+     Мягкая подложка-тень под 3D-формой: 128×128, чёрная, в середине (ядро — 72 % стороны, СборкаФормыГабаритов
+     .ядроПодложки) ровная, к краям плавно (сглаженная ступень по расстоянию до ядра) прозрачная; углы — скруглены.
+     Плоскость под вещью растягивает ядро ровно на основание, края выходят наружу на 14 % с каждой стороны.
+     */
+    static func подложка() -> Кадр? {
+        let сторона = 128
+        let край = 0.14
+        var байты = [UInt8](repeating: 0, count: сторона * сторона * 4)
+        for y in 0..<сторона {
+            for x in 0..<сторона {
+                let u = (Double(x) + 0.5) / Double(сторона)
+                let v = (Double(y) + 0.5) / Double(сторона)
+                let dx = max(0, max(край - u, u - (1 - край))) / край
+                let dy = max(0, max(край - v, v - (1 - край))) / край
+                let d = min(1, (dx * dx + dy * dy).squareRoot())
+                let мягко = 1 - d * d * (3 - 2 * d)
+                байты[(y * сторона + x) * 4 + 3] = UInt8(max(0, min(255, (0.42 * мягко * 255).rounded())))
+            }
+        }
+        guard let пространство = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let готовая = байты.withUnsafeMutableBytes { сырые -> CGImage? in
+            guard let к = CGContext(data: сырые.baseAddress, width: сторона, height: сторона, bitsPerComponent: 8,
+                                    bytesPerRow: сторона * 4, space: пространство,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            return к.makeImage()
+        }
+        guard let картинка = готовая else { return nil }
+        return Кадр(картинка: картинка, яркость: 0)
     }
 
     /// Зеркально по горизонтали: задняя сторона стойки (сзади силуэт вещи отражён).

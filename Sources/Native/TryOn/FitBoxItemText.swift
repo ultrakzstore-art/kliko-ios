@@ -73,7 +73,12 @@ enum ВещьГабаритовText {
         "fi_wall_far": "Стена далеко — подвиньте вещь ближе к ней",
         "fi_wall_on": "Вещь прижата к стене",
         "fi_shot_a11y": "Сохранить или отправить кадр с вещью",
-        "fi_shot_img": "Снимок комнаты с вещью. Размеры в сантиметрах: %@"
+        "fi_shot_img": "Снимок комнаты с вещью. Размеры в сантиметрах: %@",
+        "fi_loading_shape": "Собираем 3D-форму по размерам…",
+        "fi_shape": "3D-форма по размерам из объявления",
+        "fi_shape_note": "Форма примерная, размер настоящий — 1:1, как в объявлении",
+        "fi_ready_shape": "3D-форма готова",
+        "fi_model_fallback_shape": "3D-модель не загрузилась — показана 3D-форма по размерам"
     ]
 
     private static let kk: [String: String] = [
@@ -101,7 +106,12 @@ enum ВещьГабаритовText {
         "fi_wall_far": "Қабырға алыс — затты оған жақындатыңыз",
         "fi_wall_on": "Зат қабырғаға тығыздалды",
         "fi_shot_a11y": "Заты бар кадрды сақтау немесе жіберу",
-        "fi_shot_img": "Заты бар бөлменің суреті. Өлшемдері сантиметрмен: %@"
+        "fi_shot_img": "Заты бар бөлменің суреті. Өлшемдері сантиметрмен: %@",
+        "fi_loading_shape": "Өлшемдер бойынша 3D-пішінді құрастырып жатырмыз…",
+        "fi_shape": "Хабарландыру өлшемдері бойынша 3D-пішін",
+        "fi_shape_note": "Пішіні шамамен, өлшемі нақты — хабарландырудағыдай 1:1",
+        "fi_ready_shape": "3D-пішін дайын",
+        "fi_model_fallback_shape": "3D-модель жүктелмеді — өлшемдер бойынша 3D-пішін көрсетілді"
     ]
 
     private static let en: [String: String] = [
@@ -129,7 +139,12 @@ enum ВещьГабаритовText {
         "fi_wall_far": "The wall is far — move the item closer to it",
         "fi_wall_on": "Item pushed against the wall",
         "fi_shot_a11y": "Save or send a shot with the item",
-        "fi_shot_img": "Photo of the room with the item. Size in centimeters: %@"
+        "fi_shot_img": "Photo of the room with the item. Size in centimeters: %@",
+        "fi_loading_shape": "Building a 3D shape from the dimensions…",
+        "fi_shape": "3D shape from the listing dimensions",
+        "fi_shape_note": "The shape is approximate, the size is real — 1:1, as in the listing",
+        "fi_ready_shape": "3D shape ready",
+        "fi_model_fallback_shape": "The 3D model didn't load — showing a 3D shape from the dimensions"
     ]
 
     private static let ar: [String: String] = [
@@ -157,6 +172,11 @@ enum ВещьГабаритовText {
         "fi_wall_far": "الجدار بعيد — قرّب القطعة منه",
         "fi_wall_on": "القطعة ملاصقة للجدار",
         "fi_shot_a11y": "احفظ أو أرسل لقطة مع القطعة",
-        "fi_shot_img": "صورة الغرفة مع القطعة. المقاسات بالسنتيمتر: %@"
+        "fi_shot_img": "صورة الغرفة مع القطعة. المقاسات بالسنتيمتر: %@",
+        "fi_loading_shape": "جارٍ بناء شكل ثلاثي الأبعاد حسب المقاسات…",
+        "fi_shape": "شكل ثلاثي الأبعاد حسب مقاسات الإعلان",
+        "fi_shape_note": "الشكل تقريبي والحجم حقيقي — 1:1 كما في الإعلان",
+        "fi_ready_shape": "الشكل ثلاثي الأبعاد جاهز",
+        "fi_model_fallback_shape": "لم يُحمَّل النموذج ثلاثي الأبعاد — يُعرض شكل ثلاثي الأبعاد حسب المقاسات"
     ]
 }

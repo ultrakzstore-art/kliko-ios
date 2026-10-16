@@ -103,6 +103,8 @@ enum МастерПодачиText {
         "sq_other-services": "Что вы делаете?", "sp_other-services": "Напр.: муж на час, выгул собак, мелкий ремонт",
         // план съёмки
         "rsh_h": "Снимите по плану", "rsh_rent_tail": ", аренда", "rsh_count": "Снято %d из %d",
+        "rshc_all": "Все кадры сняты", "rshc_go": "Продолжить съёмку", "rshc_shot": "кадр %d из %d", "rshc_done": "снят",
+        "rshc_skip": "пропущен", "rshc_next": "следующий",
         "gh_rent": "Аренда", "gh_phone": "Телефон", "gh_laptop": "Ноутбук", "gh_clothes": "Одежда", "gh_shoes": "Обувь",
         "gh_furniture": "Мебель", "gh_appliance": "Техника", "gh_building": "Стройматериалы", "gh_other": "Другое"
     ]
@@ -186,6 +188,8 @@ enum МастерПодачиText {
         "sq_translation": "Нені аударасыз?", "sp_translation": "Мысалы: құжаттарды жазбаша аудару, ауызша аударма",
         "sq_other-services": "Не істейсіз?", "sp_other-services": "Мысалы: бір сағатқа шебер, ит серуендету, ұсақ жөндеу",
         "rsh_h": "Жоспар бойынша түсіріңіз", "rsh_rent_tail": ", жалға беру", "rsh_count": "%d / %d түсірілді",
+        "rshc_all": "Барлық кадр түсірілді", "rshc_go": "Түсіруді жалғастыру", "rshc_shot": "%d / %d кадр",
+        "rshc_done": "түсірілді", "rshc_skip": "өткізіп жіберілді", "rshc_next": "келесі",
         "gh_rent": "Жалға беру", "gh_phone": "Телефон", "gh_laptop": "Ноутбук", "gh_clothes": "Киім", "gh_shoes": "Аяқ киім",
         "gh_furniture": "Жиһаз", "gh_appliance": "Техника", "gh_building": "Құрылыс материалдары", "gh_other": "Басқа"
     ]
@@ -268,6 +272,8 @@ enum МастерПодачиText {
         "sq_translation": "What do you translate?", "sp_translation": "E.g.: written document translation, interpreting",
         "sq_other-services": "What do you do?", "sp_other-services": "E.g.: handyman, dog walking, small repairs",
         "rsh_h": "Shoot by the plan", "rsh_rent_tail": ", rental", "rsh_count": "%d of %d taken",
+        "rshc_all": "All shots taken", "rshc_go": "Continue shooting", "rshc_shot": "shot %d of %d", "rshc_done": "taken",
+        "rshc_skip": "skipped", "rshc_next": "next",
         "gh_rent": "Rental", "gh_phone": "Phone", "gh_laptop": "Laptop", "gh_clothes": "Clothing", "gh_shoes": "Shoes",
         "gh_furniture": "Furniture", "gh_appliance": "Appliances", "gh_building": "Building materials", "gh_other": "Other"
     ]
@@ -350,6 +356,8 @@ enum МастерПодачиText {
         "sq_translation": "ماذا تترجم؟", "sp_translation": "مثلًا: ترجمة مستندات كتابية، ترجمة فورية",
         "sq_other-services": "ماذا تعمل؟", "sp_other-services": "مثلًا: عامل صيانة بالساعة، تمشية الكلاب، إصلاحات صغيرة",
         "rsh_h": "صوّر حسب الخطة", "rsh_rent_tail": "، إيجار", "rsh_count": "التُقط %d من %d",
+        "rshc_all": "تم تصوير كل اللقطات", "rshc_go": "متابعة التصوير", "rshc_shot": "اللقطة %d من %d",
+        "rshc_done": "تم التصوير", "rshc_skip": "تم التخطي", "rshc_next": "التالية",
         "gh_rent": "إيجار", "gh_phone": "هاتف", "gh_laptop": "حاسوب محمول", "gh_clothes": "ملابس", "gh_shoes": "أحذية",
         "gh_furniture": "أثاث", "gh_appliance": "أجهزة", "gh_building": "مواد بناء", "gh_other": "أخرى"
     ]

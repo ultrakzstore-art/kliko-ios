@@ -33,6 +33,11 @@ import Combine
  первой и по умолчанию, если у объявления есть фото или 3D-модель (ВещьГабаритов, FitBoxItem.swift). Низ — как у коробки
  (сцена та же), над затвором — плашка вещи (ПлашкаВещиГабаритов, FitBoxItemViews.swift): «3D-модель ИИ», «Фото вещи в
  реальном размере» или «Загружаем…», и честная пометка. Строки сцены в «Вещи» говорят «вещь», а не «коробка».
+
+ На столе (владелец 16.10.2026: «алгоритм 3D AR и реальность не проработан — добей»): подсказки по прицелу модели —
+ «Наведите на стол и коснитесь», «Подойдите ближе к столу», «Это пол — наведите на стол», «Держите телефон — вещь
+ встанет сама»; вместо «Прижать к стене» — «Поставить на стол заново» (и действие VoiceOver; отклик — один, от кнопки),
+ плашка вещи — «3D-форма по размерам из объявления».
  */
 @MainActor
 enum ОкноГабаритов {
@@ -259,6 +264,9 @@ struct ЭкранГабаритов: View {
             Button(т("fb_place_center")) { модель.поставитьВЦентр() }
             Button(т("fb_rot_left")) { модель.повернуть(влево: true) }
             Button(т("fb_rot_right")) { модель.повернуть(влево: false) }
+            if модель.зановоДоступно {
+                Button(т("fb_replace")) { модель.поставитьЗаново() }
+            }
         }
     }
 
@@ -469,6 +477,10 @@ struct ЭкранГабаритов: View {
                 кнопкаСтены
                     .transition(.opacity)
             }
+            if модель.зановоДоступно {
+                кнопкаЗаново
+                    .transition(.opacity)
+            }
             HStack(alignment: .center, spacing: 8) {
                 боковая(значок: "arrow.counterclockwise", подпись: т("fb_reset"), озвучка: т("fb_reset_a11y"),
                         можно: модель.этап == .стоит) {
@@ -489,7 +501,35 @@ struct ЭкранГабаритов: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .animation(ДвижениеСайта.смена, value: модель.стенаДоступна)
+        .animation(ДвижениеСайта.смена, value: модель.зановоДоступно)
         .animation(ДвижениеСайта.смена, value: модель.режим)
+    }
+
+    /// Настольная вещь стоит — «Поставить на стол заново» (вместо «Прижать к стене»): вещь убирается, прицел снова на
+    /// поверхности, вещь встанет касанием или сама.
+    private var кнопкаЗаново: some View {
+        Button {
+            ОткликСайта.выбор()
+            модель.поставитьЗаново()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.to.line")
+                    .font(.subheadline.weight(.bold))
+                    .accessibilityHidden(true)
+                Text(т("fb_replace"))
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(Color.black.opacity(0.5), in: Capsule())
+            .overlay { Capsule().strokeBorder(Theme.шапкаМята.opacity(0.6), lineWidth: 1) }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(НажатиеКнопкиФото(сжатие: 0.95))
+        .accessibilityLabel(т("fb_replace"))
     }
 
     private func боковая(значок: String, подпись: String, озвучка: String, можно: Bool,
