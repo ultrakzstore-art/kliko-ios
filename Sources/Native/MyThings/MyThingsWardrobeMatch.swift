@@ -485,47 +485,73 @@ struct КарточкаПредложенияГардероба: View {
         }
     }
 
+    /* Тело разбито на части с явными типами: одно длинное выражение не проходило проверку типов в CI (строка 532). */
+    private var правилоТекст: String {
+        предложение.правило.map { т($0.ключ) } ?? т("mw_rule_unknown")
+    }
+
+    private var цветРазмера: Color {
+        предложение.размер == .ваш ? Theme.акцент : Theme.текстВторой
+    }
+
+    private var голосКарточки: String {
+        let части: [String] = [предложение.товар.голос, правилоТекст, размерТекст]
+        return части.joined(separator: ". ")
+    }
+
+    private var обложка: some View {
+        Theme.поверхность2
+            .frame(width: Self.ширина, height: Self.ширина)
+            .overlay {
+                КартинкаЛенты(предложение.товар.обложка, пунктов: Self.ширина) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.текстВторой)
+                }
+            }
+            .clipped()
+    }
+
+    private var строкаПравила: some View {
+        HStack(spacing: 4) {
+            if let цвет = предложение.цвета.first { КружокЦветаГардероба(цвет, размер: 10) }
+            Text(правилоТекст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .font(.system(size: 10, weight: .bold))
+        .foregroundStyle(Theme.акцент)
+    }
+
+    private var подпись: some View {
+        let товар: Listing = предложение.товар
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(ListingCard.цена(товар))
+                .font(.system(size: 14, weight: .heavy).monospacedDigit())
+                .foregroundStyle(Theme.текст)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(товар.title)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.текст)
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
+            строкаПравила
+            Text(размерТекст)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(цветРазмера)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+    }
+
     var body: some View {
-        let товар = предложение.товар
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
-            Theme.поверхность2
-                .frame(width: Self.ширина, height: Self.ширина)
-                .overlay {
-                    КартинкаЛенты(товар.обложка, пунктов: Self.ширина) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 20))
-                            .foregroundStyle(Theme.текстВторой)
-                    }
-                }
-                .clipped()
-            VStack(alignment: .leading, spacing: 4) {
-                Text(ListingCard.цена(товар))
-                    .font(.system(size: 14, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(товар.title)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(2, reservesSpace: true)
-                    .multilineTextAlignment(.leading)
-                HStack(spacing: 4) {
-                    if let цвет = предложение.цвета.first { КружокЦветаГардероба(цвет, размер: 10) }
-                    Text(предложение.правило.map { т($0.ключ) } ?? т("mw_rule_unknown"))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Theme.акцент)
-                Text(размерТекст)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(предложение.размер == .ваш ? Theme.акцент : Theme.текстВторой)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 8)
+            обложка
+            подпись
         }
         .frame(width: Self.ширина, alignment: .leading)
         .background(Theme.поверхность, in: форма)
@@ -533,8 +559,7 @@ struct КарточкаПредложенияГардероба: View {
         .clipShape(форма)
         .contentShape(форма)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(товар.голос + ". " + (предложение.правило.map { т($0.ключ) } ?? т("mw_rule_unknown"))
-                            + ". " + размерТекст)
+        .accessibilityLabel(голосКарточки)
         .accessibilityAddTraits(.isButton)
     }
 }
