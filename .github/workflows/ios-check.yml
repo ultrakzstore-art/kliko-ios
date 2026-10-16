@@ -223,7 +223,7 @@ jobs:
           set -o pipefail
           xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
-            MARKETING_VERSION=1.12 CURRENT_PROJECT_VERSION=999 | tail -5
+            MARKETING_VERSION=1.13 CURRENT_PROJECT_VERSION=999 | tail -5
           # Версия как у выпуска: с 0.1.0 из project.yml поверх снимков вставало окно «Эта версия устарела».
           app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
           echo "APP=$app" >> "$GITHUB_ENV"
