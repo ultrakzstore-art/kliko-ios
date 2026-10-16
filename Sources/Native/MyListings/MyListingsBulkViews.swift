@@ -410,6 +410,16 @@ struct ОкноВопросаМассовых: View {
 struct ОкноХодаМассовых: View {
     let ход: МассовыйРедактор.Ход
     let закрыть: () -> Void
+    /// «Расширить лимит» в итоге, если что-то не влезло в лимит слотов: окно покупки App Store этой услуги. nil — нет.
+    let расширить: ((ВидУслугиApple) -> Void)?
+    /// Товары App Store: пришли — «Расширить лимит» встаёт в итог сама.
+    @ObservedObject private var покупки = ПокупкиApple.shared
+
+    init(ход: МассовыйРедактор.Ход, закрыть: @escaping () -> Void, расширить: ((ВидУслугиApple) -> Void)? = nil) {
+        self.ход = ход
+        self.закрыть = закрыть
+        self.расширить = расширить
+    }
 
     private var доля: Double {
         guard ход.всего > 0 else { return 1 }
@@ -442,7 +452,7 @@ struct ОкноХодаМассовых: View {
                         .padding(.top, 14)
                 }
                 if !ход.сбои.isEmpty { сбои }
-                if ход.итог != nil && !ход.сбои.isEmpty { кнопка }
+                if ход.итог != nil && !ход.сбои.isEmpty { кнопки }
             }
             .padding(24)
             .frame(maxWidth: 360)
@@ -510,16 +520,42 @@ struct ОкноХодаМассовых: View {
         .padding(.top, 14)
     }
 
-    private var кнопка: some View {
+    /**
+     Итог со сбоями: «Готово». Что-то не влезло в лимит слотов (владелец 16.10.2026: «в окне предлагать расширить
+     сразу») — сначала «Расширить лимит» (главная, зелёная; покупка App Store: слоты, комбо или PRO), «Готово» — второй.
+     Товар ещё грузится — та же кнопка с колесом; нет — одно «Готово».
+     */
+    private var кнопки: some View {
+        VStack(spacing: 10) {
+            if ход.лимит, let расширить, РасширениеЛимита.есть(РасширениеЛимита.слоты) {
+                КнопкаРасширения(цепочка: РасширениеЛимита.слоты, действие: расширить) { занято, нажать in
+                    ГлавнаяКнопкаЛимита(подпись: МоиОбъявленияText.т("limit_slots"), занято: занято, действие: нажать)
+                }
+                кнопкаГотово(вторая: true)
+            } else {
+                кнопкаГотово(вторая: false)
+            }
+        }
+        .padding(.top, 16)
+        .task {
+            if ход.лимит && расширить != nil { await ПокупкиApple.shared.подгрузить() }
+        }
+    }
+
+    private func кнопкаГотово(вторая: Bool) -> some View {
         Button(action: закрыть) {
             Text(тМ("done"))
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity, minHeight: 46)
-                .background(Theme.зелёный, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .font(.subheadline.weight(вторая ? .semibold : .bold))
+                .foregroundStyle(вторая ? Theme.текст : Color.white)
+                .frame(maxWidth: .infinity, minHeight: вторая ? 44 : 46)
+                .background(вторая ? Theme.поверхность : Theme.зелёный,
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+                        .strokeBorder(вторая ? Theme.линия : Color.clear, lineWidth: 1.5)
+                }
         }
         .buttonStyle(НажатиеПанелиСайта(сжатие: 0.97))
-        .padding(.top, 16)
     }
 }
 

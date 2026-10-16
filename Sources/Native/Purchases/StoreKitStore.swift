@@ -592,7 +592,27 @@ final class ПокупкиApple: ObservableObject {
         if A.строка(выдано["service"]) == ВидУслугиApple.свойИИ.rawValue || товар?.вид == .свойИИ {
             Task { @MainActor in await СвойИИМодель.shared.обновить() }
         }
+        /* Услуга включена (не кредит и не возврат): лимиты подросли. Один сигнал на все пути — покупка в окне, позднее
+           одобрение «Попросить купить» (Transaction.updates), «Восстановить покупки» с новым чеком. already — чек выдан
+           раньше («Восстановить покупки» шлёт действующий PRO): ничего не подросло, экраны не дёргаем. */
+        if A.да(j["ok"]) && !A.да(j["credit"]) && !A.да(j["revoked"]) && !A.да(j["already"]) {
+            сообщитьОВключении(товар?.вид, цель: цель)
+        }
         return true
+    }
+
+    /**
+     Сигнал «услуга включена»: уведомление .klikoУслугаAppleВключена (userInfo: service — rawValue ВидУслугиApple,
+     target — id объявления или резюме). Пакет Kliko AI, комбо и PRO поднимают суточные лимиты примерки и сборки 3D —
+     их сведения спросить заново.
+     */
+    private func сообщитьОВключении(_ вид: ВидУслугиApple?, цель: String) {
+        if вид == .пакетИИ || вид == .комбо || вид == .про || вид == .свойИИ {
+            ГотовностьОбзора3DПодачи.shared.устарели()
+            ГотовностьПримерочной.shared.устарели()
+        }
+        NotificationCenter.default.post(name: .klikoУслугаAppleВключена, object: nil,
+                                        userInfo: ["service": вид?.rawValue ?? "", "target": цель])
     }
 
     // MARK: Чему покупка — на телефоне до ответа сайта
@@ -631,4 +651,10 @@ final class ПокупкиApple: ObservableObject {
             UserDefaults.standard.set(н, forKey: ключНамерений)
         }
     }
+}
+
+extension Notification.Name {
+    /// Сайт включил услугу по чеку Apple (ПокупкиApple.отправить): экраны с лимитом перечитывают его, а упёршиеся —
+    /// повторяют действие. userInfo: "service" — rawValue ВидУслугиApple, "target" — id объявления или резюме.
+    static let klikoУслугаAppleВключена = Notification.Name("kliko.iap.granted")
 }

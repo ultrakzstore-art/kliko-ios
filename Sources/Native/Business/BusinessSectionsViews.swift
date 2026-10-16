@@ -1230,6 +1230,8 @@ private struct РедакторКП: View {
     @State private var пишетИИ = false
     @State private var сообщение: String? = nil
     @State private var нужно: String? = nil
+    /// КП упёрлось в тариф PRO (need_pro): что повторить после покупки PRO в App Store.
+    @State private var нуженПро: (ии: Bool, шаблон: String)? = nil
     /// Последний текст собрал свой ИИ человека (own_ai_run ответа kp_generate) — под полем пометка «через ваш ИИ».
     @State private var своимИИ = false
 
@@ -1256,6 +1258,11 @@ private struct РедакторКП: View {
                     }
                     if let нужно {
                         ЗаметкаБизнеса(нужно, тон: .предупреждение, значок: "exclamationmark.triangle")
+                        /* «…в тарифе PRO» — сразу кнопка PRO (App Store), как у остальных разделов бизнеса; после
+                           покупки КП формируется заново тем же способом. Суточная квота Kliko AI КП не продаётся. */
+                        if let повтор = нуженПро {
+                            ЦифроваяПокупка(готово: { сформировать(ии: повтор.ии, шаблон: повтор.шаблон) })
+                        }
                     }
                     ZStack(alignment: .topLeading) {
                         TextEditor(text: $текст)
@@ -1320,6 +1327,7 @@ private struct РедакторКП: View {
     private func сформировать(ии: Bool, шаблон: String) {
         сообщение = nil
         нужно = nil
+        нуженПро = nil
         if ии { пишетИИ = true }
         Task {
             let итог = await БизнесРазделыAPI.сформироватьКП(запрос.id, ии: ии, шаблон: шаблон)
@@ -1333,6 +1341,7 @@ private struct РедакторКП: View {
                 нужно = тР("kp_need_company")
             case .нуженПРО:
                 нужно = тР("kp_need_pro")
+                нуженПро = (ии: ии, шаблон: шаблон)
             case .ошибка(let ошибка, let новая):
                 сообщение = ошибка
                 if let новая { квота = новая }

@@ -547,7 +547,7 @@ final class МодельСтудииРоликов: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             guard await self.естьАвтопостинг() else {
-                self.нуженПРО()
+                self.нуженПРО(повтор: { [weak self] in self?.нажатаСоцсеть(ключ, имя) })
                 return
             }
             if с.подключено {
@@ -566,15 +566,23 @@ final class МодельСтудииРоликов: ObservableObject {
         return страница.естьФункция("autopost")
     }
 
-    /// showProOffer: подсказка; при Config.цифровыеПокупки и загруженном товаре PRO (ДоступПокупкиApple) — затем окно
-    /// покупки PRO через App Store. Иначе — только подсказка, без перехода на оплату и без пустого окна.
-    private func нуженПРО() {
+    /**
+     showProOffer: подсказка; при Config.цифровыеПокупки и загруженном товаре PRO (ДоступПокупкиApple) — затем окно
+     покупки PRO через App Store поверх студии (ПоверхВсего): студия не закрывается, и после «Готово» то же нажатие
+     повторяется само (повтор) — со свежей страницей кабинета (уровень PRO). Иначе — только подсказка, без перехода на
+     оплату и без пустого окна.
+     */
+    private func нуженПРО(повтор: @escaping () -> Void) {
         показатьТост(т("pro_need"), секунд: 2)
         guard ПокупкиApple.shared.можноКупить(.про) else { return }
-        Task { @MainActor [weak self] in
+        Task { @MainActor in
             try? await Task.sleep(nanoseconds: 900_000_000)
-            self?.закрыть?()
-            ЛистУслугиApple.показать(.про)
+            ЛистУслугиApple.показать(.про, готово: {
+                Task { @MainActor in
+                    await БизнесМодель.shared.загрузитьСтраницу()
+                    повтор()
+                }
+            })
         }
     }
 

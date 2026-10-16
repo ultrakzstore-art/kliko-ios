@@ -130,6 +130,10 @@ final class МассовыйРедактор: ObservableObject {
         var сделано: Int = 0
         var итог: String? = nil
         var сбои: [Сбой] = []
+        /// Что-то не влезло в лимит слотов (slots_full, slots_skipped): в итоге — «Расширить лимит».
+        var лимит = false
+        /// Объявления, чья активация упёрлась в лимит: после покупки их «Активировать» повторяется.
+        var упёрлись: [String] = []
     }
 
     @Published private(set) var включён = false
@@ -146,6 +150,8 @@ final class МассовыйРедактор: ObservableObject {
     private var идёт = false
     /// Окно, которое сайт показывает после цикла (блокировка Kliko AI) — после закрытия окна хода.
     private var послеХода: МоиОбъявленияМодель.Окно? = nil
+    /// Правки полей, часть которых не влезла в лимит слотов (slots_skipped): после «Расширить лимит» — ещё раз.
+    private var правкиСверхЛимита: (итог: String, правки: [[String: Any]])? = nil
     private var путьГородов = ""
 
     private init() {}
@@ -176,6 +182,7 @@ final class МассовыйРедактор: ObservableObject {
         вопрос = nil
         ход = nil
         послеХода = nil
+        правкиСверхЛимита = nil
         разделыМагазина = nil
     }
 
@@ -322,6 +329,7 @@ final class МассовыйРедактор: ObservableObject {
     private func поОдному(_ д: ПоОдному, _ список: [МоёОбъявление], пропущено: Int) {
         guard !идёт, !список.isEmpty else { return }
         идёт = true
+        правкиСверхЛимита = nil
         let хвост: String
         let заголовок: String
         switch д {
@@ -342,6 +350,7 @@ final class МассовыйРедактор: ObservableObject {
         Task { @MainActor in
             var удачно = 0
             var сбои: [Сбой] = []
+            var упёрлись: [String] = []
             var стоп = false
             for товар in список {
                 var тело: [String: Any] = ["id": товар.id]
@@ -363,6 +372,7 @@ final class МассовыйРедактор: ObservableObject {
                         сбои.append(Сбой(id: товар.id, название: товар.название, причина: self.т("ai_blocked")))
                         стоп = true
                     } else {
+                        if A.да(j["slots_full"]) { упёрлись.append(товар.id) }
                         сбои.append(Сбой(id: товар.id, название: товар.название, причина: self.причина(j)))
                     }
                 } catch {
@@ -381,6 +391,8 @@ final class МассовыйРедактор: ObservableObject {
                 итог = String(format: self.т("res_done"), удачно, список.count)
             }
             if пропущено > 0 { итог += String(format: self.т("res_review"), пропущено) }
+            self.ход?.лимит = !упёрлись.isEmpty
+            self.ход?.упёрлись = упёрлись
             await self.закончить(итог, сбои: сбои)
         }
     }
@@ -392,7 +404,8 @@ final class МассовыйРедактор: ObservableObject {
             return метка.isEmpty ? т("prohibited") : т("prohibited") + ": " + метка
         }
         let текст = A.строка(j["error"]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if A.да(j["slots_full"]) && текст.isEmpty { return т("slots_full") }
+        /* Слова сервера о лимите — без цены, оплаты и сайта (3.1.1), иначе своя «Лимит объявлений». */
+        if A.да(j["slots_full"]) { return РасширениеЛимита.текстСервера(текст, запасной: т("slots_full")) }
         return текст.isEmpty || КабинетСайта.машинныйКод(текст) ? т("err_generic") : текст
     }
 
@@ -417,6 +430,29 @@ final class МассовыйРедактор: ObservableObject {
         if let окно = послеХода {
             послеХода = nil
             модель.окно = окно
+        }
+    }
+
+    /**
+     «Расширить лимит» в итоге массовых, покупка App Store прошла («Готово» окна покупки): окно хода прочь, список
+     заново и «Активировать» ещё раз тех, кто упёрся в лимит, — по одному, как сайт. Правки полей, не влезшие в лимит
+     (slots_skipped), — тем же mass_edit ещё раз: значения в них готовые (цена, город), повтор уже применённых безопасен.
+     Повтор активации безопасен — activate_item сервер просто снова проверяет.
+     */
+    func послеРасширения(_ ids: [String]) {
+        guard !идёт else { return }
+        if ids.isEmpty, let п = правкиСверхЛимита {
+            правкиСверхЛимита = nil
+            закрытьХод()
+            править(п.итог, п.правки)
+            return
+        }
+        закрытьХод()
+        Task { @MainActor in
+            await self.модель.загрузить(страницу: false)
+            let список = self.модель.товары.filter { ids.contains($0.id) && $0.статус != "approved" }
+            guard !список.isEmpty else { return }
+            self.поОдному(.активировать, список, пропущено: 0)
         }
     }
 
@@ -481,6 +517,7 @@ final class МассовыйРедактор: ObservableObject {
     private func править(_ итог: String, _ правки: [[String: Any]]) {
         guard !идёт, !правки.isEmpty else { return }
         идёт = true
+        правкиСверхЛимита = nil
         ход = Ход(заголовок: т("pr_applying"), всего: правки.count)
         Task { @MainActor in
             var обновлено = 0
@@ -531,7 +568,10 @@ final class МассовыйРедактор: ObservableObject {
                 self.ход = nil
                 self.идёт = false
                 self.модель.показать(self.т("need_pro"))
-                if ПокупкиApple.shared.можноКупить(.про) { ЛистУслугиApple.показать(.про) }
+                /* После покупки PRO — те же правки ещё раз: выбор не сбрасывался. */
+                if ПокупкиApple.shared.можноКупить(.про) {
+                    ЛистУслугиApple.показать(.про, готово: { [weak self] in self?.править(итог, правки) })
+                }
                 return
             }
             if let ошибка {
@@ -551,6 +591,8 @@ final class МассовыйРедактор: ObservableObject {
                 сбои.append(Сбой(id: "-", название: String(format: self.т("res_not_updated"), мимо),
                                  причина: неВлезло > 0 ? self.т("slots_full") : self.т("res_not_updated_why")))
             }
+            self.ход?.лимит = неВлезло > 0
+            self.правкиСверхЛимита = неВлезло > 0 ? (итог: итог, правки: правки) : nil
             await self.закончить(текст, сбои: сбои)
         }
     }

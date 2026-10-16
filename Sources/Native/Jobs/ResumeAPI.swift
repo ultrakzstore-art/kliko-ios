@@ -185,7 +185,8 @@ enum РезюмеAPI {
             let сообщение = A.строка(j["msg"])
             switch A.строка(j["error"]) {
             case "need_verify": return .нужнаВерификация(сообщение.isEmpty ? т("jw_need_ver") : сообщение)
-            case "limit": return .предел(сообщение.isEmpty ? т("jw_limit") : сообщение)
+            /* Предел активных резюме покупкой не поднимается: только текст — без цены, оплаты и сайта (3.1.1). */
+            case "limit": return .предел(РасширениеЛимита.текстСервера(сообщение, запасной: т("jw_limit")))
             default: return .ошибка(сообщение.isEmpty ? т("jw_fail") : сообщение)
             }
         } catch {
@@ -199,6 +200,8 @@ enum РезюмеAPI {
         case готово(title: String, about: String, skills: [String], своимИИ: Bool)
         /// Отказ своего ИИ (его готовый текст), msg сервера, «Не удалось» или «Нет соединения».
         case отказ(String)
+        /// Квота Kliko AI кончилась (need_paid) — своя фраза; мастер предложит «Больше Kliko AI».
+        case лимитИИ(String)
         case нуженВход
     }
 
@@ -225,6 +228,9 @@ enum РезюмеAPI {
                 ОкноСвоегоИИ.показатьОтказ(отказ)
                 return .отказ(отказ.текст)
             }
+            /* Кнопка «Больше Kliko AI» — только по need_paid: что пакет снимает error limit или quota черновика (может
+               быть суточной частотой), сервер не обещал (2.3) — там своя фраза без кнопки (отказКвотыИИ). */
+            if РасширениеЛимита.квотаИИ(j) { return .лимитИИ(ПодачаText.т("ai_need_paid")) }
             if let своя = отказКвотыИИ(j) { return .отказ(своя) }
             let сообщение = A.строка(j["msg"]).trimmingCharacters(in: .whitespacesAndNewlines)
             return .отказ(сообщение.isEmpty || КабинетСайта.машинныйКод(сообщение) ? т("jw_ai_fail") : сообщение)
@@ -237,15 +243,14 @@ enum РезюмеAPI {
 
     /**
      Квота и доступ Kliko AI (need_paid, ai_reason, limit, ai_off) — своя фраза, а не msg сервера: сайт в таких ответах
-     зовёт купить пакет Kliko AI у себя, а в приложении он не продаётся (App Store 3.1.1, 3.1.3) — как в подаче и
-     импорте. Прочие отказы — nil: их msg показывается как есть.
+     зовёт купить пакет Kliko AI у себя, а в приложении он продаётся только через App Store (3.1.1, 3.1.3) — кнопку
+     «Больше Kliko AI» даёт мастер по .лимитИИ (только need_paid), как в подаче и импорте; limit и quota — та же фраза
+     без кнопки. Прочие отказы — nil: их msg показывается как есть.
      */
     private static func отказКвотыИИ(_ j: [String: Any]) -> String? {
         let ошибка = A.строка(j["error"])
         let причина = A.строка(j["ai_reason"])
-        if A.да(j["need_paid"]) || причина == "need_paid" || ["need_paid", "limit", "quota"].contains(ошибка) {
-            return ПодачаText.т("ai_need_paid")
-        }
+        if РасширениеЛимита.квотаИИ(j) || ["limit", "quota"].contains(ошибка) { return ПодачаText.т("ai_need_paid") }
         if причина == "need_verify" || ошибка == "need_verify" { return ПодачаText.т("ai_need_verify") }
         if A.да(j["ai_off"]) || ошибка == "ai_off" || !причина.isEmpty { return т("jw_ai_fail") }
         return nil

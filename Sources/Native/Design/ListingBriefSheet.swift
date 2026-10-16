@@ -213,6 +213,12 @@ struct ЛистРазбораОбъявления: View {
                     .fixedSize(horizontal: false, vertical: true)
                 кнопкаИИ(ТекстыРазбора.т("br_retry"))
             }
+        case .платно(let текст):
+            /* Разбор ИИ аккаунту закрыт: «Повторить» не поможет — только честный текст. */
+            Label(текст, systemImage: "lock")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
