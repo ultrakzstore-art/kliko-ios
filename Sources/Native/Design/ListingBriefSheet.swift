@@ -185,6 +185,12 @@ struct ЛистРазбораОбъявления: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.текстВторой)
                     .fixedSize(horizontal: false, vertical: true)
+                /* Свой ИИ включён — экран говорит это до нажатия: только тогда запрос уходит с own:1 (договор, раздел 5). */
+                if СвойИИМодель.shared.активен {
+                    Label(ТекстыРазбора.т("br_will_own"), systemImage: "key")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.текстВторой)
+                }
                 кнопкаИИ(ТекстыРазбора.т("br_ai_go"))
             }
         case .грузим:
@@ -541,7 +547,16 @@ private struct СписокДоводовРазбора: View {
                 вывод
                     .появлениеРазбора(видно, все.count)
             }
-            МеткаСвоегоИИ(видна: доводы.своимИИ)
+            /* Договор сервера (отчёт 1.12, раздел 5): own_ai_run — «Ответил ваш ИИ», нет поля — «Ответил Kliko AI». */
+            Label {
+                Text(ТекстыРазбора.т(доводы.своимИИ ? "br_by_own" : "br_by_kliko"))
+            } icon: {
+                Image(systemName: доводы.своимИИ ? "key" : "sparkles")
+                    .accessibilityHidden(true)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.текстВторой)
+            .accessibilityElement(children: .combine)
             Text(ТекстыРазбора.т("br_ai_note"))
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.текстВторой)
