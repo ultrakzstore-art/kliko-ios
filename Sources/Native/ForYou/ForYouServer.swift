@@ -106,15 +106,21 @@ enum ОтборСервераДляВас {
      (iphone-se-2022 → iphone-se-3) — дело сервера.
      */
     static func slug(_ модель: String) -> String? {
-        var слова = модель.lowercased().replacingOccurrences(of: "ё", with: "е")
+        /* Разбито на шаги с явными типами: длинная цепочка map и filter с замыканиями — риск «unable to type-check». */
+        let строка: String = модель.lowercased().replacingOccurrences(of: "ё", with: "е")
             .replacingOccurrences(of: "+", with: " plus ")
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .map { русскиеСлова[$0] ?? $0 }
-            .filter { слово in
-                !лишниеСлова.contains(слово) && !(слово.hasSuffix("gb") && Int(слово.dropLast(2)) != nil)
-                    && слово.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        let части: [String] = строка.components(separatedBy: CharacterSet.alphanumerics.inverted)
+        var слова: [String] = []
+        for часть in части where !часть.isEmpty {
+            let слово: String = русскиеСлова[часть] ?? часть
+            if лишниеСлова.contains(слово) { continue }
+            if слово.hasSuffix("gb"), Int(String(слово.dropLast(2))) != nil { continue }
+            let латиница: Bool = слово.allSatisfy { (знак: Character) -> Bool in
+                знак.isASCII && (знак.isLetter || знак.isNumber)
             }
+            if !латиница { continue }
+            слова.append(слово)
+        }
         guard let первое = слова.first else { return nil }
         if let марка = маркиЛинеек[первое] { слова.insert(марка, at: 0) }
         return слова.joined(separator: "-")

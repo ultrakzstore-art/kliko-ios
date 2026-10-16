@@ -277,7 +277,7 @@ struct ЧипРазмераВещиГардероба: View {
                     .background(Theme.оттенокАкцента, in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(размер?.коротко ?? МойГардеробText.т("mw_size_pick"))
+                    Text(значениеРазмера)
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(размер == nil ? Theme.акцент : Theme.текст)
                         .contentTransition(.numericText())
@@ -308,6 +308,17 @@ struct ЧипРазмераВещиГардероба: View {
         }
         .buttonStyle(НажатиеКнопкиФото(сжатие: 0.97))
         .animation(ДвижениеСайта.смена, value: размер)
-        .accessibilityLabel(МойГардеробText.т("mw_size") + ". " + (размер?.коротко ?? МойГардеробText.т("mw_size_pick")))
+        .accessibilityLabel(подписьДоступности)
+    }
+
+    /// «EU 42» или «Выбрать размер» — строка заранее, с явным типом (?? в Text внутри большой цепочки — риск
+    /// проверки типов).
+    private var значениеРазмера: String {
+        размер?.коротко ?? МойГардеробText.т("mw_size_pick")
+    }
+
+    /// «Размер. EU 42» — строка заранее, с явными типами (склейка с ?? в цепочке модификаторов — риск проверки типов).
+    private var подписьДоступности: String {
+        МойГардеробText.т("mw_size") + ". " + значениеРазмера
     }
 }

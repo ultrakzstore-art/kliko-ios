@@ -114,9 +114,12 @@ enum ОбработкаВещиГардероба {
      */
     private static func цвета(_ кадр: CGImage, область: CGRect, порогПервого: Double) -> [ЦветСтандарта] {
         let сторона = 40
-        let кусок = CGRect(x: CGFloat(кадр.width) * область.minX, y: CGFloat(кадр.height) * область.minY,
-                           width: CGFloat(кадр.width) * область.width, height: CGFloat(кадр.height) * область.height)
-            .integral
+        /* Размеры кадра и порядок цветов — с явными типами: CGFloat(Int) в перегруженном CGRect и сортировка тернарником
+           по кортежам словаря — риск проверки типов в CI. */
+        let ширинаКадра: CGFloat = CGFloat(кадр.width)
+        let высотаКадра: CGFloat = CGFloat(кадр.height)
+        let кусок: CGRect = CGRect(x: ширинаКадра * область.minX, y: высотаКадра * область.minY,
+                                   width: ширинаКадра * область.width, height: высотаКадра * область.height).integral
         guard let часть = кадр.cropping(to: кусок), let пространство = CGColorSpace(name: CGColorSpace.sRGB),
               let холст = CGContext(data: nil, width: сторона, height: сторона, bitsPerComponent: 8,
                                     bytesPerRow: сторона * 4, space: пространство,
@@ -137,7 +140,11 @@ enum ОбработкаВещиГардероба {
             всего += 1
         }
         guard всего >= 40 else { return [] }
-        let порядок = счёт.sorted { $0.value == $1.value ? $0.key.rawValue < $1.key.rawValue : $0.value > $1.value }
+        let порядок: [(key: ЦветСтандарта, value: Int)] = счёт.sorted {
+            (а: (key: ЦветСтандарта, value: Int), б: (key: ЦветСтандарта, value: Int)) -> Bool in
+            if а.value != б.value { return а.value > б.value }
+            return а.key.rawValue < б.key.rawValue
+        }
         guard let первый = порядок.first else { return [] }
         let доляПервого = Double(первый.value) / Double(всего)
         guard доляПервого >= порогПервого else { return [] }
@@ -305,11 +312,18 @@ struct КартинкаВещиГардероба: View {
         }
     }
 
+    /// Цвет значка: нет цвета, «разноцветный» или светлый — вторичный текст, иначе краска цвета. Отдельно, с явным
+    /// типом: map с тернарником и ?? в foregroundStyle — риск проверки типов.
+    private var цветЗначка: Color {
+        guard let цвет = вещь.цвета.first, цвет != .разноцветный, !цвет.светлый else { return Theme.текстВторой }
+        return цвет.краска
+    }
+
     private var значок: some View {
-        Image(systemName: вещь.вид.значок)
-            .font(.system(size: мини ? 30 : 48, weight: .semibold))
-            .foregroundStyle(вещь.цвета.first.map { $0 == .разноцветный || $0.светлый ? Theme.текстВторой : $0.краска }
-                             ?? Theme.текстВторой)
+        let размерЗначка: CGFloat = мини ? 30 : 48
+        return Image(systemName: вещь.вид.значок)
+            .font(.system(size: размерЗначка, weight: .semibold))
+            .foregroundStyle(цветЗначка)
     }
 }
 

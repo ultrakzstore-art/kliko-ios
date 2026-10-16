@@ -1121,6 +1121,13 @@ private struct РедакторНакопителейМоего: View {
         }
     }
 
+    /// «PCIe 4.0»; поколение не задано — «PCIe ?». Отдельной функцией: склейка с map и ?? в аргументе чипа — риск
+    /// проверки типов.
+    private func подписьPCIe(_ поколение: Int?) -> String {
+        guard let g = поколение else { return "PCIe ?" }
+        return "PCIe " + String(g) + ".0"
+    }
+
     private func строкаСлота(_ номер: Int, _ слот: СлотM2Моего) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -1143,10 +1150,9 @@ private struct РедакторНакопителейМоего: View {
                         Button(ФорматКомпьютераМоего.протокол(п)) { изменитьСлот(слот.id) { $0.протокол = п } }
                     }
                 }
-                МенюЧипКомпьютераМоего(слот.pcie.map { "PCIe " + String($0) + ".0" } ?? "PCIe ?", выбран: слот.pcie != nil,
-                                       подпись: "PCIe") {
+                МенюЧипКомпьютераМоего(подписьPCIe(слот.pcie), выбран: слот.pcie != nil, подпись: "PCIe") {
                     ForEach(КаталогСтандартов.поколенияPCIe, id: \.self) { g in
-                        Button("PCIe " + String(g) + ".0") { изменитьСлот(слот.id) { $0.pcie = g } }
+                        Button(подписьPCIe(g)) { изменитьСлот(слот.id) { $0.pcie = g } }
                     }
                     Button(т("mpc_dont_know")) { изменитьСлот(слот.id) { $0.pcie = nil } }
                 }

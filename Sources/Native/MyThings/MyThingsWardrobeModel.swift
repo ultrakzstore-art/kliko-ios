@@ -308,8 +308,10 @@ struct ЗаметкаПосадкиМоего: Codable, Equatable, Identifiable,
 
     /// «Zara M — мала в плечах».
     var подпись: String {
-        let хвост = текст.trimmingCharacters(in: .whitespacesAndNewlines)
-        return бренд + " " + размер + " — " + посадка.название + (хвост.isEmpty ? "" : " " + хвост)
+        /* По шагам с явными типами: склейка с тернарником в одном выражении — риск проверки типов в CI. */
+        let хвост: String = текст.trimmingCharacters(in: .whitespacesAndNewlines)
+        let начало: String = бренд + " " + размер + " — " + посадка.название
+        return хвост.isEmpty ? начало : начало + " " + хвост
     }
 }
 
@@ -367,8 +369,18 @@ struct ГардеробМоего: Codable, Equatable, Sendable {
 
     /// Цвета всего гардероба по частоте — для «с чем носить» в «Для вас».
     var частыеЦвета: [ЦветСтандарта] {
-        let счёт = вещи.flatMap(\.цвета).reduce(into: [ЦветСтандарта: Int]()) { $0[$1, default: 0] += 1 }
-        return счёт.sorted { $0.value == $1.value ? $0.key.rawValue < $1.key.rawValue : $0.value > $1.value }.map(\.key)
+        /* Циклы и сортировка с явной сигнатурой: reduce и sorted с тернарником по кортежам — риск проверки типов в CI.
+           Порядок прежний: чаще — раньше, при равенстве — по rawValue. */
+        var счёт: [ЦветСтандарта: Int] = [:]
+        for в in вещи {
+            for цвет in в.цвета { счёт[цвет, default: 0] += 1 }
+        }
+        let порядок: [(key: ЦветСтандарта, value: Int)] = счёт.sorted {
+            (а: (key: ЦветСтандарта, value: Int), б: (key: ЦветСтандарта, value: Int)) -> Bool in
+            if а.value != б.value { return а.value > б.value }
+            return а.key.rawValue < б.key.rawValue
+        }
+        return порядок.map { (пара: (key: ЦветСтандарта, value: Int)) -> ЦветСтандарта in пара.key }
     }
 
     /// Образы без удалённых вещей.

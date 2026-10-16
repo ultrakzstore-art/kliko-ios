@@ -192,14 +192,27 @@ struct ДоскаОбраза: View {
 
     private func плитка(_ вещь: ВещьГардеробаМоего, номер: Int, рамка: CGRect, места: [CGRect],
                         поле: CGSize) -> some View {
-        let этаТащится = тащим == вещь.id
-        let подЭтой = над == номер && !этаТащится
-        return КартинкаВещиГардероба(вещь: вещь, поля: 8)
+        /* Значения — заранее, с явными типами: тернарники и арифметика в одной цепочке модификаторов — риск проверки
+           типов в CI. Цепочка разбита на два оператора, порядок модификаторов прежний. */
+        let этаТащится: Bool = тащим == вещь.id
+        let подЭтой: Bool = над == номер && !этаТащится
+        let цветРамки: Color = подЭтой ? Theme.акцент : Theme.линия
+        let толщинаРамки: CGFloat = подЭтой ? 2 : 1
+        let видимостьКнопки: Double = этаТащится ? 0 : 1
+        let масштаб: CGFloat = этаТащится ? 1.06 : (подЭтой ? 0.95 : 1)
+        let прозрачностьТени: Double = этаТащится ? 0.22 : 0
+        let цветТени: Color = Color.black.opacity(прозрачностьТени)
+        let радиусТени: CGFloat = этаТащится ? 14 : 0
+        let сдвигТени: CGFloat = этаТащится ? 8 : 0
+        let центрX: CGFloat = этаТащится ? рамка.midX + сдвиг.width : рамка.midX
+        let центрY: CGFloat = этаТащится ? рамка.midY + сдвиг.height : рамка.midY
+        let порядокСлоя: Double = этаТащится ? 10 : 0
+        let основа = КартинкаВещиГардероба(вещь: вещь, поля: 8)
             .frame(width: рамка.width, height: рамка.height)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                    .strokeBorder(подЭтой ? Theme.акцент : Theme.линия, lineWidth: подЭтой ? 2 : 1)
+                    .strokeBorder(цветРамки, lineWidth: толщинаРамки)
             }
             .overlay(alignment: .topTrailing) {
                 Button {
@@ -214,12 +227,13 @@ struct ДоскаОбраза: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(НажатиеКнопкиФото(сжатие: 0.85))
-                .opacity(этаТащится ? 0 : 1)
+                .opacity(видимостьКнопки)
                 .accessibilityHidden(true)
             }
-            .scaleEffect(этаТащится ? 1.06 : (подЭтой ? 0.95 : 1))
-            .shadow(color: Color.black.opacity(этаТащится ? 0.22 : 0), radius: этаТащится ? 14 : 0, y: этаТащится ? 8 : 0)
+            .scaleEffect(масштаб)
+            .shadow(color: цветТени, radius: радиусТени, y: сдвигТени)
             .gesture(перетаскивание(вещь, номер: номер, места: места, поле: поле))
+        return основа
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(вещь.заголовок)
             .accessibilityHint(т("mw_outfit_drag_hint"))
@@ -230,8 +244,8 @@ struct ДоскаОбраза: View {
                 if номер + 1 < вещи.count { переставить(номер, номер + 1) }
             }
             .accessibilityAction(named: Text(т("mw_outfit_remove"))) { убрать(вещь.id) }
-            .position(x: рамка.midX + (этаТащится ? сдвиг.width : 0), y: рамка.midY + (этаТащится ? сдвиг.height : 0))
-            .zIndex(этаТащится ? 10 : 0)
+            .position(x: центрX, y: центрY)
+            .zIndex(порядокСлоя)
     }
 
     /// Удержать и тащить: вещь за пальцем, место под пальцем подсвечено; отпустили над другим — меняются местами.
@@ -348,7 +362,11 @@ struct КарточкаОбразовГардероба: View {
 
     private func обложка(_ образ: ОбразМоего) -> some View {
         let вещи = гардероб.вещиОбраза(образ)
-        let имя = образ.имя.isEmpty ? String(format: т("mw_outfit_n_items"), String(вещи.count)) : образ.имя
+        let имя: String = образ.имя.isEmpty ? String(format: т("mw_outfit_n_items"), String(вещи.count)) : образ.имя
+        /* Подпись для VoiceOver — заранее, с явными типами (склейка с map и joined в accessibilityLabel — риск
+           проверки типов). */
+        let состав: String = вещи.map(\.заголовок).joined(separator: ", ")
+        let голос: String = имя + ". " + состав
         return Button {
             ОткликСайта.выбор()
             открыть(образ.id)
@@ -370,7 +388,7 @@ struct КарточкаОбразовГардероба: View {
         }
         .buttonStyle(НажатиеСайта())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(имя + ". " + вещи.map(\.заголовок).joined(separator: ", "))
+        .accessibilityLabel(голос)
         .accessibilityAddTraits(.isButton)
     }
 }

@@ -549,7 +549,11 @@ enum ЦветСтандарта: String, CaseIterable, Codable, Sendable, Identi
             let r2 = Double((h >> 16) & 0xFF), g2 = Double((h >> 8) & 0xFF), b2 = Double(h & 0xFF)
             let rm = (r + r2) / 2
             let dr = r - r2, dg = g - g2, db = b - b2
-            let d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db
+            /* Три слагаемых с явным типом: одна длинная формула с литералами — риск проверки типов (Double и CGFloat). */
+            let частьR: Double = (2 + rm / 256) * dr * dr
+            let частьG: Double = 4 * dg * dg
+            let частьB: Double = (2 + (255 - rm) / 256) * db * db
+            let d: Double = частьR + частьG + частьB
             if d < меньше {
                 меньше = d
                 лучший = цвет

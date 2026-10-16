@@ -413,8 +413,8 @@ struct ЭкранМоегоКомпьютера: View {
 
     private func строкаКупленного(_ вещь: ВещьМоего, _ к: КомпьютерМоего) -> some View {
         let поставлена = ИсторияКомпьютераМоего.поставлена(вещь, в: к)
-        let подпись = (вещь.покупка?.подписьСЦеной ?? МоёText.т("my_bought_kliko"))
-            + (поставлена ? " · " + т("mpc_installed") : "")
+        let покупкаТекст: String = вещь.покупка?.подписьСЦеной ?? МоёText.т("my_bought_kliko")
+        let подпись: String = поставлена ? покупкаТекст + " · " + т("mpc_installed") : покупкаТекст
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: поставлена ? "checkmark.circle.fill" : "shippingbox")

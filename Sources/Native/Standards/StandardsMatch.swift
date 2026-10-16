@@ -290,8 +290,19 @@ enum СверкаСтандартов {
         guard let его = разбор.набор[.цоколь, К.цоколь] else { return nil }
         let мои = дом.цоколи
         guard !мои.isEmpty else { return nil }
-        let сводка = мои.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
-            .prefix(3).map { $0.key + " ×" + String($0.value) }.joined(separator: " · ")
+        /* По шагам с явными типами: цепочка sorted (тернарный по кортежам), prefix, map, joined тяжела для
+           проверки типов.
+           Порядок прежний: больше ламп — раньше, при равенстве — по алфавиту. */
+        let порядокЦоколей: [(key: String, value: Int)] = мои.sorted {
+            (а: (key: String, value: Int), б: (key: String, value: Int)) -> Bool in
+            if а.value != б.value { return а.value > б.value }
+            return а.key < б.key
+        }
+        var частиСводки: [String] = []
+        for пара in порядокЦоколей.prefix(3) {
+            частиСводки.append(пара.key + " ×" + String(пара.value))
+        }
+        let сводка: String = частиСводки.joined(separator: " · ")
         let заголовки: [УровеньСтандарта: String] = [.подходит: т("st_lamp_ok"), .доработка: т("st_lamp_adapt"),
                                                      .проверить: т("st_lamp_check"), .неПодходит: т("st_lamp_bad")]
         if let сколько = мои[его] {

@@ -102,14 +102,26 @@ enum ПосадкаГардероба {
     /// Бренды для подсказок: свои (по частоте), потом частые, начинающиеся с набранного; не больше предела.
     static func подсказки(_ набрано: String, г: ГардеробМоего, предел: Int = 8) -> [String] {
         let н = набрано.trimmingCharacters(in: .whitespaces).lowercased()
+        /* Шаги с явными типами: кортеж с ?? и сортировка тернарником по кортежам с метками — риск проверки типов в CI. */
         var счёт: [String: (имя: String, раз: Int)] = [:]
-        for имя in г.вещи.map(\.бренд) + г.посадка.map(\.бренд) {
+        let всеБренды: [String] = г.вещи.map(\.бренд) + г.посадка.map(\.бренд)
+        for имя in всеБренды {
             let чистое = имя.trimmingCharacters(in: .whitespaces)
             guard !чистое.isEmpty else { continue }
             let ключ = чистое.lowercased()
-            счёт[ключ] = (счёт[ключ]?.имя ?? чистое, (счёт[ключ]?.раз ?? 0) + 1)
+            if let было = счёт[ключ] {
+                счёт[ключ] = (имя: было.имя, раз: было.раз + 1)
+            } else {
+                счёт[ключ] = (имя: чистое, раз: 1)
+            }
         }
-        let свои = счёт.values.sorted { $0.раз == $1.раз ? $0.имя < $1.имя : $0.раз > $1.раз }.map(\.имя)
+        let пары: [(имя: String, раз: Int)] = Array(счёт.values)
+        let поЧастоте: [(имя: String, раз: Int)] = пары.sorted {
+            (а: (имя: String, раз: Int), б: (имя: String, раз: Int)) -> Bool in
+            if а.раз != б.раз { return а.раз > б.раз }
+            return а.имя < б.имя
+        }
+        let свои: [String] = поЧастоте.map { (п: (имя: String, раз: Int)) -> String in п.имя }
         var итог: [String] = []
         for имя in свои + частыеБренды where !итог.contains(where: { $0.lowercased() == имя.lowercased() }) {
             if н.isEmpty || имя.lowercased().hasPrefix(н) { итог.append(имя) }
@@ -370,6 +382,12 @@ struct ЛистПосадкиГардероба: View {
         .карточкаМоего()
     }
 
+    /// «Удалить: Zara M — мала» для VoiceOver — строка заранее, с явным типом (склейка в accessibilityLabel на хвосте
+    /// Button — риск проверки типов).
+    private func подписьУдаления(_ заметка: ЗаметкаПосадкиМоего) -> String {
+        МоёText.т("my_delete") + ": " + заметка.подпись
+    }
+
     @ViewBuilder
     private func заметкиБренда(_ г: ГардеробМоего) -> some View {
         let заметки = г.заметки(бренда: бренд).sorted { $0.когда > $1.когда }
@@ -398,7 +416,7 @@ struct ЛистПосадкиГардероба: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(НажатиеКнопкиФото(сжатие: 0.9))
-                        .accessibilityLabel(МоёText.т("my_delete") + ": " + заметка.подпись)
+                        .accessibilityLabel(подписьУдаления(заметка))
                     }
                     .transition(.opacity)
                 }

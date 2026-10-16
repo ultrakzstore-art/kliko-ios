@@ -409,6 +409,14 @@ struct ЛистВещиГардероба: View {
         }
     }
 
+    /// «Маломерит — берите на размер больше · беру M» — строка заранее, с явными типами (склейка с map и ?? в Label —
+    /// риск проверки типов).
+    private func текстСводки(_ сводка: СводкаБрендаГардероба) -> String {
+        guard let беру = сводка.беру else { return сводка.совет }
+        let взять: String = String(format: т("mw_fit_take"), беру)
+        return сводка.совет + " · " + взять
+    }
+
     private var брендБлок: some View {
         let г = хранилище.запись.гардероб
         let подсказки = ПосадкаГардероба.подсказки(черновик.бренд, г: г, предел: 6)
@@ -428,8 +436,7 @@ struct ЛистВещиГардероба: View {
                 }
             }
             if let сводка {
-                Label(сводка.совет + (сводка.беру.map { " · " + String(format: т("mw_fit_take"), $0) } ?? ""),
-                      systemImage: "ruler")
+                Label(текстСводки(сводка), systemImage: "ruler")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(сводка.краска)
                     .fixedSize(horizontal: false, vertical: true)

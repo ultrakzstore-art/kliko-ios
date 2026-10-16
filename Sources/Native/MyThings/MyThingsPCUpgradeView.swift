@@ -102,6 +102,12 @@ struct БлокАпгрейдаМоего: View {
         }
     }
 
+    /// «Вариант — причина» — строка заранее, с явными типами (склейка с ?? в Text — риск проверки типов).
+    private func строкаНельзя(_ вариант: ВариантАпгрейдаМоего) -> String {
+        let причина: String = вариант.причина ?? ""
+        return вариант.заголовок + " — " + причина
+    }
+
     @ViewBuilder
     private var нельзя: some View {
         if !подсказки.нельзя.isEmpty {
@@ -129,7 +135,7 @@ struct БлокАпгрейдаМоего: View {
                 .accessibilityValue(нельзяОткрыто ? т("mpc_open") : т("mpc_closed"))
                 if нельзяОткрыто {
                     ForEach(подсказки.нельзя) { вариант in
-                        Text(вариант.заголовок + " — " + (вариант.причина ?? ""))
+                        Text(строкаНельзя(вариант))
                             .font(.footnote)
                             .foregroundStyle(Theme.текстВторой)
                             .fixedSize(horizontal: false, vertical: true)

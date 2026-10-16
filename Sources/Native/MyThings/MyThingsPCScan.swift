@@ -87,7 +87,10 @@ enum НаходкаСнимкаКомпьютераМоего: Hashable, Sendabl
         switch self {
         case .вид(let в, _): return в.название
         case .модель(let м): return м
-        case .процессор(let имя, let сокет): return имя + (сокет.map { " · " + ($0 == "BGA" ? т("mpc_bga") : $0) } ?? "")
+        case .процессор(let имя, let сокет):
+            guard let код = сокет else { return имя }
+            let подписьСокета: String = код == "BGA" ? т("mpc_bga") : код
+            return имя + " · " + подписьСокета
         case .всегоПамяти(let г): return т("mpc_part_ram") + ": " + ФорматКомпьютераМоего.гб(г)
         case .распаяна(let г, _): return String(format: т("mpc_scan_soldered"), ФорматКомпьютераМоего.гб(г))
         case .поколение(let п, _): return п
@@ -312,7 +315,8 @@ enum РазборСнимкаКомпьютераМоего {
         for (номер, строка) in нижние.enumerated() {
             guard ["выделенная память графическ", "dedicated gpu memory", "видеопамять", "video memory"]
                 .contains(where: { строка.contains($0) }) else { continue }
-            let где = [строка] + (номер + 1 < нижние.count ? [нижние[номер + 1]] : [])
+            var где: [String] = [строка]
+            if номер + 1 < нижние.count { где.append(нижние[номер + 1]) }
             for s in где {
                 if let г = первое(регДробьГБ, s), let x = Double(г[1]), x >= 1, x <= 48 {
                     итог.append(.памятьКарты(Int(x.rounded())))
