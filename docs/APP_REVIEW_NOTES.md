@@ -123,6 +123,28 @@ Product id — байт в байт из `enum ПродуктыApple` (`Sources/
   «Поместится ли?»; дисков → «Подойдут ли?»; одежды → «Примерить на себя» (если сервер включён). Демо-аккаунт — тот же,
   что для покупок (раздел 4).
 
+## 3б. 3D-обзор (для Review Notes; задание сервера 1.13, Б4)
+
+Договор — `docs/SERVER_3D.md` (раздел 12 — что отметить для App Store). Код — `Sources/Native/Posting/Model3D*.swift`
+(съёмка в подаче) и просмотр на странице объявления. Рубильники: в приложении `Config.обзор3D = true`, на сервере
+`model3d` (360° по ракурсам) и `model3d_build` (сборка модели ИИ, включится после ключа поставщика).
+
+| Что | Где | Что уходит с телефона |
+|---|---|---|
+| Съёмка 5 ракурсов | Подача → «Подробно» → шаг «Фото» → карточка «3D-обзор · 5 фото» (мебель, техника, электроника, обувь, сумки, машины и похожие разделы) | Пять вырезок вещи (фон убирает Vision на телефоне) — на сервер kliko.kz, после публикации — как фото объявления; неопубликованное удаляется через 24 часа |
+| 360° | Объявление со значком «360°»: поворот по ракурсам в рамке фото | Ничего |
+| 3D и «В комнате» | Объявление со значком «3D»: модель USDZ, AR Quick Look | Ничего |
+| Сборка 3D ИИ | Только при `model3d_build`: перед первой сборкой экран согласия с именем поставщика (`ai`), 24 часа, «не для обучения», «Согласен, собрать 3D» (5.1.2(i)) | Ракурсы — поставщику ИИ через наш сервер |
+
+- Пока `model3d_build` выключен, поставщика ИИ нет: остаётся только 360° по своим фото, экрана согласия нет, в Review
+  Notes абзац про ИИ-сборку не упоминать.
+- Модели помечены «3D-модель создана ИИ по фото — детали могут отличаться» (1.1/1.2), на объявление есть жалоба.
+- Ничего не продаётся; на `limit` — своя фраза приложения, без цен и ссылок (3.1.1).
+- Анкета App Privacy: «Фото или видео» уже объявлены (`Privacy/Kliko/PrivacyInfo.xcprivacy`) — сверить в App Store
+  Connect. Камера — то же разрешение, что для фото объявления.
+- Что показать проверяющему: подать объявление в «Мебели» → «Подробно» → «Фото» → «3D-обзор · 5 фото»; на объявлении
+  со значком «360°» или «3D» — повернуть, «В комнате».
+
 ---
 
 ## 4. Текст App Review Notes (вставить в App Store Connect → App Review Information → Notes)
@@ -167,6 +189,15 @@ TRY-ON AND FIT CHECKS (listing page, under the price)
   closes the screen or taps "Delete photos", and in any case within 24 hours; never used for training. Requires sign-in.
   These AI buttons appear only while our server has the feature enabled.
 Camera and "Add to Photos" permissions are requested only when the user starts one of these features or saves a result.
+
+3D VIEW (seller side, listing page for buyers)
+Sell > Detailed > step "Photo" > card "3D view - 5 photos" (furniture, appliances, electronics, shoes, bags, cars and
+similar categories). The seller walks around the item and takes 5 photos (front, 45 degrees front-left, side,
+45 degrees back-left, back); each photo is cut out on the device with Apple Vision and uploaded to our server.
+Buyers see a "360" badge and can spin the item through these photos on the listing page. Where a "3D" badge is shown,
+the model can be viewed in the room with AR Quick Look. If an AI-built 3D model is offered, the app first shows a
+consent screen naming the AI provider; unpublished photos are deleted within 24 hours and nothing is used to train AI.
+AI-built models are labeled as such. Nothing is sold in this flow.
 
 ACCOUNT DELETION
 Cabinet > Settings > Delete account (in-app, step-by-step).
