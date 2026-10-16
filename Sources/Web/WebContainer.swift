@@ -189,10 +189,12 @@ struct WebContainer: UIViewRepresentable {
         context.coordinator.contacts.webView = web
         context.coordinator.photos.webView = web
         bridge.webView = web
-        /* Под слоем первая загрузка — не здесь, а позже (WebBridge.загрузитьСтраницуПодСлоем): тяжёлая веб-главная не
-           спорит за сеть и процессор с первым кадром ленты. Страница на экране (отладочный klikoSite) — сразу, как
-           раньше. */
-        if !Self.подСлоем { web.load(URLRequest(url: Config.apiBase)) }
+        /* Страница сайта — сразу, как до 1.13 (79). TestFlight 79 (владелец 16.10.2026: «завис, не нажимаются кнопки,
+           не заходит в объявления», «предзагрузка дольше»): отложенная загрузка (WebBridge.загрузитьСтраницуПодСлоем)
+           оставляла WebKit без сетевого процесса, и вопрос к его хранилищу кук (SiteSession.куки) ждал — а за ним
+           ряды главной, карточка по ссылке и всё, что идёт с куками. Отложенный вызов теперь ничего не делает: адрес уже
+           есть. */
+        web.load(URLRequest(url: Config.apiBase))
         return web
     }
 

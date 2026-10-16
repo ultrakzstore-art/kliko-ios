@@ -33,7 +33,10 @@ enum SiteSession {
            сразу (кукиСменились), поэтому срок можно держать длинным: 2 с давали лишний круг почти на каждый экран. */
         НаблюдательКук.shared.следить()
         if let есть = запомненныеКуки, Date().timeIntervalSince(есть.когда) < 30 { return есть.поля }
-        if let идёт = кукиВПути { return await идёт.value }
+        /* Не дольше 3 с (TestFlight 79: «завис»): WebKit без сетевого процесса на вопрос о куках может не ответить, а
+           все экраны ждут один общий вопрос — зависали бы все разом. Не ответил — этот запрос идёт без кук, следующий
+           спросит заново. */
+        if let идёт = кукиВПути { return await неДольше(идёт, секунд: 3) ?? [:] }
         let поколение = поколениеКук
         let задача = Task<[String: String], Never> { @MainActor in
             let все = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
@@ -44,12 +47,28 @@ enum SiteSession {
             return HTTPCookie.requestHeaderFields(with: наши)
         }
         кукиВПути = задача
-        let поля = await задача.value
+        guard let поля = await неДольше(задача, секунд: 3) else {
+            if поколение == поколениеКук && кукиВПути == задача { кукиВПути = nil }
+            return [:]
+        }
         if поколение == поколениеКук {
             запомненныеКуки = (когда: Date(), поля: поля)
             кукиВПути = nil
         }
         return поля
+    }
+
+    /// Ответ вопроса к WebKit или nil, если его нет дольше `секунд` (сам вопрос не отменяется — просто не ждём).
+    @MainActor
+    private static func неДольше(_ задача: Task<[String: String], Never>, секунд: UInt64) async -> [String: String]? {
+        await withCheckedContinuation { (продолжение: CheckedContinuation<[String: String]?, Never>) in
+            let ответ = ОдинОтветКук(продолжение)
+            Task { ответ.отдать(await задача.value) }
+            Task {
+                try? await Task.sleep(nanoseconds: секунд * 1_000_000_000)
+                ответ.отдать(nil)
+            }
+        }
     }
 
     /// Скорость: запомненный заголовок «Cookie», вопрос к WebKit в пути и номер смены кук (наблюдатель его двигает).
@@ -217,5 +236,23 @@ final class НаблюдательКук: NSObject, WKHTTPCookieStoreObserver {
 
     nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
         Task { @MainActor in SiteSession.кукиСменились() }
+    }
+}
+
+/// Один ответ на ожидание кук: кто первым — WebKit или срок, — тот и отвечает; второй ничего не делает.
+private final class ОдинОтветКук: @unchecked Sendable {
+    private let защёлка = NSLock()
+    private var продолжение: CheckedContinuation<[String: String]?, Never>?
+
+    init(_ продолжение: CheckedContinuation<[String: String]?, Never>) {
+        self.продолжение = продолжение
+    }
+
+    func отдать(_ поля: [String: String]?) {
+        защёлка.lock()
+        let ждущее = продолжение
+        продолжение = nil
+        защёлка.unlock()
+        ждущее?.resume(returning: поля)
     }
 }
