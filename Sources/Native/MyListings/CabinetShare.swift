@@ -97,7 +97,7 @@ struct ОкноПоделитьсяКабинета: View {
                 шапка
                 превью
                     .padding(.vertical, 10)
-                if вид == .опубликовано && (топ || покупки.можноКупить(.продвижение)) {
+                if вид == .опубликовано && !данные.цифровое && (топ || покупки.можноКупить(.продвижение)) {
                     продвижение
                         .padding(.top, 2)
                     Text(т("or_share"))
@@ -108,11 +108,16 @@ struct ОкноПоделитьсяКабинета: View {
                 } else {
                     Color.clear.frame(height: 16)
                 }
-                герой
-                    .padding(.bottom, 10)
+                /* Цифровой товар (владелец 16.10.2026, Apple 3.1.1): только ссылкой — WhatsApp, Telegram, «Ссылка» и
+                   QR. Ролика нет (в нём «Безопасная сделка: оплата через гарант» и цена), автопостинга тоже (подпись
+                   поста собирает сервер, и он за PRO). */
+                if !данные.цифровое {
+                    герой
+                        .padding(.bottom, 10)
+                }
                 быстрые
                     .padding(.bottom, 10)
-                if !включённыеСоцсети.isEmpty { автопостинг }
+                if !включённыеСоцсети.isEmpty && !данные.цифровое { автопостинг }
                 Button(т("later")) { закрыть() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.текстВторой)
@@ -212,10 +217,13 @@ struct ОкноПоделитьсяКабинета: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Theme.текст)
                     .lineLimit(2)
-                Text(данные.строкаЦены)
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(Theme.акцент)
-                    .lineLimit(1)
+                /* Цифровой товар: уйдёт только название и ссылка — превью так же, без цены. */
+                if данные.ценаВидна {
+                    Text(данные.строкаЦены)
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(Theme.акцент)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -593,9 +601,9 @@ struct ОкноПоделитьсяКабинета: View {
         Config.url("/marketplace.php?item=" + ПоделитьсяСайта.код(данные.id)) ?? данные.адрес
     }
 
-    /// «Название — 12 000 ₸»; без цены — одно название.
+    /// «Название — 12 000 ₸»; без цены и у цифрового товара — одно название.
     private var подписьОтправки: String {
-        guard данные.цена > 0 else { return данные.название }
+        guard данные.цена > 0, !данные.цифровое else { return данные.название }
         return "\(данные.название) — \(DesignText.число(Int(данные.цена.rounded()))) ₸"
     }
 

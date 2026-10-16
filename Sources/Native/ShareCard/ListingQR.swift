@@ -141,12 +141,15 @@ struct КарточкаQRОбъявления: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(данные.строкаЦены)
-                .font(.system(size: 20, weight: .black))
-                .foregroundStyle(зелёный)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.top, 4)
+            /* Цифровой товар — без цены: только название и ссылка (ДанныеОтправкиСайта.цифровое). */
+            if данные.ценаВидна {
+                Text(данные.строкаЦены)
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(зелёный)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 18)
@@ -185,7 +188,8 @@ enum QRОбъявления {
     static func адрес(_ данные: ДанныеОтправкиСайта) -> URL {
         guard данные.номерФото > 0 else { return данные.адрес }
         let без = ДанныеОтправкиСайта(id: данные.id, название: данные.название, цена: данные.цена,
-                                      состояние: данные.состояние, фото: данные.фото, услуга: данные.услуга)
+                                      состояние: данные.состояние, фото: данные.фото, услуга: данные.услуга,
+                                      цифровое: данные.цифровое)
         return без.адрес
     }
 

@@ -529,7 +529,8 @@ extension View {
      */
     func поделитьсяНаКарточке(_ товар: Listing) -> some View {
         overlay(alignment: .topTrailing) {
-            if Config.дизайнКакНаСайте, товар.адрес != nil {
+            /* Цифровое — только актуальное (Listing.можноПоделиться); у обычного условие всегда истинно. */
+            if Config.дизайнКакНаСайте, товар.адрес != nil, товар.можноПоделиться {
                 Button { ЛистПоделитьсяСайта.показать(товар) } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .semibold))

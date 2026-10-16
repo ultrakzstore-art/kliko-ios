@@ -157,6 +157,9 @@ struct Listing: Identifiable, Hashable {
     var цифровоеОписание: ЦифровоеОписание? = nil
     /// seller_digital: цифровых продаж и споров у продавца; nil — поля нет или null.
     var цифровоеПродавца: ЦифровоеПродавца? = nil
+    /// status как пришёл (без пробелов по краям); нет — пусто. Читает только Listing.цифровоеОпубликовано: ?id=
+    /// карточкой отдаёт одобренное, а снятое и проданное — ответом gone со status sold · inactive · archived · reserved.
+    var статусВыдачи = ""
 
     struct Характеристика: Hashable {
         let ключ: String
@@ -379,7 +382,9 @@ extension Listing: Decodable {
         }
         районНазвание = непусто(строка("district_name"))
         марка = непусто(строка("brand"))
-        вРезерве = строка("status") == "reserved"
+        let статусСтрокой = строка("status")
+        вРезерве = статусСтрокой == "reserved"
+        статусВыдачи = статусСтрокой?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         проверкаАвто = истинно("auto_check")
         проверкаЖилья = истинно("realty_check")
         проверкаУстройства = истинно("device_check")
