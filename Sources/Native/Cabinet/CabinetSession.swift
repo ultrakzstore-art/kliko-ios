@@ -120,7 +120,8 @@ enum КабинетСайта {
         let поколение = СессияПриложения.shared.поколение
         let ответ = try await запрос(путь("cabinet.php"), ждать: ждать)
         guard ответ.код > 0, ответ.код < 500 else { throw Сбой.сеть }
-        let с = разобрать(ответ.текст)
+        /* Скорость: разбор страницы — вне главного потока; поколение снято до запроса, выход за это время его отменит. */
+        let с = await разобратьВФоне(ответ.текст)
         /* TestFlight 1.10: каждая прочитанная страница кабинета — в общее состояние входа (витрина видит то же). */
         СессияПриложения.shared.принять(с, поколение: поколение)
         return с
@@ -137,7 +138,7 @@ enum КабинетСайта {
         let поколение = СессияПриложения.shared.поколение
         let ответ = try await запрос(путь("cabinet.php"), ждать: ждать)
         guard ответ.код > 0, ответ.код < 500 else { throw Сбой.сеть }
-        let с = разобрать(ответ.текст)
+        let с = await разобратьВФоне(ответ.текст)
         СессияПриложения.shared.принять(с, поколение: поколение)
         return (с, ответ.текст)
     }
@@ -173,18 +174,9 @@ enum КабинетСайта {
         let web = try await страницаСайта(ждать: true)
         let аргументы: [String: Any] = ["p": путь("cabinet.php?action=upload_photo"), "c": токен, "d": картинка,
                                         "th": миниатюра, "fx": обработка, "ff": источник]
-        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
-            web.callAsyncJavaScript(скриптЗагрузки, arguments: аргументы, in: nil, in: .defaultClient) { итог in
-                switch итог {
-                case .success(let значение):
-                    продолжение.resume(returning: (значение as? String) ?? "")
-                case .failure(let ошибка):
-                    продолжение.resume(throwing: ошибка)
-                }
-            }
-        }
-        guard let данные = сырой.data(using: .utf8),
-              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+        /* Ответ сервера (o) приходит словарём от WebKit: числа — NSNumber, как у JSONSerialization; читают его все
+           через да() и строка() своих API. */
+        guard let объект = try await выполнитьСкрипт(скриптЗагрузки, аргументы: аргументы, в: web) else {
             throw Сбой.приложение
         }
         let код = (объект["s"] as? NSNumber)?.intValue ?? 0
@@ -193,7 +185,8 @@ enum КабинетСайта {
     }
 
     /// Тело скрипта загрузки: p — путь, c — токен, d — dataURL фото, th — dataURL миниатюры (пусто — без неё), fx и
-    /// ff — виды обработки и имя исходного файла (пусто — поля не шлются; миниатюре они не нужны).
+    /// ff — виды обработки и имя исходного файла (пусто — поля не шлются; миниатюре они не нужны). Итог — объект
+    /// {s, o} (код и ответ сервера), а не JSON-строка.
     private static let скриптЗагрузки = """
     let code = 0, err = '';
     const opts = (body, json) => {
@@ -233,7 +226,7 @@ enum КабинетСайта {
             }
           } catch (e) {}
         }
-        if (o && (o.ok || o.prohibited || o.foreign)) { return JSON.stringify({s: code, o: o}); }
+        if (o && (o.ok || o.prohibited || o.foreign)) { return {s: code, o: o}; }
         if (o && o.error) { err = String(o.error); }
       }
     } catch (e) {}
@@ -248,7 +241,7 @@ enum КабинетСайта {
       code = r.status;
       if (r.ok) {
         const o = await read(r);
-        if (o && (o.ok || o.prohibited || o.foreign)) { return JSON.stringify({s: code, o: o}); }
+        if (o && (o.ok || o.prohibited || o.foreign)) { return {s: code, o: o}; }
         if (o && o.error) { err = String(o.error); }
       }
     } catch (e) {}
@@ -260,11 +253,11 @@ enum КабинетСайта {
       code = r.status;
       if (r.ok) {
         const o = await read(r);
-        if (o && (o.ok || o.prohibited)) { return JSON.stringify({s: code, o: o}); }
+        if (o && (o.ok || o.prohibited)) { return {s: code, o: o}; }
         if (o && o.error) { err = String(o.error); }
       }
     } catch (e) {}
-    return JSON.stringify({s: code, o: {ok: false, error: err}});
+    return {s: code, o: {ok: false, error: err}};
     """
 
     // MARK: - Вход (§1.2.1)
@@ -489,50 +482,53 @@ enum КабинетСайта {
     // MARK: - Разбор страницы
 
     /// Значения, которые сервер печатает в HTML кабинета (сверено по снимку: guest/ и user/kz_ru_cabinet.php.html).
-    static func разобрать(_ html: String) -> Состояние {
+    /// Скорость: nonisolated — страницу в сотни килобайт разбирают вне главного потока (разобратьВФоне), шаблоны
+    /// собраны один раз (ШаблоныКабинета), а не на каждый поиск.
+    nonisolated static func разобрать(_ html: String) -> Состояние {
+        typealias Ш = ШаблоныКабинета
         var с = Состояние()
-        if let пользователь = найти(#"window\.KlikoUser=(\{[^;<]*\});"#, в: html),
+        if let пользователь = найти(Ш.пользователь, в: html),
            let данные = пользователь.data(using: .utf8),
            let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] {
             с.uid = строка(объект["id"])
         }
-        let гость = найти(#"window\.__ULX_GUEST\s*=\s*(true|false)"#, в: html)
+        let гость = найти(Ш.гость, в: html)
         if !с.uid.isEmpty {
             с.вошёл = true
         } else if let гость {
             с.вошёл = гость == "false"
-        } else if найти(#"window\.KlikoUser="#, в: html) != nil {
+        } else if найти(Ш.естьПользователь, в: html) != nil {
             с.вошёл = false
         }
         let токены: [String] = [
-            найти(#"window\.KlikoCsrf="([^"]*)""#, в: html) ?? "",
-            найти(#"const CSRF\s*=\s*"([^"]*)""#, в: html) ?? "",
-            найти(#"window\.__UIP_CSRF="([^"]*)""#, в: html) ?? ""
+            найти(Ш.токенСайта, в: html) ?? "",
+            найти(Ш.токенСтраницы, в: html) ?? "",
+            найти(Ш.токенНастроек, в: html) ?? ""
         ]
         с.csrf = токены.first(where: { !$0.isEmpty }) ?? ""
         if let начало = html.range(of: "const CAB_USER = {") {
             let хвост = String(html[начало.upperBound...].prefix(4000))
-            if let литерал = найти(#"\bname:\s*("(?:[^"\\]|\\.)*")"#, в: хвост) {
+            if let литерал = найти(Ш.имя, в: хвост) {
                 с.имя = строкаJSON(литерал).trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
-        if let bio = найти(#"const BIO_ON\s*=\s*(true|false)"#, в: html) { с.eGovВключён = bio == "true" }
-        с.новоеСоглашение = найти(#"window\.__TERMS_RENEW\s*=\s*(true|false)"#, в: html) == "true"
-        if let литерал = найти(#"window\.__TERMS_VER\s*=\s*("(?:[^"\\]|\\.)*")"#, в: html) {
+        if let bio = найти(Ш.eGov, в: html) { с.eGovВключён = bio == "true" }
+        с.новоеСоглашение = найти(Ш.новоеСоглашение, в: html) == "true"
+        if let литерал = найти(Ш.редакция, в: html) {
             с.редакция = строкаJSON(литерал)
         }
-        if let массив = найти(#"window\.__TERMS_WHAT\s*=\s*(\[(?:\s*"(?:[^"\\]|\\.)*"\s*,?)*\s*\])"#, в: html),
+        if let массив = найти(Ш.чтоИзменилось, в: html),
            let данные = массив.data(using: .utf8),
            let пункты = (try? JSONSerialization.jsonObject(with: данные)) as? [Any] {
             с.чтоИзменилось = пункты.compactMap { $0 as? String }.filter { !$0.isEmpty }
         }
         /* Этап 41: то, что «Моим объявлениям» нужно со страницы (сверено по снимку user/kz_ru_cabinet.php.html). */
-        с.магазин = найти(#"const IS_SHOP\s*=\s*(true|false)"#, в: html) == "true"
-        с.верифицирован = найти(#"const IS_VERIFIED\s*=\s*(true|false)"#, в: html) == "true"
-        if let литерал = найти(#"const ADV_STATUS_LABEL\s*=\s*("(?:[^"\\]|\\.)*")"#, в: html) {
+        с.магазин = найти(Ш.магазин, в: html) == "true"
+        с.верифицирован = найти(Ш.верифицирован, в: html) == "true"
+        if let литерал = найти(Ш.подписьОдобрено, в: html) {
             с.подписьОдобрено = строкаJSON(литерал)
         }
-        if let объектИИ = найти(#"window\.CAB_AI\s*=\s*(\{[^\n]*?\});"#, в: html),
+        if let объектИИ = найти(Ш.ии, в: html),
            let данные = объектИИ.data(using: .utf8),
            let ии = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] {
             с.ии = квота(ии)
@@ -540,8 +536,13 @@ enum КабинетСайта {
         return с
     }
 
+    /// Разбор страницы кабинета вне главного потока; итог — сюда, на главный (вызывающие — @MainActor).
+    private static func разобратьВФоне(_ html: String) async -> Состояние {
+        await Task.detached(priority: .userInitiated) { КабинетСайта.разобрать(html) }.value
+    }
+
     /// Этап 41: CAB_AI → КвотаИИ (поля — как их читает renderSlotBanner сайта).
-    private static func квота(_ ии: [String: Any]) -> КвотаИИ {
+    nonisolated private static func квота(_ ии: [String: Any]) -> КвотаИИ {
         var к = КвотаИИ()
         к.показать = да(ии["show"])
         к.оплачено = да(ии["paid"])
@@ -559,18 +560,19 @@ enum КабинетСайта {
         return к
     }
 
-    /// Первая группа первого совпадения.
-    private static func найти(_ шаблон: String, в тексте: String) -> String? {
-        guard let выражение = try? NSRegularExpression(pattern: шаблон, options: []) else { return nil }
+    /// Первая группа первого совпадения. Шаблон — готовый, из ШаблоныКабинета (NSRegularExpression неизменяем и
+    /// годится для любого потока).
+    nonisolated private static func найти(_ образец: NSRegularExpression?, в тексте: String) -> String? {
+        guard let образец else { return nil }
         let весь = NSRange(тексте.startIndex..<тексте.endIndex, in: тексте)
-        guard let совпадение = выражение.firstMatch(in: тексте, options: [], range: весь) else { return nil }
+        guard let совпадение = образец.firstMatch(in: тексте, options: [], range: весь) else { return nil }
         let номер = совпадение.numberOfRanges > 1 ? 1 : 0
         guard let диапазон = Range(совпадение.range(at: номер), in: тексте) else { return nil }
         return String(тексте[диапазон])
     }
 
     /// Строковый литерал JS/JSON в кавычках ("Р…") → строка.
-    private static func строкаJSON(_ литерал: String) -> String {
+    nonisolated private static func строкаJSON(_ литерал: String) -> String {
         guard let данные = ("[" + литерал + "]").data(using: .utf8),
               let массив = (try? JSONSerialization.jsonObject(with: данные)) as? [Any],
               let первая = массив.first as? String else { return "" }
@@ -602,15 +604,17 @@ enum КабинетСайта {
 
     /// Тело скрипта: аргументы m (метод), u (путь от корня сайта), b (тело JSON строкой). Путь относительный — fetch
     /// разрешает его от источника страницы (kliko.kz или www.kliko.kz), и запрос всегда свой, same-origin.
+    /// Скорость: итог — объект {s, t} (или {e}), а не JSON-строка: WebKit отдаёт его словарём, и текст ответа не
+    /// разбирается на главном потоке второй раз ради обёртки (чат и заявки опрашивают сервер каждые несколько секунд).
     private static let скриптЗапроса = """
     try {
       const o = {method: m, credentials: 'same-origin', cache: 'no-store', redirect: 'follow'};
       if (m === 'POST') { o.headers = {'Content-Type': 'application/json'}; o.body = b; }
       const r = await fetch(u, o);
       const t = await r.text();
-      return JSON.stringify({s: r.status, t: t});
+      return {s: r.status, t: t};
     } catch (e) {
-      return JSON.stringify({e: (e && e.name === 'TypeError') ? 'net' : 'js'});
+      return {e: (e && e.name === 'TypeError') ? 'net' : 'js'};
     }
     """
 
@@ -638,18 +642,7 @@ enum КабинетСайта {
             строкаТела = текст
         }
         let аргументы: [String: Any] = ["m": метод, "u": путь, "b": строкаТела]
-        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
-            web.callAsyncJavaScript(скриптЗапроса, arguments: аргументы, in: nil, in: .defaultClient) { итог in
-                switch итог {
-                case .success(let значение):
-                    продолжение.resume(returning: (значение as? String) ?? "")
-                case .failure(let ошибка):
-                    продолжение.resume(throwing: ошибка)
-                }
-            }
-        }
-        guard let данные = сырой.data(using: .utf8),
-              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+        guard let объект = try await выполнитьСкрипт(скриптЗапроса, аргументы: аргументы, в: web) else {
             throw Сбой.приложение
         }
         if let сбой = объект["e"] as? String {
@@ -657,6 +650,23 @@ enum КабинетСайта {
         }
         let код = (объект["s"] as? NSNumber)?.intValue ?? 0
         return Ответ(код: код, текст: (объект["t"] as? String) ?? "")
+    }
+
+    /// Скрипт в отдельном мире (.defaultClient) страницы под слоем; итог — объект, который скрипт вернул, словарём
+    /// (числа — NSNumber, строки — String). Скрипт вернул не объект — nil: для вызывающих это «Ошибка приложения», как
+    /// прежде не-JSON.
+    private static func выполнитьСкрипт(_ скрипт: String, аргументы: [String: Any],
+                                        в web: WKWebView) async throws -> [String: Any]? {
+        try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<[String: Any]?, Error>) in
+            web.callAsyncJavaScript(скрипт, arguments: аргументы, in: nil, in: .defaultClient) { итог in
+                switch итог {
+                case .success(let значение):
+                    продолжение.resume(returning: значение as? [String: Any])
+                case .failure(let ошибка):
+                    продолжение.resume(throwing: ошибка)
+                }
+            }
+        }
     }
 
     /// Тело JSON строкой — ровно так же, как для скрипта запроса (b).
@@ -679,7 +689,8 @@ enum КабинетСайта {
     }
 
     /// Аргумент u — путь от корня сайта. Перенаправила — тело обрывается (AbortController): карточка, на которую
-    /// ведёт гарант-ссылка, весит много, а нужен только её адрес.
+    /// ведёт гарант-ссылка, весит много, а нужен только её адрес. Итог — объект {s, a, r, t} (или {e}), как у скрипта
+    /// запроса: без второго разбора JSON на главном потоке.
     private static let скриптСтраницы = """
     try {
       const c = (typeof AbortController === 'function') ? new AbortController() : null;
@@ -689,12 +700,12 @@ enum КабинетСайта {
       const a = String(r.url || '');
       if (r.redirected) {
         if (c) { try { c.abort(); } catch (x) {} }
-        return JSON.stringify({s: r.status, a: a, r: 1, t: ''});
+        return {s: r.status, a: a, r: 1, t: ''};
       }
       const t = await r.text();
-      return JSON.stringify({s: r.status, a: a, r: 0, t: t});
+      return {s: r.status, a: a, r: 0, t: t};
     } catch (e) {
-      return JSON.stringify({e: (e && e.name === 'TypeError') ? 'net' : 'js'});
+      return {e: (e && e.name === 'TypeError') ? 'net' : 'js'};
     }
     """
 
@@ -708,18 +719,7 @@ enum КабинетСайта {
      */
     static func открытьСтраницу(_ путь: String, ждать: Bool = true) async throws -> ОтветСтраницы {
         let web = try await страницаСайта(ждать: ждать)
-        let сырой: String = try await withCheckedThrowingContinuation { (продолжение: CheckedContinuation<String, Error>) in
-            web.callAsyncJavaScript(скриптСтраницы, arguments: ["u": путь], in: nil, in: .defaultClient) { итог in
-                switch итог {
-                case .success(let значение):
-                    продолжение.resume(returning: (значение as? String) ?? "")
-                case .failure(let ошибка):
-                    продолжение.resume(throwing: ошибка)
-                }
-            }
-        }
-        guard let данные = сырой.data(using: .utf8),
-              let объект = (try? JSONSerialization.jsonObject(with: данные)) as? [String: Any] else {
+        guard let объект = try await выполнитьСкрипт(скриптСтраницы, аргументы: ["u": путь], в: web) else {
             throw Сбой.приложение
         }
         if let сбой = объект["e"] as? String {
@@ -734,17 +734,31 @@ enum КабинетСайта {
     }
 
     /// Страница сайта под слоем, готовая выполнить запрос. Не на сайте (шлюз, eGov, пусто) — грузим главную и ждём.
+    /// Скорость: с ждать и сам WKWebView ждём в том же цикле (до 15 с), а не отвечаем сразу «нет соединения», — так
+    /// корень может создавать его не в первом кадре. Пустую страницу (ещё не грузилась) ведёт мост
+    /// (WebBridge.загрузитьСтраницуПодСлоем): с правилами под слоем, без картинок и шрифтов.
     private static func страницаСайта(ждать: Bool) async throws -> WKWebView {
-        guard let web = WebBridge.shared.webView else { throw Сбой.сеть }
-        if наСайте(web) && !web.isLoading { return web }
+        if let web = WebBridge.shared.webView, наСайте(web) && !web.isLoading { return web }
         guard ждать else { throw Сбой.сеть }
-        if !наСайте(web) {
-            if WebBridge.shared.loadFailed { throw Сбой.сеть }
-            if !web.isLoading, let главная = Config.страницаСайта("") { web.load(URLRequest(url: главная)) }
-        }
-        for _ in 0..<60 {
-            try? await Task.sleep(nanoseconds: 250_000_000)
+        var первый = true
+        for шаг in 0...60 {
+            if шаг > 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
+            guard let web = WebBridge.shared.webView else { continue }
             if наСайте(web) && !web.isLoading { return web }
+            if первый {
+                первый = false
+                guard !наСайте(web) else { continue }
+                if WebBridge.shared.loadFailed { throw Сбой.сеть }
+                if web.url == nil && !web.isLoading {
+                    WebBridge.shared.загрузитьСтраницуПодСлоем()
+                } else if !web.isLoading, let главная = Config.страницаСайта("") {
+                    web.load(URLRequest(url: главная))
+                }
+            } else if шаг % 8 == 0, web.url == nil, !web.isLoading, let главная = Config.страницаСайта("") {
+                /* Мост страницу не повёл (её уже просили, а она так и не открылась) — главная своей загрузкой, как
+                   раньше; правила моста потом её не перебьют (грузят только пустую). */
+                web.load(URLRequest(url: главная))
+            }
         }
         throw Сбой.сеть
     }
@@ -804,16 +818,42 @@ enum КабинетСайта {
         return чистая
     }
 
-    private static func да(_ значение: Any?) -> Bool {
+    nonisolated private static func да(_ значение: Any?) -> Bool {
         if let число = значение as? NSNumber { return число.intValue != 0 }
         if let текст = значение as? String { return текст == "1" || текст == "true" }
         return false
     }
 
-    private static func строка(_ значение: Any?) -> String {
+    nonisolated private static func строка(_ значение: Any?) -> String {
         if let текст = значение as? String { return текст }
         if let число = значение as? NSNumber { return число.stringValue }
         return ""
+    }
+}
+
+/// Шаблоны страницы кабинета для КабинетСайта.разобрать — собраны один раз за запуск, а не на каждый поиск (страницу
+/// читают на каждом показе кабинета и при каждой сверке входа). Вне главного актора: разбор идёт в фоне.
+private enum ШаблоныКабинета {
+    static let пользователь = собрать(#"window\.KlikoUser=(\{[^;<]*\});"#)
+    static let гость = собрать(#"window\.__ULX_GUEST\s*=\s*(true|false)"#)
+    static let естьПользователь = собрать(#"window\.KlikoUser="#)
+    /// Токен сессии: KlikoCsrf || const CSRF || __UIP_CSRF.
+    static let токенСайта = собрать(#"window\.KlikoCsrf="([^"]*)""#)
+    static let токенСтраницы = собрать(#"const CSRF\s*=\s*"([^"]*)""#)
+    static let токенНастроек = собрать(#"window\.__UIP_CSRF="([^"]*)""#)
+    /// name из CAB_USER (ищется в первых 4000 знаках после «const CAB_USER = {»).
+    static let имя = собрать(#"\bname:\s*("(?:[^"\\]|\\.)*")"#)
+    static let eGov = собрать(#"const BIO_ON\s*=\s*(true|false)"#)
+    static let новоеСоглашение = собрать(#"window\.__TERMS_RENEW\s*=\s*(true|false)"#)
+    static let редакция = собрать(#"window\.__TERMS_VER\s*=\s*("(?:[^"\\]|\\.)*")"#)
+    static let чтоИзменилось = собрать(#"window\.__TERMS_WHAT\s*=\s*(\[(?:\s*"(?:[^"\\]|\\.)*"\s*,?)*\s*\])"#)
+    static let магазин = собрать(#"const IS_SHOP\s*=\s*(true|false)"#)
+    static let верифицирован = собрать(#"const IS_VERIFIED\s*=\s*(true|false)"#)
+    static let подписьОдобрено = собрать(#"const ADV_STATUS_LABEL\s*=\s*("(?:[^"\\]|\\.)*")"#)
+    static let ии = собрать(#"window\.CAB_AI\s*=\s*(\{[^\n]*?\});"#)
+
+    private static func собрать(_ текст: String) -> NSRegularExpression? {
+        try? NSRegularExpression(pattern: текст, options: [])
     }
 }
 

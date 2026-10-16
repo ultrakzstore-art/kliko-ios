@@ -43,7 +43,15 @@ extension View {
 struct МенюКарточкиОбъявления: ViewModifier {
     let товар: Listing
     @Environment(\.открытьОбъявлениеВСтеке) private var открытьВСтеке
-    @ObservedObject private var избранное = FavoritesStore.shared
+    /// В избранном ли этот номер — для подписи «В избранное» / «Убрать из избранного». Скорость: своё зеркало, а не
+    /// наблюдение за FavoritesStore целиком — сердце на одной карточке перерисовывает меню только у неё, а не у всех
+    /// карточек на экране. Подпись не устаревает: зеркало следит за номерами избранного (onReceive ниже).
+    @State private var вИзбранном: Bool
+
+    init(товар: Listing) {
+        self.товар = товар
+        _вИзбранном = State(initialValue: FavoritesStore.shared.есть(товар.id))
+    }
 
     private func т(_ ключ: String) -> String { МенюДолгогоНажатияText.т(ключ) }
 
@@ -69,11 +77,11 @@ struct МенюКарточкиОбъявления: ViewModifier {
                     }
                 }
                 if Config.избранное {
-                    let есть = избранное.есть(товар.id)
                     Button {
-                        избранное.переключить(товар)
+                        FavoritesStore.shared.переключить(товар)
                     } label: {
-                        Label(FavoritesText.т(есть ? "remove" : "add"), systemImage: есть ? "heart.slash" : "heart")
+                        Label(FavoritesText.т(вИзбранном ? "remove" : "add"),
+                              systemImage: вИзбранном ? "heart.slash" : "heart")
                     }
                 }
                 if товар.адрес != nil {
@@ -98,6 +106,12 @@ struct МенюКарточкиОбъявления: ViewModifier {
                 }
             } preview: {
                 ПревьюОбъявленияМеню(товар: товар)
+            }
+            /* Номера избранного сменились (сердце, меню, синхронизация с сайтом, выход) — пишем зеркало, только если
+               сменилось именно у этого номера: остальные карточки не перерисовываются. */
+            .onReceive(FavoritesStore.shared.$номера) { номера in
+                let сохранено = номера.contains(товар.id)
+                if вИзбранном != сохранено { вИзбранном = сохранено }
             }
     }
 }

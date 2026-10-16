@@ -393,4 +393,14 @@ enum КлавиатураНаЭкране {
         guard let рамка = уведомление.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return true }
         return рамка.height > 120
     }
+
+    /// Домашняя полоса — по самому окну (сцена одна: UIApplicationSupportsMultipleScenes = false). Нижняя зона экрана
+    /// может нести «залипший» остаток клавиатуры или чужую вставку (владелец, TestFlight 78: «боттом бар уходит
+    /// наверх»), а у окна она — только домашняя полоса. Панель вкладок и её копия на экране «Категории» встают по ней.
+    @MainActor static var низОкна: CGFloat {
+        let окна = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+        return (окна.first(where: { $0.isKeyWindow }) ?? окна.first)?.safeAreaInsets.bottom ?? 0
+    }
 }

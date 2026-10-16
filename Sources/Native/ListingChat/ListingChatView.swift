@@ -438,7 +438,7 @@ struct ЭкранЧатаОбъявления: View {
                 открытьВСтеке(Listing(номер: номер))
                 return
             }
-            WebBridge.shared.лентаВидна = true
+            WebBridge.shared.показатьЛенту()
             NativeRouter.shared.цель = .объявление(id: номер, намерение: .купить)
             return
         }

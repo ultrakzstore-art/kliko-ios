@@ -196,7 +196,7 @@ enum СделкиEDS {
     static func перехватить(_ адрес: URL, подСписок: Bool) -> Bool {
         guard let с = ссылка(адрес) else { return false }
         if подСписок && NativeRouter.доступна(.сделки) {
-            WebBridge.shared.лентаВидна = true
+            WebBridge.shared.показатьЛенту()
             NativeRouter.shared.цель = .сделки
         }
         switch с {

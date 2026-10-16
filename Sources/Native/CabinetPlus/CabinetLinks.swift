@@ -39,7 +39,7 @@ enum ПереходыКабинета {
         case .разделКабинета, .избранное: break
         default: return false
         }
-        WebBridge.shared.лентаВидна = true
+        WebBridge.shared.показатьЛенту()
         NativeRouter.shared.цель = куда
         return true
     }
@@ -79,7 +79,7 @@ enum ПереходыКабинета {
     private static func войтиЗатем(_ адрес: URL) -> Bool {
         guard Config.нативныеСсылки, вкладкиЕсть, let куда = АдресаКабинета.цельПослеВхода(адреса: адрес),
               NativeRouter.доступна(куда) else { return false }
-        WebBridge.shared.лентаВидна = true
+        WebBridge.shared.показатьЛенту()
         NativeRouter.shared.цель = куда
         return true
     }
@@ -97,7 +97,7 @@ enum ПереходыКабинета {
             /* Кабинет и деньги — выше (перехватить) или страницей сайта, как было. */
             return false
         }
-        WebBridge.shared.лентаВидна = true
+        WebBridge.shared.показатьЛенту()
         NativeRouter.shared.цель = куда
         return true
     }

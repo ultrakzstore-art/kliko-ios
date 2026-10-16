@@ -119,7 +119,7 @@ struct ЭкранСделкиEDS: View {
     private func кМоимСделкам() {
         закрыть()
         guard NativeRouter.доступна(.сделки) else { return }
-        WebBridge.shared.лентаВидна = true
+        WebBridge.shared.показатьЛенту()
         NativeRouter.shared.цель = .сделки
     }
 }
