@@ -61,7 +61,9 @@ struct ОтветГлавной: Decodable, @unchecked Sendable {
         }
         ok = да
         всего = (try? c.decode(ЧислоГлавной.self, forKey: .total))?.значение
-        вип = ((try? c.decode([ТоварГлавной].self, forKey: .vip)) ?? []).compactMap(\.товар)
+        /* Цифровые товары (Ц1) — прочь при разборе, как у ленты (ЦифровыеТовары.безЦифровых). */
+        let випПришли = ((try? c.decode([ТоварГлавной].self, forKey: .vip)) ?? []).compactMap(\.товар)
+        вип = ЦифровыеТовары.безЦифровых(випПришли)
         /* Этап 49: вакансии — отдельным блоком jobs{items, n}, как у _mhRow и _mhTiles сайта. Не объект — ряда нет. */
         let работа = try? c.decode(СырыеВакансии.self, forKey: .jobs)
         вакансии = работа?.вакансии ?? []
@@ -288,7 +290,8 @@ private struct СыройРаздел: Decodable {
             всего = nil
             return
         }
-        товары = ((try? c.decode([ТоварГлавной].self, forKey: .items)) ?? []).compactMap(\.товар)
+        let пришли = ((try? c.decode([ТоварГлавной].self, forKey: .items)) ?? []).compactMap(\.товар)
+        товары = ЦифровыеТовары.безЦифровых(пришли)       // цифровые товары (Ц1) — прочь при разборе, как у ленты
         всего = (try? c.decode(ЧислоГлавной.self, forKey: .n))?.значение
     }
 }

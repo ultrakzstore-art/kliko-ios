@@ -25,6 +25,11 @@ enum ПоискТелефона {
     /// обновится и цена. Заготовку по ссылке (только номер) не кладём: искать в ней нечего.
     @MainActor
     static func запомнить(_ товар: Listing) {
+        /* Цифровой товар (Ц1): пока его нет в лентах, нет и в поиске iPhone; лёгшую раньше запись — убрать. */
+        if ЦифровыеТовары.скрыто(товар) {
+            CSSearchableIndex.default().deleteSearchableItems(withIdentifiers: [товар.id], completionHandler: nil)
+            return
+        }
         guard Config.spotlight, !товар.заготовка, !товар.title.isEmpty,
               CSSearchableIndex.isIndexingAvailable() else { return }
         let атрибуты = CSSearchableItemAttributeSet(contentType: UTType.content)
