@@ -661,7 +661,8 @@ extension ПодачаМодель {
             }
             return
         }
-        if форма.описание.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 {
+        /* Строка «Размер: …», которую дописало приложение, в минимум не идёт (ClothingSizes.swift). */
+        if ПравилаРазмераОдежды.длинаОписания(форма.описание) < 10 {
             пометить("desc", т("need_desc"))
             шаг = .данные
             return

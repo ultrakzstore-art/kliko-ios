@@ -844,7 +844,8 @@ final class ПодачаМодель: ObservableObject {
             return ("title", т("need_title"))
         }
         if форма.раздел.isEmpty { return ("category", т("need_cat")) }
-        if форма.описание.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 { return ("desc", т("need_desc")) }
+        /* Строка «Размер: …», которую дописало приложение, в минимум не идёт (ClothingSizes.swift). */
+        if ПравилаРазмераОдежды.длинаОписания(форма.описание) < 10 { return ("desc", т("need_desc")) }
         return nil
     }
 
@@ -950,6 +951,8 @@ final class ПодачаМодель: ObservableObject {
     private func формаИзменилась(было: ФормаПодачи) {
         if !ошибкиПолей.isEmpty { снятьОшибки(было: было) }
         guard !заполняем else { return }
+        /* Раздел или название сменились — строка «Размер: …», которая им не подходит, уходит (ClothingSizes.swift). */
+        if форма.раздел != было.раздел || форма.название != было.название { убратьЧужуюСтрокуРазмера() }
         /* Название поменялось — подбор раздела по названию (без сети и Kliko AI), через 0,4 с. */
         if форма.название != было.название { запланироватьПодборРаздела() }
         if режим == .авто {
