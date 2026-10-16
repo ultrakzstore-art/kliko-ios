@@ -172,6 +172,12 @@ enum ОбработкаФотоМоего {
     /// Голова: нос, а нет его — глаз или ухо.
     private static let голова: [VNHumanBodyPoseObservation.JointName] = [.nose, .leftEye, .rightEye, .leftEar, .rightEar]
 
+    /// Для мерок по фото (ОценкаМерокПоФото, MyThingsBodyEstimate.swift): локти и запястья — длина руки. Ещё пишется
+    /// «eyes» — уровень глаз одной средней точкой (масштаб по росту); расстояние между глазами не храним.
+    private static let суставыМерок: [(ключ: String, сустав: VNHumanBodyPoseObservation.JointName)] = [
+        ("lelb", .leftElbow), ("relb", .rightElbow), ("lwri", .leftWrist), ("rwri", .rightWrist)
+    ]
+
     /**
      Точки позы самого крупного человека: доли снимка, начало сверху слева (у Vision — снизу, поэтому y = 1 − y),
      уверенность не ниже 0,3. «В полный рост» — видны голова (или шея) и хоть одна лодыжка, а фигура не ниже 55 % кадра.
@@ -201,6 +207,15 @@ enum ОбработкаФотоМоего {
             guard точки.count >= 3 else { continue }
             let ys = точки.values.map(\.y)
             let высота = (ys.max() ?? 0) - (ys.min() ?? 0)
+            // Точки для мерок — после замера высоты: на выбор человека и «в полный рост» не влияют.
+            for пара in суставыМерок {
+                if let т = точка(пара.сустав) { точки[пара.ключ] = т }
+            }
+            let глаза = [точка(.leftEye), точка(.rightEye)].compactMap { $0 }
+            if !глаза.isEmpty {
+                точки["eyes"] = ТочкаМоего(x: глаза.map(\.x).reduce(0, +) / Double(глаза.count),
+                                           y: глаза.map(\.y).reduce(0, +) / Double(глаза.count))
+            }
             if высота > лучшаяВысота {
                 лучшаяВысота = высота
                 лучшие = точки
