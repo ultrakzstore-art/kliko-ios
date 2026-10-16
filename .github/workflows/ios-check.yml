@@ -416,6 +416,115 @@ jobs:
           git commit -qm "diag2 ${{ matrix.label }} $GITHUB_RUN_ID"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/diag2-${{ matrix.label }}
 
+  # РАЗБОР ЗАВИСАНИЯ, ШАГ 3 (16.10.2026): бисекция показала — цикл AttributeGraph приносит 1a77471 (9e22e2c чистый).
+  # Варианты текущей ветки: A — без счётчика подвисаний в ленте, B — без новой раскладки нижней панели, C — без обоих.
+  # Запуск — словом [diag3] в коммите.
+  diag3:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[diag3]')
+    runs-on: macos-26
+    timeout-minutes: 50
+    continue-on-error: true
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: vA
+            cut: "A"
+          - label: vB
+            cut: "B"
+          - label: vC
+            cut: "AB"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Вариант ${{ matrix.cut }}
+        run: |
+          python3 - "${{ matrix.cut }}" <<'PY'
+          import sys
+          cut = sys.argv[1]
+          def patch(path, old, new):
+              s = open(path, encoding='utf-8').read()
+              assert s.count(old) == 1, (path, old)
+              open(path, 'w', encoding='utf-8').write(s.replace(old, new))
+          if 'A' in cut:
+              patch('Sources/Native/Feed/NativeFeedView.swift',
+                    '                .замерПодвисанийЛистания(наГлавной ? "home" : "feed")   // подвисания при листании (ScrollHitches)\n', '')
+          if 'B' in cut:
+              patch('Sources/Native/NativeTabsView.swift',
+                    '                    .padding(.bottom, полоска ? 0 : КлавиатураНаЭкране.низОкна)\n'
+                    '                    .frame(maxHeight: .infinity, alignment: .bottom)\n'
+                    '                    .ignoresSafeArea(полоска ? SafeAreaRegions() : .all, edges: .bottom)\n', '')
+          print('ok', cut)
+          PY
+          git diff --stat
+
+      - name: Xcode, XcodeGen, симулятор
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          brew install xcodegen
+          xcodegen generate
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"]); raise SystemExit
+          ')
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Собрать
+        run: |
+          set -o pipefail
+          xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=1.13 CURRENT_PROJECT_VERSION=999 | tail -3
+          app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
+          echo "APP=$app" >> "$GITHUB_ENV"
+
+      - name: Запуск
+        run: |
+          mkdir -p diag
+          xcrun simctl install "$UDID" "$APP"
+          id=$(curl -sS 'https://kliko.kz/api/listings.php?sort=reco&page=1&per=1' | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["id"])' || true)
+          xcrun simctl launch --stdout="$PWD/diag/out.txt" --stderr="$PWD/diag/err.txt" "$UDID" kz.kliko.app \
+            -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ
+          sleep 20; xcrun simctl io "$UDID" screenshot diag/home20.png >/dev/null 2>&1 || true
+          xcrun simctl terminate "$UDID" kz.kliko.app || true
+          if [ -n "$id" ]; then
+            xcrun simctl launch --stdout="$PWD/diag/out2.txt" --stderr="$PWD/diag/err2.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ -klikoOpen "https://kliko.kz/marketplace?item=$id"
+            sleep 20; xcrun simctl io "$UDID" screenshot diag/link20.png >/dev/null 2>&1 || true
+          fi
+          echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt 2>/dev/null || true
+          if cat diag/err.txt diag/err2.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
+          for f in diag/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          ls -la diag
+
+      - name: Выложить в ветку ci/diag3-${{ matrix.label }}
+        if: always()
+        run: |
+          [ -d diag ] || exit 0
+          cd diag
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "diag3 %s (вариант %s), коммит %s, прогон %s\n" "${{ matrix.label }}" "${{ matrix.cut }}" "$GITHUB_SHA" "$GITHUB_RUN_ID" > README.md
+          git add -A
+          git commit -qm "diag3 ${{ matrix.label }} $GITHUB_RUN_ID"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/diag3-${{ matrix.label }}
+
   screens:
     if: github.event_name == 'workflow_dispatch' && inputs.shots
     runs-on: macos-26
