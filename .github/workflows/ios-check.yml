@@ -288,6 +288,134 @@ jobs:
           git commit -qm "diag ${{ matrix.label }} $GITHUB_RUN_ID"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/diag-${{ matrix.label }}
 
+  # РАЗБОР ЗАВИСАНИЯ, ШАГ 2 (16.10.2026): на симуляторе 80 висит, 78 — нет, и только у 80 в выводе «AttributeGraph: cycle
+  # detected» — цикл зависимостей SwiftUI. Здесь: (1) бисекция коммитов между 78 и 79 — кадр через 30 с и есть ли цикл;
+  # (2) отладчик на 80: точка остановки на печати цикла и полный стек вызовов. Запуск — словом [diag2] в коммите.
+  diag2:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[diag2]')
+    runs-on: macos-26
+    timeout-minutes: 50
+    continue-on-error: true
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: m32
+            ref: 32f1f3f75b22d53ef755d98c13c2c7df1d32d83b
+            pick: ""
+            lldb: ""
+          - label: w31
+            ref: 31a87d776564bd6a851812298978a0e2a27ab717
+            pick: 9e22e2c5f09be79d4117d88c63d5dfa0b8c34128
+            lldb: ""
+          - label: s9e
+            ref: 9e22e2c5f09be79d4117d88c63d5dfa0b8c34128
+            pick: ""
+            lldb: ""
+          - label: dbg80
+            ref: 97989f8ba7bf9f867822544eb87487d2b11b59ce
+            pick: ""
+            lldb: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
+
+      - name: Подготовить исходники
+        run: |
+          if [ -n "${{ matrix.pick }}" ]; then
+            git -c user.name=ci -c user.email=ci@example.com cherry-pick "${{ matrix.pick }}"
+          fi
+          git log --oneline -3
+
+      - name: Xcode, XcodeGen, симулятор
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          brew install xcodegen
+          xcodegen generate
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"]); raise SystemExit
+          ')
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Собрать
+        run: |
+          set -o pipefail
+          xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=1.13 CURRENT_PROJECT_VERSION=999 | tail -3
+          app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
+          echo "APP=$app" >> "$GITHUB_ENV"
+
+      - name: Запуск
+        run: |
+          mkdir -p diag
+          xcrun simctl install "$UDID" "$APP"
+          if [ -z "${{ matrix.lldb }}" ]; then
+            xcrun simctl launch --stdout="$PWD/diag/out.txt" --stderr="$PWD/diag/err.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ
+            sleep 15; xcrun simctl io "$UDID" screenshot diag/s15.png >/dev/null 2>&1 || true
+            sleep 15; xcrun simctl io "$UDID" screenshot diag/s30.png >/dev/null 2>&1 || true
+            echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt || true
+            if grep -q "cycle detected" diag/err.txt; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
+          else
+            xcrun simctl launch --wait-for-debugger --stdout="$PWD/diag/out.txt" --stderr="$PWD/diag/err.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ
+            sleep 2
+            pid=$(pgrep -f 'Kliko.app/Kliko' | head -1)
+            echo "pid=$pid"
+            {
+              echo 'settings set target.max-string-summary-length 300'
+              echo 'breakpoint set -r "print_cycle"'
+              echo 'breakpoint set -r "[Cc]ycle[A-Z_]*[Dd]etect"'
+              echo 'breakpoint list'
+              echo 'continue'
+              echo 'bt 200'
+              echo 'thread list'
+              echo 'continue'
+              echo 'bt 200'
+              echo 'detach'
+              echo 'quit'
+            } > lldb.cmds
+            perl -e 'alarm 240; exec @ARGV' sudo lldb --batch -p "$pid" -s lldb.cmds > diag/lldb.txt 2>&1 || true
+            sleep 3
+            xcrun simctl io "$UDID" screenshot diag/after.png >/dev/null 2>&1 || true
+            echo "=== stderr:"; cat diag/err.txt || true
+            echo "=== lldb:"; cut -c1-400 diag/lldb.txt | head -700
+          fi
+          for f in diag/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          ls -la diag
+
+      - name: Выложить в ветку ci/diag2-${{ matrix.label }}
+        if: always()
+        run: |
+          [ -d diag ] || exit 0
+          cd diag
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "diag2 %s (%s + %s), прогон %s\n" "${{ matrix.label }}" "${{ matrix.ref }}" "${{ matrix.pick }}" "$GITHUB_RUN_ID" > README.md
+          git add -A
+          git commit -qm "diag2 ${{ matrix.label }} $GITHUB_RUN_ID"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/diag2-${{ matrix.label }}
+
   screens:
     if: github.event_name == 'workflow_dispatch' && inputs.shots
     runs-on: macos-26
