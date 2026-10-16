@@ -697,6 +697,9 @@ POST subs.php?action=add  { "csrf": "…", "keyword": "", "category": "lamps", "
 - `std` — **публичный фильтр одной вещи** (синтаксис §4.1, без `|`), то же, что ручной чип в ленте. Хранится в подписке
   аккаунта, как `keyword` и `category` сейчас; `list` отдаёт `std` и `label`. Это не `fit_*`: запрет `SERVER_MY_THINGS.md`
   §3.1 («`fit_*` в subs не принимать») остаётся в силе.
+- Такая подписка — подписка «Новинок» (`kind: "fit"`, `SERVER_CIRCLE.md` §6.2–6.4): в мгновенную рассылку `sub` на каждое
+  объявление она не входит (только дневная сводка), а прежний `list` без `kinds=search,fit` её не отдаёт — установленные
+  сборки проверяли бы `category` и `city` без `std`, то есть весь раздел.
 - `label` — только стандарт («Лампы E14», «Шины 205/55 R16»): приложение не кладёт туда имена вещей «Моего»
   («гостиная», «Camry», прозвище) — связь подписки с вещью хранится на телефоне. Пришло больше 60 знаков — обрезать.
 - Создаётся **только по явному нажатию** «Сообщать push-ом, даже когда приложение закрыто» у вещи — никогда сам из
@@ -854,7 +857,7 @@ curl -sS -H 'Content-Type: application/json' -X POST "$K/api/price_stats.php" \
 curl -sS "$K/api/brief.php?id=$ID" | jq '{chip, basis: .market.basis, pkey: .market.pkey}'                 # chip только low/same
 
 # Сделка: снимок и итог (под покупателем тестовой сделки)
-curl -sS -b cookies.txt "$K/escrow.php?action=my_deals&role=buyer" | jq '.deals[0] | {status, outcome, s: .listing_snapshot | {std, qty, category}}'
+curl -sS -b cookies.txt "$K/kz/ru/escrow.php?action=my_deals&role=buyer" | jq '.deals[0] | {status, outcome, s: .listing_snapshot | {std, qty, category}}'
 
 # Журналы: значений из тела POST нет
 feed 'per=1' '{"fit_std":"ram_module.gen:DDR4;ram_module.max_gb:31"}' >/dev/null
@@ -911,6 +914,8 @@ grep -rc 'max_gb:31' /var/log/ 2>/dev/null | grep -v ':0$'                      
 3. `price_stats.php` сейчас: `avg` — среднее или медиана? Как режете выбросы и считаете `enough`? Чтобы `std`-срез и
    прежний ответ не расходились в подписях.
 4. Шлёт ли сайт push по сохранённым поискам (`subs.php`) сейчас? Если нет — шаг §7.2 позже, на телефоне работает шаг А.
+   *(Закрыт вашим `APP_CHANGES.md` 29.09: да, тип `sub` на каждое объявление. Остаток вопроса — `SERVER_CIRCLE.md`
+   §19.1, п. 6.)*
 5. `api/devices.php` — откуда возьмёте ноутбуки, платы, принтеры и технику: покупка базы или сбор? Есть ли вопрос
    лицензии? С чего начнёте (топ КЗ)?
 6. Перенос старых объявлений (§3.8): сколько объявлений по первым семьям и сколько займёт? Нужен ли вам служебный
