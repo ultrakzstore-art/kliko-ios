@@ -122,7 +122,7 @@ enum ИменаРазделовСайта {
         "racket-sports": "Ракетные виды спорта", "camping": "Туризм и кемпинг", "tents": "Палатки",
         "sleeping-bags": "Спальники", "backpacks-camping": "Рюкзаки туристические",
         "hiking-boots": "Трекинговая обувь", "hunting-fishing": "Охота и рыбалка", "fishing-rods": "Удочки и снасти",
-        "hunting-equipment": "Охотничье снаряжение", "animals": "Животные", "dogs": "Собаки", "dogs-puppies": "Щенки",
+        "hunting-equipment": "Охотничье снаряжение", "animals": "Питомцы", "dogs": "Собаки", "dogs-puppies": "Щенки",
         "dogs-adults": "Взрослые собаки", "cats": "Кошки", "cats-kittens": "Котята", "cats-adults": "Взрослые кошки",
         "birds": "Птицы", "parrots": "Попугаи", "canaries": "Канарейки и зяблики", "pigeons": "Голуби",
         "birds-exotic": "Экзотические птицы", "birds-other": "Другие птицы", "fish-aquariums": "Рыбы и аквариумы",

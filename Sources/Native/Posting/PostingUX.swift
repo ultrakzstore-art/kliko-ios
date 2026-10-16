@@ -823,7 +823,9 @@ struct ЗначокРазделаПодачи: View {
         self.корень = корень
     }
 
+    /// С нативными значками разделов — тот же знак, что в сетке главной, без заливки (ЗначкиРазделов.контур).
     static func символ(_ корень: String) -> String {
+        if Config.нативныеЗначкиРазделов { return ЗначкиРазделов.контур(корень) }
         switch корень {
         case "electronics": return "iphone"
         case "transport": return "car"
@@ -843,12 +845,18 @@ struct ЗначокРазделаПодачи: View {
     }
 
     var body: some View {
-        Image(systemName: Self.символ(корень))
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(Theme.акцент)
-            .frame(width: 38, height: 38)
-            .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
-            .accessibilityHidden(true)
+        if Config.нативныеЗначкиРазделов {
+            /* 16.10.2026: значок корня в стиле iOS (ИконкаРаздела, CategoryIcons.swift) той же стороны 38 — как строки
+               «Настроек»; без названия — его читает строка. */
+            ИконкаРаздела(ключ: корень, сторона: 38)
+        } else {
+            Image(systemName: Self.символ(корень))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.акцент)
+                .frame(width: 38, height: 38)
+                .background(Theme.мята, in: RoundedRectangle(cornerRadius: Theme.Радиус.sm, style: .continuous))
+                .accessibilityHidden(true)
+        }
     }
 }
 

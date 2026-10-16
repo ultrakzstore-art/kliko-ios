@@ -54,7 +54,7 @@ enum ВитринаТекст {
             "st_prev": "Предыдущая", "st_next": "Следующая",
             "st_go_transport": "Перейти к Авто", "st_go_realty": "Перейти к Недвижимости",
             "st_go_electronics": "Перейти к Электронике", "st_go_services": "Перейти к Услугам",
-            "st_go_goods": "Перейти к Товарам", "st_go_animals": "Перейти к Животным", "st_go_jobs": "Перейти к Работе"
+            "st_go_goods": "Перейти к Товарам", "st_go_animals": "Перейти к Питомцам", "st_go_jobs": "Перейти к Работе"
         ],
         "kk": [
             "near_h": "Жаныңызда", "near_s": "Геолокацияны қосыңыз — ең жақындарын көрсетеміз",
@@ -89,7 +89,7 @@ enum ВитринаТекст {
             "st_prev": "Алдыңғы", "st_next": "Келесі",
             "st_go_transport": "Авто бөліміне өту", "st_go_realty": "Жылжымайтын мүлікке өту",
             "st_go_electronics": "Электроникаға өту", "st_go_services": "Қызметтерге өту",
-            "st_go_goods": "Тауарларға өту", "st_go_animals": "Жануарларға өту", "st_go_jobs": "Жұмысқа өту"
+            "st_go_goods": "Тауарларға өту", "st_go_animals": "Үй жануарларына өту", "st_go_jobs": "Жұмысқа өту"
         ],
         "en": [
             "near_h": "Near you", "near_s": "Turn on location — we'll show the nearest",
@@ -124,7 +124,7 @@ enum ВитринаТекст {
             "st_prev": "Previous", "st_next": "Next",
             "st_go_transport": "Go to Cars", "st_go_realty": "Go to Real estate",
             "st_go_electronics": "Go to Electronics", "st_go_services": "Go to Services",
-            "st_go_goods": "Go to Goods", "st_go_animals": "Go to Animals", "st_go_jobs": "Go to Jobs"
+            "st_go_goods": "Go to Goods", "st_go_animals": "Go to Pets", "st_go_jobs": "Go to Jobs"
         ],
         "ar": [
             "near_h": "بالقرب منك", "near_s": "شغّل تحديد الموقع — وسنعرض الأقرب",
@@ -159,7 +159,7 @@ enum ВитринаТекст {
             "st_prev": "السابق", "st_next": "التالي",
             "st_go_transport": "الانتقال إلى السيارات", "st_go_realty": "الانتقال إلى العقارات",
             "st_go_electronics": "الانتقال إلى الإلكترونيات", "st_go_services": "الانتقال إلى الخدمات",
-            "st_go_goods": "الانتقال إلى البضائع", "st_go_animals": "الانتقال إلى الحيوانات", "st_go_jobs": "الانتقال إلى الوظائف"
+            "st_go_goods": "الانتقال إلى البضائع", "st_go_animals": "الانتقال إلى الحيوانات الأليفة", "st_go_jobs": "الانتقال إلى الوظائف"
         ]
     ]
 }

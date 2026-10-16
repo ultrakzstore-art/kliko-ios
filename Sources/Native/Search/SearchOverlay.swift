@@ -475,10 +475,7 @@ private struct СтрокаРаздела: View {
     var body: some View {
         Button(action: действие) {
             HStack(spacing: 12) {
-                значок
-                    .frame(width: 40, height: 40)
-                    .background(Color(uiColor: Theme.hex(краска).withAlphaComponent(0.12)),
-                                in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+                иконка
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(имя)
@@ -505,6 +502,20 @@ private struct СтрокаРаздела: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Раздел — значок его корня в стиле iOS 40 (ИконкаРаздела, CategoryIcons.swift, 16.10.2026), как строки поиска
+    /// «Настроек»; бренд или выключенный Config.нативныеЗначкиРазделов — квадрат 40 на 12 % краски, как было.
+    @ViewBuilder
+    private var иконка: some View {
+        if буква == nil && Config.нативныеЗначкиРазделов {
+            ИконкаРаздела(ключ: РазделыСайта.корень(ключ), сторона: 40, запасная: Theme.hex(краска))
+        } else {
+            значок
+                .frame(width: 40, height: 40)
+                .background(Color(uiColor: Theme.hex(краска).withAlphaComponent(0.12)),
+                            in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+        }
     }
 
     @ViewBuilder

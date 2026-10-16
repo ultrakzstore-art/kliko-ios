@@ -121,7 +121,7 @@ enum ListingPageText {
             "hours_gate_b": "Чтобы не беспокоить продавца в нерабочее время, звонок доступен по расписанию. Напишите в чат прямо сейчас — сообщение точно дойдёт, а продавец ответит, когда ему будет удобно.",
             "hours_accepts": "Принимает звонки %@",
             "write_chat": "Написать в чат", "later": "Позже",
-            "root_electronics": "Электроника", "root_transport": "Транспорт", "root_realty": "Недвижимость", "root_clothing": "Одежда и обувь", "root_home-garden": "Дом и сад", "root_kids": "Детские товары", "root_sport": "Спорт и отдых", "root_animals": "Животные", "root_jobs": "Работа", "root_services": "Услуги", "root_hobby": "Хобби и творчество", "root_food-farm": "Продукты и фермерство", "root_beauty": "Красота и здоровье",
+            "root_electronics": "Электроника", "root_transport": "Транспорт", "root_realty": "Недвижимость", "root_clothing": "Одежда и обувь", "root_home-garden": "Дом и сад", "root_kids": "Детские товары", "root_sport": "Спорт и отдых", "root_animals": "Питомцы", "root_jobs": "Работа", "root_services": "Услуги", "root_hobby": "Хобби и творчество", "root_food-farm": "Продукты и фермерство", "root_beauty": "Красота и здоровье",
             "wa_text": "Здравствуйте! Интересует «%@» за %@. Ещё актуально?",
             "next_title": "Следующее объявление", "prev_listing": "Предыдущее объявление",
             "next_hint": "Потяните вверх или нажмите", "next_release": "Отпустите — следующее"
@@ -197,7 +197,7 @@ enum ListingPageText {
             "hours_gate_b": "Сатушыны жұмыстан тыс уақытта мазаламау үшін қоңырау кесте бойынша қолжетімді. Дәл қазір чатқа жазыңыз — хабар міндетті түрде жетеді, ал сатушы өзіне ыңғайлы кезде жауап береді.",
             "hours_accepts": "Қоңырау қабылдайды %@",
             "write_chat": "Чатқа жазу", "later": "Кейін",
-            "root_electronics": "Электроника", "root_transport": "Көлік", "root_realty": "Жылжымайтын мүлік", "root_clothing": "Киім мен аяқ киім", "root_home-garden": "Үй және бақ", "root_kids": "Балалар тауарлары", "root_sport": "Спорт және демалыс", "root_animals": "Жануарлар", "root_jobs": "Жұмыс", "root_services": "Қызметтер", "root_hobby": "Хобби және шығармашылық", "root_food-farm": "Азық-түлік және фермерлік", "root_beauty": "Сұлулық және денсаулық",
+            "root_electronics": "Электроника", "root_transport": "Көлік", "root_realty": "Жылжымайтын мүлік", "root_clothing": "Киім мен аяқ киім", "root_home-garden": "Үй және бақ", "root_kids": "Балалар тауарлары", "root_sport": "Спорт және демалыс", "root_animals": "Үй жануарлары", "root_jobs": "Жұмыс", "root_services": "Қызметтер", "root_hobby": "Хобби және шығармашылық", "root_food-farm": "Азық-түлік және фермерлік", "root_beauty": "Сұлулық және денсаулық",
             "wa_text": "Сәлеметсіз бе! «%@» %@ бағасына қызықтырады. Әлі өзекті ме?",
             "next_title": "Келесі хабарландыру", "prev_listing": "Алдыңғы хабарландыру",
             "next_hint": "Жоғары тартыңыз немесе басыңыз", "next_release": "Жіберіңіз — келесісі"
@@ -273,7 +273,7 @@ enum ListingPageText {
             "hours_gate_b": "So as not to disturb the seller after hours, calls are available on schedule. Write in the chat right now — the message will get through, and the seller will answer when it suits them.",
             "hours_accepts": "Takes calls %@",
             "write_chat": "Write in the chat", "later": "Later",
-            "root_electronics": "Electronics", "root_transport": "Vehicles", "root_realty": "Real estate", "root_clothing": "Clothing and shoes", "root_home-garden": "Home and garden", "root_kids": "Kids' goods", "root_sport": "Sports and leisure", "root_animals": "Animals", "root_jobs": "Jobs", "root_services": "Services", "root_hobby": "Hobbies and crafts", "root_food-farm": "Food and farming", "root_beauty": "Beauty and health",
+            "root_electronics": "Electronics", "root_transport": "Vehicles", "root_realty": "Real estate", "root_clothing": "Clothing and shoes", "root_home-garden": "Home and garden", "root_kids": "Kids' goods", "root_sport": "Sports and leisure", "root_animals": "Pets", "root_jobs": "Jobs", "root_services": "Services", "root_hobby": "Hobbies and crafts", "root_food-farm": "Food and farming", "root_beauty": "Beauty and health",
             "wa_text": "Hello! I'm interested in “%@” for %@. Is it still available?",
             "next_title": "Next listing", "prev_listing": "Previous listing",
             "next_hint": "Pull up or tap", "next_release": "Release for the next one"
@@ -349,7 +349,7 @@ enum ListingPageText {
             "hours_gate_b": "حتى لا يُزعج البائع خارج ساعات العمل، الاتصال متاح حسب الجدول. اكتب في الدردشة الآن — ستصل الرسالة بالتأكيد، وسيرد البائع في الوقت المناسب له.",
             "hours_accepts": "يستقبل المكالمات %@",
             "write_chat": "اكتب في الدردشة", "later": "لاحقًا",
-            "root_electronics": "إلكترونيات", "root_transport": "مركبات", "root_realty": "عقارات", "root_clothing": "ملابس وأحذية", "root_home-garden": "المنزل والحديقة", "root_kids": "مستلزمات الأطفال", "root_sport": "رياضة وترفيه", "root_animals": "حيوانات", "root_jobs": "وظائف", "root_services": "خدمات", "root_hobby": "هوايات وإبداع", "root_food-farm": "أغذية وزراعة", "root_beauty": "الجمال والصحة",
+            "root_electronics": "إلكترونيات", "root_transport": "مركبات", "root_realty": "عقارات", "root_clothing": "ملابس وأحذية", "root_home-garden": "المنزل والحديقة", "root_kids": "مستلزمات الأطفال", "root_sport": "رياضة وترفيه", "root_animals": "حيوانات أليفة", "root_jobs": "وظائف", "root_services": "خدمات", "root_hobby": "هوايات وإبداع", "root_food-farm": "أغذية وزراعة", "root_beauty": "الجمال والصحة",
             "wa_text": "مرحبًا! أنا مهتم بـ «%@» بسعر %@. هل ما زال متاحًا؟",
             "next_title": "الإعلان التالي", "prev_listing": "الإعلان السابق",
             "next_hint": "اسحب للأعلى أو اضغط", "next_release": "اترك للانتقال إلى التالي"

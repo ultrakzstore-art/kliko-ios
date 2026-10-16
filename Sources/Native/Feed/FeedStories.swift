@@ -172,7 +172,7 @@ struct РядИсторий: View {
                     .overlay { Circle().strokeBorder(Theme.поверхность, lineWidth: 2) }
                 }
                 .frame(width: 62, height: 62)
-                Text(история.заголовок.isEmpty ? набор.название : история.заголовок)
+                Text(история.заголовок.isEmpty ? набор.названиеНаЭкране : история.заголовок)
                     .font(.system(size: 10, weight: .semibold))     // .vst-t: --fs-2xs 10 px, 600
                     .foregroundStyle(Theme.текст)
                     .multilineTextAlignment(.center)
@@ -236,7 +236,8 @@ struct ПросмотрИсторий: View {
     }
 
     private var имяРаздела: String {
-        if !набор.название.isEmpty { return набор.название }
+        /* 16.10.2026: у корня со своим названием («Питомцы») — слова приложения, не сайта (названиеНаЭкране). */
+        if !набор.названиеНаЭкране.isEmpty { return набор.названиеНаЭкране }
         return DesignText.т("v_" + набор.раздел)
     }
 

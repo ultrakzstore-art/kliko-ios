@@ -64,8 +64,10 @@ struct РазделГлавной: Identifiable, Hashable {
     /// «Работа»: её объявления — вакансии (api/jobs.php у сайта), их показывает своё окно (ОкноВакансий).
     var вакансии: Bool { ключ == "jobs" }
 
-    /// Значок раздела в полосе разделов под шапкой (.mk-vchip-ic) — ближайший SF Symbol к SVG сайта.
+    /// Значок раздела в полосе разделов под шапкой (.mk-vchip-ic) — ближайший SF Symbol к SVG сайта. С нативными
+    /// значками разделов — тот же знак, что в сетке главной, без заливки (ЗначкиРазделов.контур).
     var значок: String {
+        if Config.нативныеЗначкиРазделов { return ЗначкиРазделов.контур(ключ) }
         switch ключ {
         case "transport": return "car"
         case "realty": return "building.2"
@@ -396,6 +398,7 @@ private struct ОтветРяда: @unchecked Sendable {
  специальных размерах — в одну, иначе под подпись остаётся ≈ 105 pt и слова не влезают. Чисел на ячейках нет ни в каком
  состоянии — они только в голосе VoiceOver, когда ответ home=1 пришёл. Нажатие — сжатие 0,94 и «выпрыгивающая»
  картинка (НажатиеРаздела), отклик выбора; вход — волной (ПодъёмСайта, задержка 0,02 на ячейку — скорость, 16.10.2026).
+ С 16.10.2026 картинки нет — значок в стиле iOS (ИконкаРаздела): под пальцем отскакивает его знак.
  */
 struct СеткаРазделов: View {
     let разделы: [РазделГлавной]
@@ -554,6 +557,9 @@ struct СеткаРазделов: View {
  (названиеБезРазрыва): влезает в строку — одной строкой, два слова («Жылжымайтын мүлік», «Все категории») — каждое на
  своей строке, а если и так не влезает — с ужатием до 0,75. «Все категории» — квадрат оттенка акцента без рамки, значок
  сетки и подпись цветом акцента.
+ 16.10.2026 (владелец, TestFlight 78: «иконки сделай лучше, iOS Swift-овские»): при Config.нативныеЗначкиРазделов вместо
+ белого квадрата с картинкой сайта — значок в стиле iOS той же стороны (ИконкаРаздела, CategoryIcons.swift): градиент
+ краски раздела и белый знак; у «Все категории» — сетка в зелёном Kliko. Подписи и раскладка — прежние.
  */
 private struct ЯчейкаРаздела: View {
     enum Вид {
@@ -627,25 +633,40 @@ private struct ЯчейкаРаздела: View {
         .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
     }
 
+    @ViewBuilder
     private func квадрат(сторона: CGFloat, радиус: CGFloat, картинка: CGFloat, значок: CGFloat) -> some View {
-        ZStack {
-            switch вид {
-            case .раздел(let раздел):
-                RoundedRectangle(cornerRadius: радиус, style: .continuous)
-                    .fill(Theme.поверхность)
-                RoundedRectangle(cornerRadius: радиус, style: .continuous)
-                    .strokeBorder(Theme.линия, lineWidth: 1)
-                КартинкаЯчейкиРаздела(раздел: раздел, пунктов: картинка, значок: значок)
-            case .все:
-                RoundedRectangle(cornerRadius: радиус, style: .continuous)
-                    .fill(Theme.оттенокАкцента)
-                Image(systemName: "square.grid.3x3")
-                    .font(.system(size: значок, weight: .semibold))
-                    .foregroundStyle(Theme.акцент)
+        if Config.нативныеЗначкиРазделов {
+            /* 16.10.2026: значок в стиле iOS (ИконкаРаздела, CategoryIcons.swift) вместо белого квадрата с картинкой
+               сайта; отскок знака — когда палец лёг (НажатиеРаздела кладёт разделНажат в среду). */
+            ИконкаРаздела(вид: видЗначка, сторона: сторона)
+        } else {
+            ZStack {
+                switch вид {
+                case .раздел(let раздел):
+                    RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                        .fill(Theme.поверхность)
+                    RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1)
+                    КартинкаЯчейкиРаздела(раздел: раздел, пунктов: картинка, значок: значок)
+                case .все:
+                    RoundedRectangle(cornerRadius: радиус, style: .continuous)
+                        .fill(Theme.оттенокАкцента)
+                    Image(systemName: "square.grid.3x3")
+                        .font(.system(size: значок, weight: .semibold))
+                        .foregroundStyle(Theme.акцент)
+                }
             }
+            .frame(width: сторона, height: сторона)
+            .accessibilityHidden(true)
         }
-        .frame(width: сторона, height: сторона)
-        .accessibilityHidden(true)
+    }
+
+    /// Знак и краска нативного значка: раздел — по ключу, «Все категории» — сетка в зелёном Kliko.
+    private var видЗначка: ВидЗначкаРаздела {
+        switch вид {
+        case .раздел(let раздел): return ЗначкиРазделов.вид(раздел.ключ)
+        case .все: return ЗначкиРазделов.всеКатегории
+        }
     }
 
     /// Подпись: невидимый пробел держит место ровно на две строки, название лежит поверх него сверху.
@@ -699,8 +720,9 @@ private struct ЯчейкаРаздела: View {
         }
     }
 
-    /// Значок для крупного просмотра (долгое нажатие при самом крупном тексте).
+    /// Значок для крупного просмотра (долгое нажатие при самом крупном тексте); с нативными значками — тот же знак.
     private var значок: String {
+        if Config.нативныеЗначкиРазделов { return видЗначка.символ }
         switch вид {
         case .раздел(let раздел): return раздел.значок
         case .все: return "square.grid.3x3"
@@ -972,6 +994,8 @@ struct ПлиткаРаздела: View {
     let высота: CGFloat
     let действие: () -> Void
     @Environment(\.colorScheme) private var схема
+    /// Нажатий — растёт, и знак нативного значка отскакивает (ИконкаРаздела).
+    @State private var прыжок = 0
 
     init(раздел: РазделГлавной, название: String, счёт: Int?, готово: Bool, сплошная: Bool, высота: CGFloat,
          действие: @escaping () -> Void) {
@@ -985,7 +1009,10 @@ struct ПлиткаРаздела: View {
     }
 
     var body: some View {
-        Button(action: действие) {
+        Button {
+            прыжок += 1
+            действие()
+        } label: {
             ZStack(alignment: .bottomTrailing) {
                 LinearGradient(stops: остановки, startPoint: UnitPoint(x: 0.25, y: 0), endPoint: UnitPoint(x: 0.75, y: 1))
                 /* ::after — круг 104 px за правым нижним краем: 10 % краски (в тёмной 16 %), у сплошной — белый 14 %. */
@@ -994,16 +1021,24 @@ struct ПлиткаРаздела: View {
                                    : Color(uiColor: краска).opacity(тёмная ? 0.16 : 0.1))
                     .frame(width: 104, height: 104)
                     .offset(x: 22, y: 30)
-                /* Владелец 25.09.2026, проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — WebP плитки
-                   распаковывается не на главной очереди и хранится в памяти (FeedImages.swift). */
-                КартинкаЛенты(раздел.картинка, пунктов: размерКартинки, заполнить: false) {
-                    Color.clear
+                if Config.нативныеЗначкиРазделов {
+                    /* 16.10.2026: значок в стиле iOS вместо картинки сайта (ИконкаРаздела, CategoryIcons.swift): у
+                       сплошной — 52 белым «стеклом» (краска на краске не видна), у светлой — 44 в краске раздела. */
+                    ИконкаРаздела(ключ: раздел.ключ, сторона: сплошная ? 52 : 44, наКраске: сплошная, прыжок: прыжок)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 12)
+                } else {
+                    /* Владелец 25.09.2026, проверка на телефоне, сборка 33: КартинкаЛенты вместо AsyncImage — WebP плитки
+                       распаковывается не на главной очереди и хранится в памяти (FeedImages.swift). */
+                    КартинкаЛенты(раздел.картинка, пунктов: размерКартинки, заполнить: false) {
+                        Color.clear
+                    }
+                    .frame(width: размерКартинки, height: размерКартинки)
+                    .shadow(color: Color(red: 10 / 255, green: 28 / 255, blue: 20 / 255).opacity(0.26), radius: 6, x: 0, y: 6)
+                    .padding(.trailing, сплошная ? 8 : 6)
+                    .padding(.bottom, сплошная ? 6 : 3)
+                    .accessibilityHidden(true)
                 }
-                .frame(width: размерКартинки, height: размерКартинки)
-                .shadow(color: Color(red: 10 / 255, green: 28 / 255, blue: 20 / 255).opacity(0.26), radius: 6, x: 0, y: 6)
-                .padding(.trailing, сплошная ? 8 : 6)
-                .padding(.bottom, сплошная ? 6 : 3)
-                .accessibilityHidden(true)
                 подписи
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
