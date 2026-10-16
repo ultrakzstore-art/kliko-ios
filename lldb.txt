@@ -1,0 +1,159 @@
+No entry for terminal type "unknown";
+using dumb terminal settings.
+(lldb) process attach --pid 27725
+Process 27725 stopped
+* thread #1, stop reason = signal SIGSTOP
+    frame #0: 0x00000001028789c0 dyld`_dyld_start
+dyld`_dyld_start:
+->  0x1028789c0 <+0>:  mov    x0, sp
+    0x1028789c4 <+4>:  and    sp, x0, #0xfffffffffffffff0
+    0x1028789c8 <+8>:  mov    x29, #0x0                 ; =0 
+    0x1028789cc <+12>: mov    x30, #0x0                 ; =0 
+Target 0: (Kliko) stopped.
+Executable binary set to "/Users/runner/Library/Developer/CoreSimulator/Devices/E839A11B-51B4-4AD3-ACF4-A53B95B7C957/data/Containers/Bundle/Application/B10919F5-973C-4FF6-9B3E-46E03FAE1085/Kliko.app/Kliko".
+Architecture set to: arm64-apple-ios-simulator.
+(lldb) command source -s 0 'lldb.cmds'
+Executing commands in '/Users/runner/work/kliko-ios/kliko-ios/lldb.cmds'.
+(lldb) settings set target.max-string-summary-length 300
+(lldb) breakpoint set -r "print_cycle"
+Breakpoint 1: no locations (pending).
+WARNING:  Unable to resolve breakpoint to any actual locations.
+(lldb) breakpoint set -r "[Cc]ycle[A-Z_]*[Dd]etect"
+Breakpoint 2: no locations (pending).
+WARNING:  Unable to resolve breakpoint to any actual locations.
+(lldb) breakpoint list
+Current breakpoints:
+1: regex = 'print_cycle', locations = 0 (pending)
+
+2: regex = '[Cc]ycle[A-Z_]*[Dd]etect', locations = 0 (pending)
+
+(lldb) continue
+3 locations added to breakpoint 1
+60 locations added to breakpoint 2
+Process 27725 resuming
+Process 27725 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 2.10
+    frame #0: 0x00000001d38c765c SwiftUICore`getEnumTag value witness for SwiftUI._DisplayList_Identity.CodingKeys
+SwiftUICore`getEnumTag value witness for SwiftUI._DisplayList_Identity.CodingKeys:
+->  0x1d38c765c <+0>: mov    w0, #0x0                  ; =0 
+    0x1d38c7660 <+4>: ret    
+
+SwiftUICore`protocol witness for static AttributeGraph._AttributeBody.comparisonMode.getter : __C.AGComparisonMode in conformance SwiftUI.UnaryScrollablePreferenceProvider : AttributeGraph._AttributeBody in SwiftUI:
+    0x1d38c7664 <+0>: mov    w0, #0x2                  ; =2 
+    0x1d38c7668 <+4>: ret    
+Target 0: (Kliko) stopped.
+(lldb) bt 200
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 2.10
+  * frame #0: 0x00000001d38c765c SwiftUICore`getEnumTag value witness for SwiftUI._DisplayList_Identity.CodingKeys
+    frame #1: 0x00000001d43c873c SwiftUICore`ViewGraph.init(rootViewType:requestedOutputs:) + 604
+    frame #2: 0x00000001d43c4474 SwiftUICore`ViewGraph.__allocating_init(rootViewType:requestedOutputs:) + 76
+    frame #3: 0x00000001d3a47a9c SwiftUICore`ViewGraphHost.init(rootViewType:outputs:viewDefinition:) + 204
+    frame #4: 0x00000001d3a479b8 SwiftUICore`ViewGraphHost.__allocating_init(rootViewType:outputs:viewDefinition:) + 84
+    frame #5: 0x00000001d347a748 SwiftUI`specialized _UIHostingView.init(rootView:) + 3168
+    frame #6: 0x00000001d347bba0 SwiftUI`specialized _UIHostingView.__allocating_init(rootView:) + 44
+    frame #7: 0x00000001d34823d0 SwiftUI`specialized UIHostingController.init(rootView:) + 576
+    frame #8: 0x00000001d347f568 SwiftUI`UIHostingController.init(rootView:) + 44
+    frame #9: 0x00000001139f00b4 Kliko.debug.dylib`KlikoHostingController.init() at <compiler-generated>:0
+    frame #10: 0x00000001139f0050 Kliko.debug.dylib`KlikoHostingController.__allocating_init() at SceneDelegate.swift:0
+    frame #11: 0x00000001139f1398 Kliko.debug.dylib`SceneDelegate.scene(scene=0x0000000102ebcfa0, session=0x00000001041d45f0, connectionOptions=0x0000000104252380) at SceneDelegate.swift:52:28
+    frame #13: 0x00000001857bc640 UIKitCore`+[UIScene _sceneForFBSScene:create:withSession:connectionOptions:] + 952
+    frame #14: 0x00000001864a6e90 UIKitCore`-[UIApplication _connectUISceneFromFBSScene:transitionContext:] + 1160
+    frame #15: 0x00000001864a726c UIKitCore`-[UIApplication workspace:didCreateScene:withTransitionContext:completion:] + 324
+    frame #16: 0x0000000185ebbbd8 UIKitCore`-[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:] + 276
+    frame #17: 0x00000001887ed8a0 FrontBoardServices`__95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke + 304
+    frame #18: 0x00000001887edd30 FrontBoardServices`-[FBSScene _callOutQueue_maybeCoalesceClientSettingsUpdates:] + 120
+    frame #19: 0x00000001887ed6f4 FrontBoardServices`-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:] + 404
+    frame #20: 0x00000001888590a4 FrontBoardServices`__93-[FBSWorkspaceScenesClient _callOutQueue_sendDidCreateForScene:transitionContext:completion:]_block_invoke.281 + 220
+    frame #21: 0x00000001887fb2b0 FrontBoardServices`-[FBSWorkspace _calloutQueue_executeCalloutFromSource:withBlock:] + 168
+    frame #22: 0x000000018881a4c8 FrontBoardServices`-[FBSWorkspaceScenesClient _callOutQueue_sendDidCreateForScene:transitionContext:completion:] + 380
+    frame #23: 0x000000018881bc0c FrontBoardServices`__92-[FBSWorkspaceScenesClient createSceneWithIdentity:parameters:transitionContext:completion:]_block_invoke_2 + 192
+    frame #24: 0x00000001887fb2b0 FrontBoardServices`-[FBSWorkspace _calloutQueue_executeCalloutFromSource:withBlock:] + 168
+    frame #25: 0x00000001801a0e98 libdispatch.dylib`_dispatch_client_callout + 12
+    frame #26: 0x000000018018b5fc libdispatch.dylib`_dispatch_block_invoke_direct + 376
+    frame #27: 0x0000000188243258 BoardServices`__BSSERVICEMAINRUNLOOPQUEUE_IS_CALLING_OUT_TO_A_BLOCK__ + 44
+    frame #28: 0x0000000188242210 BoardServices`BSServiceMainRunLoopSourceHandler + 180
+    frame #29: 0x0000000180422f5c CoreFoundation`__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE0_PERFORM_FUNCTION__ + 24
+    frame #30: 0x0000000180422ea4 CoreFoundation`__CFRunLoopDoSource0 + 168
+    frame #31: 0x0000000180422690 CoreFoundation`__CFRunLoopDoSources0 + 312
+    frame #32: 0x0000000180421808 CoreFoundation`__CFRunLoopRun + 760
+    frame #33: 0x000000018041c904 CoreFoundation`_CFRunLoopRunSpecificWithOptions + 496
+    frame #34: 0x00000001933599c0 GraphicsServices`GSEventRunModal + 116
+    frame #35: 0x00000001864a54cc UIKitCore`-[UIApplication _run] + 776
+    frame #36: 0x0000000186b9f910 UIKitCore`UIApplicationMain + 120
+    frame #37: 0x000000018564a820 UIKitCore`UIApplicationMain(_:_:_:_:) + 100
+    frame #40: 0x00000001101ff9b4 Kliko.debug.dylib`main at <compiler-generated>:0
+    frame #41: 0x00000001029d70e4 dyld_sim`start_sim + 20
+    frame #42: 0x00000001028944e4 dyld`start + 6992
+(lldb) thread list
+Process 27725 stopped
+* thread #1: tid = 0x12adf, 0x00000001d38c765c SwiftUICore`getEnumTag value witness for SwiftUI._DisplayList_Identity.CodingKeys, queue = 'com.apple.main-thread', stop reason = breakpoint 2.10
+  thread #2: tid = 0x16a98, 0x0000000102829a20 libsystem_pthread.dylib`start_wqthread
+  thread #3: tid = 0x16a9a, 0x0000000102829a20 libsystem_pthread.dylib`start_wqthread
+  thread #4: tid = 0x16a9b, 0x0000000102bd6698 libsystem_kernel.dylib`__workq_kernreturn + 8
+  thread #5: tid = 0x16a9d, 0x0000000102829a20 libsystem_pthread.dylib`start_wqthread
+  thread #6: tid = 0x16a9f, 0x0000000102bd4b70 libsystem_kernel.dylib`mach_msg2_trap + 8, name = 'com.apple.uikit.eventfetch-thread'
+  thread #7: tid = 0x16aa0, 0x0000000102829a20 libsystem_pthread.dylib`start_wqthread
+(lldb) continue
+Process 27725 resuming
+Process 27725 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 2.12
+    frame #0: 0x00000001d38c766c SwiftUICore`protocol witness for static AttributeGraph._AttributeBody.flags.getter : __C.AGAttributeTypeFlags in conformance SwiftUI.UnaryScrollablePreferenceProvider : AttributeGraph._AttributeBody in SwiftUI
+SwiftUICore`protocol witness for static AttributeGraph._AttributeBody.flags.getter : __C.AGAttributeTypeFlags in conformance SwiftUI.UnaryScrollablePreferenceProvider : AttributeGraph._AttributeBody in SwiftUI:
+->  0x1d38c766c <+0>: mov    w0, #0x8                  ; =8 
+    0x1d38c7670 <+4>: ret    
+
+SwiftUICore`protocol witness for static SwiftUI.ViewModifier._makeView(modifier: SwiftUI._GraphValue<τ_0_0>, inputs: SwiftUI._ViewInputs, body: (SwiftUI._Graph, SwiftUI._ViewInputs) -> SwiftUI._ViewOutputs) -> SwiftUI._ViewOutputs in conformance SwiftUI.ResetDeltaModifier : SwiftUI.ViewModifier in SwiftUI:
+    0x1d38c7674 <+0>: b      0x1d38c74b0               ; static SwiftUI.ResetDeltaModifier._makeView(modifier: SwiftUI._GraphValue<SwiftUI.ResetDeltaModifier>, inputs: SwiftUI._ViewInputs, body: (SwiftUI._Graph, SwiftUI._ViewInputs) -> SwiftUI._ViewOutputs) -> SwiftUI._ViewOutputs
+
+SwiftUICore`resolvedShapeStyles:
+    0x1d38c7678 <+0>: sub    sp, sp, #0xb0
+Target 0: (Kliko) stopped.
+(lldb) bt 200
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 2.12
+  * frame #0: 0x00000001d38c766c SwiftUICore`protocol witness for static AttributeGraph._AttributeBody.flags.getter : __C.AGAttributeTypeFlags in conformance SwiftUI.UnaryScrollablePreferenceProvider : AttributeGraph._AttributeBody in SwiftUI
+    frame #1: 0x00000001c42f2b34 AttributeGraph`___lldb_unnamed_symbol_32acc + 104
+    frame #2: 0x00000001c42d071c AttributeGraph`AG::Graph::intern_type(unsigned long, AG::ClosureFunction<void*>) + 80
+    frame #3: 0x00000001c42e9bcc AttributeGraph`AGGraphInternAttributeType + 12
+    frame #4: 0x00000001c42f054c AttributeGraph`Attribute.init(body:value:flags:update:) + 124
+    frame #5: 0x00000001d43c8770 SwiftUICore`ViewGraph.init(rootViewType:requestedOutputs:) + 656
+    frame #6: 0x00000001d43c4474 SwiftUICore`ViewGraph.__allocating_init(rootViewType:requestedOutputs:) + 76
+    frame #7: 0x00000001d3a47a9c SwiftUICore`ViewGraphHost.init(rootViewType:outputs:viewDefinition:) + 204
+    frame #8: 0x00000001d3a479b8 SwiftUICore`ViewGraphHost.__allocating_init(rootViewType:outputs:viewDefinition:) + 84
+    frame #9: 0x00000001d347a748 SwiftUI`specialized _UIHostingView.init(rootView:) + 3168
+    frame #10: 0x00000001d347bba0 SwiftUI`specialized _UIHostingView.__allocating_init(rootView:) + 44
+    frame #11: 0x00000001d34823d0 SwiftUI`specialized UIHostingController.init(rootView:) + 576
+    frame #12: 0x00000001d347f568 SwiftUI`UIHostingController.init(rootView:) + 44
+    frame #13: 0x00000001139f00b4 Kliko.debug.dylib`KlikoHostingController.init() at <compiler-generated>:0
+    frame #14: 0x00000001139f0050 Kliko.debug.dylib`KlikoHostingController.__allocating_init() at SceneDelegate.swift:0
+    frame #15: 0x00000001139f1398 Kliko.debug.dylib`SceneDelegate.scene(scene=0x0000000102ebcfa0, session=0x00000001041d45f0, connectionOptions=0x0000000104252380) at SceneDelegate.swift:52:28
+    frame #17: 0x00000001857bc640 UIKitCore`+[UIScene _sceneForFBSScene:create:withSession:connectionOptions:] + 952
+    frame #18: 0x00000001864a6e90 UIKitCore`-[UIApplication _connectUISceneFromFBSScene:transitionContext:] + 1160
+    frame #19: 0x00000001864a726c UIKitCore`-[UIApplication workspace:didCreateScene:withTransitionContext:completion:] + 324
+    frame #20: 0x0000000185ebbbd8 UIKitCore`-[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:] + 276
+    frame #21: 0x00000001887ed8a0 FrontBoardServices`__95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke + 304
+    frame #22: 0x00000001887edd30 FrontBoardServices`-[FBSScene _callOutQueue_maybeCoalesceClientSettingsUpdates:] + 120
+    frame #23: 0x00000001887ed6f4 FrontBoardServices`-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:] + 404
+    frame #24: 0x00000001888590a4 FrontBoardServices`__93-[FBSWorkspaceScenesClient _callOutQueue_sendDidCreateForScene:transitionContext:completion:]_block_invoke.281 + 220
+    frame #25: 0x00000001887fb2b0 FrontBoardServices`-[FBSWorkspace _calloutQueue_executeCalloutFromSource:withBlock:] + 168
+    frame #26: 0x000000018881a4c8 FrontBoardServices`-[FBSWorkspaceScenesClient _callOutQueue_sendDidCreateForScene:transitionContext:completion:] + 380
+    frame #27: 0x000000018881bc0c FrontBoardServices`__92-[FBSWorkspaceScenesClient createSceneWithIdentity:parameters:transitionContext:completion:]_block_invoke_2 + 192
+    frame #28: 0x00000001887fb2b0 FrontBoardServices`-[FBSWorkspace _calloutQueue_executeCalloutFromSource:withBlock:] + 168
+    frame #29: 0x00000001801a0e98 libdispatch.dylib`_dispatch_client_callout + 12
+    frame #30: 0x000000018018b5fc libdispatch.dylib`_dispatch_block_invoke_direct + 376
+    frame #31: 0x0000000188243258 BoardServices`__BSSERVICEMAINRUNLOOPQUEUE_IS_CALLING_OUT_TO_A_BLOCK__ + 44
+    frame #32: 0x0000000188242210 BoardServices`BSServiceMainRunLoopSourceHandler + 180
+    frame #33: 0x0000000180422f5c CoreFoundation`__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE0_PERFORM_FUNCTION__ + 24
+    frame #34: 0x0000000180422ea4 CoreFoundation`__CFRunLoopDoSource0 + 168
+    frame #35: 0x0000000180422690 CoreFoundation`__CFRunLoopDoSources0 + 312
+    frame #36: 0x0000000180421808 CoreFoundation`__CFRunLoopRun + 760
+    frame #37: 0x000000018041c904 CoreFoundation`_CFRunLoopRunSpecificWithOptions + 496
+    frame #38: 0x00000001933599c0 GraphicsServices`GSEventRunModal + 116
+    frame #39: 0x00000001864a54cc UIKitCore`-[UIApplication _run] + 776
+    frame #40: 0x0000000186b9f910 UIKitCore`UIApplicationMain + 120
+    frame #41: 0x000000018564a820 UIKitCore`UIApplicationMain(_:_:_:_:) + 100
+    frame #44: 0x00000001101ff9b4 Kliko.debug.dylib`main at <compiler-generated>:0
+    frame #45: 0x00000001029d70e4 dyld_sim`start_sim + 20
+    frame #46: 0x00000001028944e4 dyld`start + 6992
+(lldb) detach
+Process 27725 detached
+(lldb) quit
