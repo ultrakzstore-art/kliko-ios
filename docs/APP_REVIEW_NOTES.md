@@ -324,6 +324,58 @@ The demo account has published listings so "Promote" is visible. Purchases in re
 Демо-аккаунт: завести отдельный тестовый аккаунт (не личный), с 2–3 опубликованными объявлениями и резюме, без
 реальных денег на кошельке. Реквизиты вписать только в App Store Connect, **не в репозиторий**.
 
+### 4.1. Short version for App Store Connect (≤4000 characters)
+
+Сжатый текст раздела 4 для поля Notes (лимит поля — 4000 знаков; полный текст выше — для справки). Версия 1.13
+(сборка 83). Длина — **3884 знака, 3884 единицы UTF-16** (с переводами строк `\r\n` — 3916): `python3 -I`, текст между
+```` ``` ```` без последнего перевода строки. После замены заглушек демо-аккаунта на настоящие данные станет короче.
+Строки внутри абзацев нарочно не перенесены — вставлять как есть.
+
+Убрано по сравнению с полным текстом: 3D-обзор и 360°, ИИ-примерка («Try it on», «On my car», «In my room»),
+«Объявление с ИИ» — на сервере выключены (`tryon` `on: false`, `model3d_build`, `photo_gen`). «Cabinet» заменён на
+«Profile» — так вкладка называется в английском интерфейсе (`TabsText`, `CabinetText`). Добавлено по коду 1.13:
+значения размеров и стандартов для подбора уходят телом POST без куков, только когда сервер объявил вид в
+`rules.fit_filters` (`ForYouServer.swift`, `MyThingsFitRow.swift`; договор — `docs/SERVER_MY_THINGS.md` §8, §10:
+не сохраняются, `Cache-Control: private, no-store`); «Ищу…» — обычный сохранённый поиск по нажатию
+(`MyThingsWanted.swift`); «Continue with Google» — под Sign in with Apple, когда сервер готов (`SignInView.swift`); «Paid services» видны в
+«For business» после «I'm a business» (`CabinetView.swift`); подписи окна покупки — как в `PurchasesText` (en).
+
+```
+Kliko.kz: a classifieds marketplace for Kazakhstan (goods, services, rentals, jobs).
+
+DEMO ACCOUNT
+Login: <DEMO_LOGIN — заполнить владельцу>
+Password: <DEMO_PASSWORD — заполнить владельцу>
+The demo account has published listings so "Promote" is visible. Purchases in review use the Sandbox environment.
+To sign in: Profile tab > Sign in (phone number and password).
+
+NEW IN 1.13 (no sign-in needed, nothing is sold)
+- Profile > My Things: My garage (car, wheel specs), My devices (phone model auto-detected), My height and measurements, My home ("Will it fit through the door and lift?"), My computer ("Fill in from a screenshot", "Upgrade options"), My wardrobe ("What to wear with" > "Find matches").
+- "Fits mine" chip in the feed and a fit note on listing pages (e.g. "Your size ✓") for tires, wheels, phone cases, laptop bags, clothes, shoes; matched on the device.
+- "For you" shelf on the Feed tab: listings that fit My Things (hidden while My Things is empty).
+- Listing page, under the price: "Will it fit?" (furniture, appliances, TVs, carpets): a true-size AR box, plus an AR ruler; "Try on live" (glasses, hats, jewelry, watches): on-device camera + Vision, frames not stored or uploaded; "Will they fit?" (tires and wheels): bolt pattern, offset, center bore, diameter, tire size vs. the user's car.
+
+CAMERA AND PHOTOS
+The camera opens only on the user's tap (e.g. "Take photo", "Measure in AR", "Try on live"). Library photos in My Things use the system photo picker (selected photos only, no library access); My Things saves nothing to Photos. "Add to Photos" is asked only on "Save to Photos".
+
+MY THINGS PRIVACY
+Stored only on the device, excluded from backups; photos are re-encoded without metadata. Vision runs on the device; no face recognition. Only this leaves the phone: the car's make, model and year for our public wheel-spec lookup (no sign-in, no cookies); if our server supports matching, size and standard values (e.g. clothing size, bed size, wheel fitment, phone model) in a cookie-less POST body to the public listings feed, not stored or linked to the user (Cache-Control: private, no-store); and anything the user explicitly saves or posts (e.g. a "Looking for" search or a listing). "Add from my purchases" (sign-in) reads the user's completed Safe deal purchases, read-only. "Delete all My Things" erases all in one step (in My Things or Profile > Data on this phone); signing out erases it too.
+
+PHYSICAL GOODS AND SAFE DEAL - OUTSIDE IAP (3.1.3(e), 3.1.5)
+Payment for physical goods and real-world services between users, the optional Safe deal (escrow) and courier delivery go through a licensed Kazakh payment provider by bank card. The wallet is used only for these deals and seller payouts, never for digital services.
+
+DIGITAL GOODS (3.1.1)
+Digital-code listings (game keys, gift cards, licenses) are not shown or sold: filtered out of all lists, cannot be posted. One opened from a link shows only details and "This feature is not available in the app." (no Buy, Offer, Contact or chat); codes are never revealed.
+
+DIGITAL SERVICES - IN-APP PURCHASE ONLY
+Listing promotion (TOP, bumps), Résumé TOP, listing slots, combo packs, Kliko AI packages (7/14/30/90 days) and Kliko PRO (auto-renewable monthly subscription) are sold only via Apple In-App Purchase (StoreKit 2), with App Store prices only; no other way to pay is linked or mentioned. Purchase sheet: Restore purchases, Manage subscription, Terms of Use (EULA), Terms of service, Public offer, Privacy policy.
+Where: Profile > For business (turn on "I'm a business") > Paid services; Profile > My listings > "Promote"; after publishing a listing > "Promote the listing".
+
+SIGN IN
+Sign-in screen: Sign in with Apple; "Continue with Google", if shown, is below it. eGov (government ID) is optional, not needed for review.
+Account deletion: Profile > Settings > Delete account (in-app).
+```
+
 ---
 
 ## 5. Проверка перед отправкой: частые причины отказа
