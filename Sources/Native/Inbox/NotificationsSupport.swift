@@ -50,12 +50,12 @@ enum УведомленияКабинета {
             let классы = String(кусок.prefix(while: { $0 != "\"" }))
             let набор = Set(классы.split(separator: " ").map(String.init))
             let вид = набор.first(where: { $0.hasPrefix("nt-") }).map { String($0.dropFirst(3)) } ?? "ok"
-            let клик = найти("onclick=\"([^\"]*)\"", в: кусок) ?? ""
-            let сделка = найти("openDeal\\('([A-Za-z0-9_-]{1,40})'\\)", в: клик)
-            let товар = найти("pid:'([A-Za-z0-9_-]{1,40})'", в: клик)
-            let текст = чистыйТекст(найти("<div class=\"n-txt\"[^>]*>(.*?)</div>", в: кусок) ?? "")
-            let когда = чистыйТекст(найти("<div class=\"n-when\"><span>([^<]*)</span>", в: кусок) ?? "")
-            let повторов = чистыйТекст(найти("<span class=\"n-rep\">([^<]*)</span>", в: кусок) ?? "")
+            let клик = найти(Шаблоны.клик, в: кусок) ?? ""
+            let сделка = найти(Шаблоны.сделка, в: клик)
+            let товар = найти(Шаблоны.товар, в: клик)
+            let текст = чистыйТекст(найти(Шаблоны.текст, в: кусок) ?? "")
+            let когда = чистыйТекст(найти(Шаблоны.когда, в: кусок) ?? "")
+            let повторов = чистыйТекст(найти(Шаблоны.повторов, в: кусок) ?? "")
             guard !текст.isEmpty else { continue }
             список.append(УведомлениеКабинета(id: i, вид: вид, новое: набор.contains("nu"), текст: текст, когда: когда,
                                               повторов: повторов, сделка: сделка, товар: товар))
@@ -63,11 +63,28 @@ enum УведомленияКабинета {
         return список
     }
 
-    /// Первая группа совпадения; точка ловит и переводы строк (текст записи сервер переносит).
-    private static func найти(_ шаблон: String, в тексте: String) -> String? {
-        guard let выражение = try? NSRegularExpression(pattern: шаблон, options: [.dotMatchesLineSeparators]) else {
-            return nil
+    /// Шаблоны записи — собраны один раз за запуск (скорость, «кабинет легче»: раньше каждый вызов найти компилировал
+    /// выражение заново — шесть на каждую из 15 записей при каждом чтении страницы). NSRegularExpression неизменяем и
+    /// годится для любого потока: разбор идёт вне главного (CabinetView.разобратьСтраницу).
+    private enum Шаблоны {
+        static let клик = собрать("onclick=\"([^\"]*)\"")
+        static let сделка = собрать("openDeal\\('([A-Za-z0-9_-]{1,40})'\\)")
+        static let товар = собрать("pid:'([A-Za-z0-9_-]{1,40})'")
+        static let текст = собрать("<div class=\"n-txt\"[^>]*>(.*?)</div>")
+        static let когда = собрать("<div class=\"n-when\"><span>([^<]*)</span>")
+        static let повторов = собрать("<span class=\"n-rep\">([^<]*)</span>")
+        /// Точка ловит и переводы строк (текст записи сервер переносит).
+        static func собрать(_ шаблон: String) -> NSRegularExpression? {
+            try? NSRegularExpression(pattern: шаблон, options: [.dotMatchesLineSeparators])
         }
+        /// чистыйТекст: теги и пробелы подряд.
+        static let тег = try? NSRegularExpression(pattern: "<[^>]+>")
+        static let пробелы = try? NSRegularExpression(pattern: "\\s+")
+    }
+
+    /// Первая группа совпадения.
+    private static func найти(_ шаблон: NSRegularExpression?, в тексте: String) -> String? {
+        guard let выражение = шаблон else { return nil }
         let весь = NSRange(тексте.startIndex..., in: тексте)
         guard let совпадение = выражение.firstMatch(in: тексте, options: [], range: весь),
               совпадение.numberOfRanges > 1,
@@ -77,13 +94,20 @@ enum УведомленияКабинета {
 
     /// Теги прочь, сущности HTML — в буквы, пробелы — одним.
     static func чистыйТекст(_ html: String) -> String {
-        var s = html.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        var s = заменить(Шаблоны.тег, в: html)
         let сущности: [(String, String)] = [("&nbsp;", " "), ("&laquo;", "«"), ("&raquo;", "»"), ("&quot;", "\""),
                                             ("&#039;", "'"), ("&#39;", "'"), ("&lt;", "<"), ("&gt;", ">"),
                                             ("&mdash;", "—"), ("&ndash;", "–"), ("&times;", "×"), ("&amp;", "&")]
         for (код, буква) in сущности { s = s.replacingOccurrences(of: код, with: буква) }
-        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        s = заменить(Шаблоны.пробелы, в: s)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Каждое совпадение — одним пробелом (как replacingOccurrences с .regularExpression, но готовым выражением).
+    private static func заменить(_ шаблон: NSRegularExpression?, в тексте: String) -> String {
+        guard let выражение = шаблон else { return тексте }
+        let весь = NSRange(тексте.startIndex..., in: тексте)
+        return выражение.stringByReplacingMatches(in: тексте, options: [], range: весь, withTemplate: " ")
     }
 
     /// markAllRead: POST mark_notif_read {csrf}; ответ не читается.

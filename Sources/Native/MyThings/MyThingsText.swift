@@ -27,7 +27,7 @@ enum МоёText {
     private static let ru: [String: String] = [
         "my_title": "Моё",
         "my_sub": "Машина, дом, компьютер, гардероб и размеры — чтобы подбирать то, что подойдёт именно вам",
-        "my_local": "Только на этом телефоне: Kliko и продавцы этого не видят",
+        "my_local": "Хранится только на этом телефоне, продавцы этого не видят. Для подбора Kliko получает только размеры и стандарты — без имени и не сохраняет их",
         "my_local_short": "Только на этом телефоне",
         "my_ready": "Заполнено на %@",
         "my_all_set": "Всё заполнено",
@@ -257,7 +257,7 @@ enum МоёText {
     private static let kk: [String: String] = [
         "my_title": "Менікі",
         "my_sub": "Көлік, үй, компьютер, киім-кешек және өлшемдер — дәл сізге келетінін таңдау үшін",
-        "my_local": "Тек осы телефонда: Kliko да, сатушылар да мұны көрмейді",
+        "my_local": "Тек осы телефонда сақталады, сатушылар мұны көрмейді. Іріктеу үшін Kliko тек өлшемдер мен стандарттарды алады — атыңызсыз және оларды сақтамайды",
         "my_local_short": "Тек осы телефонда",
         "my_ready": "%@ толтырылды",
         "my_all_set": "Бәрі толтырылды",
@@ -486,7 +486,7 @@ enum МоёText {
     private static let en: [String: String] = [
         "my_title": "My Things",
         "my_sub": "Your car, home, computer, wardrobe and sizes — to find what fits you",
-        "my_local": "Only on this phone: Kliko and sellers can't see it",
+        "my_local": "Stored only on this phone, and sellers can't see it. For matching, Kliko gets only sizes and standards — without your name — and doesn't store them",
         "my_local_short": "Only on this phone",
         "my_ready": "%@ complete",
         "my_all_set": "All set",
@@ -715,7 +715,7 @@ enum МоёText {
     private static let ar: [String: String] = [
         "my_title": "أشيائي",
         "my_sub": "سيارتك ومنزلك وحاسوبك وملابسك ومقاساتك — لنختار ما يناسبك أنت تمامًا",
-        "my_local": "على هذا الهاتف فقط: لا يراها Kliko ولا البائعون",
+        "my_local": "محفوظة على هذا الهاتف فقط، ولا يراها البائعون. للمطابقة يتلقّى Kliko المقاسات والمعايير فقط — بلا اسمك — ولا يحفظها",
         "my_local_short": "على هذا الهاتف فقط",
         "my_ready": "مكتمل بنسبة %@",
         "my_all_set": "كل شيء مكتمل",

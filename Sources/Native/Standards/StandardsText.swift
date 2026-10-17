@@ -265,7 +265,11 @@ enum СтандартыText {
         "fy_ram": "Память для «%@»",
         "fy_ssd": "Накопитель для «%@»",
         "fy_gpu": "Видеокарта для «%@»",
-        "fy_size": "Ваш размер %@"
+        "fy_size": "Ваш размер %@",
+        // Уровень сервера хуже своего (пачка 84, СовместимостьМоего.сУровнемСервера)
+        "st_srv_adapt": "Подойдёт с переходником или деталью",
+        "st_srv_check": "Может подойти — уточните у продавца",
+        "st_srv_bad": "Похоже, не подойдёт"
     ]
 
     private static let kk: [String: String] = [
@@ -504,7 +508,10 @@ enum СтандартыText {
         "fy_ram": "«%@» үшін жады",
         "fy_ssd": "«%@» үшін жинақтағыш",
         "fy_gpu": "«%@» үшін бейнекарта",
-        "fy_size": "Сіздің өлшеміңіз %@"
+        "fy_size": "Сіздің өлшеміңіз %@",
+        "st_srv_adapt": "Өткізгішпен не қосымша бөлшекпен сәйкес келеді",
+        "st_srv_check": "Сәйкес келуі мүмкін — сатушыдан нақтылаңыз",
+        "st_srv_bad": "Сәйкес келмейтін сияқты"
     ]
 
     private static let en: [String: String] = [
@@ -743,7 +750,10 @@ enum СтандартыText {
         "fy_ram": "Memory for “%@”",
         "fy_ssd": "Storage for “%@”",
         "fy_gpu": "Graphics card for “%@”",
-        "fy_size": "Your size %@"
+        "fy_size": "Your size %@",
+        "st_srv_adapt": "Fits with an adapter or an extra part",
+        "st_srv_check": "May fit — check with the seller",
+        "st_srv_bad": "Probably won’t fit"
     ]
 
     private static let ar: [String: String] = [
@@ -982,6 +992,9 @@ enum СтандартыText {
         "fy_ram": "ذاكرة لـ «%@»",
         "fy_ssd": "وحدة تخزين لـ «%@»",
         "fy_gpu": "بطاقة رسوميات لـ «%@»",
-        "fy_size": "مقاسك %@"
+        "fy_size": "مقاسك %@",
+        "st_srv_adapt": "يناسب مع محوّل أو قطعة إضافية",
+        "st_srv_check": "قد يناسب — تحقّق من البائع",
+        "st_srv_bad": "على الأرجح لن يناسب"
     ]
 }

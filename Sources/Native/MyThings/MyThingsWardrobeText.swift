@@ -34,7 +34,7 @@ enum МойГардеробText {
     }
 
     private static let ru: [String: String] = [
-        "mw_local": "«Мой гардероб» хранится только на этом телефоне: фото, размеры и заметки не уходят ни в Kliko, ни продавцам. По ним подбираем, с чем носить.",
+        "mw_local": "«Мой гардероб» хранится только на этом телефоне: фото и заметки не уходят ни в Kliko, ни продавцам, по ним подбираем, с чем носить. Для подбора объявлений Kliko получает только размер — без имени и не сохраняет его.",
         "mw_add": "Добавить вещь",
         "mw_add_first": "Снимите вещь — фон уберём, цвет и вид определим сами. Всё на этом телефоне.",
         "mw_add_sub": "Снимок или Фото — фон уйдёт сам; или шаблоном, без фото.",
@@ -162,7 +162,7 @@ enum МойГардеробText {
     ]
 
     private static let kk: [String: String] = [
-        "mw_local": "«Менің киім-кешегім» тек осы телефонда сақталады: суреттер, өлшемдер мен жазбалар Kliko-ға да, сатушыларға да жіберілмейді. Солар бойынша немен киюді таңдаймыз.",
+        "mw_local": "«Менің киім-кешегім» тек осы телефонда сақталады: суреттер мен жазбалар Kliko-ға да, сатушыларға да жіберілмейді, солар бойынша немен киюді таңдаймыз. Хабарландыруларды іріктеу үшін Kliko тек өлшемді алады — атыңызсыз және оны сақтамайды.",
         "mw_add": "Зат қосу",
         "mw_add_first": "Затты суретке түсіріңіз — фонды алып тастаймыз, түсі мен түрін өзіміз анықтаймыз. Бәрі осы телефонда.",
         "mw_add_sub": "Сурет немесе Фото — фон өзі кетеді; не үлгімен, суретсіз.",
@@ -290,7 +290,7 @@ enum МойГардеробText {
     ]
 
     private static let en: [String: String] = [
-        "mw_local": "“My wardrobe” is stored only on this phone: photos, sizes and notes never go to Kliko or sellers. We use them to suggest what to wear with what.",
+        "mw_local": "“My wardrobe” is stored only on this phone: photos and notes never go to Kliko or sellers — we use them to suggest what to wear with what. To match listings, Kliko gets only your size — without your name — and doesn’t store it.",
         "mw_add": "Add an item",
         "mw_add_first": "Snap an item — we'll remove the background and detect its colour and type. Everything stays on this phone.",
         "mw_add_sub": "Camera or Photos — the background goes by itself; or use a template without a photo.",
@@ -418,7 +418,7 @@ enum МойГардеробText {
     ]
 
     private static let ar: [String: String] = [
-        "mw_local": "«خزانتي» محفوظة على هذا الهاتف فقط: الصور والمقاسات والملاحظات لا تذهب إلى Kliko ولا إلى البائعين. نستخدمها لاقتراح ما يُلبس معًا.",
+        "mw_local": "«خزانتي» محفوظة على هذا الهاتف فقط: الصور والملاحظات لا تذهب إلى Kliko ولا إلى البائعين، ونستخدمها لاقتراح ما يُلبس معًا. لمطابقة الإعلانات يتلقّى Kliko المقاس فقط — بلا اسمك — ولا يحفظه.",
         "mw_add": "إضافة قطعة",
         "mw_add_first": "صوّر القطعة — سنزيل الخلفية ونحدد اللون والنوع بأنفسنا. كل شيء يبقى على هذا الهاتف.",
         "mw_add_sub": "الكاميرا أو الصور — تختفي الخلفية تلقائيًا؛ أو بقالب دون صورة.",

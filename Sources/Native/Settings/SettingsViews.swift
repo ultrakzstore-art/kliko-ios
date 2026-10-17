@@ -43,6 +43,7 @@ struct ШапкаПрофиля: View {
     ])
 
     var body: some View {
+        let _ = ЗамерКабинета.тело("header", Self.self)
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
         HStack(alignment: .top, spacing: 12) {
             PhotosPicker(selection: $выбор, matching: .images) {
@@ -128,9 +129,10 @@ struct ШапкаПрофиля: View {
                     .font(.system(size: 19, weight: .heavy))
                     .foregroundStyle(Color.white)
                 if let адрес = Config.url(профиль.аватар), !профиль.аватар.isEmpty {
-                    AsyncImage(url: адрес) { картинка in
-                        картинка.resizable().scaledToFill()
-                    } placeholder: {
+                    /* Скорость («кабинет легче»): та же загрузка, что у фото ленты и «Требует внимания» (КартинкаЛенты):
+                       декодирование под 42 pt вне главного потока и память готовых картинок — без мигания пустого места
+                       и без полного фото на главном при каждом показе (у AsyncImage кэша декодированных нет). */
+                    КартинкаЛенты(адрес, пунктов: 42) {
                         Color.clear
                     }
                     .frame(width: 42, height: 42)
@@ -422,21 +424,25 @@ struct РазделУдаленияАккаунта: View {
 /// Окна настроек, вопрос «Применить к объявлениям?», мастер и плашка — на вкладке «Кабинет».
 struct НастройкиКабинета: ViewModifier {
     let открыть: (URL) -> Void
+    /// Кабинет на экране (живой стек вкладки, NativeTabsView): скрытый под другой вкладкой листов не показывает —
+    /// мастер «Начало работы» (сам через 1,4 с после профиля) дождётся, пока кабинет снова покажут.
+    let наЭкране: Bool
     @ObservedObject private var модель = НастройкиМодель.shared
 
-    init(открыть: @escaping (URL) -> Void) {
+    init(открыть: @escaping (URL) -> Void, наЭкране: Bool = true) {
         self.открыть = открыть
+        self.наЭкране = наЭкране
     }
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $модель.окно) { окно in
+            .sheet(item: окноНаЭкране) { окно in
                 ЛистОкнаНастроек(окно: окно, открыть: открыть)
             }
-            .sheet(item: $модель.применить) { поле in
+            .sheet(item: применитьНаЭкране) { поле in
                 ОкноПрименения(поле: поле)
             }
-            .sheet(item: $модель.мастер) { мастер in
+            .sheet(item: мастерНаЭкране) { мастер in
                 ЛистНачалаРаботы(авто: мастер.авто, открыть: открыть)
             }
             .alert(тН("ph_changed_t"), isPresented: $модель.номерЖдётВерификации) {
@@ -449,6 +455,19 @@ struct НастройкиКабинета: ViewModifier {
             }
             .overlay(alignment: .bottom) { плашка }
             .onAppear { ОткрытьСтраницуНастроек.действие = открыть }
+    }
+
+    /// Окна модели — пока кабинет на экране; закрыли лист — окно модели прочь, как у прямой привязки $модель.окно.
+    private var окноНаЭкране: Binding<НастройкиМодель.Окно?> {
+        Binding(get: { наЭкране ? модель.окно : nil }, set: { новое in модель.окно = новое })
+    }
+
+    private var применитьНаЭкране: Binding<ПолеПрименения?> {
+        Binding(get: { наЭкране ? модель.применить : nil }, set: { новое in модель.применить = новое })
+    }
+
+    private var мастерНаЭкране: Binding<НастройкиМодель.Мастер?> {
+        Binding(get: { наЭкране ? модель.мастер : nil }, set: { новое in модель.мастер = новое })
     }
 
     @ViewBuilder

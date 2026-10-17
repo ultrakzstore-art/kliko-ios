@@ -6,7 +6,8 @@ import Foundation
  пересекаться с ПримерочнаяText и с экранами живой примерки, габаритов и автоподбора.
  Здесь подписи пяти новых способов на странице объявления («Примерить на себя» — прежние to_btn* из ПримерочнаяText) и
  всё, чем «На свою машину» и «В моей комнате» отличаются от примерки одежды: заголовки, подсказки и советы камеры, шаг
- «Ваше фото», ожидание и итог. Ни цен, ни покупок.
+ «Ваше фото», ожидание и итог. Короткие слова капсулы «Поместится ли?» в строке «На столе · 3D» окна объявления
+ (th_fit_short, th_fit_desk_short, SiteListingLook.swift). Ни цен, ни покупок.
  */
 enum ХабПримеркиText {
     static func т(_ ключ: String) -> String {
@@ -33,6 +34,9 @@ enum ХабПримеркиText {
         "th_fit_desk": "Посмотреть на столе",
         "th_fit_sub_desk": "Вещь в настоящем размере у вас на столе (AR)",
         "th_fit_hint_desk": "Откроет камеру — наведите на стол, и вещь встанет на него в настоящем размере",
+        "th_fit_short": "В комнате",
+        "th_fit_desk_short": "На столе",
+        "th_look_a11y": "Посмотреть вещь",
         "th_auto": "Подойдут ли?",
         "th_auto_sub": "Сверим параметры с вашей машиной",
         "th_auto_sub_rims": "Сверим разболтовку, вылет, отверстие и диаметр с вашей машиной",
@@ -80,6 +84,9 @@ enum ХабПримеркиText {
         "th_fit_desk": "Үстелде көру",
         "th_fit_sub_desk": "Нақты өлшемдегі зат үстеліңізде (AR)",
         "th_fit_hint_desk": "Камераны ашады — үстелге бағыттаңыз, зат оған нақты өлшемінде қойылады",
+        "th_fit_short": "Бөлмеде",
+        "th_fit_desk_short": "Үстелде",
+        "th_look_a11y": "Затты көру",
         "th_auto": "Сәйкес келе ме?",
         "th_auto_sub": "Параметрлерді көлігіңізбен салыстырамыз",
         "th_auto_sub_rims": "PCD, ET, орталық тесік пен диаметрді көлігіңізбен салыстырамыз",
@@ -127,6 +134,9 @@ enum ХабПримеркиText {
         "th_fit_desk": "See it on your desk",
         "th_fit_sub_desk": "The item at true size on your desk (AR)",
         "th_fit_hint_desk": "Opens the camera — point it at your desk and the item appears on it at true size",
+        "th_fit_short": "In your room",
+        "th_fit_desk_short": "On your desk",
+        "th_look_a11y": "View the item",
         "th_auto": "Will they fit?",
         "th_auto_sub": "We check the specs against your car",
         "th_auto_sub_rims": "We check bolt pattern, offset, center bore and diameter against your car",
@@ -174,6 +184,9 @@ enum ХабПримеркиText {
         "th_fit_desk": "شاهده على مكتبك",
         "th_fit_sub_desk": "القطعة بحجمها الحقيقي على مكتبك (الواقع المعزز)",
         "th_fit_hint_desk": "يفتح الكاميرا — وجّهها إلى الطاولة لتظهر القطعة عليها بحجمها الحقيقي",
+        "th_fit_short": "في غرفتك",
+        "th_fit_desk_short": "على مكتبك",
+        "th_look_a11y": "عرض القطعة",
         "th_auto": "هل تناسب سيارتي؟",
         "th_auto_sub": "نطابق المواصفات مع سيارتك",
         "th_auto_sub_rims": "نطابق توزيع البراغي والإزاحة والثقب المركزي والقطر مع سيارتك",

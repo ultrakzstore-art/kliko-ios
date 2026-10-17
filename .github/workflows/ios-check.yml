@@ -618,8 +618,14 @@ jobs:
             sleep 18; xcrun simctl io "$UDID" screenshot "diag/moe-$sect.png" >/dev/null 2>&1 || true
             xcrun simctl terminate "$UDID" kz.kliko.app || true
           done
-          echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null || true
-          if cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
+          # Кабинет со счётчиком перерисовок (-klikoPrintChanges, только отладка): 25 с после входа сразу в кабинет.
+          xcrun simctl launch --stdout="$PWD/diag/out-cabinet.txt" --stderr="$PWD/diag/err-cabinet.txt" "$UDID" kz.kliko.app \
+            -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ -klikoOpen "https://kliko.kz/cabinet.php" -klikoPrintChanges YES
+          sleep 25; xcrun simctl io "$UDID" screenshot "diag/cabinet.png" >/dev/null 2>&1 || true
+          xcrun simctl terminate "$UDID" kz.kliko.app || true
+          echo "=== кабинет: проходы body"; grep -E "kliko-smoke\] cabinet|kliko-perf" diag/err-cabinet.txt | tail -20 || true
+          echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null | grep -v "^[A-Za-z_]*: @self\|changed\.$" | head -80 || true
+          if cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt diag/err-cabinet.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
           for f in diag/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
           ls -la diag
 
