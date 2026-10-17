@@ -543,9 +543,11 @@ extension View {
         modifier(ОтметкаКарточкиМеста(номер: номер))
     }
 
-    /// Прокрутка ленты: подключить модель, вернуть отбор и прыгнуть к месту из снимка.
-    func местоЛенты(модель: FeedModel, прокрутка: ScrollViewProxy) -> some View {
-        modifier(ПрокруткаЛентыМеста(модель: модель, прокрутка: прокрутка))
+    /// Прокрутка ленты: подключить модель, вернуть отбор и прыгнуть к месту из снимка. `цель` — во что прокручивать по
+    /// номеру объявления (лента списком, FeedList.swift: к ряду, где оно стоит); nil — к самому номеру, как раньше.
+    func местоЛенты(модель: FeedModel, прокрутка: ScrollViewProxy,
+                    цель: ((String) -> AnyHashable?)? = nil) -> some View {
+        modifier(ПрокруткаЛентыМеста(модель: модель, прокрутка: прокрутка, цель: цель))
     }
 
     /// Вкладки: запись при уходе в фон, глубины стеков для отметок, восстановление на запуске.
@@ -589,6 +591,7 @@ private struct ОтметкаКарточкиМеста: ViewModifier {
 private struct ПрокруткаЛентыМеста: ViewModifier {
     let модель: FeedModel
     let прокрутка: ScrollViewProxy
+    let цель: ((String) -> AnyHashable?)?
     @ObservedObject var место = МестоПриложения.shared
     /// Корень ленты на экране: под открытым объявлением прокрутка подождёт возврата.
     @State var наЭкране = false
@@ -605,12 +608,13 @@ private struct ПрокруткаЛентыМеста: ViewModifier {
     }
 
     private func прокрутить(виден: Bool) {
-        guard виден, let цель = место.прокрутитьК else { return }
+        guard виден, let номер = место.прокрутитьК else { return }
         место.прокрутитьК = nil
         let прокрутка = self.прокрутка
+        let куда: AnyHashable = self.цель?(номер) ?? AnyHashable(номер)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 150_000_000)
-            прокрутка.scrollTo(цель, anchor: .top)
+            прокрутка.scrollTo(куда, anchor: .top)
         }
     }
 }
