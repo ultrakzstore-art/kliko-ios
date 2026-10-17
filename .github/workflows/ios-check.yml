@@ -75,7 +75,7 @@ jobs:
   # правдой, а не с памятью. Только чтение, без входа: лента, одно объявление, ответ dm.php гостю.
   api-probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
     steps:
       - name: Что отдаёт сайт
@@ -204,6 +204,12 @@ jobs:
           python3 -c 'import json
           d=json.load(open("body")); it=d.get("items") or []
           print("ok=",d.get("ok"),"items=",len(it),"fit_applied=",d.get("fit_applied"),"err=",d.get("error"), "fit_match первых:", [x.get("fit_match") for x in it[:3]])' 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || head -c 400 body
+
+      # Владелец 17.10.2026 («как сделать, чтобы не резал фото — 16:9, 16:10 или какой формат лучше»): какие пропорции у
+      # настоящих снимков объявлений и сколько режет каждая рамка галереи (ci/photo_ratios.py).
+      - uses: actions/checkout@v7
+      - name: Пропорции фото объявлений
+        run: python3 ci/photo_ratios.py 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
   diag:
     if: (github.event_name == 'workflow_dispatch' && inputs.diag) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[diag]'))
