@@ -11,6 +11,11 @@ import UIKit
  замера считались корень ленты (списокЛенты), ряды списка и карточки (ListingCard.body). Карточек должно быть порядка
  того, сколько их выехало на экран, а не кадров; корень — единицы раз: больше — ленту перерисовывает что-то, кроме самой
  прокрутки. Job perf (ios-check.yml) в это же время снимает Time Profiler. В выпускной сборке не делает ничего.
+
+ Сравнение (verify, ios-check.yml): тот же замер ещё два раза — -klikoBenchNoPhotos YES (фото карточек не грузятся,
+ заглушка) и -klikoBenchPlain YES (вместо ячейки ленты — простая карточка: серый прямоугольник 4:3 и три строки текста,
+ без сердца, «Поделиться», меню, зума и меток). Разница с обычным прогоном — цена фото и цена самой карточки; простая
+ тоже тормозит — дело не в карточках (симулятор CI, список, верх главной).
  */
 @MainActor
 enum СчётБенча {
@@ -45,6 +50,11 @@ enum СчётБенча {
     }
 
     #if DEBUG
+    /// Сравнение: фото карточек не грузить (КартинкаЛенты показывает заглушку).
+    static let безФото = UserDefaults.standard.bool(forKey: "klikoBenchNoPhotos")
+    /// Сравнение: вместо ячейки ленты — простая карточка (ПростаяЯчейкаБенча).
+    static let простыеЯчейки = UserDefaults.standard.bool(forKey: "klikoBenchPlain")
+
     static func сбросить() {
         корень = 0
         ряды = 0
@@ -54,6 +64,32 @@ enum СчётБенча {
 }
 
 #if DEBUG
+/// Простая ячейка для сравнения (-klikoBenchPlain): примерно того же размера, что карточка сетки, без всего остального.
+struct ПростаяЯчейкаБенча: View {
+    let товар: Listing
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Rectangle()
+                .fill(Color.gray.opacity(0.18))
+                .aspectRatio(4 / 3, contentMode: .fit)
+            Text(ListingCard.цена(товар))
+                .font(.system(size: 19, weight: .bold))
+                .padding(.horizontal, 12)
+            Text(товар.title)
+                .font(.system(size: 13))
+                .lineLimit(2, reservesSpace: true)
+                .padding(.horizontal, 12)
+            Text(товар.city.isEmpty ? " " : товар.city)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+        }
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
 @MainActor
 final class БенчЛистания: NSObject {
     static let shared = БенчЛистания()
@@ -118,8 +154,9 @@ final class БенчЛистания: NSObject {
             Self.строка("scroll: списка нет на экране — замера нет")
             return
         }
-        Self.строка(String(format: "scroll start: содержимое %.0f pt, окно %.0f pt", прокрутка.contentSize.height,
-                           прокрутка.bounds.height))
+        let вариант: String = СчётБенча.простыеЯчейки ? "простые ячейки" : (СчётБенча.безФото ? "без фото" : "как есть")
+        Self.строка(String(format: "scroll start (%@): содержимое %.0f pt, окно %.0f pt", вариант,
+                           прокрутка.contentSize.height, прокрутка.bounds.height))
         СчётБенча.сбросить()
         let новая = CADisplayLink(target: self, selector: #selector(кадр(_:)))
         новая.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
