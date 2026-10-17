@@ -6,9 +6,9 @@ Kliko 1.13 introduces My Things: save your car, devices and sizes, and Kliko che
 • Everything stays on your phone, and one tap deletes it all. No account needed.
 
 🏡 My home, computer and wardrobe
-• My home: save your rooms, doorways, bed, windows, TV, lamps and appliances, and check whether a purchase will fit through the door and into the elevator.
+• My home: bed, windows, TV, lamps, doors and elevator — check whether a purchase will fit, and see matching listings under each section.
 • My computer: a map of your PC or laptop, specs from a screenshot, and upgrade tips with offers from Kliko listings.
-• My wardrobe: your clothes and outfits, with tips on what goes with what.
+• My wardrobe: your clothes and outfits, tips on what goes with what, and items in your size.
 • A “For you” shelf on the Home tab, and items bought with Safe deal go to My Things in one tap.
 
 📐 See it for real
