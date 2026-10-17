@@ -184,6 +184,27 @@ jobs:
   # (97989f8, висит) — рядом, на одном симуляторе против живого kliko.kz: кадры через 3/8/15/30 с, снимок стеков всех
   # потоков (sample) на 15-й секунде, вывод приложения и журнал. Запуск — галочкой diag или словом [diag] в сообщении
   # коммита. Итог — в ветке ci/diag-<сборка> и в журнале прогона.
+
+      - name: Ряды «Подходит вам» — сколько отдаёт сайт по разделам
+        run: |
+          ua="KlikoApp/1.13 (api-probe)"
+          for c in bedding beds curtains lighting tv-audio mens-clothing mens-shoes womens-clothing; do
+            for sort in new reco; do
+              curl -sS -A "$ua" -H 'Accept: application/json' -o body "https://kliko.kz/api/listings.php?sort=$sort&page=1&per=48&cat=$c" || true
+              python3 -c 'import json,sys
+          d=json.load(open("body"))
+          it=d.get("items") or []
+          std=sum(1 for x in it if x.get("std"))
+          pr=sum(1 for x in it if x.get("parts"))
+          print(sys.argv[1], sys.argv[2], "ok=",d.get("ok"), "items=",len(it), "total=",d.get("total"), "с std=",std, "с parts=",pr, "cats:", sorted({x.get("category") for x in it})[:6])' "$c" "$sort" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || head -c 300 body
+            done
+          done
+          echo "--- POST size=M в mens-clothing" | tee -a "$GITHUB_STEP_SUMMARY"
+          curl -sS -A "$ua" -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{"size":"clothes_men:INT:M"}' -o body "https://kliko.kz/api/listings.php?sort=new&page=1&per=48&cat=mens-clothing" || true
+          python3 -c 'import json
+          d=json.load(open("body")); it=d.get("items") or []
+          print("ok=",d.get("ok"),"items=",len(it),"fit_applied=",d.get("fit_applied"),"err=",d.get("error"), "fit_match первых:", [x.get("fit_match") for x in it[:3]])' 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || head -c 400 body
+
   diag:
     if: (github.event_name == 'workflow_dispatch' && inputs.diag) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[diag]'))
     runs-on: macos-26
