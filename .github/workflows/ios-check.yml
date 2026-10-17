@@ -666,8 +666,8 @@ jobs:
           # ленты, ряды и карточки; снимки посреди листания — успевают ли фото. Без профайлера: он в job perf. Каждый
           # прогон — с чистой установки: иначе приложение восстанавливает вкладку прошлого запуска (кабинет) и листает
           # главную за кадром. Прогоны (17.10.2026, после «голый — 927, простые ячейки — 626, как есть — 269, верх одной
-          # строкой — 267» с -O): что в ячейке ленты стоит кадров — как есть, без обвязки (сердце, «Поделиться», меню,
-          # ТОП, зум), без меню, без зума, простые ячейки.
+          # строкой — 267» с -O; обвязка ячейки — почти ничего: без неё 273): что внутри карточки стоит кадров — без цены,
+          # без строки фактов, без подвала, без вида фото, без рамки.
           bench() {  # метка, доп. аргументы
             label=$1; shift
             xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
@@ -683,10 +683,11 @@ jobs:
             grep -E "kliko-perf\] scroll (total|counts)" "diag/err-scroll-$label.txt" | while IFS= read -r line; do echo "::notice title=листание $label::$line"; done || true
           }
           bench full
-          bench nowrap -klikoBenchNoWrap YES
-          bench nomenu -klikoBenchNoMenu YES
-          bench nozoom -klikoBenchNoZoom YES
-          bench plain -klikoBenchPlain YES
+          bench noprice -klikoBenchNoPrice YES
+          bench nofacts -klikoBenchNoFacts YES
+          bench nofooter -klikoBenchNoFooter YES
+          bench nophotoview -klikoBenchNoPhotoView YES
+          bench noframe -klikoBenchNoFrame YES
           echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null | grep -v "^[A-Za-z_]*: @self\|changed\.$" | head -80 || true
           if cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt diag/err-cabinet.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
           for f in diag/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
@@ -795,10 +796,11 @@ jobs:
             grep -E "kliko-perf\] scroll (total|counts)" "perf/scroll-$label-err.txt" | while IFS= read -r line; do echo "::notice title=листание -O $label::$line"; done || true
           }
           bench full
-          bench nowrap -klikoBenchNoWrap YES
-          bench nomenu -klikoBenchNoMenu YES
-          bench nozoom -klikoBenchNoZoom YES
-          bench plain -klikoBenchPlain YES
+          bench noprice -klikoBenchNoPrice YES
+          bench nofacts -klikoBenchNoFacts YES
+          bench nofooter -klikoBenchNoFooter YES
+          bench nophotoview -klikoBenchNoPhotoView YES
+          bench noframe -klikoBenchNoFrame YES
           profile_case home
           profile_case cabinet -klikoOpen "https://kliko.kz/cabinet.php"
           for f in perf/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
