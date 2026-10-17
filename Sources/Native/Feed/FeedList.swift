@@ -58,6 +58,19 @@ struct РядСпискаЛенты: Identifiable {
     }
 }
 
+/// Ширина карточки ряда списка ленты: по ней карточка просит фото своего размера (ListingCard.пунктовФото). 0 — ширину
+/// не сказали (прежняя сетка, полки, избранное) — прежние 260 точек.
+private struct КлючШириныКарточкиЛенты: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var ширинаКарточкиЛенты: CGFloat {
+        get { self[КлючШириныКарточкиЛенты.self] }
+        set { self[КлючШириныКарточкиЛенты.self] = newValue }
+    }
+}
+
 extension View {
     /// Строка списка ленты: без полей, разделителей и подложки List — вид как у прежней прокрутки.
     func строкаСпискаЛенты() -> some View {
