@@ -9,14 +9,36 @@ import Foundation
  он объявляет в схеме подачи — rules.fit_filters ({"car": true, "phone": true, …}); схему приложение уже держит в
  Caches (ЗагрузкаСхемыПодачи, Posting/PostingSchema.swift) — здесь читается только этот файл, без сети.
 
- По умолчанию крючок выключен (включён = false): v1 «ничего не уходит с телефона» — полка грузит раздел, как любая
- лента, и сверяет на телефоне. Включить — когда сервер закроет §10 (POST не в журналах) и владелец решит; тогда для
- объявленных видов значения уйдут телом, а сверка на телефоне всё равно остаётся — fit_applied ответа не обязателен.
- Дом и компьютер (fit_std) — позже, у сервера их ещё нет.
+ По умолчанию крючок выключен: v1 «ничего не уходит с телефона» — полка грузит раздел, как любая лента, и сверяет на
+ телефоне. Пачка 83 (docs/SERVER_NEW_FOR_MINE.md §2, §11): включает ключ админки std_server_fit (РубильникиНовинок) —
+ тогда для объявленных видов значения уходят телом POST, БЕЗ КУКОВ (§2.1: сервер не связывает тело с человеком), а сверка
+ на телефоне всё равно остаётся: уровень — не лучше fit_match сервера (ForYouModel.swift), fit_applied не обязателен,
+ POST не прошёл — тот же раздел обычным GET. Дом и компьютер (fit_std) — позже, у сервера их ещё нет.
  */
+
+/**
+ Рубильники «Новинок для моего» (docs/SERVER_NEW_FOR_MINE.md §11). Все по умолчанию выключены: значение сборки — false,
+ включает и выключает только админка (НастройкиСервера.вклВыкл). Пока ключа нет в белом списке приложения
+ (НастройкиСервера.ключиФлагов, System/RemoteSettings.swift), сервер его не включит — и нового запроса нет.
+ */
+enum РубильникиНовинок {
+    /// std_server_fit — подбор «Для вас» телом POST (§2).
+    static var подборНаСервере: Bool { НастройкиСервера.вклВыкл("std_server_fit", сборка: false) }
+    /// fit_subs — подписка «Новинки для моего» без входа и push (§3, MyThingsWatch.swift).
+    static var подписка: Bool { НастройкиСервера.вклВыкл("fit_subs", сборка: false) }
+    /// season_rules — правила сезона с сервера (§4, ForYouSeasonServer.swift); встроенные работают и без него.
+    static var сезонСервера: Bool { НастройкиСервера.вклВыкл("season_rules", сборка: false) }
+    /// fit_subs_daily — push в сутки, 1…3; не прислал сервер — 1 (подпись «не чаще раза в день»).
+    static var вСутки: Int {
+        let число: Int = НастройкиСервера.целоеЧисло("fit_subs_daily") ?? 1
+        return max(1, min(3, число))
+    }
+}
+
 enum ОтборСервераДляВас {
-    /// Рубильник крючка. false — в сеть ничего из «Моего»; true — POST для видов из rules.fit_filters.
-    static let включён = false
+    /// Рубильник крючка — ключ std_server_fit. false — в сеть ничего из «Моего»; true — POST для видов из
+    /// rules.fit_filters.
+    static var включён: Bool { РубильникиНовинок.подборНаСервере }
 
     private static let сеть = СетьСайта.Запросы(json: true, безКэша: true)
 
@@ -132,13 +154,12 @@ enum ОтборСервераДляВас {
         return части.isEmpty ? nil : части.joined(separator: "|")
     }
 
-    /// POST ленты: адрес — тот же, что у GET (ListingsAPI.адрес, в нём нет «Моего»), значения — телом JSON.
-    static func загрузить(_ з: ListingsAPI.Запрос, тело: [String: String], куки: [String: String]) async throws
-        -> ListingsPage {
+    /// POST ленты: адрес — тот же, что у GET (ListingsAPI.адрес, в нём нет «Моего»), значения — телом JSON, без куков
+    /// (§2.1): тело ни с кем не связывается, своё объявление отсекает телефон.
+    static func загрузить(_ з: ListingsAPI.Запрос, тело: [String: String]) async throws -> ListingsPage {
         var запрос = URLRequest(url: ListingsAPI.адрес(з))
         запрос.httpMethod = "POST"
         запрос.httpShouldHandleCookies = false
-        for (имя, значение) in куки { запрос.setValue(значение, forHTTPHeaderField: имя) }
         запрос.setValue("application/json", forHTTPHeaderField: "Content-Type")
         запрос.httpBody = try JSONSerialization.data(withJSONObject: тело)
         let (данные, ответ) = try await сеть.data(for: запрос)

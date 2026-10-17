@@ -72,7 +72,7 @@ final class SavedSearchStore: ObservableObject {
     /// запомнит номера и промолчит, а не объявит новой всю первую страницу.
     /// false — список полон: молча вытеснять старый поиск нельзя, человек перестал бы получать о нём уведомления.
     @discardableResult
-    func добавить(_ искомое: ИскомоеЛенты, названиеРаздела: String?, видели: [String]?) -> Bool {
+    func добавить(_ искомое: ИскомоеЛенты, названиеРаздела: String?, видели: [String]?, подпись: String? = nil) -> Bool {
         guard !искомое.пустое, !есть(искомое) else { return true }
         let город = Self.городЛенты
         /* Этап 36: снятие этого поиска ещё не ушло на сайт, а колокольчик нажали снова — вернуть прежний, с его номером
@@ -85,6 +85,7 @@ final class SavedSearchStore: ObservableObject {
         }
         guard поиски.count < Self.предел else { return false }
         var запись = СохранённыйПоиск(искомое: искомое, названиеРаздела: названиеРаздела)
+        запись.подпись = подпись
         if let видели {
             запись.видели = Self.сжать(видели)
             запись.отсчёт = true
@@ -359,6 +360,10 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
     /// Этап 36: город подписки сайта (city: название или пусто — вся страна). nil — своего города нет, поиск идёт за
     /// выбором города на телефоне, как на этапах 12–35.
     var город: String?
+    /// Пачка 83: своё название поиска — «Ищу шины 205/55 R16» из «Ищу» «Моего» (MyThingsWanted.swift). Живёт только на
+    /// телефоне: subs.php его не получает, а принятьССайта оставляет запись телефона. nil — название собирается из слова
+    /// и раздела, как раньше.
+    var подпись: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -370,6 +375,7 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
         case проверен = "checked"
         case серверный = "subId"
         case город = "city"
+        case подпись = "label"
     }
 
     init(искомое: ИскомоеЛенты, названиеРаздела: String?) {
@@ -382,6 +388,7 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
         проверен = nil
         серверный = nil
         город = nil
+        подпись = nil
     }
 
     init(from decoder: Decoder) throws {
@@ -395,6 +402,7 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
         проверен = try? c.decodeIfPresent(Date.self, forKey: .проверен)
         серверный = try? c.decodeIfPresent(String.self, forKey: .серверный)
         город = try? c.decodeIfPresent(String.self, forKey: .город)
+        подпись = try? c.decodeIfPresent(String.self, forKey: .подпись)
     }
 
     /// Подходит ли поиск ленте в этом городе: свой город есть только у подписки сайта (этап 36), без него — любой.
@@ -405,6 +413,13 @@ struct СохранённыйПоиск: Codable, Identifiable, Equatable, Senda
     /// Как поиск называется в кабинете и в уведомлении: «iPhone 15», «Транспорт» или «iPhone 15 · Электроника»; с этапа
     /// 33 — и цена с состоянием: «iPhone 15 · Электроника · от 300 000 ₸ · Б/У».
     var название: String {
+        /* Пачка 83: своё название «Ищу …» — первым, за ним цена, состояние и город, как у прочих. */
+        if let своя = подпись, !своя.isEmpty {
+            var своиЧасти: [String] = [своя]
+            своиЧасти.append(contentsOf: искомое.подписиФильтров)
+            if let свой = город, !свой.isEmpty { своиЧасти.append(свой) }
+            return своиЧасти.joined(separator: " · ")
+        }
         var имяРаздела = искомое.раздел
         if let имя = названиеРаздела, !имя.isEmpty { имяРаздела = имя }
         var части: [String] = []

@@ -83,6 +83,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         // Ответ или «Прочитано» прямо из уведомления — без открытия приложения; completionHandler позовут после запроса.
         if ОтветИзУведомления.обработать(response, готово: completionHandler) { return }
+        // «Новинки для моего» (пачка 83): «Не присылать для этого» — тоже без открытия приложения (MyThingsWatch.swift).
+        if НовинкиМоегоПуш.обработать(response, готово: completionHandler) { return }
         let info = response.notification.request.content.userInfo
         сделкаИзПуша(info)
         // Этап 12: своё локальное уведомление о новых по сохранённому поиску узнаём по метке в userInfo и ведём в
@@ -111,6 +113,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// payload: {"aps":{...}, "url":"/cabinet.php?s=messages"} (или полный https-URL).
     private func handlePayload(_ info: [AnyHashable: Any]) {
+        /* «Новинки для моего» (пачка 83, fit_new, url ?go=foryou&new=1): экран «Для вас» поверх, находки push (ids) —
+           первыми среди загруженного. И нажатие, и холодный старт идут сюда. */
+        if НовинкиМоегоПуш.это(info) {
+            let номера: [String] = НовинкиМоегоПуш.номера(info)
+            Task { @MainActor in НовинкиМоегоПуш.открыть(номера) }
+            return
+        }
         /* Гарантийный талон (warranty_card: «Продавец подписал талон» / «Покупатель просит подписать»): у такого пуша сайт
            своего адреса не знает (push_url_for_type даёт /cabinet.php) — ведём в карточку сделки, где талон и подпись. */
         let тип = (info["type"] as? String) ?? ""

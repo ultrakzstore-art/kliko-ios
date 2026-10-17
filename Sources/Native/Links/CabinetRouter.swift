@@ -81,6 +81,8 @@ enum АдресаКабинета {
         if let после = цельПослеВхода(параметры) { return после }
         /* Аренда (ultra-site 13.10.2026): ?go=rentals&rent=<номер> и ?s=rentals&rent=<номер> — «Мои аренды» на карточке. */
         if let аренды = цельАренды(параметры) { return аренды }
+        /* «Новинки для моего» (пачка 83): ?go=foryou и ?go=foryou&new=1 — до проверки «один параметр». */
+        if let дляВас = цельДляВас(параметры) { return дляВас }
         guard параметры.count == 1, let п = параметры.first else { return nil }
         let значение = (п.value ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         switch п.name {
@@ -200,6 +202,19 @@ enum АдресаКабинета {
         }
         guard покупка, Config.нативныйКабинет else { return nil }
         return Config.нативныеПлатныеУслуги ? .разделКабинета(.платныеУслуги) : .кабинет
+    }
+
+    /**
+     «Новинки для моего» (пачка 83, docs/SERVER_NEW_FOR_MINE.md §3.5): ?go=foryou и ?go=foryou&new=1 — ссылка push fit_new
+     и сайта. Своего маршрута у «Для вас» нет (это окно поверх, его открывает сам push — AppDelegate), поэтому ссылка
+     ведёт в хаб «Моё», как ?go=my. Лишний параметр — nil (страница кабинета разберёт сама).
+     */
+    private static func цельДляВас(_ параметры: [URLQueryItem]) -> NativeRouter.Цель? {
+        guard let go = параметры.first(where: { $0.name == "go" }),
+              (go.value ?? "").trimmingCharacters(in: .whitespaces).lowercased() == "foryou" else { return nil }
+        let прочие: [URLQueryItem] = параметры.filter { $0.name != "go" && $0.name != "new" }
+        guard прочие.isEmpty, Config.моё, Config.нативныйКабинет else { return nil }
+        return .разделКабинета(.моё)
     }
 
     /**

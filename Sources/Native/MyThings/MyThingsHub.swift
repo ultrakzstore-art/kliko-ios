@@ -6,10 +6,13 @@ import UIKit
 
  Вход — карточка «Моё» в кабинете (гостю тоже) и «Мой гараж» в «Подойдут ли?». Экран — шапка с общим прогрессом,
  карточки профилей ровной высоты 96 pt: гараж, устройства, рост и мерки, а с пачки 16.10.2026 «мой дом, компьютер,
- гардероб и для вас» — «Мой дом», «Мой компьютер», «Мой гардероб» (на iPad — две строки по три колонки), строка
- «Добавить из моих покупок», «Только на этом телефоне» и «Удалить всё «Моё»» (то же — в меню «…» шапки). Подача —
- каскад ПоявлениеМоего (шапка 0, карточки 1–6, покупки 7, низ 8) и кольца, дорастающие пружиной; «Удалить всё» —
- кольца плавно уходят в 0, сводки сменяются проявлением, внизу весть «Удалено с телефона».
+ гардероб и для вас» — «Мой дом», «Мой компьютер», «Мой гардероб» (на iPad — две строки по три колонки) и строка
+ «Добавить из моих покупок». Подача — каскад ПоявлениеМоего (шапка 0, карточки 1–6, покупки 7) и кольца, дорастающие
+ пружиной; «Удалить всё» — кольца уходят проявлением, сводки сменяются, внизу весть «Удалено с телефона».
+
+ Пачка 83 (аудит упрощений, «Моё» главный): «Удалить всё «Моё»» — только в меню «…» шапки (и в общей очистке
+ кабинета), красной кнопки внизу нет; «Только на этом телефоне» — одной капсулой в шапке (ШапкаМоего), строки с замком
+ внизу нет; пустая карточка — название, одна строка пользы и чип действия, без кольца 0 % (КарточкаХабаМоего).
 
  В стеке кабинета переходы к первым трём — через переходКабинета (КабинетЦель: .моё, .мойГараж, .моиУстройства,
  .моиМерки); к новым разделам — значением ЦельМоего (стек кабинета — NavigationPath, цель регистрирует сам хаб). В окне
@@ -41,8 +44,6 @@ struct ЭкранМоего: View {
                     }
                     .появлениеМоего(7)
                 }
-                низ(запись)
-                    .появлениеМоего(8)
             }
             .padding(16)
             .frame(maxWidth: класс == .regular ? 960 : 640)
@@ -137,35 +138,6 @@ struct ЭкранМоего: View {
                                  номер: раздел.rawValue + ПрофильМоего.allCases.count)
         }
         .появлениеМоего(раздел.rawValue + ПрофильМоего.allCases.count + 1)
-    }
-
-    /// Строка приватности и «Удалить всё «Моё»».
-    private func низ(_ запись: ЗаписьМоего) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text(т("my_local"))
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "lock.shield.fill")
-                    .foregroundStyle(Theme.акцент)
-            }
-            .font(.footnote)
-            .foregroundStyle(Theme.текстВторой)
-            Button {
-                спросить = true
-            } label: {
-                Label(т("my_delete_all"), systemImage: "trash")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Theme.скидкаТекст)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(НажатиеКнопкиФото(сжатие: 0.96))
-            .disabled(запись.пусто)
-            .opacity(запись.пусто ? 0.45 : 1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 4)
     }
 
     private func стереть() {
@@ -339,9 +311,10 @@ extension ЗаписьМоего {
         }
     }
 
-    /// «Toyota Camry, 2018 · 5×114.3 · R17 · + ещё 1».
+    /// «Toyota Camry, 2018 · 5×114.3 · R17 · + ещё 1». Машины нет — польза одной строкой (чип «＋ Добавьте машину»
+    /// стоит рядом, повторять его не нужно).
     var сводкаГаража: String {
-        guard let м = главнаяМашина else { return МоёText.т("my_garage_empty") }
+        guard let м = главнаяМашина else { return МоёText.т("my_garage_use") }
         var части = [м.заголовок]
         if let р = м.посадка?.разболтовка { части.append(р.подпись) }
         if let r = м.посадка?.штатныеДиаметры.first { части.append("R" + ЧислаАвтоподбора.ч(r)) }
@@ -500,8 +473,8 @@ extension ЗаписьМоего {
     }
 }
 
-/// Карточка нового раздела хаба — как КарточкаПрофиляМоего: ровно 96 pt, значок, название, сводка, чип следующего
-/// шага, кольцо. Для VoiceOver — один элемент: «название, заполнено N, следующий шаг».
+/// Карточка нового раздела хаба — та же карточка хаба (КарточкаХабаМоего), что у профилей: ровно 96 pt, значок,
+/// название, сводка, чип следующего шага, кольцо (у пустой — без кольца).
 struct КарточкаРазделаМоего: View {
     let раздел: РазделМоего
     let сводка: String
@@ -515,62 +488,9 @@ struct КарточкаРазделаМоего: View {
         self.номер = номер
     }
 
-    private var текстШага: String {
-        прогресс.шаг.map { МоёText.т($0) } ?? МоёText.т("my_all_set")
-    }
-
     var body: some View {
-        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-        HStack(spacing: 12) {
-            ЗначокПрофиляМоего(значок: раздел.значок, цвет: раздел.цвет)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(раздел.название)
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Theme.текст)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(сводка)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.текстВторой)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .contentTransition(.opacity)
-                чипШага
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            КольцоМоего(доля: прогресс.доля, размер: 36, толщина: 4, номер: номер + 1, цвет: раздел.цвет)
-            СтрелкаСтрокиКабинета()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 96, alignment: .leading)
-        .background(Theme.поверхность, in: форма)
-        .теньКарточкиСайта(радиус: Theme.Радиус.md)
-        .contentShape(форма)
-        .animation(ДвижениеСайта.смена, value: прогресс.шаг)
-        .animation(ДвижениеСайта.смена, value: сводка)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(раздел.название + ". " + String(format: МоёText.т("my_ready"), ПроцентМоего.текст(прогресс.доля))
-                            + ". " + текстШага)
-        .accessibilityAddTraits(.isButton)
-    }
-
-    /// «＋ Укажите кровать»; всё заполнено — «✓ Всё заполнено».
-    private var чипШага: some View {
-        HStack(spacing: 4) {
-            Image(systemName: прогресс.шаг == nil ? "checkmark" : "plus")
-                .font(.system(size: 9, weight: .heavy))
-            Text(текстШага)
-                .font(.system(size: 11, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .foregroundStyle(Theme.акцент)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Theme.оттенокАкцента, in: Capsule())
-        .id(прогресс.шаг ?? "done")
-        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        КарточкаХабаМоего(значок: раздел.значок, цвет: раздел.цвет, название: раздел.название, сводка: сводка,
+                          прогресс: прогресс, номер: номер)
     }
 }
 

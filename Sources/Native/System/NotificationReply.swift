@@ -52,9 +52,14 @@ enum ОтветИзУведомления {
                                                options: [])
         let центр = UNUserNotificationCenter.current()
         let имя = категорияСообщения
+        /* «Новинки для моего» (пачка 83, FIT_NEW: «Не присылать для этого», MyThingsWatch.swift) — в той же паре get → set:
+           две отдельные пары гоняются, и последняя затирает категорию первой. */
+        let новинки: UNNotificationCategory = НовинкиМоегоПуш.категорияУведомлений()
+        let свои: Set<String> = [имя, НовинкиМоегоПуш.категория]
         центр.getNotificationCategories { есть in
-            var все = есть.filter { $0.identifier != имя }
+            var все = есть.filter { !свои.contains($0.identifier) }
             все.insert(категория)
+            все.insert(новинки)
             центр.setNotificationCategories(все)
         }
     }

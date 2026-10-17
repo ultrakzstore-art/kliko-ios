@@ -42,7 +42,7 @@ enum ИнбоксText {
 
     private static let ru: [String: String] = [
         // Инбокс «Чат»
-        "title": "Чат", "nav_chat": "Чат", "sub": "Переписка, аренда и обмен — в одном месте",
+        "title": "Чат", "nav_chat": "Чат",
         "search_ph": "Поиск: имя, товар, сообщение", "clear": "Очистить", "trash": "Корзина",
         "f_all": "Все", "f_lead": "Покупатели", "f_rental": "Аренда", "f_exchange": "Обмен",
         "retention": "Удалённые переписки хранятся у поддержки 12 месяцев.",
@@ -176,7 +176,7 @@ enum ИнбоксText {
     ]
 
     private static let kk: [String: String] = [
-        "title": "Чат", "nav_chat": "Чат", "sub": "Хат алмасу, жалға беру және айырбас — бір жерде",
+        "title": "Чат", "nav_chat": "Чат",
         "search_ph": "Іздеу: аты, тауар, хабарлама", "clear": "Тазалау", "trash": "Себет",
         "f_all": "Барлығы", "f_lead": "Сатып алушылар", "f_rental": "Жалға", "f_exchange": "Айырбас",
         "retention": "Жойылған хат алмасулар қолдау қызметінде 12 ай сақталады.",
@@ -306,7 +306,7 @@ enum ИнбоксText {
     ]
 
     private static let en: [String: String] = [
-        "title": "Chat", "nav_chat": "Chat", "sub": "Messages, rentals and swaps — all in one place",
+        "title": "Chat", "nav_chat": "Chat",
         "search_ph": "Search: name, item, message", "clear": "Clear", "trash": "Trash",
         "f_all": "All", "f_lead": "Buyers", "f_rental": "Rentals", "f_exchange": "Swaps",
         "retention": "Deleted chats are kept by support for 12 months.",
@@ -434,7 +434,7 @@ enum ИнбоксText {
     ]
 
     private static let ar: [String: String] = [
-        "title": "الدردشة", "nav_chat": "الدردشة", "sub": "المراسلات والإيجار والمقايضة — في مكان واحد",
+        "title": "الدردشة", "nav_chat": "الدردشة",
         "search_ph": "بحث: الاسم، السلعة، الرسالة", "clear": "مسح", "trash": "المهملات",
         "f_all": "الكل", "f_lead": "المشترون", "f_rental": "الإيجار", "f_exchange": "المقايضة",
         "retention": "تحتفظ خدمة الدعم بالمحادثات المحذوفة لمدة 12 شهرًا.",

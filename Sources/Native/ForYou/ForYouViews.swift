@@ -19,6 +19,10 @@ import UIKit
  Экран целиком (ЭкранДляВас) — окном поверх всего (ПоверхВсего): свой стек (объявление, похожие, чат), чипы групп с
  числами, сетка карточек ленты с подробной плашкой (с чем сверили, нужная деталь), «потянуть вниз» — заново. У ленты
  есть конец: «Это всё, что подходит сейчас» и «Дополнить «Моё»»; бесконечной подгрузки нет.
+
+ Пачка 83: в заголовке полки — «Для вас · 3 новых» (НовинкиДляВас), на экране — чип «Новые»; открыл экран — новое
+ стало показанным. Точных нет — ряд «Проверьте» с оранжевой плашкой без галочки («Размер не указан — уточните у
+ продавца», в две строки). При ключе fit_subs — «Сообщать о новом» с согласием и «Что хранится на сервере» в меню.
  */
 struct ПолкаДляВас<Карточка: View>: View {
     /// Ряды главной уже пришли (ПодборкиГлавной.числаГотовы): раньше полка в сеть не идёт.
@@ -59,9 +63,15 @@ struct ПолкаДляВас<Карточка: View>: View {
         }
     }
 
+    /// «Для вас», а с новинками с прошлого просмотра — «Для вас · 3 новых» (НовинкиДляВас).
+    private var заголовок: String {
+        guard модель.новых > 0 else { return т("fv_title") }
+        return т("fv_title") + " · " + НовинкиМоегоText.сколькоНовых(модель.новых)
+    }
+
     private var полка: some View {
         VStack(alignment: .leading, spacing: 0) {
-            РядГлавной(раздел: ПодборДляВас.разделГлавной, название: т("fv_title"), показано: модель.ряд.count,
+            РядГлавной(раздел: ПодборДляВас.разделГлавной, название: заголовок, показано: модель.ряд.count,
                        всего: модель.находки.count, всё: { ОкноДляВас.открыть() }) {
                 ForEach(Array(модель.ряд.enumerated()), id: \.element.id) { номер, находка in
                     ячейка(находка)
@@ -159,6 +169,9 @@ struct ПлашкаДляВас: View {
         .accessibilityLabel(голос)
     }
 
+    /// «Проверьте» (пачка 83): причина длиннее («Размер не указан — уточните у продавца») — в две строки.
+    private var проверка: Bool { находка.уровень == .проверить }
+
     private var капсула: some View {
         HStack(spacing: 5) {
             Image(systemName: находка.уровень.значок)
@@ -167,8 +180,9 @@ struct ПлашкаДляВас: View {
             Text(находка.причина)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.текст)
-                .lineLimit(1)
+                .lineLimit(проверка ? 2 : 1)
                 .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: проверка)
             if let цвет = находка.цвет {
                 Circle()
                     .fill(цвет.краска)
@@ -177,8 +191,10 @@ struct ПлашкаДляВас: View {
             }
         }
         .padding(.horizontal, 8)
+        .padding(.vertical, проверка ? 3 : 0)
         .frame(minHeight: 24)
-        .background(находка.уровень.краска.opacity(0.12), in: Capsule())
+        .background(находка.уровень.краска.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// «Подходит: Для вашей Camry, сочетается с вашими вещами цвета «синий»»; подробно — и с чем сверили.
@@ -204,12 +220,16 @@ enum ОкноДляВас {
     }
 }
 
-/// Все находки «Для вас»: чипы групп, сетка карточек ленты с подробной плашкой, честный конец.
+/// Все находки «Для вас»: чипы групп (и «Новые»), сетка карточек ленты с подробной плашкой, честный конец; при ключе
+/// fit_subs — «Сообщать о новом» с согласием одной строкой (MyThingsWatch.swift).
 struct ЭкранДляВас: View {
     let закрыть: () -> Void
     @ObservedObject private var модель = ПодборкаДляВас.shared
+    @ObservedObject private var новинки = НовинкиДляВас.shared
+    @ObservedObject private var подписка = ПодпискаНовинокМоего.shared
     @State private var путь = NavigationPath()
     @State private var группа: ГруппаДляВас? = nil
+    @State private var толькоНовые = false
     @State private var спроситьСкрыть = false
     @Environment(\.dynamicTypeSize) private var размерТекста
 
@@ -219,7 +239,13 @@ struct ЭкранДляВас: View {
 
     private func т(_ ключ: String) -> String { ДляВасText.т(ключ) }
 
+    /// Новые, что были на экране в этот показ и ещё на нём.
+    private var новыеНаЭкране: [НаходкаДляВас] {
+        модель.находки.filter { (н: НаходкаДляВас) -> Bool in новинки.новыеЭкрана.contains(н.id) }
+    }
+
     private var показанные: [НаходкаДляВас] {
+        if толькоНовые { return новыеНаЭкране }
         guard let выбрана = группа else { return модель.находки }
         return модель.находки.filter { $0.группа == выбрана }
     }
@@ -252,9 +278,29 @@ struct ЭкранДляВас: View {
         } message: {
             Text(т("fv_hide_m"))
         }
+        .alert(НовинкиМоегоText.т("nm_watch_stored_t"), isPresented: показХранимого) {
+            Button(НовинкиМоегоText.т("nm_ok"), role: .cancel) {}
+        } message: {
+            Text((подписка.хранится ?? []).joined(separator: "\n"))
+        }
+        .onAppear { модель.открытьЭкран() }
+        .onDisappear { модель.закрытьЭкран() }
         .onChange(of: группы) { _, есть in
             if let выбрана = группа, !есть.contains(выбрана) { группа = nil }
         }
+        .onChange(of: новинки.новыеЭкрана.isEmpty) { _, пусто in
+            if пусто && толькоНовые { толькоНовые = false }
+        }
+    }
+
+    /// Окно «Хранится на сервере» — пока есть ответ sub_get.
+    private var показХранимого: Binding<Bool> {
+        Binding<Bool>(
+            get: { подписка.хранится != nil },
+            set: { (виден: Bool) in
+                if !виден { подписка.хранится = nil }
+            }
+        )
     }
 
     @ToolbarContentBuilder
@@ -268,6 +314,15 @@ struct ЭкранДляВас: View {
                     ОкноМоего.открыть()
                 } label: {
                     Label(т("fv_more"), systemImage: "square.grid.2x2")
+                }
+                if подписка.доступна && подписка.включено {
+                    Button {
+                        Task<Void, Never> { @MainActor in
+                            await ПодпискаНовинокМоего.shared.спросить()
+                        }
+                    } label: {
+                        Label(НовинкиМоегоText.т("nm_watch_stored"), systemImage: "server.rack")
+                    }
                 }
                 Button(role: .destructive) {
                     спроситьСкрыть = true
@@ -285,7 +340,8 @@ struct ЭкранДляВас: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 вступление
-                if группы.count > 1 { чипы }
+                if подписка.доступна { переключательПодписки }
+                if группы.count > 1 || !новыеНаЭкране.isEmpty { чипы }
                 содержимое
                 if !показанные.isEmpty { конец }
             }
@@ -296,9 +352,16 @@ struct ЭкранДляВас: View {
         .refreshable { await модель.обновить() }
     }
 
+    /// Вступление: «никуда не уходит» — пока значения и правда не уходят; подбор на сервере или включённая подписка —
+    /// честный текст §10.3 («на сервер уходят только значения стандартов»).
+    private var текстВступления: String {
+        let уходит: Bool = РубильникиНовинок.подборНаСервере || (подписка.доступна && подписка.включено)
+        return уходит ? НовинкиМоегоText.т("nm_lead_server") : т("fv_lead")
+    }
+
     private var вступление: some View {
         Label {
-            Text(т("fv_lead"))
+            Text(текстВступления)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "lock.shield")
@@ -309,15 +372,69 @@ struct ЭкранДляВас: View {
         .padding(.horizontal, 16)
     }
 
+    /// «Сообщать о новом» (только при ключе fit_subs): согласие одной строкой; включение — окно разрешения push.
+    private var переключательПодписки: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: включениеПодписки) {
+                Text(НовинкиМоегоText.т("nm_watch"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.текст)
+            }
+            .disabled(подписка.занято)
+            Text(НовинкиМоегоText.согласие(РубильникиНовинок.вСутки))
+                .font(.caption)
+                .foregroundStyle(Theme.текстВторой)
+                .fixedSize(horizontal: false, vertical: true)
+            if let весть = текстВести {
+                Text(весть)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(УровеньАвтоподбора.проверить.краска)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var включениеПодписки: Binding<Bool> {
+        Binding<Bool>(
+            get: { подписка.включено },
+            set: { (вкл: Bool) in
+                ОткликСайта.выбор()
+                if вкл {
+                    ПодпискаНовинокМоего.shared.включить()
+                } else {
+                    ПодпискаНовинокМоего.shared.выключить()
+                }
+            }
+        )
+    }
+
+    private var текстВести: String? {
+        switch подписка.весть {
+        case .нет: return nil
+        case .неОчем: return НовинкиМоегоText.т("nm_watch_empty")
+        case .выключеноВНастройках: return НовинкиМоегоText.т("nm_watch_denied")
+        case .частьНеПринята: return НовинкиМоегоText.т("nm_watch_dropped")
+        case .сбой: return НовинкиМоегоText.т("nm_watch_fail")
+        }
+    }
+
     private var чипы: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ЧипМоего(т("fv_all") + " · " + String(модель.находки.count), выбран: группа == nil) {
+                ЧипМоего(т("fv_all") + " · " + String(модель.находки.count), выбран: группа == nil && !толькоНовые) {
                     выбрать(nil)
+                }
+                if !новыеНаЭкране.isEmpty {
+                    ЧипМоего(НовинкиМоегоText.т("nm_new_chip") + " · " + String(новыеНаЭкране.count),
+                             выбран: толькоНовые, значок: "sparkles") {
+                        выбратьНовые()
+                    }
+                    .accessibilityLabel(НовинкиМоегоText.ф("nm_new_a11y", String(новыеНаЭкране.count)))
                 }
                 ForEach(группы) { г in
                     ЧипМоего(г.название + " · " + String(модель.находки.filter { $0.группа == г }.count),
-                             выбран: группа == г, значок: г.значок) {
+                             выбран: группа == г && !толькоНовые, значок: г.значок) {
                         выбрать(г)
                     }
                 }
@@ -327,9 +444,21 @@ struct ЭкранДляВас: View {
     }
 
     private func выбрать(_ новая: ГруппаДляВас?) {
-        guard новая != группа else { return }
+        guard новая != группа || толькоНовые else { return }
         ОткликСайта.выбор()
-        withAnimation(ДвижениеСайта.вставкаСписка) { группа = новая }
+        withAnimation(ДвижениеСайта.вставкаСписка) {
+            толькоНовые = false
+            группа = новая
+        }
+    }
+
+    private func выбратьНовые() {
+        guard !толькоНовые else { return }
+        ОткликСайта.выбор()
+        withAnimation(ДвижениеСайта.вставкаСписка) {
+            группа = nil
+            толькоНовые = true
+        }
     }
 
     @ViewBuilder
@@ -402,12 +531,14 @@ struct ЭкранДляВас: View {
 
     /// Конец ленты: всё, что подходит сейчас, — и как получить больше (дополнить «Моё»), без бесконечной подгрузки.
     private var конец: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "checkmark.circle")
+        /* Одни «Проверьте» (точных нет) — без галочки и без «Это всё, что подходит»: под плашками «Размер не указан». */
+        let проверка: Bool = модель.толькоПроверить
+        return VStack(spacing: 6) {
+            Image(systemName: проверка ? УровеньАвтоподбора.проверить.значок : "checkmark.circle")
                 .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Theme.зелёный2)
+                .foregroundStyle(проверка ? УровеньАвтоподбора.проверить.краска : Theme.зелёный2)
                 .accessibilityHidden(true)
-            Text(т("fv_end"))
+            Text(проверка ? НовинкиМоегоText.т("nm_end_check") : т("fv_end"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.текст)
             Text(т("fv_end_sub"))

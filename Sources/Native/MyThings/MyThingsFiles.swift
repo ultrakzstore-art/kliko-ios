@@ -309,6 +309,35 @@ enum ФайлыМоего {
         очередь.async { try? FileManager.default.removeItem(at: файл) }
     }
 
+    // MARK: Маленькие файлы рядом с записью
+
+    /// Адрес маленького файла в папке MyThings (пачка 83: показанные находки «Для вас», подписка «Новинки»); имя —
+    /// только своё, без папок, не файл записи. Стирается вместе с папкой («Удалить всё «Моё»», выход).
+    private static func адресМалого(_ имя: String, создать: Bool = false) -> URL? {
+        guard !имя.isEmpty, !имя.contains("/"), !имя.contains(".."), имя != имяЗаписи,
+              let папка = папка(создать: создать) else { return nil }
+        return папка.appendingPathComponent(имя)
+    }
+
+    /// Маленький файл целиком. Синхронно: файл в несколько килобайт. Нет или не читается — nil.
+    static func прочитатьМалый(_ имя: String) -> Data? {
+        guard let файл = адресМалого(имя), FileManager.default.fileExists(atPath: файл.path) else { return nil }
+        return try? Data(contentsOf: файл)
+    }
+
+    /// Записать маленький файл — на очереди, после прежних правок, атомарно, вне резервной копии.
+    static func записатьМалый(_ имя: String, _ данные: Data) {
+        очередь.async {
+            guard let файл = адресМалого(имя, создать: true) else { return }
+            do {
+                try данные.write(to: файл, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                внеКопии(файл)
+            } catch {
+                /* Диск полон — в памяти всё есть до конца запуска; следующая правка попробует снова. */
+            }
+        }
+    }
+
     /// Папка MyThings целиком.
     static func стереть() {
         guard let папка = папка() else { return }

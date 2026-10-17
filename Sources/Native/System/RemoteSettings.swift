@@ -28,20 +28,25 @@ enum НастройкиСервера {
     /// perf_telemetry — замеры скорости на api/app_perf.php (PerfTelemetry.swift); modal_actions_v2, item_brief и
     /// item_brief_ai — раскладка окна объявления и «Разбор объявления» (ListingActions.swift); digital_show — стоп-кран
     /// цифровых товаров в лентах и каталоге (ListingDigital.swift): сервер может только выключить, включает лишь сборка.
+    /// Пачка 83: рубильники «Моего» (docs/SERVER_NEW_FOR_MINE.md §11, §16) — std_server_fit, fit_subs, season_rules
+    /// (ForYouServer.swift), fit_demand_post, fit_notify_on_publish (PostingFitDemand.swift), wanted_std; все читаются
+    /// через вклВыкл(..., сборка: false), то есть по умолчанию выключены.
     static let ключиФлагов: Set<String> = [
         "checks_rk", "ai_recognize", "native_session", "listing_chat", "chat_send", "listing_map",
         "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize",
-        "perf_telemetry", "modal_actions_v2", "item_brief", "item_brief_ai", "digital_show"
+        "perf_telemetry", "modal_actions_v2", "item_brief", "item_brief_ai", "digital_show",
+        "std_server_fit", "fit_subs", "season_rules", "fit_demand_post", "fit_notify_on_publish", "wanted_std"
     ]
     /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store; force_lag и force_grace_hours —
     /// числа для принудительного обновления (ПринудительноеОбновление, ForcedUpdate.swift): порог отставания от App Store
-    /// в выпусках (0 — выключено) и срок предупреждения в часах. Не прислал сервер — 3 и 72.
+    /// в выпусках (0 — выключено) и срок предупреждения в часах. Не прислал сервер — 3 и 72. fit_subs_daily — предел
+    /// push «Новинок для моего» в сутки (РубильникиНовинок.вСутки, ForYouServer.swift); не прислал сервер — 1.
     static let ключиТекстов: Set<String> = [
         "banner_ru", "banner_kk", "banner_en", "banner_ar", "min_version", "app_store_url",
-        "force_lag", "force_grace_hours"
+        "force_lag", "force_grace_hours", "fit_subs_daily"
     ]
     /// Ключи, которые сервер может прислать числом, а не строкой.
-    private static let ключиЧисел: Set<String> = ["force_lag", "force_grace_hours"]
+    private static let ключиЧисел: Set<String> = ["force_lag", "force_grace_hours", "fit_subs_daily"]
     /// Ссылка на приложение в App Store, если сервер свою не дал (та же, что у студии роликов).
     static let ссылкаAppStoreПоУмолчанию = "https://apps.apple.com/kz/app/kliko-kz/id6805824484"
 

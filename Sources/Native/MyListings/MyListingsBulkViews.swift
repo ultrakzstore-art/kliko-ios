@@ -41,28 +41,51 @@ struct КнопкаВыбратьОбъявления: View {
     }
 }
 
-/// «+ Добавить» в шапке экрана — мастер подачи.
+/// «+ Добавить» в шапке экрана — меню «Объявление / Резюме / Вакансия» (пачка 83: «Работа» в одном месте — «+ Резюме»
+/// и «+ Вакансия» переехали сюда со строки «Работа» кабинета, её больше нет). «Объявление» — мастер подачи (нажать),
+/// остальные — мастер «Работы» поверх экрана (МастерРезюме); сохранил — блок «Работа» заново (klikoРаботаСохранена).
+/// Большой кнопки «+ Добавить объявление» под списком нет: она осталась только на пустой вкладке.
 struct КнопкаДобавитьВШапке: View {
     let нажать: () -> Void
 
     var body: some View {
-        Button(action: нажать) {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.footnote.weight(.heavy))
-                    .accessibilityHidden(true)
-                Text(тМ("hdr_add"))
-                    .font(.footnote.weight(.bold))
-                    .lineLimit(1)
+        Menu {
+            Button(action: нажать) {
+                Label(МенюДобавленияText.т("mla_listing"), systemImage: "camera")
             }
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .leading,
-                                       endPoint: .trailing), in: Capsule())
+            Button {
+                НативныеОкна.показать(.работа(вид: .резюме, номер: nil))
+            } label: {
+                Label(МоиОбъявленияText.т("hov_resume"), systemImage: "person.text.rectangle")
+            }
+            Button {
+                НативныеОкна.показать(.работа(вид: .вакансия, номер: nil))
+            } label: {
+                Label(МоиОбъявленияText.т("hov_vacancy"), systemImage: "briefcase")
+            }
+        } label: {
+            подпись
         }
-        .buttonStyle(НажатиеПанелиСайта(сжатие: 0.95))
-        .accessibilityLabel(тМ("a11y_add"))
+        .menuOrder(.fixed)
+        .accessibilityLabel(МенюДобавленияText.т("mla_a11y"))
+    }
+
+    /// Зелёная капсула «+ Добавить» — как была кнопкой.
+    private var подпись: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "plus")
+                .font(.footnote.weight(.heavy))
+                .accessibilityHidden(true)
+            Text(тМ("hdr_add"))
+                .font(.footnote.weight(.bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(LinearGradient(colors: [Theme.зелёный, Theme.зелёный2], startPoint: .leading,
+                                   endPoint: .trailing), in: Capsule())
+        .contentShape(Capsule())
     }
 }
 

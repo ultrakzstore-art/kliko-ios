@@ -14,6 +14,9 @@ import UIKit
  ВыборГодаМоего) → справочник посадки; не нашёлся — параметры колёс вручную (ПараметрыКолёсМоего). Ниже — фото сбоку с
  кольцами колёс (тащатся пальцем), своё название, «Сделать главной», «Удалить машину». Сохраняется само на каждое
  изменение; «Готово» закрывает. Закрыли, ничего не указав, — пустая машина в гараже не остаётся.
+
+ Пачка 83 (§16): под карточкой — «Ищу шины …» (сохранённый поиск со стандартом) и «Продать ▾» (шины или диски машины —
+ мастер подачи уже заполнен). Своё название машины никуда не уходит.
  */
 struct ЭкранГаражаМоего: View {
     @ObservedObject private var хранилище = МоёХранилище.shared
@@ -39,8 +42,11 @@ struct ЭкранГаражаМоего: View {
                         .transition(.opacity)
                 } else {
                     ForEach(машины) { машина in
-                        карточка(машина)
-                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        VStack(alignment: .leading, spacing: 8) {
+                            карточка(машина)
+                            действия(машина)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                     низ(машины.count)
                 }
@@ -114,6 +120,76 @@ struct ЭкранГаражаМоего: View {
                 Label(т("my_car_remove"), systemImage: "trash")
             }
         }
+    }
+
+    /**
+     Под карточкой машины (пачка 83): «Ищу шины 205/55 R16» (сохранённый поиск со стандартом, MyThingsWanted.swift) и
+     «Продать» — меню «Шины 205/55 R16» / «Диски R16 5×114.3» (мастер подачи уже заполнен, MyThingsSell.swift). Нет
+     размеров — ряда нет.
+     */
+    @ViewBuilder
+    private func действия(_ машина: МашинаМоего) -> some View {
+        let ищу: ЗапросИщуМоего? = ИщуМоего.машина(машина)
+        let шины: ЗаготовкаПодачи? = ПродатьСвоёМоего.шины(машина)
+        let диски: ЗаготовкаПодачи? = ПродатьСвоёМоего.диски(машина)
+        let естьПродажа: Bool = шины != nil || диски != nil
+        if ищу != nil || естьПродажа {
+            ПотокЧипов(зазор: 8) {
+                if let ищу {
+                    КнопкаИщуМоего(ищу)
+                }
+                if естьПродажа {
+                    менюПродать(машина, шины: шины, диски: диски)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// «Продать ▾»: шины и диски машины комплектом — мастер подачи с готовыми полями.
+    private func менюПродать(_ машина: МашинаМоего, шины: ЗаготовкаПодачи?, диски: ЗаготовкаПодачи?) -> some View {
+        let форма = RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous)
+        let размерШин: String = машина.посадка?.шины.first?.подпись ?? ""
+        let подписьДисков: String = ПродатьСвоёМоего.подписьДисков(машина) ?? ""
+        return Menu {
+            if let шины {
+                Button {
+                    продать(шины)
+                } label: {
+                    Label(ПродатьМоёText.ф("msl_sell_tyres", размерШин), systemImage: "circle.circle")
+                }
+            }
+            if let диски {
+                Button {
+                    продать(диски)
+                } label: {
+                    Label(ПродатьМоёText.ф("msl_sell_rims", подписьДисков), systemImage: "gearshape")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "tag")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityHidden(true)
+                Text(ПродатьМоёText.т("msl_sell"))
+                    .font(.subheadline.weight(.bold))
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Theme.акцент)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(Theme.оттенокАкцента, in: форма)
+            .contentShape(форма)
+        }
+        .accessibilityLabel(ПродатьМоёText.т("msl_sell"))
+        .accessibilityHint(ПродатьМоёText.т("msl_sell_hint"))
+    }
+
+    private func продать(_ заготовка: ЗаготовкаПодачи) {
+        ОткликСайта.выбор()
+        ПереходыГардероба.продать(заготовка)
     }
 
     private func кнопкаСъёмки(_ id: UUID) -> some View {

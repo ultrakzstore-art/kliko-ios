@@ -161,6 +161,25 @@ struct Listing: Identifiable, Hashable {
     /// карточкой отдаёт одобренное, а снятое и проданное — ответом gone со status sold · inactive · archived · reserved.
     var статусВыдачи = ""
 
+    // ── «Моё» полями (пачка 83, docs/SERVER_NEW_FOR_MINE.md §1.1, §2.2, §5; ListingFitFields.swift): только добавления ──
+    /// std, std_src, qty — значения стандартов продавца ({семья: {поле: значение}}), откуда они и сколько единиц; nil —
+    /// поля нет (старый сервер) или ни одной знакомой семьи. Сверка берёт их первым слоем (РазборСтандартов.разобрать).
+    var стандартыПолей: НаборСтандартов? = nil
+    /// parts шин и дисков: kind, width, profile, diameter, season, dot · diameter, width_j, pcd, et, dia. Пусто — нет.
+    var запчастьПолей: [String: String] = [:]
+    /// size_sys — система, в которой выбирал продавец («US M», «EU»); пусто — система сайта у раздела.
+    var системаРазмера = ""
+    /// size_all — «EU 42 · RU 41 · US M 8.5 · …» без «Размер: »; пусто — нет.
+    var строкаВсехСистем = ""
+    /// size_avail — размеры в наличии у магазина в системе сайта (до 20); пусто — нет.
+    var размерыВНаличии: [String] = []
+    /// collection — партия магазина; nil — нет.
+    var коллекция: КоллекцияОбъявления? = nil
+    /// collection_new — коллекция впервые на Kliko за последние 30 дней.
+    var коллекцияНовая = false
+    /// fit_match — уровень подбора сервера по видам; nil — не прислан (GET ленты его не шлёт).
+    var уровеньСервера: УровеньСервераОбъявления? = nil
+
     struct Характеристика: Hashable {
         let ключ: String
         let значение: String
@@ -487,6 +506,50 @@ extension Listing: Decodable {
         if цифровое {
             цифровоеОписание = try? c.decode(ЦифровоеОписание.self, forKey: Ключ("digital_info"))
             цифровоеПродавца = try? c.decode(ЦифровоеПродавца.self, forKey: Ключ("seller_digital"))
+        }
+
+        /* «Моё» полями (пачка 83, ListingFitFields.swift). Скорость: как у цифровых — только присланные ключи, у старого
+           ответа ни одной лишней попытки разбора. std_src не пришёл — слово продавца (""); незнакомый — как текст. */
+        if c.contains(Ключ("std")),
+           let сырые = try? c.decode([String: [String: ЗначениеПоляЛенты]].self, forKey: Ключ("std")) {
+            var значения: [String: [String: String]] = [:]
+            for (семья, поля) in сырые {
+                let чистые: [String: String] = ЗначениеПоляЛенты.словарь(поля)
+                if !чистые.isEmpty { значения[семья] = чистые }
+            }
+            var сколько = 1
+            if let штук = число("qty"), штук.isFinite, штук >= 1, штук < 1000 { сколько = Int(штук) }
+            var источник = ИсточникСтандарта.продавец
+            if c.contains(Ключ("std_src")) {
+                let откуда: String = (строка("std_src") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                источник = ИсточникСтандарта(rawValue: откуда) ?? .текст
+            }
+            let набор = НаборСтандартов(значения: значения, сколько: сколько, источник: источник)
+            if !набор.пусто { стандартыПолей = набор }
+        }
+        if c.contains(Ключ("parts")),
+           let сырые = try? c.decode([String: ЗначениеПоляЛенты].self, forKey: Ключ("parts")) {
+            запчастьПолей = ЗначениеПоляЛенты.словарь(сырые)
+        }
+        if c.contains(Ключ("size_sys")), let система = непусто(строка("size_sys")) {
+            системаРазмера = String(система.prefix(16))
+        }
+        if c.contains(Ключ("size_all")), let все = непусто(строка("size_all")) {
+            строкаВсехСистем = String(все.prefix(200))
+        }
+        if c.contains(Ключ("size_avail")),
+           let список = try? c.decode([ЗначениеПоляЛенты].self, forKey: Ключ("size_avail")) {
+            let есть: [String] = список.compactMap { (з: ЗначениеПоляЛенты) -> String? in з.текст }
+            размерыВНаличии = Array(есть.prefix(20))
+        }
+        if c.contains(Ключ("collection")) {
+            let партия: КоллекцияОбъявления? = try? c.decode(КоллекцияОбъявления.self, forKey: Ключ("collection"))
+            if let партия, !партия.название.isEmpty { коллекция = партия }
+        }
+        if c.contains(Ключ("collection_new")) { коллекцияНовая = да("collection_new") }
+        if c.contains(Ключ("fit_match")),
+           let сырые = try? c.decode([String: ВидПодбораСервера].self, forKey: Ключ("fit_match")) {
+            уровеньСервера = УровеньСервераОбъявления.собрать(сырые)
         }
     }
 }

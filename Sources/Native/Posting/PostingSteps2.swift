@@ -1091,11 +1091,17 @@ struct ОкноПроверкиПодачи: View {
                         ЗаметкаПодачи(т("reach_n").replacingOccurrences(of: "{n}", with: String(модель.ждут)), тон: .хорошо,
                                       значок: "person.2")
                     }
+                    /* «Подойдёт N людям» и «Сообщить им» (§16.1, §16.2) — на полном пути здесь, на коротком — на «Проверьте»
+                       (PostingFitDemand.swift); без рубильников — ничего. */
+                    if !модель.быстрый {
+                        СтрокаСпросаПодачи(модель: модель)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 14)
             }
         }
+        .спросПодачи(модель, когда: !модель.быстрый)
         .background(КраскаПодачи.карточка.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
             GeometryReader { г in
