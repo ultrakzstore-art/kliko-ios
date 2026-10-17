@@ -636,6 +636,92 @@ jobs:
           git commit -qm "verify ${{ matrix.label }} $GITHUB_RUN_ID"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/verify-${{ matrix.label }}
 
+  # ТОРМОЗА КАБИНЕТА (владелец 17.10.2026: «кабинет всё ещё чуть лагает — будто тяжёлое приложение»). Отладочная
+  # сборка с оптимизацией -O на симуляторе, Time Profiler (xctrace): 25 с после обычного запуска (главная) и 25 с после
+  # запуска сразу в кабинет (-klikoOpen …/cabinet.php). Сводка главного потока (ci/tp_summary.py) — в журнале прогона,
+  # кадры — в ветке ci/perf. Запуск — словом [perf] в коммите.
+  perf:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[perf]')
+    runs-on: macos-26
+    timeout-minutes: 55
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Xcode, XcodeGen, симулятор
+        run: |
+          best=""; bestkey=0
+          for app in /Applications/Xcode*.app; do
+            v=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || continue
+            key=$(echo "$v" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+            if [ "$key" -gt "$bestkey" ]; then bestkey="$key"; best="$app"; fi
+          done
+          sudo xcode-select -s "$best"
+          sudo DevToolsSecurity -enable || true
+          brew install xcodegen
+          xcodegen generate
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          rt=sorted([k for k in d if "iOS" in k], reverse=True)
+          for k in rt:
+              for x in d[k]:
+                  if x["name"].startswith("iPhone"):
+                      print(x["udid"]); raise SystemExit
+          ')
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+      - name: Собрать (отладка с -O)
+        run: |
+          set -o pipefail
+          xcodebuild build -project Kliko.xcodeproj -scheme Kliko -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO \
+            SWIFT_OPTIMIZATION_LEVEL=-O MARKETING_VERSION=1.13 CURRENT_PROJECT_VERSION=999 | tail -3
+          app=$(find build/dd/Build/Products -maxdepth 2 -name 'Kliko.app' -type d | head -1)
+          echo "APP=$app" >> "$GITHUB_ENV"
+
+      - name: Профиль — главная и кабинет
+        run: |
+          mkdir -p perf
+          xcrun simctl install "$UDID" "$APP"
+          profile_case() {  # имя, аргументы запуска
+            name=$1; shift
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            out=$(xcrun simctl launch --stderr="$PWD/perf/$name-err.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@")
+            pid=$(echo "$out" | awk -F': ' '{print $2}' | tr -d ' ')
+            echo "$name: pid=$pid"
+            xcrun xctrace record --template 'Time Profiler' --device "$UDID" --attach "$pid" --time-limit 25s \
+              --output "perf/$name.trace" > "perf/$name-record.txt" 2>&1 || { echo "::warning::xctrace record $name"; tail -20 "perf/$name-record.txt"; }
+            xcrun simctl io "$UDID" screenshot "perf/$name.png" >/dev/null 2>&1 || true
+            xcrun xctrace export --input "perf/$name.trace" \
+              --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' --output "perf/$name.xml" 2>&1 | tail -3 || true
+            echo "===================== $name"
+            [ -f "perf/$name.xml" ] && python3 ci/tp_summary.py "perf/$name.xml" 45 | tee "perf/$name-summary.txt" || echo "нет экспорта"
+          }
+          profile_case home
+          profile_case cabinet -klikoOpen "https://kliko.kz/cabinet.php"
+          for f in perf/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
+          rm -rf perf/*.trace perf/*.xml
+          ls -la perf
+
+      - name: Выложить в ветку ci/perf
+        if: always()
+        run: |
+          [ -d perf ] || exit 0
+          cd perf
+          git init -q
+          git config user.name "kliko-ci"
+          git config user.email "ci@users.noreply.github.com"
+          printf "perf: коммит %s, прогон %s\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" > README.md
+          git add -A
+          git commit -qm "perf $GITHUB_RUN_ID"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci/perf
+
   screens:
     if: github.event_name == 'workflow_dispatch' && inputs.shots
     runs-on: macos-26
