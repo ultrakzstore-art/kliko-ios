@@ -63,7 +63,6 @@ enum ТекстОписанияЗаготовки {
 
     private static let ru: [String: String] = [
         "prf_d_ask": "Пишите в чат — отвечу на вопросы.",
-        "prf_d_kliko": "Куплено на Kliko через Безопасную сделку.",
         "prf_d_fits": "Штатный размер для %@.",
         "prf_d_size": "размер %@",
         "prf_d_tyres": "Комплект из %1$@ шин %2$@",
@@ -109,7 +108,6 @@ enum ТекстОписанияЗаготовки {
 
     private static let kk: [String: String] = [
         "prf_d_ask": "Сұрақтарыңыз болса, чатқа жазыңыз.",
-        "prf_d_kliko": "Kliko-да Қауіпсіз мәміле арқылы сатып алынған.",
         "prf_d_fits": "%@ үшін зауыттық өлшем.",
         "prf_d_size": "өлшемі %@",
         "prf_d_tyres": "%2$@ шиналар жиынтығы, %1$@ дана",
@@ -155,7 +153,6 @@ enum ТекстОписанияЗаготовки {
 
     private static let en: [String: String] = [
         "prf_d_ask": "Questions? Message me in the chat.",
-        "prf_d_kliko": "Bought on Kliko with Safe Deal.",
         "prf_d_fits": "Factory size for %@.",
         "prf_d_size": "size %@",
         "prf_d_tyres": "Set of %1$@ tires %2$@",
@@ -201,7 +198,6 @@ enum ТекстОписанияЗаготовки {
 
     private static let ar: [String: String] = [
         "prf_d_ask": "لأي استفسار، راسلني في المحادثة.",
-        "prf_d_kliko": "تم شراؤه على Kliko عبر الصفقة الآمنة.",
         "prf_d_fits": "المقاس الأصلي لـ %@.",
         "prf_d_size": "المقاس %@",
         "prf_d_tyres": "طقم من %1$@ إطارات %2$@",
