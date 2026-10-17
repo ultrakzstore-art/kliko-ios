@@ -22,7 +22,7 @@ enum СчётБенча {
 
     /// Корень ленты построил список (NativeFeedView.списокЛенты).
     @inline(__always)
-    static func корня() {
+    static func плюсКорень() {
         #if DEBUG
         корень += 1
         #endif
@@ -30,7 +30,7 @@ enum СчётБенча {
 
     /// Ряд списка ленты построен (ForEach рядов).
     @inline(__always)
-    static func ряда() {
+    static func плюсРяд() {
         #if DEBUG
         ряды += 1
         #endif
@@ -38,7 +38,7 @@ enum СчётБенча {
 
     /// Посчитано тело карточки ленты (ListingCard.body).
     @inline(__always)
-    static func карточки() {
+    static func плюсКарточка() {
         #if DEBUG
         карточки += 1
         #endif
