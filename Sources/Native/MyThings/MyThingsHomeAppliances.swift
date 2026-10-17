@@ -81,6 +81,7 @@ struct РедакторТехникиДома: View {
     @State private var неПрочитали = false
     @State private var модели: [String] = []
     @State private var бренды: [String] = []
+    @Environment(\.dismiss) private var закрыть
 
     static let частыеБренды: [String] = ["Samsung", "LG", "Bosch", "Beko", "Haier", "Indesit", "Electrolux", "Artel",
                                          "Xiaomi"]
@@ -110,6 +111,11 @@ struct РедакторТехникиДома: View {
                 Label(покупка.подписьСЦеной, systemImage: "bag")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.золото)
+            }
+            if !новая {
+                /* «Продать» (владелец 17.10.2026): вид → раздел, марка, модель, габариты, расходник; комната — нет. */
+                МалаяКнопкаАвтоподбора(заголовок: ПродатьМоёText.т("msl_sell"), значок: "tag") { продать() }
+                    .accessibilityHint(ПродатьМоёText.т("msl_sell_hint"))
             }
         }
         .выборСнимкаДома(камера: $камера, галерея: $галерея) { источник in прочитать(источник) }
@@ -289,5 +295,13 @@ struct РедакторТехникиДома: View {
     private func удалить() {
         let id = прибор.id
         МоёХранилище.shared.обновитьДом { д in д.техника.removeAll { $0.id == id } }
+    }
+
+    /// Лист закрывается, мастер подачи открывается заполненным (то, что сейчас на листе).
+    private func продать() {
+        let заготовка: ЗаготовкаПодачи = ПродатьСвоёМоего.техника(прибор)
+        ОткликСайта.выбор()
+        закрыть()
+        ПереходыГардероба.продать(заготовка)
     }
 }

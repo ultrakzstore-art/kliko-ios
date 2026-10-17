@@ -437,7 +437,8 @@ struct ЭкранПокупокМоего: View {
                                        withAnimation(ДвижениеСайта.выбор) { выбор[покупка.id] = раздел }
                                    },
                                    добавить: { добавить(покупка) },
-                                   убрать: { убрать(покупка) })
+                                   убрать: { убрать(покупка) },
+                                   продать: { продать(покупка) })
             }
             Text(т("my_deals_end"))
                 .font(.footnote)
@@ -464,6 +465,16 @@ struct ЭкранПокупокМоего: View {
         показатьВесть(т("my_deals_removed"))
     }
 
+    /**
+     «Продать» то, что уже лежит в «Моём» (владелец 17.10.2026): заготовка своего вида — одежда, компьютер, техника или
+     вещь (MyThingsSellHome.swift); чужие фото и текст объявления не переносятся (SERVER_CIRCLE.md §4.6).
+     */
+    private func продать(_ покупка: ПокупкаИзСделкиМоего) {
+        guard let заготовка = ПродатьСвоёМоего.изСделки(покупка.id, запись: хранилище.запись) else { return }
+        ОткликСайта.выбор()
+        ПереходыГардероба.продать(заготовка)
+    }
+
     private func показатьВесть(_ текст: String) {
         номерВести += 1
         let номер = номерВести
@@ -486,6 +497,8 @@ private struct СтрокаПокупкиМоего: View {
     let выбрать: (РазделВещиМоего) -> Void
     let добавить: () -> Void
     let убрать: () -> Void
+    /// «Продать» добавленное (меню «В «Моём» ✓»); nil — пункта нет.
+    var продать: (() -> Void)? = nil
 
     private func т(_ ключ: String) -> String { МоёText.т(ключ) }
 
@@ -514,6 +527,11 @@ private struct СтрокаПокупкиМоего: View {
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: добавлена ? т("my_deals_remove") : т("my_deals_add")) {
             добавлена ? убрать() : добавить()
+        }
+        .accessibilityActions {
+            if добавлена, let продать {
+                Button(ПродатьМоёText.т("msl_sell"), action: продать)
+            }
         }
     }
 
@@ -572,6 +590,11 @@ private struct СтрокаПокупкиМоего: View {
     private var кнопка: some View {
         if добавлена {
             Menu {
+                if let продать {
+                    Button(action: продать) {
+                        Label(ПродатьМоёText.т("msl_sell"), systemImage: "tag")
+                    }
+                }
                 Button(role: .destructive, action: убрать) {
                     Label(т("my_deals_remove"), systemImage: "minus.circle")
                 }

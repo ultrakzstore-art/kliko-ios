@@ -1,7 +1,8 @@
 import Foundation
 
 /**
- Тексты «Продать своё» из «Моего» (пачка 83, MyThingsSell.swift): названия заготовки подачи и кнопки гаража. Ключи
+ Тексты «Продать своё» из «Моего» (пачка 83, MyThingsSell.swift; дом, устройства и компьютер целиком — владелец
+ 17.10.2026, MyThingsSellHome.swift): названия заготовки подачи и кнопки «Продать». Ключи
  msl_*; языки ru, kk, en, ar, прочие — русский (язык — тот же, что у примерочной: ПримерочнаяText.язык). Строки с %@
  идут через String(format:). В названиях — только вид и значения вещи, без своих названий «Моего» (§16.4).
  */
@@ -32,8 +33,9 @@ enum ПродатьМоёText {
         "msl_gpu": "Видеокарта %@",
         "msl_psu": "Блок питания %@",
         "msl_cpu": "Процессор %@",
-        "msl_laptop": "Ноутбук %@",
         "msl_laptop_plain": "Ноутбук",
+        "msl_desktop_plain": "Компьютер",
+        "msl_mattress": "Матрас %@",
         "msl_sell": "Продать",
         "msl_sell_tyres": "Шины %@",
         "msl_sell_rims": "Диски %@",
@@ -49,8 +51,9 @@ enum ПродатьМоёText {
         "msl_gpu": "Бейнекарта %@",
         "msl_psu": "Қуат блогы %@",
         "msl_cpu": "Процессор %@",
-        "msl_laptop": "Ноутбук %@",
         "msl_laptop_plain": "Ноутбук",
+        "msl_desktop_plain": "Компьютер",
+        "msl_mattress": "Матрас %@",
         "msl_sell": "Сату",
         "msl_sell_tyres": "Шиналар %@",
         "msl_sell_rims": "Дискілер %@",
@@ -66,8 +69,9 @@ enum ПродатьМоёText {
         "msl_gpu": "Graphics card %@",
         "msl_psu": "Power supply %@",
         "msl_cpu": "Processor %@",
-        "msl_laptop": "Laptop %@",
         "msl_laptop_plain": "Laptop",
+        "msl_desktop_plain": "Desktop PC",
+        "msl_mattress": "Mattress %@",
         "msl_sell": "Sell",
         "msl_sell_tyres": "Tires %@",
         "msl_sell_rims": "Wheels %@",
@@ -83,8 +87,9 @@ enum ПродатьМоёText {
         "msl_gpu": "بطاقة رسوميات %@",
         "msl_psu": "مزوّد طاقة %@",
         "msl_cpu": "معالج %@",
-        "msl_laptop": "حاسوب محمول %@",
         "msl_laptop_plain": "حاسوب محمول",
+        "msl_desktop_plain": "حاسوب مكتبي",
+        "msl_mattress": "مرتبة %@",
         "msl_sell": "بيع",
         "msl_sell_tyres": "إطارات %@",
         "msl_sell_rims": "جنوط %@",

@@ -1224,7 +1224,7 @@ struct СъёмкаПоПлану: View {
     }
 }
 
-// MARK: - Тексты (ru / kk / en / ar): подписи — как lang/*.php сайта (cam_*), своё — переведено здесь
+// MARK: - Тексты (ru / kk / en / ar): подписи — как lang/<язык>.php сайта (cam_*), своё — переведено здесь
 
 enum СъёмкаПоПлануText {
     static func т(_ ключ: String) -> String {

@@ -667,6 +667,12 @@ struct КарточкаКупленногоДома: View {
             }
             Spacer(minLength: 8)
             Menu {
+                /* «Продать» купленное (владелец 17.10.2026): название сделки, раздел, стандарты; чужого фото — нет. */
+                Button {
+                    продать(вещь)
+                } label: {
+                    Label(ПродатьМоёText.т("msl_sell"), systemImage: "tag")
+                }
                 Button(role: .destructive) {
                     убрать(вещь.id)
                 } label: {
@@ -683,6 +689,7 @@ struct КарточкаКупленногоДома: View {
         }
         .frame(minHeight: 48)
         .accessibilityElement(children: .combine)
+        .accessibilityAction(named: ПродатьМоёText.т("msl_sell")) { продать(вещь) }
         .accessibilityAction(named: т("mh_bought_remove")) { убрать(вещь.id) }
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
@@ -690,5 +697,11 @@ struct КарточкаКупленногоДома: View {
     private func убрать(_ id: UUID) {
         ОткликСайта.выбор()
         withAnimation(ДвижениеСайта.вставкаСписка) { МоёХранилище.shared.удалитьВещь(id) }
+    }
+
+    /// Мастер подачи уже заполненным (MyThingsSellHome.swift).
+    private func продать(_ вещь: ВещьМоего) {
+        ОткликСайта.выбор()
+        ПереходыГардероба.продать(ПродатьСвоёМоего.купленное(вещь))
     }
 }

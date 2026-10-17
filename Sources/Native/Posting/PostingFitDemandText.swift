@@ -92,7 +92,9 @@ enum СпросПодачиText {
         "fd_why_std": "у них {label}",
         "fd_wanted": "Ищут сейчас: {n}",
         "fd_notify": "Сообщить им",
-        "fd_notify_sub": "После публикации Kliko сам сообщит тем, кто ждёт такое, — вы не узнаете, кому"
+        "fd_notify_sub": "После публикации Kliko сам сообщит тем, кто ждёт такое, — вы не узнаете, кому",
+        "fd_ask": "Узнать, скольким подойдёт",
+        "fd_ask_sub": "Значения вещи из «Моего» уйдут на сервер только по этой кнопке"
     ]
 
     private static let kk: [String: String] = [
@@ -103,7 +105,9 @@ enum СпросПодачиText {
         "fd_why_std": "оларда {label} бар",
         "fd_wanted": "Қазір іздеп жүр: {n}",
         "fd_notify": "Оларға хабарлау",
-        "fd_notify_sub": "Жарияланғаннан кейін Kliko мұны күтіп жүргендерге өзі хабарлайды — кімге екенін білмейсіз"
+        "fd_notify_sub": "Жарияланғаннан кейін Kliko мұны күтіп жүргендерге өзі хабарлайды — кімге екенін білмейсіз",
+        "fd_ask": "Қанша адамға сәйкес келетінін білу",
+        "fd_ask_sub": "«Менікі» бөліміндегі заттың мәндері серверге тек осы түйме арқылы жіберіледі"
     ]
 
     private static let en: [String: String] = [
@@ -114,7 +118,9 @@ enum СпросПодачиText {
         "fd_why_std": "they have {label}",
         "fd_wanted": "Looking now: {n}",
         "fd_notify": "Notify them",
-        "fd_notify_sub": "After publishing, Kliko will tell people waiting for this — you won’t know who"
+        "fd_notify_sub": "After publishing, Kliko will tell people waiting for this — you won’t know who",
+        "fd_ask": "See how many people it fits",
+        "fd_ask_sub": "The item’s details from My Things are sent to the server only when you tap this"
     ]
 
     private static let ar: [String: String] = [
@@ -125,6 +131,8 @@ enum СпросПодачиText {
         "fd_why_std": "لديهم {label}",
         "fd_wanted": "يبحث الآن: {n}",
         "fd_notify": "أبلِغهم",
-        "fd_notify_sub": "بعد النشر سيُبلغ Kliko من ينتظر هذا — لن تعرف من هم"
+        "fd_notify_sub": "بعد النشر سيُبلغ Kliko من ينتظر هذا — لن تعرف من هم",
+        "fd_ask": "اعرف لكم شخصًا يناسب",
+        "fd_ask_sub": "لا تُرسَل تفاصيل الغرض من «أشيائي» إلى الخادم إلا عند الضغط هنا"
     ]
 }
