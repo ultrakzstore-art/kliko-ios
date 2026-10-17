@@ -268,16 +268,16 @@ struct КарточкаМоегоКабинета: View, Equatable {
     @ViewBuilder
     private func правая(_ сводка: Сводка) -> some View {
         if сводка.пусто {
-            Text(МоёText.т("my_start"))
-                .font(.system(size: 11, weight: .bold))
+            /* Коротко и не сжимается (снимок CI 17.10.2026: «Заполните за пару минут» в рамке 120 pt сжималось до
+               «Зап о…»). Полная фраза остаётся в подписи для VoiceOver. */
+            Label(МоёText.т("my_add"), systemImage: "plus")
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Theme.акцент)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .background(Theme.оттенокАкцента, in: Capsule())
-                .frame(maxWidth: 120)
                 .transition(.opacity)
         } else if сводка.всёГотово {
             Image(systemName: "checkmark.seal.fill")
