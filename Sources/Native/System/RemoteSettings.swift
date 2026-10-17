@@ -31,14 +31,17 @@ enum НастройкиСервера {
     /// Пачка 83: рубильники «Моего» (docs/SERVER_NEW_FOR_MINE.md §11, §16) — std_server_fit, fit_subs, season_rules
     /// (ForYouServer.swift), fit_demand_post, fit_notify_on_publish (PostingFitDemand.swift), wanted_std; все читаются
     /// через вклВыкл(..., сборка: false), то есть по умолчанию выключены.
-    /// Сборка 84: окно объявления v2 — modal_summary, gallery_43, open_zoom (ListingWindowV2.swift); сборка 86: лента
+    /// Сборка 84: окно объявления v2 — modal_summary, gallery_43, open_zoom (ListingWindowV2.swift); сборка 85: лента
     /// системным списком — feed_list (FeedList.swift). В сборке включены, сервер может выключить.
+    /// Сборка 86: поиск (SearchLive.swift) — search_live (в сборке включён) и ai_search (в сборке выключен; сервер
+    /// включит, когда выложит search_suggest.php, docs/SERVER_AI_SEARCH.md). В 85 этих ключей здесь не было —
+    /// сервер не мог их переключить.
     static let ключиФлагов: Set<String> = [
         "checks_rk", "ai_recognize", "native_session", "listing_chat", "chat_send", "listing_map",
         "compare", "review_prompt", "whats_new", "deals_money", "wallet_money", "banner_on", "img_resize",
         "perf_telemetry", "modal_actions_v2", "item_brief", "item_brief_ai", "digital_show",
         "std_server_fit", "fit_subs", "season_rules", "fit_demand_post", "fit_notify_on_publish", "wanted_std",
-        "modal_summary", "gallery_43", "open_zoom", "feed_list"
+        "modal_summary", "gallery_43", "open_zoom", "feed_list", "search_live", "ai_search"
     ]
     /// Тексты: баннер на четырёх языках, минимальная версия, ссылка на App Store; force_lag и force_grace_hours —
     /// числа для принудительного обновления (ПринудительноеОбновление, ForcedUpdate.swift): порог отставания от App Store
