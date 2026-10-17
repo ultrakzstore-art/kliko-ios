@@ -213,6 +213,9 @@ jobs:
       # Владелец 17.10.2026 («Почему снято с продажи?»): что сайт отдаёт в status и is_active (ci/status_probe.py).
       - name: Статус и is_active объявлений
         run: python3 ci/status_probe.py 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+      # Владелец 17.10.2026 («у продавца много товаров, а в профиле только 4»): откуда профиль берёт товары продавца.
+      - name: Товары продавца — профиль против ленты
+        run: python3 ci/seller_probe.py 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
   diag:
     if: (github.event_name == 'workflow_dispatch' && inputs.diag) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[diag]'))
