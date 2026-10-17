@@ -8,6 +8,8 @@ import Foundation
  называют то, что делают», «Аренда проще», «Запись о фото и подпись «Фото обработано»», «Картинка по описанию, часть 2»):
  ma_* — ключи раскладки сайта, rs_* — лист аренды, pm_* — подписи кадров. Своим словарём, чтобы не раздувать
  ListingPageText.
+ Сборка 84 (окно объявления v2, владелец 17.10.2026 «Собирай 84»): ma_reserved / ma_sold — серая строка панели над
+ «Связаться», когда вещь в резерве или продана (гарант на занятой вещи больше не предлагается).
  */
 enum ТекстыДействийОкна {
     static func т(_ ключ: String) -> String {
@@ -24,6 +26,7 @@ enum ТекстыДействийОкна {
             "ma_eds": "Сделка с подписью eGov", "ma_eds_sub": "Договор с подписью через eGov",
             "ma_contact": "Связаться", "ma_contact_sub": "Чат, звонок или WhatsApp", "ma_contact_chat": "Чат на площадке",
             "ma_hold_sub": "Безопасная сделка сейчас на паузе",
+            "ma_reserved": "В резерве — идёт сделка", "ma_sold": "Продано",
             "ma_offer": "Торг", "ma_offer_a11y": "Предложить цену", "ma_edit": "Редактировать",
             "ma_blk_t": "Связь недоступна", "ma_blk_s": "Вы заблокировали продавца", "ma_unblock": "Разблокировать",
             "ma_more": "Ещё", "ma_more_login": "Войти, чтобы пожаловаться", "ma_block": "Заблокировать продавца",
@@ -66,6 +69,7 @@ enum ТекстыДействийОкна {
             "ma_eds": "eGov қолтаңбасымен мәміле", "ma_eds_sub": "eGov арқылы қол қойылатын шарт",
             "ma_contact": "Байланысу", "ma_contact_sub": "Чат, қоңырау немесе WhatsApp", "ma_contact_chat": "Алаңдағы чат",
             "ma_hold_sub": "Қауіпсіз мәміле қазір үзілісте",
+            "ma_reserved": "Брондалған — мәміле жүріп жатыр", "ma_sold": "Сатылды",
             "ma_offer": "Сауда", "ma_offer_a11y": "Баға ұсыну", "ma_edit": "Өңдеу",
             "ma_blk_t": "Байланыс қолжетімсіз", "ma_blk_s": "Сіз сатушыны бұғаттадыңыз", "ma_unblock": "Бұғаттан шығару",
             "ma_more": "Тағы", "ma_more_login": "Шағымдану үшін кіріңіз", "ma_block": "Сатушыны бұғаттау",
@@ -108,6 +112,7 @@ enum ТекстыДействийОкна {
             "ma_eds": "Deal signed with eGov", "ma_eds_sub": "A contract signed via eGov",
             "ma_contact": "Contact", "ma_contact_sub": "Chat, call or WhatsApp", "ma_contact_chat": "Chat on Kliko",
             "ma_hold_sub": "The Safe deal is paused for now",
+            "ma_reserved": "Reserved — a deal is in progress", "ma_sold": "Sold",
             "ma_offer": "Offer", "ma_offer_a11y": "Make an offer", "ma_edit": "Edit",
             "ma_blk_t": "Contact unavailable", "ma_blk_s": "You blocked this seller", "ma_unblock": "Unblock",
             "ma_more": "More", "ma_more_login": "Sign in to report", "ma_block": "Block the seller",
@@ -150,6 +155,7 @@ enum ТекстыДействийОкна {
             "ma_eds": "صفقة بتوقيع eGov", "ma_eds_sub": "عقد موقّع عبر eGov",
             "ma_contact": "تواصل", "ma_contact_sub": "دردشة أو اتصال أو WhatsApp", "ma_contact_chat": "الدردشة في المنصة",
             "ma_hold_sub": "الصفقة الآمنة متوقفة مؤقتًا",
+            "ma_reserved": "محجوز — الصفقة جارية", "ma_sold": "تم البيع",
             "ma_offer": "تفاوض", "ma_offer_a11y": "اقترح سعرًا", "ma_edit": "تعديل",
             "ma_blk_t": "التواصل غير متاح", "ma_blk_s": "لقد حظرت هذا البائع", "ma_unblock": "إلغاء الحظر",
             "ma_more": "المزيد", "ma_more_login": "سجّل الدخول للإبلاغ", "ma_block": "حظر البائع",

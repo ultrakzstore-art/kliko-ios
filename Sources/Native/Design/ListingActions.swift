@@ -20,6 +20,18 @@ import UIKit
 
  🔴 ДЕНЬГИ. Новых путей к оплате нет: главная кнопка жмёт тот же гарант панели (окно «Безопасная сделка», деньги — только за
  Config.деньгиСделок), цифровые услуги в приложении не продаются.
+
+ СБОРКА 84 — ОКНО ОБЪЯВЛЕНИЯ V2 (владелец 17.10.2026: «Модалку товаров надо упростить, так как фокус сбивается»; на макет —
+ «Собирай 84»; план и замеры — docs/LISTING_MODAL_V2.md, рубильник modal_summary — Config.окноРешения):
+   · ряд всегда в одну строку: главная гибкая (не ниже 56 pt), «Торг» и «Связаться» — плитки 68×56 с нейтральными
+     значками; столбиком — только при крупном «Размере текста» (accessibility), выбор по окружению, без ViewThatFits и
+     без замера геометрии. Главная без квадрата 34 pt и без строки пояснения: значок 17 pt в строке, заголовок 15 pt до
+     двух строк без ужатия; пояснение («Деньги у Kliko до получения товара») — подсказка VoiceOver, а на экране — строка
+     карточки решения. Тень 6 / 20 % / 3, одно общее появление вместо каскада, блик — один раз за запуск приложения;
+   · ошибки, найденные при разборе (исправлены и при выключенном рубильнике): задаток — только у машин и жилья (шины,
+     диски и запчасти — «Купить безопасно»); вещь в резерве или продана — серая строка и одна «Связаться», гарант на
+     занятой вещи не предлагается.
+ Рубильник выключен — раскладка и движение прежние.
  */
 extension Config {
     /// Новая раскладка окна объявления и «Ещё» в шапке (рубильник сайта modal_actions_v2, включён). Выключен — прежняя
@@ -50,6 +62,9 @@ enum ГлавноеДействиеОкна: Equatable {
 
     /// eds — режим сделок с подписью (MK_DEAL_MODE = "eds", РежимСделокСайта).
     static func для(_ т: Listing, eds: Bool) -> ГлавноеДействиеОкна {
+        /* Сборка 84 (владелец 17.10.2026, «Найденные ошибки» окна v2): вещь в резерве или продана — гарант не
+           предлагается, главная — «Связаться» (над ней панель пишет «В резерве — идёт сделка» или «Продано»). */
+        if занятость(т) != nil { return .связаться }
         /* «Сдаётся» — «Арендовать», даже когда есть цена продажи: сделка у такого объявления — залог аренды. */
         if т.forRent { return .аренда }
         /* Аренда жилья без галочки «Сдаю» (непроверенный продавец до 13.10.2026 — realty.deal = "rent"): заявку через
@@ -60,8 +75,43 @@ enum ГлавноеДействиеОкна: Equatable {
            оформлять нечего — «Связаться». */
         guard (т.price ?? 0) > 0, ГарантОбъявления.кнопка(т) == .купить else { return .связаться }
         if т.услуга { return т.корень == "services" ? .заказать : .связаться }
-        if т.корень == "transport" || т.корень == "realty" { return .задаток }
+        if т.корень == "realty" { return .задаток }
+        /* Сборка 84: задаток — бронь машины; шины, диски и запчасти (внутри transport) — обычный товар, «Купить
+           безопасно» (раньше у колёс выходил «Внести задаток»). */
+        if т.корень == "transport" && !РазделыСайта.внутри(т.категория, разделыБезЗадатка) { return .задаток }
         return .купить
+    }
+
+    /// Разделы transport, где задатка нет: запчасти и шины с дисками (tires-wheels лежит внутри auto-parts — названы
+    /// оба, чтобы правило не зависело от дерева разделов).
+    static let разделыБезЗадатка: Set<String> = ["auto-parts", "tires-wheels"]
+
+    /// Вещь занята: в резерве (status = "reserved") или продана (status = "sold" или снята — is_active = false).
+    enum Занятость: Equatable {
+        case резерв
+        case продано
+
+        /// Серая строка панели над «Связаться».
+        var текст: String {
+            switch self {
+            case .резерв: return ТекстыДействийОкна.т("ma_reserved")
+            case .продано: return ТекстыДействийОкна.т("ma_sold")
+            }
+        }
+
+        var значок: String {
+            switch self {
+            case .резерв: return "hourglass"
+            case .продано: return "checkmark.circle"
+            }
+        }
+    }
+
+    /// Занята ли вещь (Listing.вРезерве, статус выдачи и Listing.активно); nil — свободна.
+    static func занятость(_ т: Listing) -> Занятость? {
+        if т.вРезерве { return .резерв }
+        if !т.активно || т.статусВыдачи == "sold" { return .продано }
+        return nil
     }
 
     var заголовок: String {
@@ -95,7 +145,10 @@ enum ГлавноеДействиеОкна: Equatable {
         case .заказать: return ТекстыДействийОкна.т("ma_order_sub")
         case .подписьEDS: return ТекстыДействийОкна.т("ma_eds_sub")
         case .связаться:
-            if ГарантОбъявления.наПаузеУОбъявления(т) { return ТекстыДействийОкна.т("ma_hold_sub") }
+            /* Занятой вещи пауза гаранта ни при чём — о ней не пишем. */
+            if занятость(т) == nil && ГарантОбъявления.наПаузеУОбъявления(т) {
+                return ТекстыДействийОкна.т("ma_hold_sub")
+            }
             return т.звонок || т.whatsApp ? ТекстыДействийОкна.т("ma_contact_sub") : ТекстыДействийОкна.т("ma_contact_chat")
         }
     }
@@ -154,6 +207,13 @@ enum ЛистОкнаОбъявления: String, Identifiable {
  «[главная][Торг][Связаться]»: главная — зелёная, во всю оставшуюся ширину, «Торг» и «Связаться» — квадратные плитки
  одной высоты с ней. Не влезло в строку (длинный язык, «Сделка с подписью eGov», крупный текст) — главная сверху во всю
  ширину, плитки под ней поровну: подпись не обрезается многоточием. Появляются снизу лёгким каскадом.
+
+ компактно (сборка 84, Config.окноРешения — снимок панели): всегда одна строка HStack(spacing 8) — главная гибкая, плитки
+ 68×56; столбиком — только при крупном «Размере текста» (dynamicTypeSize.isAccessibilitySize, окружение уже ограничено
+ панелью до accessibility1). ViewThatFits сравнивал идеальную ширину ≈431 pt с 357 pt и всегда выбирал два ряда (178 pt),
+ а на Pro Max ряд прыгал из одного в два, когда приходила сверка гаранта. Без замера геометрии и без записи состояния из
+ тела; .fixedSize(vertical) остаётся — без него повторится растяжение из TestFlight 74. Появление — одно общее
+ (прозрачность и 8 pt), без каскада.
  */
 struct РядДействийОкна: View {
     let главное: ГлавноеДействиеОкна
@@ -164,11 +224,14 @@ struct РядДействийОкна: View {
     let нажатьГлавное: () -> Void
     let нажатьТорг: () -> Void
     let нажатьСвязаться: () -> Void
+    /// Окно объявления v2: одна строка, компактная главная, нейтральные плитки (решает панель — снимок рубильника).
+    let компактно: Bool
     @State private var видно = false
+    @Environment(\.dynamicTypeSize) private var размерТекста
 
     init(главное: ГлавноеДействиеОкна, подпись: String, ждём: Bool, торг: Bool, связаться: Bool,
          нажатьГлавное: @escaping () -> Void, нажатьТорг: @escaping () -> Void,
-         нажатьСвязаться: @escaping () -> Void) {
+         нажатьСвязаться: @escaping () -> Void, компактно: Bool = false) {
         self.главное = главное
         self.подпись = подпись
         self.ждём = ждём
@@ -177,9 +240,65 @@ struct РядДействийОкна: View {
         self.нажатьГлавное = нажатьГлавное
         self.нажатьТорг = нажатьТорг
         self.нажатьСвязаться = нажатьСвязаться
+        self.компактно = компактно
     }
 
     var body: some View {
+        if компактно {
+            рядКомпактно
+        } else {
+            рядПрежний
+        }
+    }
+
+    // MARK: Окно v2 (сборка 84)
+
+    /// Одна строка; столбиком — только при крупном тексте. Одно общее появление снизу на 8 pt.
+    private var рядКомпактно: some View {
+        Group {
+            if размерТекста.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    главнаяКомпактно
+                    if торг || связаться {
+                        HStack(spacing: 8) { малыеКомпактно(растянуть: true) }
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    главнаяКомпактно
+                    малыеКомпактно(растянуть: false)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .opacity(видно ? 1 : 0)
+        .offset(y: видно ? 0 : 8)
+        .animation(ДвижениеСайта.мягко(.spring(response: 0.42, dampingFraction: 0.8)), value: видно)
+        .onAppear { видно = true }
+    }
+
+    private var главнаяКомпактно: some View {
+        ГлавнаяКнопкаОкна(значок: главное.значок, заголовок: главное.заголовок, подпись: подпись, ждём: ждём,
+                          компактно: true, нажать: нажатьГлавное)
+    }
+
+    @ViewBuilder
+    private func малыеКомпактно(растянуть: Bool) -> some View {
+        if торг {
+            МалаяКнопкаОкна(значок: "tag", заголовок: ТекстыДействийОкна.т("ma_offer"),
+                            голос: ТекстыДействийОкна.т("ma_offer_a11y"), растянуть: растянуть, компактно: true,
+                            нажать: нажатьТорг)
+        }
+        if связаться {
+            МалаяКнопкаОкна(значок: "bubble.left.and.bubble.right", заголовок: ТекстыДействийОкна.т("ma_contact"),
+                            голос: ТекстыДействийОкна.т("ma_cc_title"), растянуть: растянуть, компактно: true,
+                            нажать: нажатьСвязаться)
+        }
+    }
+
+    // MARK: Как до сборки 84
+
+    private var рядПрежний: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 главная
@@ -227,83 +346,62 @@ struct РядДействийОкна: View {
  Главная кнопка окна: зелёный градиент панели связи, значок в светлом квадрате, заголовок и строка пояснения; один раз
  по появлении по ней проходит мягкий блик («мощная подача»), при «Уменьшении движения» — без него. Ждём ответа гаранта —
  вместо значка колесо, второе нажатие не уходит.
+ компактно (сборка 84, окно v2): без квадрата и без строки пояснения — значок 17 pt прямо в строке, заголовок 15 pt
+ heavy до двух строк без ужатия (не режется многоточием); пояснение — только подсказкой VoiceOver. Тень 6 / 20 % / 3,
+ блик — один раз за запуск приложения (владелец 17.10.2026: движение само по себе сбивает фокус).
  */
 struct ГлавнаяКнопкаОкна: View {
     let значок: String
     let заголовок: String
     let подпись: String
     let ждём: Bool
+    let компактно: Bool
     let нажать: () -> Void
     @State private var блик: CGFloat = -0.7
     @ScaledMetric(relativeTo: .subheadline) private var кегль: CGFloat = 15
     @ScaledMetric(relativeTo: .caption2) private var кегльПодписи: CGFloat = 11
+    /// Компактный блик уже прошёл за этот запуск — у следующих окон его нет.
+    private static var бликЗаЗапускБыл = false
 
-    init(значок: String, заголовок: String, подпись: String, ждём: Bool = false, нажать: @escaping () -> Void) {
+    init(значок: String, заголовок: String, подпись: String, ждём: Bool = false, компактно: Bool = false,
+         нажать: @escaping () -> Void) {
         self.значок = значок
         self.заголовок = заголовок
         self.подпись = подпись
         self.ждём = ждём
+        self.компактно = компактно
         self.нажать = нажать
     }
 
     var body: some View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+        let тень: Color = Theme.панельСвязиКонец.opacity(компактно ? 0.2 : 0.45)
+        let радиусТени: CGFloat = компактно ? 6 : 12
+        let сдвигТени: CGFloat = компактно ? 3 : 8
         return Button(action: нажать) {
-            HStack(spacing: 10) {
-                ZStack {
-                    if ждём {
-                        SiteSpinner.белый
-                    } else {
-                        Image(systemName: значок)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color.white)
+            содержимое
+                .background(LinearGradient(colors: [Theme.панельСвязиНачало, Theme.панельСвязиКонец],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay {
+                    GeometryReader { г in
+                        LinearGradient(colors: [Color.white.opacity(0), Color.white.opacity(0.26), Color.white.opacity(0)],
+                                       startPoint: .leading, endPoint: .trailing)
+                            .frame(width: г.size.width * 0.32)
+                            .rotationEffect(.degrees(16))
+                            .offset(x: блик * г.size.width)
                     }
-                }
-                .frame(width: 34, height: 34)
-                .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
-                .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(заголовок)
-                        .font(.system(size: кегль, weight: .heavy))
-                        .tracking(-0.15)
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    if !подпись.isEmpty {
-                        Text(подпись)
-                            .font(.system(size: кегльПодписи, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.78))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, minHeight: 56, maxHeight: .infinity, alignment: .leading)
-            .background(LinearGradient(colors: [Theme.панельСвязиНачало, Theme.панельСвязиКонец],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay {
-                GeometryReader { г in
-                    LinearGradient(colors: [Color.white.opacity(0), Color.white.opacity(0.26), Color.white.opacity(0)],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: г.size.width * 0.32)
-                        .rotationEffect(.degrees(16))
-                        .offset(x: блик * г.size.width)
-                }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
-            .clipShape(форма)
-            .overlay {
-                форма
-                    .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.3), Color.clear],
-                                                 startPoint: .top, endPoint: .center), lineWidth: 1)
                     .allowsHitTesting(false)
-            }
-            .shadow(color: Theme.панельСвязиКонец.opacity(0.45), radius: 12, x: 0, y: 8)
-            .contentShape(форма)
+                    .accessibilityHidden(true)
+                }
+                .clipShape(форма)
+                .overlay {
+                    форма
+                        .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.3), Color.clear],
+                                                     startPoint: .top, endPoint: .center), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+                .shadow(color: тень, radius: радиусТени, x: 0, y: сдвигТени)
+                .contentShape(форма)
         }
         .buttonStyle(НажатиеСПружинкой(сжатие: 0.97))
         .disabled(ждём)
@@ -314,38 +412,122 @@ struct ГлавнаяКнопкаОкна: View {
         .onAppear { блеснуть() }
     }
 
-    /// Блик проходит один раз, чуть погодя после появления; без движения — не проходит.
+    @ViewBuilder
+    private var содержимое: some View {
+        if компактно {
+            содержимоеКомпактно
+        } else {
+            содержимоеПрежнее
+        }
+    }
+
+    /// Окно v2: значок 17 pt в строке и заголовок до двух строк, по центру кнопки; подписи на экране нет.
+    private var содержимоеКомпактно: some View {
+        HStack(spacing: 8) {
+            Group {
+                if ждём {
+                    SiteSpinner.белый
+                } else {
+                    Image(systemName: значок)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                }
+            }
+            .accessibilityHidden(true)
+            Text(заголовок)
+                .font(.system(size: кегль, weight: .heavy))
+                .tracking(-0.15)
+                .foregroundStyle(Color.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 56, maxHeight: .infinity)
+    }
+
+    /// Как до сборки 84: значок в светлом квадрате 34 pt, заголовок и строка пояснения.
+    private var содержимоеПрежнее: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                if ждём {
+                    SiteSpinner.белый
+                } else {
+                    Image(systemName: значок)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.Радиус.ms, style: .continuous))
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(заголовок)
+                    .font(.system(size: кегль, weight: .heavy))
+                    .tracking(-0.15)
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if !подпись.isEmpty {
+                    Text(подпись)
+                        .font(.system(size: кегльПодписи, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 56, maxHeight: .infinity, alignment: .leading)
+    }
+
+    /// Блик проходит один раз, чуть погодя после появления; без движения — не проходит. Компактная кнопка — один раз за
+    /// запуск приложения: следующее окно объявления открывается без блика.
     private func блеснуть() {
         guard !ДвижениеСайта.тихо, блик < 0 else { return }
+        if компактно {
+            guard !Self.бликЗаЗапускБыл else { return }
+            Self.бликЗаЗапускБыл = true
+        }
         withAnimation(.easeInOut(duration: 1.1).delay(0.5)) { блик = 1.3 }
     }
 }
 
-/// Плитка «Торг» / «Связаться»: значок над подписью, поверхность с тонкой рамкой, высота — как у главной.
+/// Плитка «Торг» / «Связаться»: значок над подписью, поверхность с тонкой рамкой, высота — как у главной. Компактно
+/// (окно v2, сборка 84): ширина 68 и нейтральный значок цветом текста — зелёной в кадре остаётся одна главная.
 private struct МалаяКнопкаОкна: View {
     let значок: String
     let заголовок: String
     let голос: String
     let растянуть: Bool
+    let компактно: Bool
     let нажать: () -> Void
     @ScaledMetric(relativeTo: .caption) private var кегль: CGFloat = 12
 
     /// Явный init: private @ScaledMetric прячет готовый.
-    init(значок: String, заголовок: String, голос: String, растянуть: Bool, нажать: @escaping () -> Void) {
+    init(значок: String, заголовок: String, голос: String, растянуть: Bool, компактно: Bool = false,
+         нажать: @escaping () -> Void) {
         self.значок = значок
         self.заголовок = заголовок
         self.голос = голос
         self.растянуть = растянуть
+        self.компактно = компактно
         self.нажать = нажать
     }
 
     var body: some View {
         let форма = RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+        let краскаЗначка: Color = компактно ? Theme.текст : Theme.зелёный2
+        let ширина: CGFloat = компактно ? 68 : 76
+        let поле: CGFloat = компактно ? 4 : 6
         return Button(action: нажать) {
             VStack(spacing: 4) {
                 Image(systemName: значок)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Theme.зелёный2)
+                    .foregroundStyle(краскаЗначка)
                     .accessibilityHidden(true)
                 Text(заголовок)
                     .font(.system(size: кегль, weight: .bold))
@@ -353,9 +535,9 @@ private struct МалаяКнопкаОкна: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, поле)
             .padding(.vertical, 8)
-            .frame(width: растянуть ? nil : CGFloat(76))
+            .frame(width: растянуть ? nil : ширина)
             .frame(maxWidth: растянуть ? CGFloat.infinity : nil, minHeight: 56, maxHeight: .infinity)
             .background(Theme.поверхность, in: форма)
             .overlay {
@@ -428,6 +610,38 @@ struct СтрокаСвязьНедоступна: View {
                 .strokeBorder(Theme.линия, lineWidth: 1)
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+}
+
+/**
+ Вещь занята (сборка 84, владелец 17.10.2026 — ошибка из разбора окна: на зарезервированной вещи предлагался «Купить
+ безопасно»): серая строка «В резерве — идёт сделка» или «Продано» над единственной «Связаться». Не нажимается, без
+ цвета и движения; растёт с «Размером текста» до accessibility1, как вся панель.
+ */
+struct СтрокаЗанятоОкна: View {
+    let занятость: ГлавноеДействиеОкна.Занятость
+    @ScaledMetric(relativeTo: .footnote) private var кегль: CGFloat = 13
+
+    init(занятость: ГлавноеДействиеОкна.Занятость) {
+        self.занятость = занятость
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: занятость.значок)
+                .font(.system(size: кегль, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(занятость.текст)
+                .font(.system(size: кегль, weight: .semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(Theme.текстВторой)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .accessibilityElement(children: .combine)
     }
 }
 

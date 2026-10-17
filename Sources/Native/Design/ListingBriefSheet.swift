@@ -9,6 +9,8 @@ import UIKit
  Данные — из уже отданной карточки и api/brief.php (МодельРазбораОбъявления); доводы Kliko AI — по нажатию «Разобрать с
  ИИ». Кнопки внизу жмут кнопки самого окна (главная и «Связаться»), «Что спросить продавца» — вопрос в строку ввода чата:
  новых путей к оплате нет.
+ Сборка 84 (окно объявления v2, рубильник modal_summary — Config.окноРешения; владелец 17.10.2026: «у каждого действия
+ одно место»): второй «Связаться» в листе нет — он в панели окна; остаётся только главная кнопка сделки, если она есть.
  */
 struct ЛистРазбораОбъявления: View {
     let товар: Listing
@@ -16,11 +18,14 @@ struct ЛистРазбораОбъявления: View {
     /// Закрыть лист; не nil — что сделать окну после.
     let готово: (ПослеРазбора?) -> Void
     @State private var видно = false
+    /// Окно объявления v2 (Config.окноРешения) — снимок при создании листа.
+    private let окноРешения: Bool
 
     init(товар: Listing, модель: МодельРазбораОбъявления, готово: @escaping (ПослеРазбора?) -> Void) {
         self.товар = товар
         _модель = ObservedObject(wrappedValue: модель)
         self.готово = готово
+        self.окноРешения = Config.окноРешения
     }
 
     var body: some View {
@@ -338,21 +343,29 @@ struct ЛистРазбораОбъявления: View {
                 if главное != .связаться {
                     кнопкаЗелёная(главное.заголовок, значок: главное.значок) { готово(.главное) }
                 }
-                Button { готово(.связаться) } label: {
-                    Text(ТекстыДействийОкна.т("ma_contact"))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.зелёный2)
-                        .frame(maxWidth: .infinity, minHeight: 46)
-                        .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                                .strokeBorder(Theme.линия, lineWidth: 1)
-                        }
-                        .contentShape(Rectangle())
+                /* Окно v2: «Связаться» — только в панели окна (одно действие — одно место). */
+                if !окноРешения {
+                    кнопкаСвязаться
                 }
-                .buttonStyle(НажатиеСПружинкой(сжатие: 0.97))
             }
         }
+    }
+
+    /// «Связаться» листа — как до сборки 84 (рубильник окна v2 выключен).
+    private var кнопкаСвязаться: some View {
+        Button { готово(.связаться) } label: {
+            Text(ТекстыДействийОкна.т("ma_contact"))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.зелёный2)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(Theme.поверхность2, in: RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
+                        .strokeBorder(Theme.линия, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеСПружинкой(сжатие: 0.97))
     }
 }
 
