@@ -5,18 +5,18 @@ import Foundation
 
  Что известно из кода сайта (js/marketplace.min.js, снимки shots…/site):
    · страница продавца — /kz/<язык>/seller.php?id=<seller_id> (APP_L + "/seller.php?id=", mkChatGone, mkOpenModal,
-     подписки в избранном, QR на постере услуги);
-   · это страница витрины того же шаблона, что главная и объявление: список товаров приходит в разметке массивом
-     `var MK_SEED = [...]` (как у home.html / item.html), а витрина фильтрует его по продавцу (window._mkSellerCtx,
-     mkItemMatches: t.seller_id === _mkSellerCtx). Сама разметка seller.php в снимках не сохранена — имя массива
-     INFERRED по шаблону. Поэтому разбор терпимый: ищем MK_SEED и похожие имена, берём только записи этого продавца;
+     подписки в избранном, QR на постере услуги); с неё берём только имя и фото (og:title, og:image);
+   · ТОВАРЫ — НЕ СО СТРАНИЦЫ (владелец 17.10.2026: «у продавца Канат много товаров, а в профиле только 4 — где
+     остальные?»). Проба CI 17.10 (ci/seller_probe.py): MK_SEED на seller.php — служебная выборка из 6 объявлений, не
+     список продавца (сайт: «у seller.php нет MK_SEED, витрина собирается на сервере в HTML»); из неё выходило 4 его
+     товара из 41, и список ещё считался полным. Отбора по продавцу в api/listings.php нет (seller, seller_id, uid —
+     сервер молча отдаёт общую ленту). Поэтому товары — лентой по страницам (sort=new, per=48, параметр seller на
+     будущее), с отбором по seller_id на телефоне, пока страницы не кончатся, но не больше страницДо;
    · шапка продавца — поля объявления seller, seller_avatar, seller_verified, seller_rating, seller_reviews,
      seller_deals, seller_followers, seller_since, shop_accent (MK_SEED[0], api-map §8) — они одинаковы у всех его
      объявлений; имя и фото без объявлений — из og:title / og:image страницы;
    · отзывы и сводка «сделок · отзывов · оценка» — /kz/ru/api/seller_reviews.php?id= (SellerAPI, этап 37);
    · подписка и подписчики — subs.php?action=status|follow|unfollow (этап 36).
- Запасной путь, если страница не отдала массив: /api/listings.php?per=48&sort=new&seller=<id> — параметра продавца в
- _mkApiQS нет (INFERRED, сервер может его не знать), поэтому ответ всё равно фильтруется по seller_id на телефоне.
 
  Куки — веб-сессии (SiteSession), как у ленты: цены и избранное для вошедшего.
  */
@@ -34,7 +34,7 @@ struct ВитринаПродавца: Equatable {
     /// shop_accent «#RRGGBB» — фирменный цвет магазина.
     var акцент: UInt32? = nil
     var товары: [Listing] = []
-    /// Список пришёл со страницы продавца (а не запасным запросом ленты) — он полный.
+    /// Страницы ленты кончились раньше предела — показаны все товары продавца; нет — под ними «Остальные — на сайте».
     var полныйСписок = false
 
     static func == (a: ВитринаПродавца, b: ВитринаПродавца) -> Bool {
@@ -59,27 +59,22 @@ enum ВитринаПродавцаAPI {
         return Config.страницаСайта("seller.php?id=" + номер)
     }
 
-    /// Вся витрина: страница продавца, при пустом списке — запасной запрос ленты. nil — нет связи и ничего не пришло.
+    /// Вся витрина: имя и фото — со страницы продавца, товары — лентой (товарыЛентой). nil — нет связи и ничего не пришло.
     static func загрузить(_ id: String, имя: String) async -> ВитринаПродавца? {
         let куки = await SiteSession.куки()
         var витрина = ВитринаПродавца(id: id, имя: имя)
         var связь = false
         if let html = await страница(id, куки: куки) {
             связь = true
-            /* Цифровые товары (Ц1): у MK_SEED страницы поля digital может не быть, а запасной признак разбора — только
-               сам корень digital. Подразделы — по справочнику: скрытые он знает, лишь пока показ цифрового выключен. */
-            let скрытые = await MainActor.run { ЗагрузкаКаталогаПоиска.сейчас?.скрытые ?? [] }
-            let товары = товарыСоСтраницы(html, продавец: id).filter { !скрытые.contains($0.категория ?? "") }
-            if !товары.isEmpty {
-                витрина.товары = товары
-                витрина.полныйСписок = true
-            }
             if витрина.имя.isEmpty, let имяСтраницы = мета("og:title", в: html) { витрина.имя = чистоеИмя(имяСтраницы) }
             if let фото = мета("og:image", в: html), let адрес = Config.url(фото) { витрина.аватар = адрес }
         }
-        if витрина.товары.isEmpty, let запасные = await запасныеТовары(id, куки: куки) {
+        if let лента = await товарыЛентой(id, куки: куки) {
             связь = true
-            витрина.товары = запасные
+            /* Цифровые товары (Ц1): разбор ленты их уже убирает, пока показ выключен; подразделы — ещё и по справочнику. */
+            let скрытые = await MainActor.run { ЗагрузкаКаталогаПоиска.сейчас?.скрытые ?? [] }
+            витрина.товары = лента.товары.filter { !скрытые.contains($0.категория ?? "") }
+            витрина.полныйСписок = лента.все
         }
         guard связь else { return nil }
         заполнитьШапку(&витрина)
@@ -97,82 +92,6 @@ enum ВитринаПродавцаAPI {
         guard let пришло = try? await сессия.data(for: запрос) else { return nil }
         if let http = пришло.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
         return String(data: пришло.0, encoding: .utf8)
-    }
-
-    /// Имена массивов, в которых шаблон витрины кладёт товары (MK_SEED — CONFIRMED на главной и объявлении).
-    private static let именаМассивов = ["MK_SEED", "MK_SELLER_ITEMS", "SELLER_ITEMS", "MK_ITEMS"]
-
-    static func товарыСоСтраницы(_ html: String, продавец: String) -> [Listing] {
-        for имя in именаМассивов {
-            guard let json = массивJS(имя, в: html), let данные = json.data(using: .utf8) else { continue }
-            let товары = разобратьМассив(данные)
-            /* Как mkItemMatches: только этого продавца; без seller_id запись со страницы продавца — его. */
-            let его = товары.filter { ($0.продавецID ?? продавец) == продавец }
-            if !его.isEmpty { return его }
-        }
-        return []
-    }
-
-    /// [ {...}, … ] → объявления тем же терпимым разбором, что лента (ListingsPage пропускает неразобранные).
-    static func разобратьМассив(_ данные: Data) -> [Listing] {
-        var обёртка = Data("{\"items\":".utf8)
-        обёртка.append(данные)
-        обёртка.append(Data("}".utf8))
-        return (try? ListingsAPI.разобрать(обёртка).items) ?? []
-    }
-
-    /**
-     Текст массива `имя = [ … ]` из разметки: от первой «[» после «=» до парной «]», с учётом строк и экранирования.
-     nil — такого присваивания нет.
-     */
-    static func массивJS(_ имя: String, в html: String) -> String? {
-        var поиск = html.startIndex
-        while let найдено = html.range(of: имя, range: поиск..<html.endIndex) {
-            поиск = найдено.upperBound
-            var i = найдено.upperBound
-            while i < html.endIndex, html[i].isWhitespace {
-                i = html.index(after: i)
-            }
-            guard i < html.endIndex, html[i] == "=" else { continue }
-            i = html.index(after: i)
-            while i < html.endIndex, html[i].isWhitespace {
-                i = html.index(after: i)
-            }
-            guard i < html.endIndex, html[i] == "[" else { continue }
-            if let конец = параЗакрытия(html, от: i) {
-                return String(html[i...конец])
-            }
-        }
-        return nil
-    }
-
-    /// Парная закрывающая скобка для «[» или «{» в позиции начало.
-    private static func параЗакрытия(_ s: String, от начало: String.Index) -> String.Index? {
-        var глубина = 0
-        var вСтроке: Character? = nil
-        var экран = false
-        var i = начало
-        while i < s.endIndex {
-            let c = s[i]
-            if let кавычка = вСтроке {
-                if экран {
-                    экран = false
-                } else if c == "\\" {
-                    экран = true
-                } else if c == кавычка {
-                    вСтроке = nil
-                }
-            } else if c == "\"" || c == "'" {
-                вСтроке = c
-            } else if c == "[" || c == "{" {
-                глубина += 1
-            } else if c == "]" || c == "}" {
-                глубина -= 1
-                if глубина == 0 { return i }
-            }
-            i = s.index(after: i)
-        }
-        return nil
     }
 
     /// content у <meta property="…" content="…"> (или name=…); HTML-сущности кавычек и амперсанда — обратно.
@@ -201,13 +120,35 @@ enum ВитринаПродавцаAPI {
         return имя.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: - Запасной путь: лента
+    // MARK: - Товары продавца лентой
 
-    private static func запасныеТовары(_ id: String, куки: [String: String]) async -> [Listing]? {
+    /// Больше стольких страниц по 48 не листаем: дальше — «Остальные товары — на сайте» (полныйСписок = false).
+    private static let страницДо = 6
+    private static let наСтранице = 48
+
+    /// Все объявления продавца, какие нашлись в ленте: страница за страницей, только его (seller_id), без повторов.
+    /// все — страницы кончились раньше предела. nil — первая страница не пришла (нет связи или ответ не разобрался).
+    private static func товарыЛентой(_ id: String, куки: [String: String]) async -> (товары: [Listing], все: Bool)? {
+        var его: [Listing] = []
+        var были = Set<String>()
+        for номер in 1...страницДо {
+            guard let страница = await страницаЛенты(id, номер: номер, куки: куки) else {
+                return номер == 1 ? nil : (его, false)
+            }
+            for товар in страница.items where товар.продавецID == id && были.insert(товар.id).inserted {
+                его.append(товар)
+            }
+            let последняя: Bool = страница.hasMore == false || страница.пришло < наСтранице
+            if последняя { return (его, true) }
+        }
+        return (его, false)
+    }
+
+    private static func страницаЛенты(_ id: String, номер: Int, куки: [String: String]) async -> ListingsPage? {
         var ч = URLComponents(url: Config.apiBase.appendingPathComponent("api/listings.php"), resolvingAgainstBaseURL: false)
         ч?.queryItems = [URLQueryItem(name: "sort", value: "new"),
-                         URLQueryItem(name: "page", value: "1"),
-                         URLQueryItem(name: "per", value: "48"),
+                         URLQueryItem(name: "page", value: String(номер)),
+                         URLQueryItem(name: "per", value: String(наСтранице)),
                          URLQueryItem(name: "seller", value: id)]
         guard let адрес = ч?.url else { return nil }
         var запрос = URLRequest(url: адрес)
@@ -216,8 +157,7 @@ enum ВитринаПродавцаAPI {
         for (поле, значение) in куки { запрос.setValue(значение, forHTTPHeaderField: поле) }
         guard let пришло = try? await сессия.data(for: запрос) else { return nil }
         if let http = пришло.1 as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
-        guard let страница = try? ListingsAPI.разобрать(пришло.0) else { return nil }
-        return страница.items.filter { $0.продавецID == id }
+        return try? ListingsAPI.разобрать(пришло.0)
     }
 
     // MARK: - Шапка из полей объявлений
