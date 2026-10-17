@@ -73,6 +73,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 WebBridge.shared.pendingURL = адрес
             }
         }
+        /* «Моё» для снимков: `-klikoMy <дом|компьютер|гардероб>` — раздел окном поверх через 2 с, `-klikoMyDemo YES` —
+           демонстрационное «Моё» только в памяти (MyThings/MyThingsDebug.swift). */
+        ОтладкаМоего.запуск()
         #endif
 
         /* Сменили тему в кабинете — перекрашиваем окно наплывом. Первое значение уже стоит на окне (dropFirst); значение

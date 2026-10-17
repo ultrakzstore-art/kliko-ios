@@ -119,7 +119,6 @@ enum МойДомText {
         "mh_lift_cabin_w": "Кабина: ширина",
         "mh_lift_cabin_d": "Кабина: глубина",
         "mh_lift_cabin": "Кабина лифта",
-        "mh_lift_own_short": "Свой замер",
         "mh_lift_short_en81_1": "Малый · 450 кг",
         "mh_lift_short_en81_2": "Обычный · 630 кг",
         "mh_lift_short_en81_3": "Большой · 1275 кг",
@@ -231,15 +230,17 @@ enum МойДомText {
         "mh_style_sub": "Только меняют порядок подборки — ничего не прячут",
         "mh_colors": "Цвета дома",
         "mh_colors_from_rooms": "Собрать с комнат",
-        "mh_first": "Первая минута — три касания",
-        "mh_first_sub": "Кровать, лифт и лампы — и Kliko сам сверит матрасы, мебель и лампочки с вашим домом",
-        "mh_first_bed": "Какая у вас кровать?",
         "mh_first_lift": "Какой у вас лифт?",
-        "mh_first_lamps": "Какие лампы? Коснитесь — +1",
-        "mh_first_a11y": "Готово %@ из трёх",
         "mh_bought": "Куплено на Kliko для дома",
         "mh_bought_sub": "Завершённые сделки — в «Мой дом» одним касанием",
-        "mh_bought_remove": "Убрать из «Моего»"
+        "mh_bought_remove": "Убрать из «Моего»",
+        "mh_edit": "Изменить",
+        "mh_not_filled": "Не заполнено",
+        "mh_pass_own": "Свои размеры",
+        "mh_pass_set_path": "Указать двери и лифт",
+        "mh_bed_common": "Частые размеры",
+        "mh_s_floor": "%@ этаж",
+        "mh_s_floor_ground": "1-й этаж"
     ]
 
     private static let kk: [String: String] = [
@@ -341,7 +342,6 @@ enum МойДомText {
         "mh_lift_cabin_w": "Кабина: ені",
         "mh_lift_cabin_d": "Кабина: тереңдігі",
         "mh_lift_cabin": "Лифт кабинасы",
-        "mh_lift_own_short": "Өз өлшеміңіз",
         "mh_lift_short_en81_1": "Шағын · 450 кг",
         "mh_lift_short_en81_2": "Әдеттегі · 630 кг",
         "mh_lift_short_en81_3": "Үлкен · 1275 кг",
@@ -453,15 +453,17 @@ enum МойДомText {
         "mh_style_sub": "Тек іріктеу ретін өзгертеді — ештеңені жасырмайды",
         "mh_colors": "Үй түстері",
         "mh_colors_from_rooms": "Бөлмелерден жинау",
-        "mh_first": "Алғашқы минут — үш түрту",
-        "mh_first_sub": "Төсек, лифт және шамдар — Kliko матрастарды, жиһаз бен шамдарды үйіңізбен өзі салыстырады",
-        "mh_first_bed": "Төсегіңіз қандай?",
         "mh_first_lift": "Лифтіңіз қандай?",
-        "mh_first_lamps": "Қандай шамдар? Түртіңіз — +1",
-        "mh_first_a11y": "Үшеуінен %@ дайын",
         "mh_bought": "Үйге Kliko-да сатып алынғандар",
         "mh_bought_sub": "Аяқталған мәмілелер — «Менің үйіме» бір түртумен",
-        "mh_bought_remove": "«Менікінен» алып тастау"
+        "mh_bought_remove": "«Менікінен» алып тастау",
+        "mh_edit": "Өзгерту",
+        "mh_not_filled": "Әлі толтырылмаған",
+        "mh_pass_own": "Өз өлшемдері",
+        "mh_pass_set_path": "Есік пен лифтті көрсету",
+        "mh_bed_common": "Жиі өлшемдер",
+        "mh_s_floor": "%@-қабат",
+        "mh_s_floor_ground": "1-қабат"
     ]
 
     private static let en: [String: String] = [
@@ -563,7 +565,6 @@ enum МойДомText {
         "mh_lift_cabin_w": "Car: width",
         "mh_lift_cabin_d": "Car: depth",
         "mh_lift_cabin": "Lift car",
-        "mh_lift_own_short": "Measure myself",
         "mh_lift_short_en81_1": "Small · 450 kg",
         "mh_lift_short_en81_2": "Standard · 630 kg",
         "mh_lift_short_en81_3": "Large · 1275 kg",
@@ -675,15 +676,17 @@ enum МойДомText {
         "mh_style_sub": "They only change the order of picks — nothing is hidden",
         "mh_colors": "Home colours",
         "mh_colors_from_rooms": "Collect from rooms",
-        "mh_first": "First minute — three taps",
-        "mh_first_sub": "Bed, lift and bulbs — and Kliko checks mattresses, furniture and bulbs against your home by itself",
-        "mh_first_bed": "What is your bed?",
         "mh_first_lift": "What is your lift?",
-        "mh_first_lamps": "Which bulbs? Tap — +1",
-        "mh_first_a11y": "%@ of three done",
         "mh_bought": "Bought on Kliko for home",
         "mh_bought_sub": "Completed deals — into “My home” with one tap",
-        "mh_bought_remove": "Remove from “Mine”"
+        "mh_bought_remove": "Remove from “Mine”",
+        "mh_edit": "Edit",
+        "mh_not_filled": "Not added yet",
+        "mh_pass_own": "Own size",
+        "mh_pass_set_path": "Add doors and lift",
+        "mh_bed_common": "Common sizes",
+        "mh_s_floor": "floor %@",
+        "mh_s_floor_ground": "ground floor"
     ]
 
     private static let ar: [String: String] = [
@@ -785,7 +788,6 @@ enum МойДомText {
         "mh_lift_cabin_w": "المقصورة: العرض",
         "mh_lift_cabin_d": "المقصورة: العمق",
         "mh_lift_cabin": "مقصورة المصعد",
-        "mh_lift_own_short": "قياسي الخاص",
         "mh_lift_short_en81_1": "صغير · 450 كغ",
         "mh_lift_short_en81_2": "عادي · 630 كغ",
         "mh_lift_short_en81_3": "كبير · 1275 كغ",
@@ -897,14 +899,16 @@ enum МойДомText {
         "mh_style_sub": "تغيّر ترتيب الاقتراحات فقط — لا تُخفي شيئًا",
         "mh_colors": "ألوان المنزل",
         "mh_colors_from_rooms": "جمعها من الغرف",
-        "mh_first": "الدقيقة الأولى — ثلاث لمسات",
-        "mh_first_sub": "السرير والمصعد والمصابيح — وسيقارن Kliko المراتب والأثاث والمصابيح بمنزلك تلقائيًا",
-        "mh_first_bed": "ما سريرك؟",
         "mh_first_lift": "ما مصعدك؟",
-        "mh_first_lamps": "أي مصابيح؟ المس — +1",
-        "mh_first_a11y": "اكتمل %@ من ثلاثة",
         "mh_bought": "مشتريات Kliko للمنزل",
         "mh_bought_sub": "الصفقات المكتملة — إلى «منزلي» بلمسة واحدة",
-        "mh_bought_remove": "إزالة من «أغراضي»"
+        "mh_bought_remove": "إزالة من «أغراضي»",
+        "mh_edit": "تعديل",
+        "mh_not_filled": "لم تتم الإضافة بعد",
+        "mh_pass_own": "مقاسات خاصة",
+        "mh_pass_set_path": "أضف الأبواب والمصعد",
+        "mh_bed_common": "المقاسات الشائعة",
+        "mh_s_floor": "الطابق %@",
+        "mh_s_floor_ground": "الطابق الأرضي"
     ]
 }

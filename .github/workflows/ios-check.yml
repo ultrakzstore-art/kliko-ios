@@ -610,8 +610,16 @@ jobs:
               -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ -klikoOpen "https://kliko.kz/marketplace?item=$id"
             sleep 20; xcrun simctl io "$UDID" screenshot diag/link20.png >/dev/null 2>&1 || true
           fi
-          echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt 2>/dev/null || true
-          if cat diag/err.txt diag/err2.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
+          xcrun simctl terminate "$UDID" kz.kliko.app || true
+          # «Мой дом» и «Мой гардероб» с примерными данными (только отладка: -klikoMyDemo, -klikoMy) — снимки и цикл.
+          for sect in home wardrobe; do
+            xcrun simctl launch --stdout="$PWD/diag/out-$sect.txt" --stderr="$PWD/diag/err-$sect.txt" "$UDID" kz.kliko.app \
+              -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ -klikoMyDemo YES -klikoMy "$sect"
+            sleep 18; xcrun simctl io "$UDID" screenshot "diag/moe-$sect.png" >/dev/null 2>&1 || true
+            xcrun simctl terminate "$UDID" kz.kliko.app || true
+          done
+          echo "=== ${{ matrix.label }} stderr:"; cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null || true
+          if cat diag/err.txt diag/err2.txt diag/err-home.txt diag/err-wardrobe.txt 2>/dev/null | grep -q "cycle detected"; then echo "::warning title=${{ matrix.label }}::ЦИКЛ ЕСТЬ"; else echo "::notice title=${{ matrix.label }}::цикла нет"; fi
           for f in diag/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
           ls -la diag
 
@@ -791,6 +799,22 @@ jobs:
             run "3-sait-glavnaya-$theme" 25 -klikoSite "https://kliko.kz/kz/ru/?ci=1"
             [ -n "$id" ] && run "4-sait-kartochka-$theme" 20 -klikoSite "https://kliko.kz/marketplace?item=$id&ci=1"
           done
+          # «Моё» сразу на разделе (-klikoMy, только отладочная сборка) с демонстрационным «Моим» только в памяти
+          # (-klikoMyDemo, MyThingsDebug.swift): заполненные разделы дома и гардероба и ряды «Подходит вам» — ряд есть,
+          # только если в свежих объявлениях раздела нашлось подходящее.
+          # stderr — рядом со снимком (уходит в ci/screenshots): метки [kliko-smoke] my-demo, my-open и my-row <раздел>
+          # <карточек> отличают пустой ряд (ничего не подошло) от несработавшей загрузки или неоткрывшегося окна.
+          run_moe() {  # как run, но со своим stderr
+            name=$1; wait=$2; shift 2
+            xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+            xcrun simctl launch --stderr="$PWD/shots/$name-err.txt" "$UDID" kz.kliko.app -klikoNoPushPrompt YES \
+              -AppleLanguages "(ru)" -AppleLocale ru_KZ "$@"
+            sleep "$wait"; snap "$name"
+            grep -h kliko-smoke "shots/$name-err.txt" || echo "::warning::$name: меток my-* нет"
+          }
+          xcrun simctl ui "$UDID" appearance light
+          run_moe "5-moe-dom-light" 25 -klikoMy дом -klikoMyDemo YES
+          run_moe "6-moe-garderob-light" 25 -klikoMy гардероб -klikoMyDemo YES
           # Исходники сайта рядом со снимками: HTML главной и карточки, все подключённые CSS — точные цвета, картинки
           # плиток и адреса кнопок для нативных экранов.
           mkdir -p shots/site

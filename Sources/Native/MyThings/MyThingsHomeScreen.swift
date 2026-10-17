@@ -4,17 +4,24 @@ import UIKit
 /**
  «МОЁ» — «МОЙ ДОМ» (пачка 16.10.2026 «мой дом, компьютер, гардероб и для вас»; владелец: «мой дом — что можно по
  дому?»; «стандарты: по ним изи точечно подбирать, что почём; шаблоны»; «удобно для глаз, ровная схема везде, мощная
- анимированная подача, летает на всех девайсах»).
+ анимированная подача, летает на всех девайсах»; TestFlight 81: «вот эти моменты упростить + чтобы отсюда поиск и сюда
+ вставить то, что подходит»).
 
- Экран сверху вниз (каскад ПоявлениеМоего, как у хаба):
+ Экран сверху вниз — короткий и ровный (каскад ПоявлениеМоего, как у хаба):
    · шапка — кольцо прогресса дома (прогрессДома), сводка («160×200 · E27 ×6 · дверь 74 см») и следующий шаг;
-   · «Первая минута — три касания» (docs/STANDARDS.md §8.2): кровать, лифт, цоколи — стандартами чипами; заполненное
-     уходит, карточка — тоже;
-   · «Пройдёт ли в дверь и лифт?» — вещь шаблоном или своими Ш×В×Г против пути в дом (MyThingsHomePass.swift);
-   · комнаты (MyThingsHomeRooms.swift), проёмы, кровати, окна, ТВ на стене, свет (MyThingsHomeCards.swift), техника
-     (MyThingsHomeAppliances.swift), стиль и цвета, купленное на Kliko для дома и «Добавить из моих покупок».
- Листы правки — MyThingsHomeSheets.swift. Всё — только на телефоне (МоёХранилище.обновитьДом), на сервер ничего не
- уходит; камера и фото — только по нажатию; цвета фото и текст наклейки читаются на телефоне.
+   · «Пройдёт ли в дверь и лифт?» — вещь шаблоном одним рядом или «Свои размеры» против пути в дом
+     (MyThingsHomePass.swift); путь не указан — одна кнопка «Указать двери и лифт» (лист проёмов);
+   · разделы — по строке-карточке (КарточкаРазделаДома): значок, название, что сохранено одной строкой («Кровать
+     160×200», «130×140, 145×150», «Не заполнено»), справа «Изменить ›» или «Добавить». Шаблоны чипами — не здесь, а в
+     листах: «Изменить» открывает лист раздела (ЛистРазделаДома — строки, шаблоны, этаж и «Лифта нет», цоколи, стиль),
+     «Добавить» у пустого — сразу лист новой вещи с шаблонами внутри (у проёмов, света и стиля — лист раздела);
+   · под заполненным разделом — ряд «Подходит вам» (РядПодходитМоего, MyThingsFitRow.swift): кровать — матрасы и бельё
+     этого размера, окна — шторы и жалюзи, ТВ — кронштейны по VESA, свет — лампы по цоколю; ничего не подошло — ряда
+     нет, есть «Найти подходящее» (лента раздела с «Для моего»); у проёмов и техники — только «Найти подходящее»;
+   · купленное на Kliko для дома и «Добавить из моих покупок».
+ Разделы — ленивым столбцом: ряд «Подходит вам» идёт в сеть, только когда доехал до экрана. Листы правки —
+ MyThingsHomeSheets.swift. Всё — только на телефоне (МоёХранилище.обновитьДом), на сервер ничего не уходит; камера и
+ фото — только по нажатию; цвета фото и текст наклейки читаются на телефоне.
 
  Ширина — до 680 pt (iPad), на iPhone SE — те же карточки столбиком. «Уменьшение движения» и лёгкий режим — без полёта
  (ДвижениеСайта, РежимУстройства), VoiceOver — строки одним элементом, регуляторы — регулируемые.
@@ -29,8 +36,9 @@ struct ЭкранМоегоДома: View {
     var body: some View {
         let запись = хранилище.запись
         ScrollView {
-            VStack(spacing: 14) {
+            LazyVStack(spacing: 14) {
                 верх(запись)
+                разделы(запись)
                 низ(запись)
             }
             .padding(16)
@@ -54,44 +62,65 @@ struct ЭкранМоегоДома: View {
 
     @ViewBuilder
     private func верх(_ запись: ЗаписьМоего) -> some View {
-        let дом = запись.дом
         ШапкаДомаМоего(прогресс: запись.прогрессДома, сводка: запись.сводкаДома)
             .появлениеМоего(0)
-        if ПерваяМинутаДома.нужна(дом) {
-            ПерваяМинутаДома(дом: дом, открыть: открыть)
-                .появлениеМоего(1)
-                .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+        КарточкаПроходаДома(дом: запись.дом, открыть: открыть)
+            .появлениеМоего(1)
+    }
+
+    /// Разделы строками; у заполненного — ряд «Подходит вам» в той же карточке.
+    private func разделы(_ запись: ЗаписьМоего) -> some View {
+        ForEach(РазделДомаМоего.allCases, id: \.self) { раздел in
+            карточкаРаздела(раздел, запись)
+                .появлениеМоего(2 + раздел.порядок)
         }
-        КарточкаПроходаДома(дом: дом, открыть: открыть)
-            .появлениеМоего(2)
-        КарточкаКомнатДома(дом: дом, открыть: открыть)
-            .появлениеМоего(3)
-        КарточкаПроёмовДома(дом: дом, открыть: открыть)
-            .появлениеМоего(4)
+    }
+
+    private func карточкаРаздела(_ раздел: РазделДомаМоего, _ запись: ЗаписьМоего) -> some View {
+        let дом: ДомМоего = запись.дом
+        let сводка: String? = КарточкаРазделаДома.сохранено(раздел, дом)
+        let цвета: [ЦветСтандарта] = раздел == .стиль ? дом.палитра : []
+        return КарточкаРазделаДома(раздел: раздел, сводка: сводка, цвета: цвета) {
+            if сводка == nil {
+                добавить(раздел, дом)
+            } else {
+                открыть(.раздел(раздел))
+            }
+        }
+    }
+
+    /// «Добавить» у пустого раздела: лист новой вещи — шаблоны в нём; комната кладётся сразу (пустая при закрытии
+    /// уходит сама); проёмы, свет и стиль — лист раздела (этаж, «Лифта нет», цоколи, цвета).
+    private func добавить(_ раздел: РазделДомаМоего, _ дом: ДомМоего) {
+        switch раздел {
+        case .комнаты:
+            guard дом.комнаты.count < ДомМоего.пределКомнат else { return }
+            let новая = КомнатаМоего(вид: .другая)
+            МоёХранилище.shared.обновитьДом { д in д.комнаты.append(новая) }
+            открыть(.комната(новая.id, новая: true))
+        case .кровати:
+            открыть(.кровать(КроватьМоего(), новая: true))
+        case .окна:
+            открыть(.окно(ОкноДомаМоего(), новое: true))
+        case .экраны:
+            открыть(.экран(ЭкранНаСтенеМоего(), новый: true))
+        case .техника:
+            открыть(.техника(ТехникаМоего(вид: .другая), новая: true))
+        case .проёмы, .свет, .стиль:
+            открыть(.раздел(раздел))
+        }
     }
 
     @ViewBuilder
     private func низ(_ запись: ЗаписьМоего) -> some View {
-        let дом = запись.дом
         let купленное = запись.вещиВ(.дом)
-        КарточкаКроватейДома(дом: дом, открыть: открыть)
-            .появлениеМоего(5)
-        КарточкаОконДома(дом: дом, открыть: открыть)
-            .появлениеМоего(6)
-        КарточкаЭкрановДома(дом: дом, устройства: запись.экраны, открыть: открыть)
-            .появлениеМоего(7)
-        КарточкаСветаДома(дом: дом)
-            .появлениеМоего(8)
-        КарточкаТехникиДома(дом: дом, открыть: открыть)
-            .появлениеМоего(9)
-        КарточкаСтиляДома(дом: дом)
-            .появлениеМоего(10)
+        let после: Int = 2 + РазделДомаМоего.allCases.count
         if !купленное.isEmpty || Config.покупкиВМоё {
-            КарточкаКупленногоДома(вещи: купленное, дом: дом)
-                .появлениеМоего(11)
+            КарточкаКупленногоДома(вещи: купленное, дом: запись.дом)
+                .появлениеМоего(после)
         }
         приватность
-            .появлениеМоего(12)
+            .появлениеМоего(после + 1)
     }
 
     private var приватность: some View {
@@ -106,6 +135,307 @@ struct ЭкранМоегоДома: View {
         .foregroundStyle(Theme.текстВторой)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
+    }
+}
+
+// MARK: - Разделы
+
+/// Разделы «Моего дома» на главном экране — по строке на каждый, в этом порядке.
+enum РазделДомаМоего: String, CaseIterable, Hashable {
+    case комнаты = "rooms"
+    case проёмы = "openings"
+    case кровати = "beds"
+    case окна = "windows"
+    case экраны = "tvs"
+    case свет = "light"
+    case техника = "appliances"
+    case стиль = "style"
+
+    var название: String {
+        switch self {
+        case .комнаты: return МойДомText.т("mh_rooms")
+        case .проёмы: return МойДомText.т("mh_openings")
+        case .кровати: return МойДомText.т("mh_beds")
+        case .окна: return МойДомText.т("mh_windows")
+        case .экраны: return МойДомText.т("mh_tvs")
+        case .свет: return МойДомText.т("mh_light")
+        case .техника: return МойДомText.т("mh_appliances")
+        case .стиль: return МойДомText.т("mh_style")
+        }
+    }
+
+    var значок: String {
+        switch self {
+        case .комнаты: return "square.split.2x2"
+        case .проёмы: return "door.left.hand.open"
+        case .кровати: return "bed.double"
+        case .окна: return "window.casement"
+        case .экраны: return "tv"
+        case .свет: return "lightbulb"
+        case .техника: return "powerplug"
+        case .стиль: return "paintpalette"
+        }
+    }
+
+    /// Место в каскаде появления (после шапки и «Пройдёт ли?»).
+    var порядок: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+
+    /// Ряд «Подходит вам» под строкой раздела; у комнат и стиля его нет.
+    var подбор: ПодборРазделаМоего? {
+        switch self {
+        case .проёмы: return .проёмы
+        case .кровати: return .кровати
+        case .окна: return .окна
+        case .экраны: return .экраны
+        case .свет: return .свет
+        case .техника: return .техника
+        case .комнаты, .стиль: return nil
+        }
+    }
+
+    func заполнен(_ дом: ДомМоего) -> Bool {
+        switch self {
+        case .комнаты: return !дом.комнаты.isEmpty
+        case .проёмы: return !дом.проёмы.isEmpty || дом.этаж != nil || дом.лифтаНет
+        case .кровати: return !дом.кровати.isEmpty
+        case .окна: return !дом.окна.isEmpty
+        case .экраны: return !дом.экраны.isEmpty
+        case .свет: return !дом.лампы.isEmpty
+        case .техника: return !дом.техника.isEmpty
+        case .стиль: return !дом.стиль.isEmpty || !дом.палитра.isEmpty
+        }
+    }
+}
+
+/**
+ Раздел на главном экране дома: строка 48 pt — значок, название, что сохранено одной строкой (у стиля — и круги цвета),
+ справа «Изменить ›» или «Добавить» капсулой; касание всей строки — то же. Под строкой в той же карточке — ряд «Подходит
+ вам» (он сам решает, показаться ли: пусто — места не занимает; заполнено, а ряда нет — «Найти подходящее»).
+ */
+struct КарточкаРазделаДома: View {
+    let раздел: РазделДомаМоего
+    /// nil — раздел не заполнен.
+    let сводка: String?
+    let цвета: [ЦветСтандарта]
+    let действие: () -> Void
+    @Environment(\.dynamicTypeSize) private var размерТекста
+
+    init(раздел: РазделДомаМоего, сводка: String?, цвета: [ЦветСтандарта] = [], действие: @escaping () -> Void) {
+        self.раздел = раздел
+        self.сводка = сводка
+        self.цвета = цвета
+        self.действие = действие
+    }
+
+    private func т(_ ключ: String) -> String { МойДомText.т(ключ) }
+
+    private var текстСводки: String { сводка ?? т("mh_not_filled") }
+    private var текстДействия: String { сводка == nil ? МоёText.т("my_add") : т("mh_edit") }
+
+    // MARK: Что сохранено
+
+    /**
+     Что сохранено — одной строкой: «Кровать 160×200», «130×140, 145×150», «E27 ×4 · GU10 ×6»; пусто — nil. Здесь, а
+     не у РазделДомаМоего: берёт заголовки у карточек разделов (КарточкаКроватейДома.заголовок…), а они — виды.
+     */
+    static func сохранено(_ раздел: РазделДомаМоего, _ дом: ДомМоего) -> String? {
+        guard раздел.заполнен(дом) else { return nil }
+        switch раздел {
+        case .комнаты: return Self.сводкаКомнат(дом)
+        case .проёмы: return Self.сводкаПроёмов(дом)
+        case .кровати: return Self.сводкаКроватей(дом)
+        case .окна: return Self.сводкаОкон(дом)
+        case .экраны: return Self.сводкаЭкранов(дом)
+        case .свет: return Self.сводкаСвета(дом)
+        case .техника: return Self.список(дом.техника.map(\.заголовок))
+        case .стиль: return Self.сводкаСтиля(дом)
+        }
+    }
+
+    /// Первые несколько через запятую и «+N» за остальные.
+    private static func список(_ части: [String], предел: Int = 3, через: String = ", ") -> String {
+        let видно: [String] = Array(части.prefix(предел))
+        var текст: String = видно.joined(separator: через)
+        let ещё: Int = части.count - видно.count
+        if ещё > 0 { текст += " +" + String(ещё) }
+        return текст
+    }
+
+    /// Одна комната — «Спальня · ≈ 3×4 м · 12 м²»; несколько — названия.
+    private static func сводкаКомнат(_ дом: ДомМоего) -> String {
+        if дом.комнаты.count == 1, let к = дом.комнаты.first {
+            guard let размеры = МойДомЧисла.комната(к) else { return к.заголовок }
+            return к.заголовок + " · " + размеры
+        }
+        let имена: [String] = дом.комнаты.map(\.заголовок)
+        return список(имена)
+    }
+
+    /// «Входная дверь 74 см · Лифт 80 см · 5 этаж»; «Лифта нет».
+    private static func сводкаПроёмов(_ дом: ДомМоего) -> String {
+        let см: String = МойДомText.т("mh_cm")
+        var названия: [String] = []
+        for п in дом.проёмы {
+            var проём: String = КарточкаПроёмовДома.заголовок(п)
+            if let ш = п.ширина { проём += " " + String(ш) + " " + см }
+            названия.append(проём)
+        }
+        var части: [String] = []
+        if !названия.isEmpty { части.append(список(названия, предел: 2, через: " · ")) }
+        if let этаж = дом.этаж {
+            let ярус: String = этаж <= 1
+                ? МойДомText.т("mh_s_floor_ground")
+                : String(format: МойДомText.т("mh_s_floor"), String(этаж))
+            части.append(ярус)
+        }
+        let естьЛифт: Bool = дом.проёмы.contains { $0.вид == .лифт }
+        if дом.лифтаНет && !естьЛифт { части.append(МойДомText.т("mh_no_lift")) }
+        return части.joined(separator: " · ")
+    }
+
+    /// Одна — «Кровать 160×200»; несколько — «160×200, 90×200».
+    private static func сводкаКроватей(_ дом: ДомМоего) -> String {
+        if дом.кровати.count == 1, let к = дом.кровати.first { return КарточкаКроватейДома.заголовок(к) }
+        let места: [String] = дом.кровати.compactMap(\.место)
+        let размеры: [String] = места.map { (м: String) -> String in КаталогСтандартов.показ(м) }
+        guard !размеры.isEmpty else { return МойДомText.т("mh_bed") }
+        return список(размеры)
+    }
+
+    /// Одно — «Окно 130×140 см»; несколько — «130×140, 145×150».
+    private static func сводкаОкон(_ дом: ДомМоего) -> String {
+        if дом.окна.count == 1, let о = дом.окна.first { return КарточкаОконДома.заголовок(о) }
+        var размеры: [String] = []
+        for о in дом.окна {
+            guard let ш = о.ширина, let в = о.высота else { continue }
+            размеры.append(String(ш) + "×" + String(в))
+        }
+        guard !размеры.isEmpty else { return МойДомText.т("mh_window") }
+        return список(размеры)
+    }
+
+    /// Один — «ТВ 55″ · VESA 300×300»; несколько — «ТВ 55″, 43″».
+    private static func сводкаЭкранов(_ дом: ДомМоего) -> String {
+        if дом.экраны.count == 1, let э = дом.экраны.first { return КарточкаЭкрановДома.заголовок(э) }
+        var диагонали: [String] = []
+        for э in дом.экраны {
+            if let д = э.диагональ { диагонали.append(ЧислоМоего.дюймы(д)) }
+        }
+        let начало: String = МойДомText.т("mh_tv_short")
+        guard !диагонали.isEmpty else { return начало }
+        return начало + " " + список(диагонали)
+    }
+
+    /// «E27 ×4 · GU10 ×6» — сначала цоколи, где ламп больше.
+    private static func сводкаСвета(_ дом: ДомМоего) -> String {
+        let счёт: [String: Int] = дом.цоколи
+        let коды: [String] = счёт.keys.sorted { (а: String, б: String) -> Bool in
+            let на: Int = счёт[а] ?? 0
+            let нб: Int = счёт[б] ?? 0
+            if на != нб { return на > нб }
+            return а < б
+        }
+        var части: [String] = []
+        for код in коды {
+            let сколько: Int = счёт[код] ?? 0
+            части.append(код + " ×" + String(сколько))
+        }
+        return список(части, через: " · ")
+    }
+
+    /// «Сканди, Лофт»; стиля нет, а цвета есть — «Цвета дома» (круги цвета — рядом).
+    private static func сводкаСтиля(_ дом: ДомМоего) -> String {
+        let стили: [String] = дом.стиль.map(\.название)
+        guard !стили.isEmpty else { return МойДомText.т("mh_colors") }
+        return список(стили)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            строка
+            if let подбор = раздел.подбор {
+                РядПодходитМоего(подбор)
+            }
+        }
+        .карточкаМоего(поля: 14)
+    }
+
+    private var строка: some View {
+        Button {
+            ОткликСайта.выбор()
+            действие()
+        } label: {
+            HStack(spacing: 12) {
+                ЗначокПрофиляМоего(значок: раздел.значок, цвет: РазделМоего.дом.цвет, размер: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(раздел.название)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Theme.текст)
+                        .multilineTextAlignment(.leading)
+                    подпись
+                }
+                Spacer(minLength: 8)
+                метка
+            }
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(НажатиеКнопкиФото(сжатие: 0.98))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(раздел.название + ", " + текстСводки)
+        .accessibilityHint(текстДействия)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var подпись: some View {
+        HStack(spacing: 6) {
+            Text(текстСводки)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.текстВторой)
+                .lineLimit(размерТекста.isAccessibilitySize ? 3 : 1)
+                .multilineTextAlignment(.leading)
+                .contentTransition(.opacity)
+            if !цвета.isEmpty {
+                HStack(spacing: -3) {
+                    ForEach(цвета) { цвет in
+                        КраскаЦветаДома(цвет: цвет, размер: 12)
+                    }
+                }
+            }
+        }
+    }
+
+    /// «Изменить ›» у заполненного, «+ Добавить» капсулой у пустого; при крупном шрифте — только значок.
+    @ViewBuilder
+    private var метка: some View {
+        let коротко: Bool = размерТекста.isAccessibilitySize
+        if сводка == nil {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.heavy))
+                if !коротко {
+                    Text(МоёText.т("my_add"))
+                        .lineLimit(1)
+                }
+            }
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(Theme.акцент)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 34)
+            .background(Theme.оттенокАкцента, in: Capsule())
+            .overlay { Capsule().strokeBorder(Theme.рамкаПункта, lineWidth: 1) }
+        } else {
+            HStack(spacing: 3) {
+                if !коротко {
+                    Text(т("mh_edit"))
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.bold))
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Theme.акцент)
+        }
     }
 }
 
@@ -179,191 +509,6 @@ struct ШапкаДомаМоего: View {
         .background(Theme.шапкаМята, in: Capsule())
         .id(прогресс.шаг ?? "done")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
-    }
-}
-
-// MARK: - Первая минута
-
-/**
- «Первая минута — три касания» (docs/STANDARDS.md §8.2): кровать — частые спальные места; лифт — «Лифта нет», «1-й
- этаж или свой дом», типовые лифты (EN 81-70 и «советский ≈», «грузовой ≈») и «Свой замер»; лампы — частые цоколи
- картинками (+1 лампа). Заполненная строка уходит, все три — уходит карточка.
- */
-struct ПерваяМинутаДома: View {
-    let дом: ДомМоего
-    let открыть: (ЛистДомаМоего) -> Void
-
-    init(дом: ДомМоего, открыть: @escaping (ЛистДомаМоего) -> Void) {
-        self.дом = дом
-        self.открыть = открыть
-    }
-
-    private func т(_ ключ: String) -> String { МойДомText.т(ключ) }
-
-    static func естьКровать(_ д: ДомМоего) -> Bool { д.кровати.contains(where: \.заполнена) }
-    static func естьЛифт(_ д: ДомМоего) -> Bool { д.лифтаНет || д.проёмы.contains { $0.вид == .лифт && $0.заполнен } }
-    static func естьЛампы(_ д: ДомМоего) -> Bool { !д.лампы.isEmpty }
-
-    static func нужна(_ д: ДомМоего) -> Bool { !естьКровать(д) || !естьЛифт(д) || !естьЛампы(д) }
-
-    private var готово: Int {
-        [Self.естьКровать(дом), Self.естьЛифт(дом), Self.естьЛампы(дом)].filter { $0 }.count
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                ЗаголовокМоего(т("mh_first"), значок: "bolt.fill")
-                Spacer(minLength: 8)
-                Text(String(готово) + "/3")
-                    .font(.caption.weight(.heavy).monospacedDigit())
-                    .foregroundStyle(РазделМоего.дом.цвет)
-                    .contentTransition(.numericText(value: Double(готово)))
-                    .accessibilityLabel(String(format: т("mh_first_a11y"), String(готово)))
-            }
-            Text(т("mh_first_sub"))
-                .font(.footnote)
-                .foregroundStyle(Theme.текстВторой)
-                .fixedSize(horizontal: false, vertical: true)
-            if !Self.естьКровать(дом) {
-                строкаКровати
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
-            if !Self.естьЛифт(дом) {
-                строкаЛифта
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
-            if !Self.естьЛампы(дом) {
-                строкаЛамп
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
-        }
-        .карточкаМоего()
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Радиус.md, style: .continuous)
-                .strokeBorder(РазделМоего.дом.цвет.opacity(0.35), lineWidth: 1.5)
-        }
-    }
-
-    private var строкаКровати: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(т("mh_first_bed"), systemImage: "bed.double")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Theme.текст)
-            ПотокЧипов(зазор: 8) {
-                ForEach(КаталогСтандартов.частыеСпальныеМеста, id: \.self) { место in
-                    ЧипМоего(КаталогСтандартов.показ(место), выбран: false) { кровать(место) }
-                }
-                ЧипМоего(т("mh_bed_other"), выбран: false, значок: "slider.horizontal.3") {
-                    ОткликСайта.выбор()
-                    открыть(.кровать(КроватьМоего(), новая: true))
-                }
-            }
-        }
-    }
-
-    private var строкаЛифта: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(т("mh_first_lift"), systemImage: "arrow.up.arrow.down.square")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Theme.текст)
-            ПотокЧипов(зазор: 8) {
-                ЧипМоего(т("mh_no_lift"), выбран: false, значок: "xmark") { безЛифта(этаж: nil) }
-                ЧипМоего(т("mh_ground"), выбран: false, значок: "house") { безЛифта(этаж: 0) }
-                ForEach(КаталогСтандартов.лифты) { лифт in
-                    ЧипМоего(т("mh_lift_short_" + лифт.id), выбран: false) { добавитьЛифт(лифт) }
-                }
-                ЧипМоего(т("mh_lift_own_short"), выбран: false, значок: "ruler") {
-                    ОткликСайта.выбор()
-                    открыть(.проём(ПроёмМоего(вид: .лифт), новый: true))
-                }
-            }
-        }
-    }
-
-    private var строкаЛамп: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(т("mh_first_lamps"), systemImage: "lightbulb")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(Theme.текст)
-            ПотокЧипов(зазор: 8) {
-                ForEach(КаталогСтандартов.цоколи.filter(\.частый), id: \.id) { ц in
-                    ЧипЦоколяДома(код: ц.id) { лампа(ц.id) }
-                }
-            }
-        }
-    }
-
-    // MARK: Действия
-
-    private func кровать(_ место: String) {
-        ОткликСайта.успех()
-        МоёХранилище.shared.обновитьДом { д in
-            if let i = д.кровати.firstIndex(where: { $0.место == nil }) {
-                д.кровати[i].место = место
-            } else if д.кровати.count < ДомМоего.пределКроватей {
-                д.кровати.append(КроватьМоего(место: место))
-            }
-        }
-    }
-
-    private func безЛифта(этаж: Int?) {
-        ОткликСайта.успех()
-        МоёХранилище.shared.обновитьДом { д in
-            д.лифтаНет = true
-            if let этаж { д.этаж = этаж }
-        }
-    }
-
-    private func добавитьЛифт(_ шаблон: КаталогСтандартов.ЛифтСтандарта) {
-        ОткликСайта.успех()
-        let лифт = ПроёмМоего.лифт(шаблон)
-        МоёХранилище.shared.обновитьДом { д in
-            guard д.проёмы.count < ДомМоего.пределПроёмов else { return }
-            д.проёмы.append(лифт)
-            д.лифтаНет = false
-        }
-    }
-
-    private func лампа(_ код: String) {
-        ОткликСайта.успех()
-        МоёХранилище.shared.обновитьДом { д in
-            if let i = д.лампы.firstIndex(where: { $0.цоколь == код && $0.комната == nil }) {
-                д.лампы[i].сколько = min(ЛампыМоего.пределыСколько.upperBound, д.лампы[i].сколько + 1)
-            } else if д.лампы.count < ДомМоего.пределЛамп {
-                д.лампы.append(ЛампыМоего(цоколь: код, сколько: 1))
-            }
-        }
-    }
-}
-
-/// Чип цоколя с картинкой: «[рисунок] E27».
-struct ЧипЦоколяДома: View {
-    let код: String
-    let действие: () -> Void
-
-    init(код: String, действие: @escaping () -> Void) {
-        self.код = код
-        self.действие = действие
-    }
-
-    var body: some View {
-        Button(action: действие) {
-            HStack(spacing: 6) {
-                РисунокЦоколяДома(код: код, размер: 24)
-                Text(код)
-                    .font(.subheadline.weight(.bold))
-            }
-            .foregroundStyle(Theme.акцент)
-            .padding(.leading, 6)
-            .padding(.trailing, 12)
-            .frame(minHeight: 40)
-            .background(Theme.оттенокАкцента, in: Capsule())
-            .overlay { Capsule().strokeBorder(Theme.рамкаПункта, lineWidth: 1) }
-            .contentShape(Capsule())
-        }
-        .buttonStyle(НажатиеКнопкиФото(сжатие: 0.95))
-        .accessibilityLabel(код + ", " + (КаталогСтандартов.цоколь(код)?.пояснение ?? ""))
     }
 }
 
