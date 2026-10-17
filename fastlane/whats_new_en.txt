@@ -22,9 +22,12 @@ Kliko 1.13 introduces My Things: save your car, devices and sizes, and Kliko che
 • The camera reads tire and wheel markings, including when you’re selling them.
 
 🏷️ Listings
-• At the bottom: “Buy safely” (where Safe deal is available), “Offer” and “Contact” — chat, call or WhatsApp.
+• Calmer and simpler: one card under the price — what it is, who sells it and how to buy safely.
+• One row at the bottom: “Buy safely” (where Safe deal is available), “Offer” and “Contact” — chat, call or WhatsApp.
+• Photos are no longer cropped: portrait and square shots are shown in full.
+• A listing grows right out of its card and swipes back into it (iOS 18 and later).
 • “Next listing” — keep browsing without going back to the feed.
-• “Listing breakdown” under the price and a “Below market” tag — a hint, not an inspection or a guarantee.
+• “Listing breakdown” by the price and a “Below market” tag — a hint, not an inspection or a guarantee.
 
 📦 Profile and deals
 • “Needs your attention” on your profile shows deals where it’s your move.

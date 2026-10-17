@@ -303,7 +303,10 @@ screenshots are not stored; "Upgrade options") and their wardrobe (clothes and o
 on the device; "What to wear with"). "Add from my purchases" (sign-in) reads the user's completed safe-deal purchases,
 read-only. The "For you" shelf on the Home tab, the "from" prices in "Upgrade options" and "Find matches" load ordinary
 public category feeds (category, city and ordinary feed filters only; the shelf without cookies) and match on the
-device: no My Things values are sent. All of it stays on the device and "Delete all My Things" erases it. The camera
+device. When our server announces matching for a category (rules.fit_filters), only size and standard values (e.g.
+clothing size, bed size, wheel fitment, phone model) go in a cookie-less POST body to the public listings feed, without
+name or account, and are not stored (Cache-Control: private, no-store). My Things itself stays on the device and
+"Delete all My Things" erases it. The camera
 opens only on "Take photo", "Shoot the sticker" or "Measure in AR"; photos come from the system photo picker (no photo
 library access requested). Nothing is sold here.
 
