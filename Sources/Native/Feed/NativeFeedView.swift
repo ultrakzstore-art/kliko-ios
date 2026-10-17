@@ -963,9 +963,11 @@ struct NativeFeedView: View {
             } else if !подборки.ряды.isEmpty {
                 рядыГлавной
                     .transition(.opacity)
+                    .onAppear { ДымоваяПроверка.отметить("home-ready") }
             } else {
                 неудачаСПолосой
                     .transition(.opacity)
+                    .onAppear { ДымоваяПроверка.отметить("home-ready") }
             }
         }
         .animation(ДвижениеСайта.появление, value: видБлокаРядов)

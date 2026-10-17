@@ -85,6 +85,7 @@ struct КарточкаОбъявленияЯдро: View, Equatable {
                 видПрежний
             }
         }
+        .onAppear { ДымоваяПроверка.отметить("listing") }
         .task { await догрузить() }
         /* Сделка по этому объявлению закрылась — карточка заново: «Резерв» уходит, кнопки снова живые. */
         .onReceive(NotificationCenter.default.publisher(for: .klikoОбъявлениеСделкиИзменилось)) { весть in
