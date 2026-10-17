@@ -678,7 +678,7 @@ jobs:
   # ТОРМОЗА КАБИНЕТА (владелец 17.10.2026: «кабинет всё ещё чуть лагает — будто тяжёлое приложение»). Отладочная
   # сборка с оптимизацией -O на симуляторе, Time Profiler (xctrace): 25 с после обычного запуска (главная) и 25 с после
   # запуска сразу в кабинет (-klikoOpen …/cabinet.php). Сводка главного потока (ci/tp_summary.py) — в журнале прогона,
-  # кадры — в ветке ci/perf. Запуск — словом [perf] в коммите.
+  # кадры — в ветке ci/perf. Запуск — словом [perf] в коммите. С 17.10.2026 — и листание ленты главной (-klikoScrollBench).
   perf:
     if: github.event_name == 'push' && contains(github.event.head_commit.message, '[perf]')
     runs-on: macos-26
@@ -744,6 +744,26 @@ jobs:
           }
           profile_case home
           profile_case cabinet -klikoOpen "https://kliko.kz/cabinet.php"
+          # ЛИСТАНИЕ ЛЕНТЫ (владелец 17.10.2026: «при скроллинге будто тяжело смартфону»): -klikoScrollBench YES — через
+          # 10 с после подключения списка главная 16 с листается сама (FeedScrollBench.swift). Time Profiler — с 8-й по
+          # 34-ю секунду, снимки — посреди листания (видно, успевают ли фото). Итог замера — строки [kliko-perf] scroll.
+          xcrun simctl terminate "$UDID" kz.kliko.app 2>/dev/null || true
+          out=$(xcrun simctl launch --stderr="$PWD/perf/scroll-err.txt" "$UDID" kz.kliko.app \
+            -klikoNoPushPrompt YES -AppleLanguages "(ru)" -AppleLocale ru_KZ -klikoScrollBench YES)
+          pid=$(echo "$out" | awk -F': ' '{print $2}' | tr -d ' ')
+          echo "scroll: pid=$pid"
+          sleep 8
+          ( sleep 9; xcrun simctl io "$UDID" screenshot perf/scroll-a.png >/dev/null 2>&1
+            sleep 6; xcrun simctl io "$UDID" screenshot perf/scroll-b.png >/dev/null 2>&1 ) &
+          xcrun xctrace record --template 'Time Profiler' --device "$UDID" --attach "$pid" --time-limit 26s \
+            --output perf/scroll.trace > perf/scroll-record.txt 2>&1 || { echo "::warning::xctrace record scroll"; tail -20 perf/scroll-record.txt; }
+          sleep 3
+          xcrun xctrace export --input perf/scroll.trace \
+            --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' --output perf/scroll.xml 2>&1 | tail -3 || true
+          echo "===================== scroll"
+          grep -E "kliko-perf\] scroll|scroll-bench" perf/scroll-err.txt | tee perf/scroll-bench.txt || echo "замера листания нет"
+          grep -E "kliko-perf\] scroll (total|counts)" perf/scroll-err.txt | while IFS= read -r line; do echo "::notice title=листание::$line"; done || true
+          [ -f perf/scroll.xml ] && python3 ci/tp_summary.py perf/scroll.xml 60 | tee perf/scroll-summary.txt || echo "нет экспорта"
           for f in perf/*.png; do [ -f "$f" ] && sips -Z 1100 -s format jpeg -s formatOptions 75 "$f" --out "${f%.png}.jpg" >/dev/null && rm "$f"; done
           rm -rf perf/*.trace perf/*.xml
           ls -la perf

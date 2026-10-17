@@ -103,6 +103,9 @@ final class НаблюдательСпискаЛенты: NSObject, ObservableOb
                 self?.сдвинулось(вид)
             }
         }
+        #if DEBUG
+        БенчЛистания.shared.может(новая, где: где)      // замер листания в CI (-klikoScrollBench, FeedScrollBench.swift)
+        #endif
     }
 
     private func отключить() {
