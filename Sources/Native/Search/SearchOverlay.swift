@@ -28,6 +28,8 @@ struct ДействияПоискаСайта {
     let бренд: (String, String) -> Void
     /// Распознали фото: запрос, раздел (пусто — без раздела), qa — написания выдачи по ним (пусто — поиск по запросу).
     let фото: (String, String, String) -> Void
+    /// Живой товар из подсказок (SearchLive.swift) — сразу его объявление; nil — товаров в подсказках нет.
+    var объявление: ((Listing) -> Void)? = nil
 }
 
 /// Вешается на ленту: поле шапки в фокусе — экран поиска; итог поиска по фото — в ленту; плашка «Ищем: …».
@@ -80,6 +82,16 @@ struct ПоискКакНаСайте: ViewModifier {
                                  камера: {
                                      фотоПотом = true
                                      сменить(false)
+                                 },
+                                 объявление: действия.объявление.map { открыть in
+                                     { товар in
+                                         сменить(false)
+                                         /* Экран поиска ушёл без анимации — объявление кладётся в стек следующим ходом. */
+                                         Task { @MainActor in
+                                             try? await Task.sleep(nanoseconds: 60_000_000)
+                                             открыть(товар)
+                                         }
+                                     }
                                  })
             }
             .background {
@@ -135,16 +147,20 @@ struct ЭкранПоискаСайта: View {
     let раздел: (String) -> Void
     let бренд: (String, String) -> Void
     let камера: () -> Void
+    /// Открыть живой товар из подсказок; nil — секции товаров нет.
+    let объявление: ((Listing) -> Void)?
 
     @State private var текст: String
     @State private var каталог = КаталогПоиска()
     @FocusState private var вФокусе: Bool
     @ObservedObject private var недавние = RecentStore.shared
     @State private var появился = false
+    /// Живые товары под строкой запроса (SearchLive.swift).
+    @StateObject private var живые = ЖивыеПодсказкиПоиска()
 
     init(начальный: String, товары: [Listing], закрыть: @escaping () -> Void, найти: @escaping (String) -> Void,
          раздел: @escaping (String) -> Void, бренд: @escaping (String, String) -> Void,
-         камера: @escaping () -> Void) {
+         камера: @escaping () -> Void, объявление: ((Listing) -> Void)? = nil) {
         self.начальный = начальный
         self.товары = товары
         self.закрыть = закрыть
@@ -152,6 +168,7 @@ struct ЭкранПоискаСайта: View {
         self.раздел = раздел
         self.бренд = бренд
         self.камера = камера
+        self.объявление = объявление
         _текст = State(initialValue: начальный)
     }
 
@@ -168,7 +185,7 @@ struct ЭкранПоискаСайта: View {
                                 вставить: { запрос in вставить(запрос) },
                                 забыть: { запрос in недавние.забытьЗапрос(запрос) },
                                 очистить: { недавние.очиститьЗапросы() },
-                                раздел: раздел, бренд: бренд)
+                                раздел: раздел, бренд: бренд, живые: секцияТоваров)
                     .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -178,6 +195,9 @@ struct ЭкранПоискаСайта: View {
         .offset(y: появился ? 0 : -6)
         .onAppear {
             withAnimation(ДвижениеСайта.появление) { появился = true }
+        }
+        .onChange(of: текст, initial: true) { _, новый in
+            if объявление != nil { живые.искать(новый) }
         }
         .task {
             /* Как setTimeout(…focus, 70) у сайта: поле получает фокус, когда экран уже на месте. */
@@ -267,6 +287,28 @@ struct ЭкранПоискаСайта: View {
         }
     }
 
+    /// Живые товары под строкой запроса — только для набранного запроса, товары которого уже пришли или идут.
+    private var секцияТоваров: AnyView? {
+        guard объявление != nil else { return nil }
+        let набрано: String = текст.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard набрано.count >= 2 else { return nil }
+        let свои: Bool = живые.запрос.caseInsensitiveCompare(набрано) == .orderedSame
+        let итог: ЖивыеТоварыПоиска = свои ? живые.итог : ЖивыеТоварыПоиска()
+        return AnyView(
+            СекцияЖивыхТоваров(итог: итог, грузим: живые.грузим, запрос: набрано,
+                               открыть: { товар, место in
+                                   СобытияПоиска.отметить(.товар, запрос: набрано, объявление: товар.id, место: место)
+                                   if Config.недавние { недавние.запомнитьЗапрос(набрано) }
+                                   объявление?(товар)
+                               },
+                               найти: { выбрать(набрано) },
+                               вместо: { исправление in
+                                   СобытияПоиска.отметить(.вместо, запрос: набрано)
+                                   вставить(исправление)
+                               })
+        )
+    }
+
     /// mkSovPick: пустое — закрыть; иначе — в «Вы искали» и искать.
     private func выбрать(_ запрос: String) {
         let чистый = запрос.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -275,6 +317,7 @@ struct ЭкранПоискаСайта: View {
             return
         }
         if Config.недавние { недавние.запомнитьЗапрос(чистый) }
+        СобытияПоиска.отметить(.найти, запрос: чистый)
         найти(чистый)
     }
 
@@ -294,6 +337,8 @@ private struct СписокПодсказок: View {
     let очистить: () -> Void
     let раздел: (String) -> Void
     let бренд: (String, String) -> Void
+    /// Живые товары (SearchLive.swift) — сразу под строкой запроса; nil — секции нет.
+    let живые: AnyView?
 
     private func т(_ ключ: String) -> String { ПоискСайтаText.т(ключ) }
 
@@ -334,6 +379,9 @@ private struct СписокПодсказок: View {
     private var набрано: some View {
         if let запрос = выдача.запрос {
             СтрокаЗапроса(строка: запрос, выбрать: выбратьЗапрос, сбоку: nil)
+        }
+        if let живые {
+            живые
         }
         if !выдача.разделы.isEmpty {
             Заголовок(текст: т("sov_in_cats"), кнопка: nil, действие: nil)

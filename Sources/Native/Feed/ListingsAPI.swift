@@ -126,6 +126,9 @@ enum ListingsAPI {
         поля.append(URLQueryItem(name: "per", value: String(з.per)))
         поля.append(contentsOf: Self.параметрыРаздела(з.cat))   // этап 49: «Товары» — cats=, как vs=goods у сайта
         if !з.q.isEmpty { поля.append(URLQueryItem(name: "q", value: з.q)) }
+        /* ИИ-поиск (docs/SERVER_AI_SEARCH.md §2, рубильник ai_search): сервер сам разбирает запрос в фильтры и отдаёт
+           ai_applied. Явные фильтры человека сильнее разбора — это решает сервер. */
+        if !з.q.isEmpty && Config.умныйПоиск { поля.append(URLQueryItem(name: "ai", value: "1")) }
         if !з.qa.isEmpty { поля.append(URLQueryItem(name: "qa", value: з.qa)) }        // написания поиска по фото
         поля.append(contentsOf: з.где.параметры)          // этап 32: city= / region= / district=
         поля.append(contentsOf: з.фильтры.параметры)      // этап 33: cond, verified, photo, pmin, pmax, brands, models,

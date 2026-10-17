@@ -619,6 +619,9 @@ struct ListingsPage: Decodable {
     /// fit_applied (пачка 84, docs/SERVER_MY_THINGS.md §3.1): какие виды подбора из тела POST сервер применил («car»,
     /// «std», «size»…). nil — поля нет: старый сервер или GET — отбора на сервере не было; пусто — тело не разобралось.
     let применёноСервером: [String]?
+    /// ai_applied (docs/SERVER_AI_SEARCH.md §2): что Kliko AI понял из запроса и применил — подписи («до 200 000 ₸»,
+    /// «Алматы»), до шести. Пусто — поля нет (ai_search выключен или сервер старый) или ничего не применено.
+    let понялИИ: [String]
 
     private enum Ключи: String, CodingKey {
         case items
@@ -626,6 +629,21 @@ struct ListingsPage: Decodable {
         case hasMore = "has_more"
         case gs
         case применено = "fit_applied"
+        case понялИИ = "ai_applied"
+    }
+    /// Пункт ai_applied: объект с label или просто строка; иначе — пусто.
+    private struct ПодписьИИ: Decodable {
+        let текст: String?
+        private enum Поля: String, CodingKey { case label }
+        init(from decoder: Decoder) throws {
+            if let поля = try? decoder.container(keyedBy: Поля.self), let s = try? поля.decode(String.self, forKey: .label) {
+                текст = s
+            } else if let s = try? decoder.singleValueContainer().decode(String.self) {
+                текст = s
+            } else {
+                текст = nil
+            }
+        }
     }
     private struct Любое: Decodable {
         let значение: Listing?
@@ -681,6 +699,14 @@ struct ListingsPage: Decodable {
             }
         } else {
             применёноСервером = nil
+        }
+        if let список = try? c.decode([ПодписьИИ].self, forKey: .понялИИ) {
+            let подписи: [String] = список.compactMap { (п: ПодписьИИ) -> String? in
+                п.текст?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            понялИИ = Array(подписи.filter { (п: String) -> Bool in !п.isEmpty }.prefix(6))
+        } else {
+            понялИИ = []
         }
     }
 }
