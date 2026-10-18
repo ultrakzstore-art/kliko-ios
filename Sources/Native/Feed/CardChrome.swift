@@ -145,3 +145,36 @@ final class ВидОбводкиКарточки: UIView {
         CATransaction.commit()
     }
 }
+
+/// Верхняя полоса карточки по её скруглению (полоса магазина .mk-cbrand, 3 pt): прямоугольник верха, пересечённый с
+/// контуром карточки, — углы полосы идут по углам карточки без обрезки всей карточки (рамкаКарточкиПолная).
+struct ВерхСкруглённойКарточки: Shape {
+    let радиус: CGFloat
+    let высота: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let контур = Path(roundedRect: rect, cornerRadius: радиус, style: .continuous)
+        let полоса = Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: min(высота, rect.height)))
+        return контур.intersection(полоса)
+    }
+}
+
+extension View {
+    /**
+     Фото карточки витрины — обрезано по своей рамке, со скруглением только у тех углов, что совпадают с углами карточки
+     (сетка — верхние, широкая карточка списка — левые). Сборка 87: вместо обрезки всей карточки (рамкаКарточкиПолная) —
+     у одного фото. Замер листания (-klikoBenchNoClip) — прямоугольная обрезка, для сравнения.
+     */
+    @ViewBuilder
+    func обрезкаФотоКарточки(_ углы: RectangleCornerRadii) -> some View {
+        #if DEBUG
+        if СчётБенча.безОбрезки {
+            clipped()
+        } else {
+            clipShape(UnevenRoundedRectangle(cornerRadii: углы, style: .continuous))
+        }
+        #else
+        clipShape(UnevenRoundedRectangle(cornerRadii: углы, style: .continuous))
+        #endif
+    }
+}

@@ -2621,22 +2621,31 @@ struct ListingCard: View {
         #endif
     }
 
-    /// Рамка слоями Core Animation (сборка 87, CardChrome.swift): подложка с тенью по контуру — под содержимым, обводка и
-    /// золотое кольцо — над ним; SwiftUI здесь только обрезает содержимое по скруглению. Вид — как у прежней рамки.
+    /**
+     Рамка слоями Core Animation (сборка 87, CardChrome.swift): подложка с тенью по контуру — под содержимым, обводка и
+     золотое кольцо — над ним. Вид — как у прежней рамки.
+
+     Без обрезки всей карточки по скруглению (замер листания, 18.10.2026: без неё 523 кадра из ~960, с ней — 259):
+     clipShape целой карточки заставлял SwiftUI рисовать её одним растром на главном потоке для каждой новой ячейки.
+     Скругляется только то, что доходит до углов: фото — своими верхними углами (обрезкаФотоКарточки), золотистый верх
+     ТОПа и VIP — заливкой скруглённой формы, полоса магазина — формой верха скругления (ВерхСкруглённойКарточки).
+     Остальное лежит внутри полей и углов не касается; белую подложку даёт слой.
+     */
     private func рамкаКарточкиПолная<Содержимое: View>(_ содержимое: Содержимое) -> some View {
         let тёмная: Bool = схема == .dark
         return содержимое
-        .background(фонКарточкиСайта)
-        .overlay(alignment: .top) {
-            if let краска = краскаМагазина {
-                Rectangle()
-                    .fill(краска)
-                    .frame(height: 3)
-                    .allowsHitTesting(false)
+        .background {
+            if золотая {
+                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
+                    .fill(заливкаЗолотой)
             }
         }
-        .кромеЗамера(СчётБенча.безОбрезки) { вид in
-            вид.clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .overlay(alignment: .top) {
+            if let краска = краскаМагазина {
+                ВерхСкруглённойКарточки(радиус: Theme.Радиус.lg, высота: 3)
+                    .fill(краска)
+                    .allowsHitTesting(false)
+            }
         }
         .overlay {
             ОбводкаКарточкиСлоем(золотая: золотая, тёмная: тёмная)
@@ -2720,7 +2729,7 @@ struct ListingCard: View {
             .overlay {
                 картинкаКарточки(пунктов: крупныйТекст ? 300 : 220)
             }
-            .clipped()
+            .обрезкаФотоКарточки(RectangleCornerRadii(topLeading: Theme.Радиус.lg, bottomLeading: Theme.Радиус.lg))
             .overlay(alignment: .topLeading) { меткиФото }
             .overlay(alignment: .bottomLeading) {
                 if товар.isTop {
@@ -2791,7 +2800,7 @@ struct ListingCard: View {
                 картинкаКарточки(пунктов: Self.пунктовФото(ширина: ширинаЛенты, крупный: крупныйТекст))
                     .заменаЗамера(СчётБенча.безФотоВида, высота: 0)
             }
-            .clipped()
+            .обрезкаФотоКарточки(RectangleCornerRadii(topLeading: Theme.Радиус.lg, topTrailing: Theme.Радиус.lg))
             .overlay(alignment: .topLeading) { меткиФото }
             .меткаИИНаОбложке(товар)
             .overlay(alignment: .topTrailing) {
@@ -3109,12 +3118,17 @@ struct ListingCard: View {
     @ViewBuilder
     private var фонКарточкиСайта: some View {
         if золотая {
-            LinearGradient(stops: [Gradient.Stop(color: Theme.топФон, location: 0),
-                                   Gradient.Stop(color: Theme.поверхность, location: 0.55)],
-                           startPoint: .top, endPoint: .bottom)
+            заливкаЗолотой
         } else {
             Theme.поверхность
         }
+    }
+
+    /// Золотистый верх ТОПа и VIP (.mh-c.is-top): от Theme.топФон к поверхности на 55 % высоты.
+    private var заливкаЗолотой: LinearGradient {
+        LinearGradient(stops: [Gradient.Stop(color: Theme.топФон, location: 0),
+                               Gradient.Stop(color: Theme.поверхность, location: 0.55)],
+                       startPoint: .top, endPoint: .bottom)
     }
 
     /// Тень — --mk-shs сайта (0 4px 14px −8px rgba(15,81,50,.3), в тёмной 0 6px 18px −10px rgba(0,0,0,.6)), у ТОПа —
