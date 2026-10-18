@@ -2634,12 +2634,7 @@ struct ListingCard: View {
     private func рамкаКарточкиПолная<Содержимое: View>(_ содержимое: Содержимое) -> some View {
         let тёмная: Bool = схема == .dark
         return содержимое
-        .background {
-            if золотая {
-                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
-                    .fill(заливкаЗолотой)
-            }
-        }
+        .background { подложкаСодержимого }
         .overlay(alignment: .top) {
             if let краска = краскаМагазина {
                 ВерхСкруглённойКарточки(радиус: Theme.Радиус.lg, высота: 3)
@@ -3121,6 +3116,39 @@ struct ListingCard: View {
             заливкаЗолотой
         } else {
             Theme.поверхность
+        }
+    }
+
+    /**
+     Сплошная подложка под содержимым карточки — скруглённой формой (обрезки всей карточки нет). Замер 18.10.2026: без
+     сплошной подложки SwiftUI под текстом (только слой Core Animation) листание шло заметно хуже — 264 кадра против 523
+     с ней, — поэтому подложка есть и у обычной карточки, хотя белый цвет даёт и слой. Замер умеет менять её
+     (-klikoBenchBg rect | none) для сравнения.
+     */
+    @ViewBuilder
+    private var подложкаСодержимого: some View {
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "klikoBenchBg") {
+        case "rect":
+            фонКарточкиСайта
+        case "none":
+            if золотая {
+                RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous).fill(заливкаЗолотой)
+            }
+        default:
+            подложкаСкруглённая
+        }
+        #else
+        подложкаСкруглённая
+        #endif
+    }
+
+    @ViewBuilder
+    private var подложкаСкруглённая: some View {
+        if золотая {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous).fill(заливкаЗолотой)
+        } else {
+            RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous).fill(Theme.поверхность)
         }
     }
 

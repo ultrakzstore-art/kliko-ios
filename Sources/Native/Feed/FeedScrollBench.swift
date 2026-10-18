@@ -235,7 +235,8 @@ final class БенчЛистания: NSObject {
                                СчётБенча.безФактов ? "без фактов" : "", СчётБенча.безПодвала ? "без подвала" : "",
                                СчётБенча.безФотоВида ? "без вида фото" : "", СчётБенча.безРамки ? "без рамки" : "",
                                СчётБенча.прежняяРамка ? "прежняя рамка" : "", СчётБенча.безОбрезки ? "без обрезки" : "",
-                               UserDefaults.standard.bool(forKey: "klikoBenchNoPrepare") ? "фото без подготовки" : ""]
+                               UserDefaults.standard.bool(forKey: "klikoBenchNoPrepare") ? "фото без подготовки" : "",
+                               UserDefaults.standard.string(forKey: "klikoBenchBg").map { "подложка " + $0 } ?? ""]
             .filter { !$0.isEmpty }.joined(separator: ", ")
         Self.строка(String(format: "scroll start (%@): содержимое %.0f pt, окно %.0f pt", вариант.isEmpty ? "как есть" : вариант,
                            прокрутка.contentSize.height, прокрутка.bounds.height))
