@@ -1,0 +1,10 @@
+[kliko-smoke] listing
+IOSurfaceClientSetSurfaceNotify failed e00002c7
+[kliko-smoke] my-demo
+[kliko-smoke] my-open
+[kliko-smoke] my-row-in curtains:0
+[kliko-smoke] my-row-out ряд 0 проверить 0
+[kliko-smoke] my-row windows 0
+[kliko-smoke] my-row-in bedding:0 beds:0
+[kliko-smoke] my-row-out ряд 0 проверить 0
+[kliko-smoke] my-row beds 0

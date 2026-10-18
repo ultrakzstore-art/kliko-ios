@@ -1,0 +1,15 @@
+[kliko-smoke] listing
+[kliko-smoke] cabinet-ready
+IOSurfaceClientSetSurfaceNotify failed e00002c7
+[kliko-smoke] cabinet-renders 38
+[kliko-perf] cabinet-bodies my=10 root=11 tiles=17
+[kliko-smoke] cabinet-renders 41
+[kliko-perf] cabinet-bodies my=11 root=12 tiles=18
+[kliko-smoke] cabinet-renders 41
+[kliko-perf] cabinet-bodies my=11 root=12 tiles=18
+[kliko-smoke] cabinet-renders 41
+[kliko-perf] cabinet-bodies my=11 root=12 tiles=18
+[kliko-smoke] cabinet-renders 41
+[kliko-perf] cabinet-bodies my=11 root=12 tiles=18
+[kliko-smoke] cabinet-renders 41
+[kliko-perf] cabinet-bodies my=11 root=12 tiles=18
