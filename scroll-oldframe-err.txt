@@ -1,0 +1,11 @@
+IOSurfaceClientSetSurfaceNotify failed e00002c7
+[kliko-smoke] home-ready
+[kliko-perf] scroll start (прежняя рамка, фото без подготовки): содержимое 5022 pt, окно 874 pt
+[kliko-perf] scroll 1500 pt/с: кадров 71, подвисаний 45 (63.4%), худший 428 мс, потеряно 2777 мс
+[kliko-perf] scroll 2500 pt/с: кадров 60, подвисаний 40 (66.7%), худший 274 мс, потеряно 2927 мс
+[kliko-smoke] home-ready
+[kliko-perf] scroll 4000 pt/с: кадров 45, подвисаний 34 (75.6%), худший 427 мс, потеряно 3236 мс
+[kliko-perf] scroll 2500 pt/с: кадров 46, подвисаний 37 (80.4%), худший 405 мс, потеряно 3180 мс
+[kliko-perf] scroll total: кадров 222, подвисаний 156 (70.3%), худший 428 мс, потеряно 12120 мс, экран 60 Гц
+[kliko-perf] scroll counts: корень ленты 7, рядов 205, карточек 179
+[kliko-smoke] scroll-bench-done
