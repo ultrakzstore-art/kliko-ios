@@ -273,7 +273,14 @@ final class КартинкиЛенты {
                          kCGImageSourceCreateThumbnailWithTransform: true,
                          kCGImageSourceThumbnailMaxPixelSize: потолок] as CFDictionary
         guard let растр = CGImageSourceCreateThumbnailAtIndex(источник, 0, параметры) else { return nil }
-        return UIImage(cgImage: растр)
+        /* Сборка 87 (замер листания: без вида фото — 383 кадра против 261): растр ImageIO бывает не в том виде, в каком
+           его рисует экран, и тогда Core Animation перегоняет его на главном потоке в тот кадр, когда карточка
+           появляется. preparingForDisplay делает это здесь, не на главной очереди, — на экран идёт готовый. */
+        let картинка = UIImage(cgImage: растр)
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "klikoBenchNoPrepare") { return картинка }    // сравнение замера
+        #endif
+        return картинка.preparingForDisplay() ?? картинка
     }
 }
 

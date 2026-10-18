@@ -2611,6 +2611,8 @@ struct ListingCard: View {
         #if DEBUG
         if СчётБенча.безРамки {                  // замер листания (FeedScrollBench.swift): только подложка
             содержимое.background(Theme.поверхность)
+        } else if СчётБенча.прежняяРамка {      // замер: рамка SwiftUI, как до сборки 87
+            рамкаКарточкиSwiftUI(содержимое)
         } else {
             рамкаКарточкиПолная(содержимое)
         }
@@ -2619,7 +2621,43 @@ struct ListingCard: View {
         #endif
     }
 
+    /// Рамка слоями Core Animation (сборка 87, CardChrome.swift): подложка с тенью по контуру — под содержимым, обводка и
+    /// золотое кольцо — над ним; SwiftUI здесь только обрезает содержимое по скруглению. Вид — как у прежней рамки.
     private func рамкаКарточкиПолная<Содержимое: View>(_ содержимое: Содержимое) -> some View {
+        let тёмная: Bool = схема == .dark
+        return содержимое
+        .background(фонКарточкиСайта)
+        .overlay(alignment: .top) {
+            if let краска = краскаМагазина {
+                Rectangle()
+                    .fill(краска)
+                    .frame(height: 3)
+                    .allowsHitTesting(false)
+            }
+        }
+        .кромеЗамера(СчётБенча.безОбрезки) { вид in
+            вид.clipShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        }
+        .overlay {
+            ОбводкаКарточкиСлоем(золотая: золотая, тёмная: тёмная)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .background {
+            ПодложкаКарточкиСлоем(золотая: золотая, тёмная: тёмная)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous))
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(голосКарточки)
+        .onAppear { ОценкиПути.shared.нужна(товар.id) }
+    }
+
+    #if DEBUG
+    /// Прежняя рамка SwiftUI (до сборки 87) — только для сравнения в замере листания (-klikoBenchOldFrame).
+    private func рамкаКарточкиSwiftUI<Содержимое: View>(_ содержимое: Содержимое) -> some View {
         содержимое
         .background(фонКарточкиСайта)
         .overlay(alignment: .top) {
@@ -2651,6 +2689,7 @@ struct ListingCard: View {
         .accessibilityLabel(голосКарточки)
         .onAppear { ОценкиПути.shared.нужна(товар.id) }
     }
+    #endif
 
     private func кегль(_ пикселей: CGFloat) -> CGFloat { пикселей * сотня / 100 }
 
@@ -3080,7 +3119,8 @@ struct ListingCard: View {
 
     /// Тень — --mk-shs сайта (0 4px 14px −8px rgba(15,81,50,.3), в тёмной 0 6px 18px −10px rgba(0,0,0,.6)), у ТОПа —
     /// золотистая. Заливкой подложки той же формы (ShapeStyle.shadow), а не .shadow на карточке: такую тень не считают
-    /// заново по прозрачности фото и текста каждый кадр прокрутки (сборка 33, «лента подвисает»).
+    /// заново по прозрачности фото и текста каждый кадр прокрутки (сборка 33, «лента подвисает»). С 87 у карточки тень
+    /// слоем (CardChrome.swift, те же цвета — ЦветаРамкиКарточки.тень); эта — только прежней рамке в замере.
     private var теньСайта: some View {
         RoundedRectangle(cornerRadius: Theme.Радиус.lg, style: .continuous)
             .fill(Theme.поверхность.shadow(.drop(color: цветТени, radius: 5, x: 0, y: 4)))
